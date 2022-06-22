@@ -19,13 +19,12 @@ class Felsenstein:
                                         index = i
 
 
-
                         # set likelihood for the observed observation as 1.0
                         for i in range(4):
                                 if (i == index):
-                                        likelihood.add(i, 1.0)
+                                        likelihood[i] = 1.0
                                 else: 
-                                        likelihood.add(i, 0.0)
+                                        likelihood[i] = 0.0
                         
 
                         #System.out.println(" I am leaf : " + aNode.getName() + " and my likelihood array is : " + likelihood);
@@ -33,45 +32,37 @@ class Felsenstein:
                 else:
         
 
+                        children = aNode.getChildren() # was .iterator()
+                        childrenLikelihood = {}
 
-       
+	                #get all the children's likelihood arrays
+                        for child in children: 
+                                childrenLikelihood[child] = self.getLikelihood(child, column)
+                        
 
-	    Iterator<? extends TNode> childrenIterator= aNode.getChildren().iterator();
-	    HashMap<TNode,ArrayList<Double>> childrenLikelihood = new HashMap<TNode,ArrayList<Double>>();
-	    ArrayList<TNode> children = new ArrayList<TNode>();
+	                #Calculate likelihood for this node using Felsenstein's algorithm
+	                
 
-	    //get all the children's likelihood arrays
-	    while(childrenIterator.hasNext()) {
-		TNode next = childrenIterator.next();
-		children.add(next);
-		childrenLikelihood.put(next, getLikelihood(next, column));
-	    }
+                        for i in range(4):
+                                tempvalues = aNode.getChildCount()
 
-	    //Calculate likelihood for this node using Felsenstein's algorithm
-	    for (int i = 0; i < genes.length(); i++) {
-                double[] tempvalues = new double[aNode.getChildCount()];
+                                for j in range(len(self.genes)):
+                                        for k in range(len(tempvalues)):
+                                                childLikelihood = childrenLikelihood[children[k]].get(j) #.get( ) for a node?
+                                                #last argument is for caching behavior
+                                                tempvalues[k] += childLikelihood * self.getPij(self.genes[i], self.genes[j], children[k].getParentDistance(), children[k])
+                                
+                                
+                                product = 1.0
+                                for k in range(len(tempvalues)):
+                                        product *= tempvalues[k]
+                                
 
-                for (int j = 0; j < genes.length(); j++) {
-                    for (int k = 0; k < tempvalues.length; k++) {
-                        double childLikelihood = childrenLikelihood.get(children.get(k)).get(j);
-			// last argument is for caching behavior
-                        tempvalues[k] += childLikelihood * getPij(genes.charAt(i), genes.charAt(j), children.get(k).getParentDistance(), children.get(k));
-                    }
-                }
-
-                double product = 1;
-                for (int k = 0; k < tempvalues.length; k++) {
-                    product *= tempvalues[k];
-                }
-
-                likelihood.add(i, product);
-            }
-
-            //System.out.println(" I am an internal node " + " and my likelihood array is : " + likelihood);
-
-            return likelihood;
-        }
-                return 0
+                                likelihood[i] = product
+                        
+                        #System.out.println(" I am an internal node " + " and my likelihood array is : " + likelihood);
+                        return likelihood
+        
         
         def getLikelihoodTree(self, tree, column):
                 result = 0.0
@@ -81,8 +72,23 @@ class Felsenstein:
                         result += baseFrequencies[i] * rootLikelihoods.get(i)
                 return result
 
-        def getPij():
-                return 0
+        def getPij(self, i, j, t, n):
+                Alphabet alphabet = NucleotideAlphabet.getClassInstance() #????
+
+                # if cache entry exists, use it
+                """
+                if (calculationCache.cacheSubstitutionProbabilityMatrix.containsKey(n)) {
+                double[][] pij = calculationCache.cacheSubstitutionProbabilityMatrix.get(n);
+                return (pij[alphabet.getObservationSymbolIndex(i)][alphabet.getObservationSymbolIndex(j)]);
+                }
+                """
+                # otherwise calculate and cache it
+                pij = self.substitutionModel.calculateProbabilitiesFromRates(t)
+                ##calculationCache.cacheSubstitutionProbabilityMatrix.put(n, pij);
+
+                return (pij[alphabet.getObservationSymbolIndex(i)][alphabet.getObservationSymbolIndex(j)])
+                        
+
 
 
 """
