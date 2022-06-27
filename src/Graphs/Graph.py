@@ -1,19 +1,20 @@
 from collections import deque
 
+
 class Graph:
         """
-        This class represents a directed graph containing nodes of any data type, and edges.
-        An edge is a tuple (a,b) where a and b are nodes in the graph, and the direction of the edge
-        is from a to b. (a,b) is not the same as (b,a).
+        An "interface" level graph implementation. implements all common functionality
+        between digraphs and undirected graphs
         """
         edges = []
         nodes = []
-        connectedBool = True
-        
-        def __init__(self, edges, nodes):
+        edgeWeights = {}
+
+        def __init__(self, edges, nodes, weights):
                 self.edges = edges
                 self.nodes = nodes
-        
+                self.edgeWeights = weights
+
         def addNodes(self, nodes):
                 """
                 if nodes is a list of data (doesn't matter what the data is), then add each data point to the list
@@ -21,9 +22,11 @@ class Graph:
                 """
                 if type(nodes) == list:
                         for node in nodes:
-                                self.nodes.append(node)
+                                if node not in self.nodes:
+                                        self.nodes.append(node)
                 else:
-                        self.nodes.append(nodes)
+                        if node not in self.nodes:
+                                self.nodes.append(nodes)
                 return
         
         def addEdges(self, edges):
@@ -33,11 +36,14 @@ class Graph:
                 """
                 if type(edges) == list:
                         for edge in edges:
-                                self.edges.append(edge)
+                                if edge not in self.edges:
+                                        self.edges.append(edge)
                 else:
-                        self.edges.append(edges)
+                        if edges not in self.edges:
+                                self.edges.append(edges)
                 return
-        
+
+
         def removeNode(self, node, removeEdges):
                 """
                 Removes node from the list of nodes. If removeEdges is true/enabled,
@@ -50,7 +56,7 @@ class Graph:
                                         if node in edge:
                                                 self.edges.remove(edge)
                 return
-                        
+        
         def removeEdge(self, edge):
                 """
                 Removes edge from the list of edges. Does not delete nodes with no edges
@@ -59,6 +65,43 @@ class Graph:
                         self.edges.remove(edge)
                 return
 
+        def findShortestPathLength(self, nodeStart, nodeEnd):
+                """
+                TODO
+                """
+                return 0
+
+        def getNumberOfNodes(self):
+                """
+                returns the number of nodes in the graph
+                """
+                return len(self.nodes)
+        
+        def getNumberOfEdges(self):
+                """
+                returns the number of edges in the graph
+                """
+                return len(self.edges)
+        
+        def setEdgeWeights(self, edgeDict):
+                for key, value in edgeDict.items():
+                        if key in self.edges:
+                                self.edgeWeights[key] = value
+                return 
+
+class diGraph(Graph):
+        """
+        This class represents a directed graph containing nodes of any data type, and edges.
+        An edge is a tuple (a,b) where a and b are nodes in the graph, and the direction of the edge
+        is from a to b. (a,b) is not the same as (b,a).
+        """
+        
+        connectedBool = True
+        
+        def __init__(self, edges, nodes, weights):
+                super().__init__(edges, nodes, weights)
+        
+        
         def inDegree(self, node):
                 return len(self.inEdges(node))
                 
@@ -78,30 +121,12 @@ class Graph:
                 """
                 return [node for node in self.nodes if self.inDegree(node)==0]
 
-        
         def findDirectPredecessors(self, node):
                 return [edge[0] for edge in self.inEdges(node)]
         
         def findDirectSuccessors(self, node):
                 return [edge[1] for edge in self.outEdges(node)]
         
-        def findShortestPathLength(self, node):
-                """
-                TODO
-                """
-                return 0
-        
-        def getNumberOfNodes(self):
-                """
-                returns the number of nodes in the graph
-                """
-                return len(self.nodes)
-        
-        def getNumberOfEdges(self):
-                """
-                returns the number of edges in the graph
-                """
-                return len(self.edges)
         
         def getLeafs(self):
                 """
@@ -141,45 +166,89 @@ class Graph:
                                         self.dfs(neighbor, visited, sorted_nodes)
                 sorted_nodes.appendleft(start_node)
 
+        
+class undiGraph(Graph):
+
+        def __init__(self, edges, nodes, weights):
+                super().__init__(edges, nodes, weights)
+        
         def isConnected(self):
+                return True
+                
+        def minimumSpanningTree(self):
                 """
-                If dfs is run and the nodes it finds is not a complete list, then there are
-                more than one connected component and the graph is therefore not connected
+                implements kruskal's algorithm
+                returns a graph instance representing the MST
                 """
-                self.top_sort()
-                if self.connectedBool:
-                        return True
+
+                if self.isConnected() == False:
+                        return "Attempting to find MST of unconnected graph"
+                
+                mst = undiGraph([], [], {})
+                edgeCandidates = self.edgeWeights.copy()
+
+                while mst.getNumberOfEdges() < self.getNumberOfNodes() - 1:
+                        edgeCandidates = self.findMinEdgeAndInsert(mst, edgeCandidates)
+                
+                return mst
+
+
+        def findMinEdgeAndInsert(self, graph, potentialEdges):
+                
+                minKey = list(min(potentialEdges, key=potentialEdges.get))
+                
+                graph.addNodes([minKey[0], minKey[1]])
+                graph.addEdges(frozenset(minKey))
+                graph.setEdgeWeights({frozenset(minKey) : self.edgeWeights[frozenset(minKey)]})
+                print("Adding nodes", minKey[0], minKey[1])
+
+                if graph.containsCycle() == True:
+                        graph.removeNode(minKey[0], False)
+                        graph.removeNode(minKey[1], False)
+                        graph.removeEdge(minKey)
+                        del potentialEdges[frozenset(minKey)]
+                        self.findMinEdgeAndInsert(graph, potentialEdges)
+                else:
+                        del potentialEdges[frozenset(minKey)]
+                        return potentialEdges
+
+        def getTotalWeight(self):
+                sum = 0
+                for edge in self.edges:
+                        sum += self.edgeWeights[edge]
+                return sum     
+
+
+        def containsCycle(self):
+                """
+                need to implement this for correctness on graphs with cycles
+                """
                 return False
 
-
-        def addReticulationEdge(self):
-                """
-                Unwritten
-                """
-                return 0
 
         
 
 
 def graphTestSuite():
-        g = Graph([("a","b"), ("a", "c"), ("b","d"), ("c","d")], ["a", "b", "c", "d"])
-        
-        print(g.findDirectSuccessors("a"))
-        print(g.getLeafs())
-        print(g.getNumberOfNodes())
-        print(g.getNumberOfEdges())
-        print(g.top_sort())
-        print(g.isConnected())
-        g.addNodes("e")
-        print(g.getNumberOfNodes())
-        print(g.top_sort())
-        print(g.isConnected())
-        g.addEdges(("e", "a"))
-        print(g.isConnected())
-        print(g.getNumberOfEdges())
-        g.removeNode("c", True)
-        print(g.top_sort())
-        print(g.getNumberOfEdges())
+        g = undiGraph([frozenset(["a","b"]), frozenset(["a", "c"]), frozenset(["c","d"]), frozenset(["c","b"]), frozenset(["b", "e"])], ["a", "b", "c", "d", "e"], {frozenset(["a","b"]):1, frozenset(["c","d"]):1.2, frozenset(["c","b"]):2, frozenset(["b", "e"]):3})
+        # print(g.findDirectSuccessors("a"))
+        # print(g.getLeafs())
+        # print(g.getNumberOfNodes())
+        # print(g.getNumberOfEdges())
+        print(g.minimumSpanningTree().getNumberOfEdges())
+        print(g.minimumSpanningTree().getNumberOfNodes())
+        print(g.minimumSpanningTree().getTotalWeight())
+        # print(g.isConnected())
+        # g.addNodes("e")
+        # print(g.getNumberOfNodes())
+        # print(g.top_sort())
+        # print(g.isConnected())
+        # g.addEdges(("e", "a"))
+        # print(g.isConnected())
+        # print(g.getNumberOfEdges())
+        # g.removeNode("c", True)
+        # print(g.top_sort())
+        # print(g.getNumberOfEdges())
 
 
 
