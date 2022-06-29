@@ -1,6 +1,7 @@
 from collections import deque
 
 
+
 class Graph:
         """
         An "interface" level graph implementation. implements all common functionality
@@ -88,6 +89,12 @@ class Graph:
                         if key in self.edges:
                                 self.edgeWeights[key] = value
                 return 
+
+        def getTotalWeight(self):
+                sum = 0
+                for edge in self.edges:
+                        sum += self.edgeWeights[edge]
+                return sum 
 
 class diGraph(Graph):
         """
@@ -210,13 +217,7 @@ class undiGraph(Graph):
                         self.findMinEdgeAndInsert(graph, potentialEdges)
                 else:
                         del potentialEdges[frozenset(minKey)]
-                        return potentialEdges
-
-        def getTotalWeight(self):
-                sum = 0
-                for edge in self.edges:
-                        sum += self.edgeWeights[edge]
-                return sum     
+                        return potentialEdges    
 
 
         def containsCycle(self):
