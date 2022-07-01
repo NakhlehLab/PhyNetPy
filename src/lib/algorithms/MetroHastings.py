@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+from math import log
+import MHSettings
+import random
 
 
 class MetroHastings:
@@ -20,16 +23,17 @@ class MetroHastings:
         
 
         def run(self):
-                
+                ##initialize random seed
+                random.seed(MHSettings._SEED)
 
                 for i in range(self.freq):
                         accept = False
                         logHastings = self.state.propose() ##
                         op = self.state.getOperation().getName() ##
 
-                        if logHastings != Utils.INVALID_MOVE: ##
+                        if logHastings != MHSettings.INVALID_MOVE: ##
 
-                                if Utils.DEBUG_MODE and not self.state.isValidState():
+                                if MHSettings.DEBUG_MODE and not self.state.isValidState():
                                         print("INVALID state after operation and validation!!!"
                                         + op + "\n" + self.state.toString() + "\n" + self.state.getNetwork())
                                 
@@ -42,7 +46,7 @@ class MetroHastings:
 
                                 self.state.getOperation().optimize(logAlpha)
 
-                                if logAlpha >= Math.log(Randomizer.getRandomDouble()):
+                                if logAlpha >= log(random.random()): ## what base? I went natural log
                                         self.logLikelihood = logLikelihoodNext
                                         self.logPrior = logPriorNext
                                         self.logPost = logNext
@@ -50,17 +54,20 @@ class MetroHastings:
                                         self.state.accept(logAlpha)
                                 else:
                                         self.state.undo(logAlpha)
-                                        if(SNAPPLikelihood.useApproximateBayesian):
+                                        if(False): # SNAPPLikelihood.useApproximateBayesian hard coded for now
                                                 self.logLikelihood = self.state.calculateLikelihood()
                                                 self.logPost = self.logPrior + self.logLikelihood
                         else:       
-                                self.state.undo(Utils.INVALID_MOVE)
+                                self.state.undo(MHSettings.INVALID_MOVE)
 
 
 
-                        if (Utils.DEBUG_MODE and not self.state.isValidState()):
+                        if (MHSettings.DEBUG_MODE and not self.state.isValidState()):
                                 print("INVALID state!!!"
                                         + op + "\n" + self.state.toString() + "\n" + self.state.getNetwork())
                 
 
                 return
+
+
+        
