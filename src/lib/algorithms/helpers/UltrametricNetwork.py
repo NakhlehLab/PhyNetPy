@@ -1,8 +1,9 @@
 from cmath import nan
 import math
 import MHSettings
+from state import StateNode
 
-class UltrametricNetwork(stateNode):
+class UltrametricNetwork(StateNode):
 
  ## STILL A BUNCH TO FIX FOR THIS CLASS
     
