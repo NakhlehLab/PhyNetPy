@@ -1,5 +1,5 @@
 import math
-
+from Sequence import Sequence 
 
 class MarkerSeq:
 
@@ -51,7 +51,7 @@ class MarkerSeq:
         self.taxaNames.sort() #sorted in ascending order whatever that means for the taxaNames??
 
         for taxon in self.taxaNames:
-            seq = Sequence(taxon, sequences[taxon]) ##TODO: sequence
+            seq = Sequence(taxon, sequences[taxon])
             self.sequences.add(seq)
             self.counts.add(seq.getSequence(self.m_dataType))
             if(seq.getStateCount() == -1):

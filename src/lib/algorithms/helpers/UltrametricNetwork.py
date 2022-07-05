@@ -2,6 +2,7 @@ from cmath import nan
 import math
 import MHSettings
 from state import StateNode
+from MarkersSeq import MarkerSeq
 
 class UltrametricNetwork(StateNode):
 
@@ -397,7 +398,7 @@ class UltrametricNetwork(StateNode):
         self.network.getRoot().setRootPopSize(popSize)
     
 
-    def initNetHeights2(constraints):
+    def initNetHeights2(self, constraints):
         restrictedNodes = TemporalConstraints.getNodeRestriction(self.network)
         stack = stack() ## python stack implementation?
         stack.add([self.network.getRoot(), MHSettings.DEFAULT_NET_ROOT_HEIGHT])
