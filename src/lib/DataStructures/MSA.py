@@ -22,9 +22,10 @@ class MSA:
                 self.data = []
                 self.locations = []
                 self.count = []
+                
+                
                 seqRecords = []
-
-
+                
                 if ext == ".nex" or ext == ".nxs":
                         seqRecords = SeqIO.parse(filename, "nexus")
                 elif ext == ".fasta":
@@ -104,7 +105,10 @@ class MSA:
         
         
         def populateCounts(self , newData):
-                
+                """
+                Generates a count list that maps the ith distinct column to the number
+                of times it appears in the original alignment matrix
+                """
                 for i in range(self.uniqueSites):
                         col = self.getColumn(i, newData)
                         first = True
