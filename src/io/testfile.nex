@@ -48,12 +48,8 @@ seq_7 ..........A..---G....----..............................A
 END;
 
 BEGIN TRAITS;
-[The traits block is specific to PopART. The numbers in the matrix are number of
-samples associated with each trait. The order of the columns must match the 
-order of TraitLabels. Separator can be comma, space, or tab.]
   Dimensions NTRAITS=5;
   Format labels=yes missing=? separator=Comma;
-  [Optional: if you include TraitLatitude and TraitLongitude they will be used to place trait groups on the map]
   TraitLatitude 53 43.6811 5.4 -25.61 -0;
   TraitLongitude 16.75 87.3311 26.5 134.355 -76;
   TraitLabels Europe Asia Africa Australia America;
@@ -69,16 +65,14 @@ seq_6 0,0,0,7,3
 
 END;
 
-[The geotags block lets you specify coordinates for each sequence. These will be clustered into the number of groups specified by NClusts]
+
 Begin GeoTags;
 Dimensions NClusts=5;
 Format labels=yes separator=Spaces;
-[ClustLatitude and ClustLongitude are optional. If they are given, they will be used to determine how sequences are clustered. Otherwise, the k-means clustering algorithm will choose where to place clusters on the map]
 ClustLatitude 53 43.6811 5.4 -25.61 -0;
 ClustLongitude 16.75 87.3311 26.5 134.355 -76;
-[ClustLabels is only allowed if ClustLatitude and ClustLongitude are given]
 ClustLabels Europe Asia Africa Australia America;
-[The matrix has sequence name, latitude, longitude, number of samples. Sequences may appear more than once. Number of samples is optional. You can also give a number indicating which cluster a sequence belongs to (between 1 and NClusts)]
+
 Matrix
 seq_5 48.3621687364 -10.6803478956 4
 seq_5 20.9011934738 41.0061010737 10
@@ -98,40 +92,7 @@ seq_2 -21.8525898158 120.606615453 6
 End;
 
 
-
-[This is a trees block from PAUP*. If you want to build an Ancestral Parsimony 
-network, you need a trees block. These were all MP trees, but feel free to use 
-ML or Bayesian trees, or else sub-optimal parsimony trees.]
-Begin trees;  [Treefile saved Sun Jun 10 12:51:09 2012]
-[!
->Data file = /home/jleigh/workspace/Hapnet/examples/dnasp.nex
->Heuristic search settings:
->  Optimality criterion = parsimony
->    Character-status summary:
->      Of 56 total characters:
->        All characters are of type 'unord'
->        All characters have equal weight
->        45 characters are constant
->        8 variable characters are parsimony-uninformative
->        Number of parsimony-informative characters = 3
->    Gaps are treated as "missing"
->  Starting tree(s) obtained via stepwise addition
->  Addition sequence: simple (reference taxon = seq 1)
->  Number of trees held at each step during stepwise addition = 1
->  Branch-swapping algorithm: tree-bisection-reconnection (TBR)
->  Steepest descent option not in effect
->  Initial 'MaxTrees' setting = 100 (will be auto-increased by 100)
->  Branches collapsed (creating polytomies) if maximum branch length is zero
->  'MulTrees' option in effect
->  Topological constraints not enforced
->  Trees are unrooted
->
->Heuristic search completed
->   Total number of rearrangements tried = 976
->   Score of best tree(s) found = 16
->   Number of trees retained = 14
->   Time used = <1 sec (CPU time = 0.00 sec)
-]
+Begin trees;  
   Translate
     1 seq_1,
     2 seq_2,
