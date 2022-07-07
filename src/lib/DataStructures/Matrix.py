@@ -33,6 +33,16 @@ class MatrixException(Exception):
                 self.message = message
                 super().__init__(self.message)
 
+class MatrixException2(Exception):
+        """
+        This exception is raised when the file contains too many different labels
+        given the alphabet supplied
+        """
+
+        def __init__(self, message="File tried to list too many states!"):
+                self.message = message
+                super().__init__(self.message)
+
 class Matrix:
 
         def __init__(self, filename, ext, alphabet):
@@ -107,8 +117,7 @@ class Matrix:
 
                 if state not in self.stateMap:
                         if len(self.stateMap.keys()) > self.bits:
-                                print("ERROR: FILE CONTAINS MORE STATES THAN IS ALLOWED FOR THIS ALPHABET")
-                                return None
+                                raise MatrixException2
                         else:
                                 #map state to the next state 
                                 self.stateMap[state] = self.nextState
