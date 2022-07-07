@@ -5,7 +5,7 @@ and packages it into an easy to use and space efficient data type
 """
 
 from Bio import SeqIO
-
+import sys
 
 def list2Str(myList):
         """
@@ -132,7 +132,8 @@ class MSA:
 
 aln = MSA("src/io/testfile.nex", ".nex")
 aln.verification()
-        
+
+
         
 
 
