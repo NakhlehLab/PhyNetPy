@@ -10,6 +10,7 @@ abstracted away. This class can represent a 4bit, 8bit, 32bit, or 64bit matrix.
 from Bio import SeqIO
 import sys
 import numpy as np
+import math
 
 def list2Str(myList):
         """
@@ -43,12 +44,22 @@ class MatrixException2(Exception):
                 self.message = message
                 super().__init__(self.message)
 
+
+class MatrixCastError(Exception):
+        """
+        This exception is raised when the file contains too many different labels
+        given the alphabet supplied
+        """
+
+        def __init__(self, type1, type2):
+                self.message = "Disallowed Matrix cast from " + type1 + "to " + type2
+                super().__init__(self.message)
+
 class Matrix:
 
         def __init__(self, filename, ext, alphabet):
 
-                #actual matrix. max is 64 states, so 1 byte covers that
-                self.data = np.array([], dtype=np.int8)
+        
 
                 #ith element of the array = column i's distinct site pattern index in
                 #the compressed matrix
@@ -57,40 +68,50 @@ class Matrix:
                 #ith element of the array = count of the number of times
                 #column i appears in the original uncompressed matrix
                 self.count = []
+                self.type = alphabet
 
 
                 #the next binary state to map a new character to
                 self.nextState = 0
-                
-                #set the number of mappable states based on the alphabet type
-                if alphabet == "DNA" or alphabet == "RNA":
-                        self.bits = 8
-                elif alphabet == "SNP":
-                        self.bits = 8
-                elif alphabet == "Proteins":
-                        self.bits = 32
-                else:
-                        self.bits = 64 #for codons
-                
+
 
                 ##Parse the input file into a list of sequence records
-                seqRecords = []
+                self.seqRecords = []
                 
                 if ext == ".nex" or ext == ".nxs":
-                        seqRecords = SeqIO.parse(filename, "nexus")
+                        self.seqRecords = SeqIO.parse(filename, "nexus")
                 elif ext == ".fasta":
-                        seqRecords = SeqIO.parse(filename, "fasta")
+                        self.seqRecords = SeqIO.parse(filename, "fasta")
                 else:
                         raise MatrixException(self.filename, self.ext)
                 
-                
+                self.populateData()
+                                
+
+        def populateData(self):
                 #init the map from chars to binary
+                #set the number of mappable states based on the alphabet type
+                if self.type == "DNA" or self.type == "RNA":
+                        self.bits = math.pow(2,8) #2^4?
+                        self.data = np.array([], dtype=np.int8)
+                        self.populateData() 
+                elif self.type == "SNP":
+                        self.bits = math.pow(2,8) #2^2?
+                        self.data = np.array([], dtype=np.int8)
+                elif self.type == "Proteins":
+                        self.bits = math.pow(2,32)
+                        self.data = np.array([], dtype=np.int32)
+                else:
+                        self.bits = math.pow(2,64)
+                        self.data = np.array([], dtype=np.int64)
+
+
                 self.stateMap = {}
 
 
                 #translate the data into the matrix
                 index = 0
-                for r in seqRecords:
+                for r in self.seqRecords:
                         lenCount = 0
                         for char in r.seq:
                                 self.data = np.append(self.data, np.array([self.map(char)]), axis=0)
@@ -105,7 +126,8 @@ class Matrix:
 
                 #compress the matrix and fill out the locations and count fields
                 self.simplify()
-                                
+
+
 
         def map(self, state):
                 """
@@ -197,7 +219,30 @@ class Matrix:
                                                 first = False
                                         else:
                                                 self.count[i]+=1
-                                        
+        
+
+
+        def asDNA(self):
+                if(self.type == "RNA" or self.type == "Proteins"):
+                        raise MatrixCastError(self.type, "DNA")
+                elif self.type == "codon":
+                        #switch from codon matrix to DNA matrix
+                        self.type = "DNA"
+                        self.populateData()
+                return
+        
+
+        def asProtein(self):
+                if(self.type == "RNA" or self.type == "Proteins"):
+                        raise MatrixCastError(self.type, "DNA")
+                elif self.type == "codon":
+                        #switch from codon matrix to DNA matrix
+                        self.type = "DNA"
+                        self.populateData()
+                return
+        
+        
+
 
 
 
