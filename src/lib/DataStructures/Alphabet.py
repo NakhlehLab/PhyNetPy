@@ -52,3 +52,8 @@ class Alphabet:
         
         def getType(self):
                 return self.type
+
+        def reverseMap(self, state):
+                for key in self.alphabet.keys():
+                        if self.alphabet[key] == state:
+                                return key

@@ -238,24 +238,33 @@ class Matrix:
                 return
         
         
+        def charMatrix(self):
+                matrix = np.zeros(self.data.shape, dtype='U1')
+                rows, cols = matrix.shape
+                
+                for i in range(rows):
+                        for j in range(cols):
+                                matrix[i][j] = self.alphabet.reverseMap(self.data[i][j])
+                                
+                return matrix
 
 
 
 
 
-
-
+##Simply use AlignIO.read
 msa = AlignIO.read("src/io/testfile.nex", "nexus")
 msa2 = AlignIO.read("src/io/testfile2.nex", "nexus")
 
 
 
-aln = Matrix(msa)
+aln = Matrix(msa) #default is to use the DNA alphabet
 aln.verification()
 
 print("========================================")
 
 aln2 = Matrix(msa2)
 aln2.verification()
+print(aln2.charMatrix())
 
 
