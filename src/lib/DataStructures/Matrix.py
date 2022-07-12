@@ -7,10 +7,11 @@ abstracted away. This class can represent a 4bit, 8bit, 32bit, or 64bit matrix.
 
 """
 
-from Bio import SeqIO
+from Bio import SeqIO, AlignIO
 import sys
 import numpy as np
 import math
+from Alphabet import Alphabet
 
 def list2Str(myList):
         """
@@ -22,17 +23,6 @@ def list2Str(myList):
         return sb
 
 
-class MatrixException(Exception):
-        """
-        This exception is raised when the user tries to instantiate a Matrix
-        instance with a file type that is not parsable into a bit matrix
-        """
-
-        def __init__(self, filename, ext, message="File extension not supported for this operation"):
-                self.filename = filename
-                self.ext = ext
-                self.message = message
-                super().__init__(self.message)
 
 class MatrixException2(Exception):
         """
@@ -57,8 +47,12 @@ class MatrixCastError(Exception):
 
 class Matrix:
 
-        def __init__(self, filename, ext, alphabet):
-
+        def __init__(self, alignment, alphabet = Alphabet("DNA")):
+                """
+                Takes one single MultipleSequenceAlignment object, along with an Alphabet object,
+                represented as either DNA, RNA, PROTEIN, CODON, SNP, or BINARY (for now). The default
+                is DNA                
+                """
         
 
                 #ith element of the array = column i's distinct site pattern index in
@@ -68,7 +62,8 @@ class Matrix:
                 #ith element of the array = count of the number of times
                 #column i appears in the original uncompressed matrix
                 self.count = []
-                self.type = alphabet
+                self.alphabet = alphabet
+                self.type = alphabet.getType()
 
 
                 #the next binary state to map a new character to
@@ -76,15 +71,9 @@ class Matrix:
 
 
                 ##Parse the input file into a list of sequence records
-                self.seqRecords = []
-                
-                if ext == ".nex" or ext == ".nxs":
-                        self.seqRecords = SeqIO.parse(filename, "nexus")
-                elif ext == ".fasta":
-                        self.seqRecords = SeqIO.parse(filename, "fasta")
-                else:
-                        raise MatrixException(self.filename, self.ext)
-                
+                self.seqRecords = list(alignment)
+
+                ##turn sequence record objects into the matrix data
                 self.populateData()
                                 
 
@@ -94,11 +83,12 @@ class Matrix:
                 if self.type == "DNA" or self.type == "RNA":
                         self.bits = math.pow(2,8) #2^4?
                         self.data = np.array([], dtype=np.int8)
-                        self.populateData() 
                 elif self.type == "SNP":
                         self.bits = math.pow(2,8) #2^2?
                         self.data = np.array([], dtype=np.int8)
-                elif self.type == "Proteins":
+                elif self.type == "PROTEIN":
+                        #Prespecified substitution rates between aminos
+                        #
                         self.bits = math.pow(2,32)
                         self.data = np.array([], dtype=np.int32)
                 else:
@@ -114,7 +104,9 @@ class Matrix:
                 for r in self.seqRecords:
                         lenCount = 0
                         for char in r.seq:
-                                self.data = np.append(self.data, np.array([self.map(char)]), axis=0)
+                                #use the alphabet to map characters to their bit states and add to 
+                                #the data as a column
+                                self.data = np.append(self.data, np.array([self.alphabet.map(char)]), axis=0)
                                 lenCount+=1
                         
                         index += 1
@@ -131,11 +123,15 @@ class Matrix:
 
         def map(self, state):
                 """
-                Return f(state), where f: {alphabet} -> binary.
+
+                UNUSED FOR NOW
+                Return f(state), where f: {alphabet} -> int.
                 
                 If state is not yet defined in the map, then select its binary 
                 representation and then return it. Otherwise, simply return f(state).
                 """
+
+                
 
                 if state not in self.stateMap:
                         if len(self.stateMap.keys()) > self.bits:
@@ -249,15 +245,17 @@ class Matrix:
 
 
 
+msa = AlignIO.read("src/io/testfile.nex", "nexus")
+msa2 = AlignIO.read("src/io/testfile2.nex", "nexus")
 
 
 
-aln = Matrix("src/io/testfile.nex", ".nex", "DNA")
+aln = Matrix(msa)
 aln.verification()
 
 print("========================================")
 
-aln2 = Matrix("src/io/testfile2.nex", ".nex", "DNA")
+aln2 = Matrix(msa2)
 aln2.verification()
 
 

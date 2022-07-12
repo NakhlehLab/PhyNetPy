@@ -1,6 +1,15 @@
 from collections import deque
 
 
+class GraphTopologyError(Exception):
+        """
+        This exception is raised when a graph is malformed in some way
+        """
+
+        def __init__(self, message="Error. Graph is malformed."):
+                self.message = message
+                super().__init__(self.message)
+
 
 class Graph:
         """
@@ -96,11 +105,13 @@ class Graph:
                         sum += self.edgeWeights[edge]
                 return sum 
 
-class diGraph(Graph):
+class DAG(Graph):
         """
         This class represents a directed graph containing nodes of any data type, and edges.
         An edge is a tuple (a,b) where a and b are nodes in the graph, and the direction of the edge
         is from a to b. (a,b) is not the same as (b,a).
+
+        This particular graph instance must only have one root and must be connected.
         """
         
         connectedBool = True
@@ -121,12 +132,15 @@ class diGraph(Graph):
         def outEdges(self, node):
                 return [edge for edge in self.edges if edge[0] == node]
                 
-        def findRoots(self):
+        def findRoot(self):
                 """
-                if this directed graph has nodes with in-degree 0, then they will be returned in a list.
-                if no such nodes exist, an empty list is returned
+                Finds the root of this DAG. It is an error if one does not exist
+                or if there are more than one.
                 """
-                return [node for node in self.nodes if self.inDegree(node)==0]
+                root = [node for node in self.nodes if self.inDegree(node)==0]
+                if len(root) != 1:
+                        raise GraphTopologyError("This graph does not have 1 and only 1 root node")
+                return root
 
         def findDirectPredecessors(self, node):
                 return [edge[0] for edge in self.inEdges(node)]
@@ -149,7 +163,7 @@ class diGraph(Graph):
                 self.connectedBool = True
                 sorted_nodes, visited = deque(), set()
                 count = 0
-                for node in self.findRoots(): #start dfs at roots for correctness
+                for node in self.findRoot(): #start dfs at roots for correctness
                         if node not in visited:
                                 self.dfs(node, visited, sorted_nodes)
                                 #if the initial dfs call is run more than once,
