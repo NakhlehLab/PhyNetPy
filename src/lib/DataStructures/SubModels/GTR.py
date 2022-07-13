@@ -13,32 +13,42 @@ class SubstitutionModelError(Exception):
 
 
 
-
-
 class GTR:
+        """
+        General superclass for substitution models. Implements 
+        Eigenvalue decomposition for computing P(t).
+        Special case subclasses attempt to improve on the time 
+        complexity of that operation
+        """
 
         def __init__(self, baseFreqs, transitions, states=4):
 
+                #Check for malformed inputs
                 if len(baseFreqs)!=states or sum(baseFreqs)!= 1:
                         raise SubstitutionModelError("Base frequency list either does not sum to 1 or is not of correct length")
 
                 if len(transitions) != ((states-1)*states) / 2:
                         raise SubstitutionModelError("incorrect number of transition rates")
+
+
                 self.states = states
                 self.freqs = baseFreqs
                 self.trans = transitions
+
+                #compute Q, the instantaneous probability matrix
                 self.Q = self.buildQ()
+
                 self.qIsUpdated = True
                 self.Qt = None
                 
                 
-        
-        def populateTest(self):
-                for i in range(self.states):
-                        for j in range(self.states):
-                                self.Q[i][j] = random.random()
+
         
         def buildQ(self):
+                """
+                Populate the Q matrix with the correct values. 
+                Based on https://en.wikipedia.org/wiki/Substitution_model
+                """
                 self.Q = np.zeros((self.states, self.states), dtype = np.double)
 
                 for i in range(self.states):
@@ -53,23 +63,31 @@ class GTR:
 
 
                 
-                #normalize
+                #normalize such that -1 * SUM Q_ii * pi_i = 1
                 normFactor = 0
                 for i in range(self.states):
                         normFactor += (self.Q[i][i] * self.freqs[i])
                 
                 normFactor = -1/normFactor
+
+                #scale the matrix
                 self.Q = self.Q * normFactor
 
-                print(self.Q)
                 
         
         def updateQ(self):
+                """
+                If any parameters to the model are changed, repopulate the Q matrix
+                """
                 self.qIsUpdated = True
                 #do updates
 
         def expt(self, t):
-        
+                """
+                Compute the matrix exponential Q^t and store the result.
+                If the solution has been computed already but the Q matrix has not 
+                changed, simply return the value
+                """
                 if self.qIsUpdated:
                         eigenvals, eigenvecs = lg.eigh(self.Q)
                         self.q = eigenvecs
@@ -153,6 +171,9 @@ class HKY(GTR):
 
 
 class K3ST(GTR):
+
+        ##POTENTIAL SPEEDUP???
+
         def __init__(self, transitions):
                 if len(transitions)!= 6:
                         raise SubstitutionModelError("Incorrect parameter input length")
