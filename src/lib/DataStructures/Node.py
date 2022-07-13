@@ -10,10 +10,13 @@ class Node:
         """
         
         
-        def __init__(self, height, attr):
-                self.height = height
-                self.tempHeight = None
+        def __init__(self, branchLen=None, parNode=None, attr=None, isReticulation=False, name = None):
+                self.branchLength = branchLen
+                self.tempLen = None
                 self.attributes = attr
+                self.isReticulation = isReticulation
+                self.parent = parNode
+                self.label = name
                 
         
         def addAttribute(self, key, value):
@@ -24,8 +27,8 @@ class Node:
                 Stores the current value in a temporary holder while the
                 newValue gets tested for viability 
                 """
-                self.tempHeight = self.height
-                self.height = newValue
+                self.tempLen = self.branchLength
+                self.branchLength = newValue
         
         def accept(self):
                 """
@@ -33,7 +36,7 @@ class Node:
                 out of the temp container, symbolically cementing .height as the 
                 official height
                 """
-                self.tempHeight = None
+                self.tempLen = None
         
         def reject(self):
                 """
@@ -43,16 +46,25 @@ class Node:
                 Flush the temp container of all data.
                 """
 
-                self.height = self.tempHeight
-                self.tempHeight = None
+                self.branchLength = self.tempLen
+                self.tempLen = None
         
-        def branchLen(self, otherNode):
+        def branchLen(self):
                 """
-                Defines either the weight of the edge between this node and otherNode, or
+                Defines either the weight of the edge between this node and its parent, or
                 simply the difference in time between two nodes.
                 """
 
-                return math.abs(otherNode.getHeight()-self.height)
+                return self.branchLength
 
-        def getHeight(self):
-                return self.height
+        def asString(self):
+                myStr = "Node " + str(self.label) + ": "
+                if self.branchLength != None:
+                        myStr += str(self.branchLength) + " "
+                if self.parent != None:
+                        myStr += " has parent " + str(self.parent.name)
+                
+                return myStr
+
+
+        

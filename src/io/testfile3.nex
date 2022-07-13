@@ -1,0 +1,107 @@
+
+
+#NEXUS
+[This is an example of a Nexus file, modified from a sample file distributed 
+with DNASP. It should run in PopART. Any text appearing between square braces is
+a comment and will be ignored by the program.]
+
+
+BEGIN TAXA;
+[You need either taxa and characters blocks, or else a data block.]
+DIMENSIONS NTAX=7;
+
+TAXLABELS
+seq_1
+seq_2
+seq_3
+seq_4
+seq_5
+seq_6
+seq_7
+;
+
+END;
+
+BEGIN CHARACTERS;
+[You can either use the matchchar option or else include all characters for 
+all sequences.]
+DIMENSIONS NCHAR=56;
+FORMAT DATATYPE=DNA MISSING=? GAP=- MATCHCHAR=. ;
+MATRIX
+
+seq_1 ATATACGGGGTTA---TTAGA----AAAATGTGTGTGTGTTTTTTTTTTCATGTGG
+
+seq_2 ......--..A..---...C.----.G...C.A...C..C...C............
+
+seq_3 ..........A..---...T.----.G.............................
+
+seq_4 ..........A..---G...T----..............................A
+
+seq_5 ..........A..---G...G----..............................C
+
+seq_6 ..........A..---G...C----..............................T
+
+seq_7 ..........A..---G....----..............................A
+
+;
+
+END;
+
+BEGIN TRAITS;
+  Dimensions NTRAITS=5;
+  Format labels=yes missing=? separator=Comma;
+  TraitLatitude 53 43.6811 5.4 -25.61 -0;
+  TraitLongitude 16.75 87.3311 26.5 134.355 -76;
+  TraitLabels Europe Asia Africa Australia America;
+  Matrix
+seq_2 10,5,0,6,0
+seq_7 0,0,5,0,0
+seq_5 4,0,10,0,0
+seq_4 0,0,0,4,2
+seq_3 0,0,0,3,5
+seq_1 0,0,0,3,3
+seq_6 0,0,0,7,3
+;
+
+END;
+
+
+Begin GeoTags;
+Dimensions NClusts=5;
+Format labels=yes separator=Spaces;
+ClustLatitude 53 43.6811 5.4 -25.61 -0;
+ClustLongitude 16.75 87.3311 26.5 134.355 -76;
+ClustLabels Europe Asia Africa Australia America;
+
+Matrix
+seq_5 48.3621687364 -10.6803478956 4
+seq_5 20.9011934738 41.0061010737 10
+seq_4 -34.5248765744 156.980424598 4
+seq_4 6.47997227196 -126.310890191 2
+seq_7 12.3724817276 32.9959970947 5
+seq_6 -25.3125032726 132.069876577 7
+seq_6 -17.5420017453 -81.8875028076 3
+seq_1 -28.1278668152 133.927583142 3
+seq_1 1.90619338755 -100.675193346 3
+seq_3 -9.2031496606 156.495614547 3
+seq_3 2.76141711712 -95.3738206052 5
+seq_2 43.4068001627 40.4459241442 10
+seq_2 36.0290665027 68.1753092664 5
+seq_2 -21.8525898158 120.606615453 6
+;
+End;
+
+
+Begin trees;  
+  Translate
+    uno seq_1,
+    dos seq_2,
+    tres seq_3,
+    quatro seq_4,
+    cinco seq_5,
+    seis seq_6,
+    siete seq_7
+    ;
+tree numeroUno = (cinco:.5, quatro:.5, seis:.5, siete:.5, tres:.5 , dos:.5)uno:.5;
+
+End;

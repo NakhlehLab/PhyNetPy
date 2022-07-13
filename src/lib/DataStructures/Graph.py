@@ -1,5 +1,7 @@
 from collections import deque
 
+from Node import Node
+
 
 class GraphTopologyError(Exception):
         """
@@ -35,7 +37,7 @@ class Graph:
                                 if node not in self.nodes:
                                         self.nodes.append(node)
                 else:
-                        if node not in self.nodes:
+                        if nodes not in self.nodes:
                                 self.nodes.append(nodes)
                 return
         
@@ -116,7 +118,7 @@ class DAG(Graph):
         
         connectedBool = True
         
-        def __init__(self, edges, nodes, weights):
+        def __init__(self, edges=[], nodes=[], weights=[]):
                 super().__init__(edges, nodes, weights)
         
         
@@ -187,6 +189,10 @@ class DAG(Graph):
                                         self.dfs(neighbor, visited, sorted_nodes)
                 sorted_nodes.appendleft(start_node)
 
+        def printGraph(self):
+                for node in self.nodes:
+                        if(type(node)==Node):
+                                print(node.asString())
         
 class undiGraph(Graph):
 
@@ -267,4 +273,3 @@ def graphTestSuite():
 
 
 
-graphTestSuite()
