@@ -1,6 +1,12 @@
 import math
 
 
+class NodeError(Exception):
+
+        def __init__(self, message= "Unknown Error in Node Class"):
+                super().__init__(message)
+
+
 class Node:
 
         """
@@ -67,4 +73,56 @@ class Node:
                 return myStr
 
 
+
+class UltrametricNode(Node):
+
+        def __init__(self, height=None, par=None, attributes=None, isRetNode=False, label = None):
+                self.height = height
+                super().__init__(parNode=par, attr = attributes, isReticulation = isRetNode, name=label)
+                
+        
+        def branchLen(self, otherNode):
+                if(type(otherNode)!= UltrametricNode):
+                        raise NodeError("Attempting to gather a branch length between an Ultrametric Node and a non-Ultrametric Node")
+                
+                return math.abs(self.height - otherNode.getHeight())
+
+        def getHeight(self):
+                return self.height
+        
+        def asString(self):
+                myStr = "Node " + str(self.label) + ": "
+                if self.height != None:
+                        myStr += str(self.height) + " "
+                if self.parent != None:
+                        myStr += " has parent " + str(self.parent.name)
+                
+                return myStr
+
+        def propose(self, newValue):
+                """
+                Stores the current value in a temporary holder while the
+                newValue gets tested for viability 
+                """
+                self.tempHeight = self.height
+                self.height = newValue
+        
+        def accept(self):
+                """
+                If the proposed change is good, accept it by flushing the data 
+                out of the temp container, symbolically cementing .height as the 
+                official height
+                """
+                self.tempHeight = None
+        
+        def reject(self):
+                """
+                If the proposed change is bad, reset the official height to what it
+                was (the contents of the temp container).
+
+                Flush the temp container of all data.
+                """
+
+                self.height = self.tempHeight
+                self.tempHeight = None
         
