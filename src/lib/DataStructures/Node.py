@@ -16,7 +16,7 @@ class Node:
         """
         
         
-        def __init__(self, branchLen=None, parNode=None, attr=None, isReticulation=False, name = None):
+        def __init__(self, branchLen=None, parNode=None, attr={}, isReticulation=False, name = None):
                 self.branchLength = branchLen
                 self.tempLen = None
                 self.attributes = attr
@@ -71,6 +71,7 @@ class Node:
                         myStr += " has parent(s) " + str([self.parent[i].name for i in range(len(self.parent))])
                 
                 myStr += " is a reticulation node? " + str(self.isReticulation)
+                myStr += " has attributes: " + str(self.attributes)
                 
                 return myStr
 
@@ -84,7 +85,7 @@ class Node:
 
 class UltrametricNode(Node):
 
-        def __init__(self, height=None, par=None, attributes=None, isRetNode=False, label = None):
+        def __init__(self, height=None, par=None, attributes={}, isRetNode=False, label = None):
                 self.height = height
                 super().__init__(parNode=par, attr = attributes, isReticulation = isRetNode, name=label)
                 

@@ -1,9 +1,44 @@
+from operator import index
 from nexus import NexusReader
 from Bio import Phylo
 from io import StringIO
 from Graph import DAG
 from Node import Node
 import copy
+from Node import NodeError
+
+
+def parseAttributes(attrStr):
+        if len(attrStr) < 2:
+                raise NodeError("reticulation event label formatting incorrect")
+
+        indexLookup = 0
+
+        #decipher event type
+        if attrStr[0] == "R":
+                event = "Recombination"
+                indexLookup = 1
+        elif attrStr[0] == "H":
+                event = "Hybridization"
+                indexLookup = 1
+        elif attrStr[0] == "L":
+                try:
+                        if attrStr[1] == "G" and attrStr[2]=="T":
+                                event = "Lateral Gene Transfer"
+                                indexLookup = 3
+                except:
+                        raise NodeError("Invalid label format string (event error)")
+        else:
+                raise NodeError("Invalid label format string (event error) ")
+
+        #parse node index
+        try:
+                strnum = attrStr[indexLookup:]
+                num = int(strnum)
+                return event, num
+        except:
+                raise NodeError("Invalid label format string (number error)")
+        
 
 
 
@@ -27,18 +62,36 @@ def buildFromTreeObj(tree):
         
         
         for node, par in parents.items():
-        
-                if str(node.name)[0] == "#":
-                        retValue = True
-                else:
-                        retValue = False
+
+                #support for extended newick
+                extendedNewickParsedLabel = node.name.split("#")
                 
-                oldNode = net.hasNodeWithName(node.name)
+                #if its a reticulation node, grab the formatting information
+                #only allow labels to have a singular #
+                if len(extendedNewickParsedLabel) == 2:
+                        eventType, num =  parseAttributes(extendedNewickParsedLabel[1])
+                        retValue = True
+                elif len(extendedNewickParsedLabel) ==1:
+                        retValue = False
+                else:
+                        raise NodeError("Node has a name that contains too many '#' characters. Must only contain 1")
+                
+                #if node already exists, just add its other parent
+                oldNode = net.hasNodeWithName(extendedNewickParsedLabel[0])
                 if oldNode != False:
                         oldNode.addParent(par)
                 else:
-                        newNode = Node(node.branch_length, par, name = node.name, isReticulation=retValue)
-                        net.addNodes(copy.deepcopy(newNode))
+                        #create new node, with attributes if a reticulation node
+                        if(retValue):
+                                newNode = copy.deepcopy(Node(node.branch_length, par, name = extendedNewickParsedLabel[0], isReticulation=retValue))
+                                newNode.addAttribute("eventType", eventType)
+                                newNode.addAttribute("index", num)
+                        else: 
+                                newNode = copy.deepcopy(Node(node.branch_length, par, name = extendedNewickParsedLabel[0], isReticulation=retValue))
+
+                        
+                        #add the newly created node to the DAG
+                        net.addNodes(newNode)
 
         return net
 
@@ -81,4 +134,6 @@ class NetworkBuilder:
 n = NetworkBuilder("src/io/testfile3.nex")
 
 n.printNetworks()
+
+
         
