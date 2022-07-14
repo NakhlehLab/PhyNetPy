@@ -21,7 +21,7 @@ class Node:
                 self.tempLen = None
                 self.attributes = attr
                 self.isReticulation = isReticulation
-                self.parent = parNode
+                self.parent = [parNode]
                 self.label = name
                 
         
@@ -68,9 +68,17 @@ class Node:
                 if self.branchLength != None:
                         myStr += str(self.branchLength) + " "
                 if self.parent != None:
-                        myStr += " has parent " + str(self.parent.name)
+                        myStr += " has parent(s) " + str([self.parent[i].name for i in range(len(self.parent))])
+                
+                myStr += " is a reticulation node? " + str(self.isReticulation)
                 
                 return myStr
+
+        def getName(self):
+                return self.label
+        
+        def addParent(self, par):
+                self.parent.append(par)
 
 
 
@@ -96,6 +104,8 @@ class UltrametricNode(Node):
                         myStr += str(self.height) + " "
                 if self.parent != None:
                         myStr += " has parent " + str(self.parent.name)
+                
+                myStr += " is a reticulation node? " + str(self.isReticulation)
                 
                 return myStr
 

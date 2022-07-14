@@ -27,6 +27,7 @@ class Graph:
                 self.nodes = nodes
                 self.edgeWeights = weights
 
+
         def addNodes(self, nodes):
                 """
                 if nodes is a list of data (doesn't matter what the data is), then add each data point to the list
@@ -40,6 +41,8 @@ class Graph:
                         if nodes not in self.nodes:
                                 self.nodes.append(nodes)
                 return
+        
+        
         
         def addEdges(self, edges):
                 """
@@ -188,6 +191,14 @@ class DAG(Graph):
                                 if neighbor not in visited:
                                         self.dfs(neighbor, visited, sorted_nodes)
                 sorted_nodes.appendleft(start_node)
+
+        def hasNodeWithName(self, name):
+                for node in self.nodes:
+                        if node.getName() == name:
+                                print(node)
+                                return node
+
+                return False
 
         def printGraph(self):
                 for node in self.nodes:
