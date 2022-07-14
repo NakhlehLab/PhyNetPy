@@ -5,18 +5,6 @@ from Graph import DAG
 from Node import Node
 
 
-def get_parent(tree, child_clade):
-    node_path = tree.get_path(child_clade)
-    print(node_path)
-    if len(node_path) == 0:
-        return None
-    elif len(node_path) == 1:
-        return node_path[0]
-    return node_path[-2]
-
-
-
-
 class NetworkBuilder:
 
         def __init__(self, filename):
@@ -32,19 +20,34 @@ class NetworkBuilder:
                 """
 
                 for t in self.reader.trees:
+                        #grab the right hand side of the tree definition
                         handle = StringIO(str(t).split("=")[1])
+
+                        #parse the string handle
                         tree = Phylo.read(handle, "newick")
+
+                        #build the graph of the network
                         self.networks.append(self.buildFromTreeObj(tree))
-                        return
+
+                        return #just do 1 for now
         
         def buildFromTreeObj(self, tree):
+                """
+                Given a biopython Tree object (with nested clade objects)
+                walk through the tree and build a network/ultrametric network
+                from the nodes
+                """
+
+                #Build a parent dictionary from the biopython tree obj
                 parents = {}
                 for clade in tree.find_clades(order="level"):
                         for child in clade:
                                 parents[child] = clade
                 
+                #create new directed acyclic graph 
                 net = DAG()
 
+                #populate said graph with nodes and their attributes
                 for node, par in parents.items():
                         newNode = Node(node.branch_length, par, name = node.name)
                         net.addNodes(newNode)
