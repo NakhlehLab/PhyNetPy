@@ -195,7 +195,7 @@ class DAG(Graph):
         def hasNodeWithName(self, name):
                 for node in self.nodes:
                         if node.getName() == name:
-                                print(node)
+                                #print(node)
                                 return node
 
                 return False

@@ -9,6 +9,14 @@ from Node import NodeError
 
 
 def parseAttributes(attrStr):
+        """
+        Takes the formatting string from the extended newick grammar and parses
+        it into the event type and index.
+
+        IE: #H1 returns "Hybridization", 1
+        IE: #LGT21 returns "Lateral Gene Transfer", 21
+
+        """
         if len(attrStr) < 2:
                 raise NodeError("reticulation event label formatting incorrect")
 
@@ -42,6 +50,42 @@ def parseAttributes(attrStr):
 
 
 
+def parseNode(node, network):
+        """
+        Takes in a clade, and outputs a Node object with the appropriate attributes
+        """
+        # if type(node) != Phylo.Clade:
+        #         raise NodeError("attempting to parse a node that is not of class Clade")
+
+        extendedNewickParsedLabel = node.name.split("#")
+
+        #if node already exists, just add its other parent
+        oldNode = network.hasNodeWithName(extendedNewickParsedLabel[0])
+        if oldNode != False:
+                return oldNode
+      
+        #if its a reticulation node, grab the formatting information
+        #only allow labels to have a singular #
+        if len(extendedNewickParsedLabel) == 2:
+                eventType, num =  parseAttributes(extendedNewickParsedLabel[1])
+                retValue = True
+        elif len(extendedNewickParsedLabel) ==1:
+                retValue = False
+        else:
+                raise NodeError("Node has a name that contains too many '#' characters. Must only contain 1")
+        
+        #create new node, with attributes if a reticulation node
+        if(retValue):
+                newNode = copy.deepcopy(Node(node.branch_length, name = extendedNewickParsedLabel[0], isReticulation=retValue))
+                newNode.addAttribute("eventType", eventType)
+                newNode.addAttribute("index", num)
+        else: 
+                newNode = copy.deepcopy(Node(node.branch_length, name = extendedNewickParsedLabel[0], isReticulation=retValue))
+        
+        network.addNodes(newNode)
+        return newNode
+        
+
 def buildFromTreeObj(tree):
         """
         Given a biopython Tree object (with nested clade objects)
@@ -59,40 +103,17 @@ def buildFromTreeObj(tree):
         net = copy.deepcopy(DAG())
 
         #populate said graph with nodes and their attributes
-        
+        edges = []
         
         for node, par in parents.items():
+                childNode = parseNode(node, net)
+                parentNode = parseNode(par, net)
 
-                #support for extended newick
-                extendedNewickParsedLabel = node.name.split("#")
+                childNode.addParent(parentNode)
+                edges.append([parentNode, childNode])
                 
-                #if its a reticulation node, grab the formatting information
-                #only allow labels to have a singular #
-                if len(extendedNewickParsedLabel) == 2:
-                        eventType, num =  parseAttributes(extendedNewickParsedLabel[1])
-                        retValue = True
-                elif len(extendedNewickParsedLabel) ==1:
-                        retValue = False
-                else:
-                        raise NodeError("Node has a name that contains too many '#' characters. Must only contain 1")
-                
-                #if node already exists, just add its other parent
-                oldNode = net.hasNodeWithName(extendedNewickParsedLabel[0])
-                if oldNode != False:
-                        oldNode.addParent(par)
-                else:
-                        #create new node, with attributes if a reticulation node
-                        if(retValue):
-                                newNode = copy.deepcopy(Node(node.branch_length, par, name = extendedNewickParsedLabel[0], isReticulation=retValue))
-                                newNode.addAttribute("eventType", eventType)
-                                newNode.addAttribute("index", num)
-                        else: 
-                                newNode = copy.deepcopy(Node(node.branch_length, par, name = extendedNewickParsedLabel[0], isReticulation=retValue))
-
-                        
-                        #add the newly created node to the DAG
-                        net.addNodes(newNode)
-
+        net.addEdges(edges)
+        
         return net
 
 class NetworkBuilder:

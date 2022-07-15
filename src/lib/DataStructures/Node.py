@@ -16,16 +16,19 @@ class Node:
         """
         
         
-        def __init__(self, branchLen=None, parNode=None, attr={}, isReticulation=False, name = None):
+        def __init__(self, branchLen=None, parNode=[], attr={}, isReticulation=False, name = None):
                 self.branchLength = branchLen
                 self.tempLen = None
                 self.attributes = attr
                 self.isReticulation = isReticulation
-                self.parent = [parNode]
+                self.parent = parNode
                 self.label = name
                 
         
         def addAttribute(self, key, value):
+                """
+                put a key and value pair into the node attribute dictionary
+                """
                 self.attributes[key] = value
         
         def propose(self, newValue):
@@ -68,7 +71,7 @@ class Node:
                 if self.branchLength != None:
                         myStr += str(self.branchLength) + " "
                 if self.parent != None:
-                        myStr += " has parent(s) " + str([self.parent[i].name for i in range(len(self.parent))])
+                        myStr += " has parent(s) " + str([self.parent[i].getName() for i in range(len(self.parent))])
                 
                 myStr += " is a reticulation node? " + str(self.isReticulation)
                 myStr += " has attributes: " + str(self.attributes)
@@ -85,7 +88,7 @@ class Node:
 
 class UltrametricNode(Node):
 
-        def __init__(self, height=None, par=None, attributes={}, isRetNode=False, label = None):
+        def __init__(self, height=None, par=[], attributes={}, isRetNode=False, label = None):
                 self.height = height
                 super().__init__(parNode=par, attr = attributes, isReticulation = isRetNode, name=label)
                 

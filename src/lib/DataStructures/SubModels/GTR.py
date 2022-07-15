@@ -2,7 +2,9 @@ import numpy as np
 from numpy import linalg as lg
 import random 
 import math
-
+from numba import jit, cuda
+from timeit import default_timer as timer  
+import copy
 
 class SubstitutionModelError(Exception):
 
@@ -82,6 +84,27 @@ class GTR:
                 self.qIsUpdated = True
                 #do updates
 
+        @jit(target_backend="cuda")
+        def exptCUDA(self, t):
+                """
+                DOES NOT WORK RIGHT NOW
+                
+                Compute the matrix exponential Q^t and store the result.
+                If the solution has been computed already but the Q matrix has not 
+                changed, simply return the value
+                """
+                if self.qIsUpdated:
+                        eigenvals, eigenvecs = lg.eigh(self.Q)
+                        self.q = eigenvecs
+                        self.qinv = np.transpose(self.q)
+                        self.diag = np.diag(eigenvals)
+
+                        self.Qt = np.real(np.matmul(np.matmul(self.q, lg.matrix_power(self.diag, t)), self.qinv))
+                        self.qIsUpdated = False
+   
+                return self.Qt
+        
+        
         def expt(self, t):
                 """
                 Compute the matrix exponential Q^t and store the result.
@@ -204,3 +227,25 @@ class TN93(GTR):
                         raise SubstitutionModelError("Error in TN93 Transversions. Not all equal") 
 
                 super().__init__(baseFreqs, transitions, 4)
+
+
+
+
+
+
+
+
+model = GTR([.25, .25, .25, .25], [1,1,1,1,1,1])
+model2 = copy.deepcopy(GTR([.25, .25, .25, .25], [1,1,1,1,1,1]))
+
+start = timer()
+model.exptCUDA(50)
+print("with GPU:", timer()-start)    
+
+start = timer()
+model2.expt(50)
+print("without GPU:", timer()-start)
+
+
+
+
