@@ -1,5 +1,5 @@
 from collections import deque
-
+from queue import Queue
 from Node import Node
 
 
@@ -170,7 +170,7 @@ class DAG(Graph):
                 count = 0
                 for node in self.findRoot(): #start dfs at roots for correctness
                         if node not in visited:
-                                self.dfs(node, visited, sorted_nodes)
+                                self.dfs_recursive(node, visited, sorted_nodes)
                                 #if the initial dfs call is run more than once,
                                 #then nodes were not reached initially in which case
                                 #the graph is not connected
@@ -180,7 +180,7 @@ class DAG(Graph):
                                 
                 return list(sorted_nodes)
         
-        def dfs(self, start_node, visited, sorted_nodes):
+        def dfs_recursive(self, start_node, visited, sorted_nodes):
                 """
                 recursive dfs helper
                 """
@@ -191,6 +191,74 @@ class DAG(Graph):
                                 if neighbor not in visited:
                                         self.dfs(neighbor, visited, sorted_nodes)
                 sorted_nodes.appendleft(start_node)
+        
+
+        def bfs(self, startNode):
+
+                
+                dist = {startNode: 0}
+                parent = {startNode: None}
+
+                q = Queue(maxsize = 0) #unlimited length queue
+                q.put(startNode)
+
+                while not q.empty():
+                        cur = q.get()
+                        for neighbor in self.findDirectSuccessors(cur):
+                                if neighbor not in dist.keys():   
+                                        dist[neighbor] = dist[cur] + 1
+                                        parent[neighbor] = cur
+                                        q.put(neighbor)
+                
+                return parent, dist
+        
+        def graphSize(self, node):
+                parent, dist = self.bfs(node)
+                return len(list(parent.keys()))
+        
+
+        def dfs_graphPrint(self):
+
+                root = self.findRoot()[0]
+                dist = {root: 0}
+                parent = {root: None}
+                row = {root:0}
+                col = {} #maps parent to column
+
+                q = deque()
+                q.append(root)
+                self.stringMatrix[row[root]] += "-------------" + root.getName()
+                col[root]= len(self.stringMatrix[0])
+                
+                
+                while len(q) != 0:
+                        cur = q.pop()
+
+                        rowIter = row[cur]
+                        for neighbor in self.findDirectSuccessors(cur):
+                                if neighbor not in dist.keys():  
+                                        row[neighbor] = rowIter 
+                                        dist[neighbor] = dist[cur] + 1
+                                        parent[neighbor] = cur
+                                        q.append(neighbor)
+                                        if len(self.stringMatrix[rowIter]) == 0:
+                                                for dummy in range(col[cur]):
+                                                        self.stringMatrix[rowIter]+= " "
+                                        self.stringMatrix[rowIter] += "|-------------" + neighbor.getName()
+                                        col[neighbor] = len(self.stringMatrix[rowIter])
+                                        # for index in range(rowIter + 1, rowIter + 4):
+                                        #         if len(self.stringMatrix[index]) == 0:
+                                        #                 for dummy in range(col[neighbor]):
+                                        #                         self.stringMatrix[index]+= " "
+                                        #                 self.stringMatrix[index] += "|"
+                                        rowIter += 4*self.graphSize(neighbor)
+                
+                return parent, dist, col
+
+
+
+
+
 
         def hasNodeWithName(self, name):
                 for node in self.nodes:
@@ -204,6 +272,26 @@ class DAG(Graph):
                 for node in self.nodes:
                         if(type(node)==Node):
                                 print(node.asString())
+
+        def asciiGraph(self):
+                print("PRINTING NETWORK")
+                
+                #self.stringMatrix = ["" for dummy in range(8*self.graphSize(self.findRoot()[0]))]
+                self.stringMatrix = ["" for dummy in range(80)]
+                self.dfs_graphPrint()
+
+                # with open("graphOut.txt", "w") as f:
+                #         for rowStr in self.stringMatrix:
+                #                 f.write(rowStr + "\n")
+
+                for rowStr in self.stringMatrix:
+                        print(rowStr)
+
+                        
+                        
+
+
+
         
 class undiGraph(Graph):
 

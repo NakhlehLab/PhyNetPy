@@ -46,7 +46,7 @@ class Felsenstein:
                         for i in range(4):
                                 tempvalues = aNode.getChildCount()
 
-                                for j in range(len(self.genes)):
+                                for j in range(4):
                                         for k in range(len(tempvalues)):
                                                 childLikelihood = childrenLikelihood[children[k]].get(j) #.get( ) for a node?
                                                 #last argument is for caching behavior

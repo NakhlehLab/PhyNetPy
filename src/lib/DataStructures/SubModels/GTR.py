@@ -43,7 +43,12 @@ class GTR:
                 self.qIsUpdated = True
                 self.Qt = None
                 
-                
+
+        def getHyperParams(self):
+                return self.freqs, self.trans
+
+        def getStates(self):
+                return self.states
 
         
         def buildQ(self):
@@ -88,7 +93,7 @@ class GTR:
         def exptCUDA(self, t):
                 """
                 DOES NOT WORK RIGHT NOW
-                
+
                 Compute the matrix exponential Q^t and store the result.
                 If the solution has been computed already but the Q matrix has not 
                 changed, simply return the value
@@ -118,7 +123,7 @@ class GTR:
                         self.diag = np.diag(eigenvals)
 
                         self.Qt = np.real(np.matmul(np.matmul(self.q, lg.matrix_power(self.diag, t)), self.qinv))
-                        self.qIsUpdated = False
+                        #self.qIsUpdated = False   TODO:make sure laziness works here
    
                 return self.Qt
 

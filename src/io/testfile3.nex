@@ -103,6 +103,8 @@ Begin trees;
     siete seq_7
     ;
 
+
+tree numeroZero = ((tres:.5, siete:.5)dos:.5, (cinco:.5, seis:.5)quatro:.5)uno:.5;
 tree numeroUno = ((((siete:.5)cinco:.5, seis:.5)quatro#H1:.5)tres:.5, (quatro#H1:.5)dos:.5)uno:.5;
 tree numeroDos = ((((siete:.5)cinco:.5, seis:.5)quatro#H1:.5)dos:.5, (quatro#H1:.5)tres:.5)uno:.5;
 

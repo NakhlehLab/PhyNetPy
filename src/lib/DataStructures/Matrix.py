@@ -64,7 +64,7 @@ class Matrix:
                 self.count = []
                 self.alphabet = alphabet
                 self.type = alphabet.getType()
-
+                self.taxa2Rows = {}
 
                 #the next binary state to map a new character to
                 self.nextState = 0
@@ -102,6 +102,8 @@ class Matrix:
                 #translate the data into the matrix
                 index = 0
                 for r in self.seqRecords:
+                        self.taxa2Rows[r.name] = index
+                        print("mapping " + str(r.name) + " to row number "+ str(index))
                         lenCount = 0
                         for char in r.seq:
                                 #use the alphabet to map characters to their bit states and add to 
@@ -183,7 +185,11 @@ class Matrix:
                 print(self.count)
                 print(self.stateMap)
                                        
-
+        def getIJ(self, row, col):
+                return self.data[row][col]
+        
+        def rowGivenName(self, label):
+                return self.taxa2Rows[label]
 
         def getColumn(self, i, data, sites):
                 """
@@ -197,6 +203,14 @@ class Matrix:
                 
                 return data[:, i]
         
+        def getColumnAt(self, i):
+                """
+                Returns ith column of data matrix
+                """                
+                return self.data[:, i]
+        
+        def siteCount(self):
+                return self.uniqueSites
         
         def populateCounts(self , newData):
                 """
