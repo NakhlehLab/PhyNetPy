@@ -3,6 +3,10 @@ import numpy as np
 from Node import Node
 from Graph import DAG
 import math
+import copy
+from threading import Thread
+from threading import Lock
+import time
 
 
 def numLiveSpecies(nodeList):
@@ -16,6 +20,22 @@ def randomSpeciesSelection(nodeList):
 def liveSpecies(nodeList):
         return [node for node in nodeList if node.attrLookup("live") == True]
 
+
+class treeGen(Thread):
+        def __init__(self, thread_name, thread_ID, yuleObj, tasks):
+                Thread.__init__(self)
+                self.thread_name = thread_name
+                self.thread_ID = thread_ID
+                self.model = yuleObj
+                self.tasks = tasks
+ 
+        # helper function to execute the threads
+        def run(self):
+                return self.model.generateTrees(self.tasks)
+                #print("Thread "+ str(self.thread_ID) + " has completed")
+                
+                
+
 class Yule:
 
         def __init__(self, gamma, n):
@@ -24,6 +44,7 @@ class Yule:
                 self.lin = 2
                 self.internalCount = 1
                 self.elapsedTime = 0
+                self.generatedTrees = []
 
 
         def drawWaitingTime(self):
@@ -111,11 +132,47 @@ class Yule:
         
 
                 #return the simulated tree
-                tree = DAG()
+                tree = copy.deepcopy(DAG())
                 tree.addEdges(edges)
                 tree.addNodes(nodes)
-                
+
                 return tree
+        
+        def clearGenerated(self):
+                self.generatedTrees = []
+        
+        def generateNTreesParallel(self, numTrees, numThreads):
+                """
+                Return a list of numTrees number of simulated trees.
+
+                Not yet parallelized, m threads would grant the ability to sim
+                m trees at once, reducing runtime for large trees or a large number of trees
+                """
+                ids = 0
+                totalTrees = []
+                for dummy in range(numThreads):
+                        newThread = treeGen("thread" + str(ids), ids , self, int(numTrees / numThreads))
+                        ids+=1
+                        totalTrees.append(newThread.run())
+                
+                return totalTrees
+        
+
+        def generateNTreesSeq(self, numTrees):
+                for dummy in range(numTrees):
+                        self.generatedTrees.append(self.generateTree())
+
+                return self.generatedTrees
+        
+        def generateTrees(self, tasks):
+                trees = []
+                for dummy in range(tasks):
+                        trees.append(self.generateTree())
+                
+                return trees
+
+
+
                         
 
 
@@ -148,7 +205,22 @@ class CBDP:
 
 
 
-sim = Yule(.05, 6)
+sim = Yule(.05, 10)
 
-tree = sim.generateTree()
-tree.printGraph()
+startSeq = time.perf_counter()
+seqTrees = sim.generateNTreesSeq(10000)
+endSeq = time.perf_counter()
+print(len(seqTrees))
+sim.clearGenerated()
+
+
+startPar = time.perf_counter()
+parTrees = sim.generateNTreesParallel(10000, 10)
+endPar = time.perf_counter()
+
+print(len(parTrees[0]))
+
+print("SEQUENTIAL TIME:" + str(endSeq-startSeq))
+print("PARALLEL TIME:" + str(endPar-startPar))
+
+
