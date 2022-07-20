@@ -83,7 +83,21 @@ class Node:
         
         def addParent(self, par):
                 self.parent.append(par)
+        
+        def getParent(self, all=False):
+                if all:
+                        return self.parent
+                else:
+                        return self.parent[0]
+        
+        def setParent(self, newPar):
+                self.parent = [newPar]
 
+        def attrLookup(self, attr):
+                if attr in self.attributes:
+                        return self.attributes[attr]
+                else:
+                        return None
 
 
 class UltrametricNode(Node):
