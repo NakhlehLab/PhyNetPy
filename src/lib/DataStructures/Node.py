@@ -69,7 +69,7 @@ class Node:
         def asString(self):
                 myStr = "Node " + str(self.label) + ": "
                 if self.branchLength != None:
-                        myStr += str(self.branchLength) + " "
+                        myStr += str(round(self.branchLength, 2)) + " "
                 if self.parent != None:
                         myStr += " has parent(s) " + str([self.parent[i].getName() for i in range(len(self.parent))])
                 
@@ -92,6 +92,9 @@ class Node:
         
         def setParent(self, newPar):
                 self.parent = [newPar]
+        
+        def setBranchLength(self, length):
+                self.branchLength = length
 
         def attrLookup(self, attr):
                 if attr in self.attributes:

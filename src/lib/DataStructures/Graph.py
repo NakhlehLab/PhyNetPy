@@ -272,6 +272,7 @@ class DAG(Graph):
                 for node in self.nodes:
                         if(type(node)==Node):
                                 print(node.asString())
+                        
 
         def asciiGraph(self):
                 print("PRINTING NETWORK")
