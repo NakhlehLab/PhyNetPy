@@ -361,22 +361,24 @@ class ThreadSafeList():
 
 
 
-sim = Yule(.05, 10)
+sim = Yule(.05, 6)
 
-startSeq = time.perf_counter()
-sim.generateNTreesSeq(500000)
-endSeq = time.perf_counter()
-print(len(sim.generatedTrees))
-sim.clearGenerated()
+sim.generateTree().printGraph()
+
+# startSeq = time.perf_counter()
+# sim.generateNTreesSeq(500000)
+# endSeq = time.perf_counter()
+# print(len(sim.generatedTrees))
+# sim.clearGenerated()
 
 
-startPar = time.perf_counter()
-sim.generateNTreesParallel(500000, 4)
-endPar = time.perf_counter()
+# startPar = time.perf_counter()
+# sim.generateNTreesParallel(500000, 4)
+# endPar = time.perf_counter()
 
-print(sim.parallelTrees.length())
+# print(sim.parallelTrees.length())
 
-print("SEQUENTIAL TIME:" + str(endSeq-startSeq))
-print("PARALLEL TIME:" + str(endPar-startPar))
+# print("SEQUENTIAL TIME:" + str(endSeq-startSeq))
+# print("PARALLEL TIME:" + str(endPar-startPar))
 
 

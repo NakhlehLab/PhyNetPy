@@ -84,12 +84,12 @@ class Probability:
                 
                 #multiply the likelihoods together, via the assumption that each site
                 #is an independent event
-                result = 1
+                result = 0
                 for likelihood in likelihoods:
                         #dot product of base frequencies and the likelihood array
                         compressed = np.dot(likelihood, self.sub.getHyperParams()[0]) #dot product of likelihoods and the base frequencies
                         #use the log likelihood
-                        result *= math.log(compressed)
+                        result += math.log(compressed)
                 
                 return result
                 
