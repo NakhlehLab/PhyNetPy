@@ -148,9 +148,21 @@ class DAG(Graph):
                 return root
 
         def findDirectPredecessors(self, node):
+                """
+                Returns a list of the children of node
+
+                node-- A Node Object
+                """
                 return [edge[0] for edge in self.inEdges(node)]
         
         def findDirectSuccessors(self, node):
+                """
+                Returns a list of the parent(s) of node. For a tree, this 
+                list should be of length 1. For a network, a child may have more
+                than one.
+
+                node-- A Node Object
+                """
                 return [edge[1] for edge in self.outEdges(node)]
         
         

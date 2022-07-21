@@ -1,12 +1,12 @@
-
-
-
 from Matrix import Matrix
 import GTR
 import numpy as np
 import math
 
 class ProbabilityError(Exception):
+        """
+        Class that handles any probability exceptions
+        """
         def __init__(self, message = "Error"):
                 self.message = message
                 super().__init__(self.message)
@@ -17,23 +17,38 @@ class Probability:
         A class for drawing objects from a distribution, or calculating the 
         probability of an object from within a distribution space (given some data
         and hyperparameters)
+
+        network-- A DAG object that represents a tree/network
+
+        model-- A substitution model, default being Jukes Cantor. May be any subtype
+                of the GTR class
+        
+        data-- A Matrix object that is a compressed MSA matrix containing site data
+                for each taxa
         """
 
         def __init__(self, network, model = GTR.JC(), data = None):
+                #init inputs
                 self.sub = model
                 self.data = data
                 self.tree = network
+
+                #cache for storing computed matrix exponentials
                 self.cache = {}
 
         def setModel(self, subModel):
                 """
                 set the substitution model
+
+                subModel-- the new substitution model of subtype GTR
                 """
                 self.sub = subModel
 
         def setData(self, dataMatrix):
                 """
                 set the data matrix, must be of class type Matrix
+
+                dataMatrix-- a Matrix object
                 """
                 if type(dataMatrix) != Matrix:
                         raise ProbabilityError("Tried to set data to type other than Matrix")
@@ -50,6 +65,12 @@ class Probability:
                 """
                 computes the likelihood of a data structure given the data and 
                 a substitution model
+
+                For now, this is felsensteins algorithm, which only works on DNA
+                and trees that lack reticulations/hybridizations.
+
+                Outputs: The log likelihood probability P(Tree | Data & Substitution model) 
+
                 """
 
                 #need data
@@ -74,6 +95,23 @@ class Probability:
                 
                 
         def computeColumnLikelihood(self, i, startNode):
+
+                """
+                Computes the likelihood for one unique site(column) in the data matrix
+
+                If this function is called on a leaf, the likelihood will be simply a unit vector of length
+                4 that describes the state A C G or T based on the actual data matrix.
+
+                If this function is called on an internal node, then Felsenstein's algo will be invoked
+                on its children nodes to compute its likelihood.
+
+                i-- the column index into the data matrix
+
+                startNode-- the node for which you would like to compute the Felsenstein likelihood for
+
+                Output: an array of length 4. arr[j] is the probability that state j is seen in this node
+                        given branch lengths and child probabilities
+                """
 
                 #only works for DNA right now
                 genes = ["A", "C", "G", "T"]
@@ -118,7 +156,13 @@ class Probability:
         def pij(self, i, j, branchLen):
                 """
                 Calculate Q^branchLen and select the ijth entry. Only calculate
-                Q^branchLen if it has not been calculated before. In 
+                Q^branchLen if it has not been calculated before. 
+
+                i-- row index
+                j-- column index
+                branchLen-- time, or the power to raise the transition matrix to
+
+                Output: P_ij
                 """
 
                 if branchLen in self.cache.keys():
