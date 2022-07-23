@@ -169,6 +169,54 @@ class Yule:
 
                 return nodes, edges
 
+        
+        def generateTreeGeneral(self):
+
+                """
+                Simulate one tree under the model. Starts with a root and 2 living lineages
+                and then continuously runs speciation (in this case birth only) 
+                events until there are exactly self.N live species.
+
+                This calculates only the tree topology, not the branch lengths.
+                """
+
+                #Set up the tree with 2 living lineages and an "internal" root node
+                node1 = Node(0, attr = {"t":0, "label": "root", "live":False}, name = "root")
+                node2 = Node(parNode=[node1], attr={"live":True}, name="spec1")
+                node3 = Node(parNode=[node1], attr={"live":True}, name="spec2")
+
+                nodes = [node1, node2, node3]
+                edges = [[node1, node2], [node1, node3]]
+
+                #until the tree contains N extant taxa, keep having speciation events
+                while numLiveSpecies(nodes) < self.N:
+                        self.event(nodes, edges)
+                
+                #populate remaining branches with branch lengths according to
+                #Eq 5.1? Just taking sigma_n for now
+                nextTime = self.drawWaitingTime()
+
+                for node in liveSpecies(nodes):
+                        node.addAttribute("t", self.elapsedTime + nextTime)
+                        if len(node.getParent(True)) != 0:
+                                node.setBranchLength(self.elapsedTime + nextTime - node.getParent().attrLookup("t"))
+                        else:
+                                node.setBranchLength(0)
+        
+
+                #return the simulated tree
+                tree = copy.deepcopy(DAG())
+                tree.addEdges(edges)
+                tree.addNodes(nodes)
+
+                #reset the elapsed time to 0, and the number of live branches to 2 
+                #for correctness generating future trees
+                self.elapsedTime = 0
+                self.lin = 2
+
+                return tree
+
+
 
         def generateTree(self):
                 """
@@ -288,31 +336,32 @@ class Yule:
 
 
 
-# class CBDP:
+class CBDP:
 
-#         def __init__(self, gamma, mu, n):
-#                 self.gamma = gamma
-#                 self.mu = mu
-#                 self.pBirth = self.gamma / (self.gamma + self.mu)
-#                 self.pDeath = self.mu / (self.gamma + self.mu)
-#                 self.N = n
+        def __init__(self, gamma, mu, sample, n):
+                self.gamma = gamma
+                self.mu = mu
+                self.sample = sample
+                self.pBirth = self.gamma / (self.gamma + self.mu)
+                self.pDeath = self.mu / (self.gamma + self.mu)
+                self.N = n
 
 
-#         def drawWaitingTime(self, numLineages):
-#                 scale = 1 / (numLineages * (self.mu + self.gamma))
-#                 return np.random.exponential(scale)
+        def drawWaitingTime(self, numLineages):
+                scale = 1 / (numLineages * (self.mu + self.gamma))
+                return np.random.exponential(scale)
         
-#         def event(self):
-#                 """
-#                 A speciation event occurs. Return 1 if it is a birth event,
-#                 or 0 for a death event.
-#                 """
-#                 draw = random.random()
+        def event(self):
+                """
+                A speciation event occurs. Return 1 if it is a birth event,
+                or 0 for a death event.
+                """
+                draw = random.random()
 
-#                 if draw < (1 - self.pBirth):
-#                         return 0 #death
-#                 else:
-#                         return 1 #birth
+                if draw < (1 - self.pBirth):
+                        return 0 #death
+                else:
+                        return 1 #birth
 
 
 

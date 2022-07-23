@@ -3,6 +3,37 @@ from queue import Queue
 from Node import Node
 
 
+
+
+def newickSubstring(children, node):
+        """
+        Ex E: a, b, c and c: d
+
+        becomes (a, b, )
+        
+        """
+        if node in children.keys():
+                
+                retStr = "("
+
+                for child in children[node][0]:
+                        if not children[node][1]:
+                                retStr += newickSubstring(children, child)
+                        else:
+                                retStr += child.getName()
+                        retStr += ", "
+
+                retStr = retStr[:-2] #Get rid of spurious comma
+
+                retStr += ")" + node.getName()
+        else:
+                retStr = node.getName()
+
+        return retStr
+
+
+
+
 class GraphTopologyError(Exception):
         """
         This exception is raised when a graph is malformed in some way
@@ -285,6 +316,58 @@ class DAG(Graph):
                         if(type(node)==Node):
                                 print(node.asString())
                         
+
+        def newickString(self):
+                strElements = deque()
+
+                strElements.appendleft(";")
+
+                root = self.findRoot()[0]
+               
+                children = {root:[set(), False]}
+                visitedRetic = []
+                
+
+                q = deque()
+                q.append(root)
+         
+                
+                while len(q) != 0:
+                        cur = q.pop()
+
+                        for neighbor in self.findDirectSuccessors(cur):
+                                
+                                if cur in children.keys():
+                                        children[cur][0].add(neighbor)
+                                else:
+                                        children[cur] = [set([neighbor]), False]
+                                        
+                                
+                                if neighbor.isReticulation and neighbor in visitedRetic:
+                                        children[cur][1] = True
+                                elif neighbor.isReticulation:
+                                        visitedRetic.append(neighbor)
+
+        
+                                q.append(neighbor)
+                
+
+                return newickSubstring(children, root) + ";"
+
+                                        
+                
+        
+
+
+
+
+
+
+
+                
+
+
+
 
         def asciiGraph(self):
                 print("PRINTING NETWORK")

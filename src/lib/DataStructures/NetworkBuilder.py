@@ -6,7 +6,7 @@ from Graph import DAG
 from Node import Node
 import copy
 from Node import NodeError
-from Probability import Probability
+
 
 
 def parseAttributes(attrStr):
@@ -159,9 +159,10 @@ class NetworkBuilder:
 
 
 n = NetworkBuilder("src/io/testfile3.nex")
-n.printNetworks()
+#n.printNetworks()
 
-test = n.getNetwork(0)
+test = n.getNetwork(1)
+print(test.newickString())
 
 
         
