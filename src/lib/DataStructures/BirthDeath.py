@@ -72,16 +72,21 @@ class Yule:
                 branch lengths and a younger tree.
         
         n-- number of extant taxa at the end of simulation
+
+        time-- if conditioning on time, the age of the tree to be simulated
         
         """
 
-        def __init__(self, gamma, n):
+        def __init__(self, gamma, n, time):
 
                 #birth rate
                 self.gamma = gamma
 
                 #goal number of taxa
                 self.N = n
+
+                #goal time
+                self.time = time
 
                 if self.N < 3:
                         #choosing <3 because a tree with 2 taxa is always the same (branch lengths aside)
@@ -102,10 +107,6 @@ class Yule:
                 self.parallelTrees = ThreadSafeList()
                 
 
-        
-
-                
-
 
         def drawWaitingTime(self):
                 """
@@ -119,7 +120,9 @@ class Yule:
                 scale = 1 / (self.lin * self.gamma)
                 return round(np.random.exponential(scale), 2)
         
-        def event(self, nodes, edges):
+
+
+        def event(self, nodes, edges, condition="N"):
                 """
                 A speciation event occurs. Select a living lineage.
 
@@ -140,8 +143,16 @@ class Yule:
 
                 #calculate the branch length to the internal node
                 nextTime = self.drawWaitingTime()
-                branchLen = self.elapsedTime + nextTime - specNode.getParent().attrLookup("t")
-                self.elapsedTime += nextTime
+                if condition == "N":
+                        branchLen = self.elapsedTime + nextTime - specNode.getParent().attrLookup("t")
+                        self.elapsedTime += nextTime
+                elif condition == "T" and self.elapsedTime + nextTime <= self.time:
+                        branchLen = self.elapsedTime + nextTime - specNode.getParent().attrLookup("t")
+                        self.elapsedTime += nextTime
+                elif condition == "T" and self.elapsedTime + nextTime > self.time:
+                        return -1
+                        # branchLen = self.time - specNode.getParent().attrLookup("t")
+                        # self.elapsedTime = self.time
 
                 #create the new internal node
                 newInternal = Node(branchLen, parNode=[specNode.getParent()], attr={"t":self.elapsedTime, "live":False}, name = "internal" + str(self.internalCount))
@@ -169,56 +180,9 @@ class Yule:
 
                 return nodes, edges
 
-        
-        def generateTreeGeneral(self):
-
-                """
-                Simulate one tree under the model. Starts with a root and 2 living lineages
-                and then continuously runs speciation (in this case birth only) 
-                events until there are exactly self.N live species.
-
-                This calculates only the tree topology, not the branch lengths.
-                """
-
-                #Set up the tree with 2 living lineages and an "internal" root node
-                node1 = Node(0, attr = {"t":0, "label": "root", "live":False}, name = "root")
-                node2 = Node(parNode=[node1], attr={"live":True}, name="spec1")
-                node3 = Node(parNode=[node1], attr={"live":True}, name="spec2")
-
-                nodes = [node1, node2, node3]
-                edges = [[node1, node2], [node1, node3]]
-
-                #until the tree contains N extant taxa, keep having speciation events
-                while numLiveSpecies(nodes) < self.N:
-                        self.event(nodes, edges)
-                
-                #populate remaining branches with branch lengths according to
-                #Eq 5.1? Just taking sigma_n for now
-                nextTime = self.drawWaitingTime()
-
-                for node in liveSpecies(nodes):
-                        node.addAttribute("t", self.elapsedTime + nextTime)
-                        if len(node.getParent(True)) != 0:
-                                node.setBranchLength(self.elapsedTime + nextTime - node.getParent().attrLookup("t"))
-                        else:
-                                node.setBranchLength(0)
-        
-
-                #return the simulated tree
-                tree = copy.deepcopy(DAG())
-                tree.addEdges(edges)
-                tree.addNodes(nodes)
-
-                #reset the elapsed time to 0, and the number of live branches to 2 
-                #for correctness generating future trees
-                self.elapsedTime = 0
-                self.lin = 2
-
-                return tree
 
 
-
-        def generateTree(self):
+        def generateTree(self, condition="N"):
                 """
                 Simulate one tree under the model. Starts with a root and 2 living lineages
                 and then continuously runs speciation (in this case birth only) 
@@ -237,30 +201,55 @@ class Yule:
                 edges = [[node1, node2], [node1, node3]]
 
                 #until the tree contains N extant taxa, keep having speciation events
-                while numLiveSpecies(nodes) < self.N:
-                        self.event(nodes, edges)
+                if(condition == "N"):
+                        while numLiveSpecies(nodes) < self.N:
+                                self.event(nodes, edges)
+                        
+                        #populate remaining branches with branch lengths according to
+                        #Eq 5.1? Just taking sigma_n for now
+                        nextTime = self.drawWaitingTime()
+
+                        for node in liveSpecies(nodes):
+                                node.addAttribute("t", self.elapsedTime + nextTime)
+                                if len(node.getParent(True)) != 0:
+                                        node.setBranchLength(self.elapsedTime + nextTime - node.getParent().attrLookup("t"))
+                                else:
+                                        node.setBranchLength(0)
                 
-                #populate remaining branches with branch lengths according to
-                #Eq 5.1? Just taking sigma_n for now
-                nextTime = self.drawWaitingTime()
 
-                for node in liveSpecies(nodes):
-                        node.addAttribute("t", self.elapsedTime + nextTime)
-                        if len(node.getParent(True)) != 0:
-                                node.setBranchLength(self.elapsedTime + nextTime - node.getParent().attrLookup("t"))
-                        else:
-                                node.setBranchLength(0)
-        
+                        #return the simulated tree
+                        tree = copy.deepcopy(DAG())
+                        tree.addEdges(edges)
+                        tree.addNodes(nodes)
 
-                #return the simulated tree
-                tree = copy.deepcopy(DAG())
-                tree.addEdges(edges)
-                tree.addNodes(nodes)
+                        #reset the elapsed time to 0, and the number of live branches to 2 
+                        #for correctness generating future trees
+                        self.elapsedTime = 0
+                        self.lin = 2
+                
+                elif condition == "T":
+                        while self.elapsedTime < self.time:
+                                status = self.event(nodes, edges, "T")
+                                if status == -1:
+                                        break
+                        
+                        for node in liveSpecies(nodes):
+                                node.addAttribute("t", self.time)
+                                if len(node.getParent(True)) != 0:
+                                        node.setBranchLength(self.time - node.getParent().attrLookup("t"))
+                                else:
+                                        node.setBranchLength(0)
 
-                #reset the elapsed time to 0, and the number of live branches to 2 
-                #for correctness generating future trees
-                self.elapsedTime = 0
-                self.lin = 2
+                        tree = copy.deepcopy(DAG())
+                        tree.addEdges(edges)
+                        tree.addNodes(nodes)
+
+                        #reset the elapsed time to 0, and the number of live branches to 2 
+                        #for correctness generating future trees
+                        self.elapsedTime = 0
+                        self.lin = 2
+                else:
+                        raise BirthDeathSimError("Condition parameter was not time ('T') or number of taxa ('N')")
 
                 return tree
         
@@ -410,9 +399,9 @@ class ThreadSafeList():
 
 
 
-sim = Yule(.05, 6)
+sim = Yule(.05, 6, 30)
 
-sim.generateTree().printGraph()
+sim.generateTree("T").printGraph()
 
 # startSeq = time.perf_counter()
 # sim.generateNTreesSeq(500000)
