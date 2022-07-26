@@ -7,7 +7,7 @@ import copy
 from threading import Thread
 from threading import Lock
 import time
-
+from collections import deque
 
 class BirthDeathSimError(Exception):
         """
@@ -327,30 +327,132 @@ class Yule:
 
 class CBDP:
 
-        def __init__(self, gamma, mu, sample, n):
-                self.gamma = gamma
-                self.mu = mu
+        def __init__(self, gamma, mu, n, sample=1):
+
+                #Eq 15 from https://www.sciencedirect.com/science/article/pii/S0022519309003300#bib24
+                self.gamma = gamma / sample
+                self.mu = mu - gamma*(1 - (1/sample))
+
                 self.sample = sample
+
+                #probabilities of speciation or extinction event
                 self.pBirth = self.gamma / (self.gamma + self.mu)
                 self.pDeath = self.mu / (self.gamma + self.mu)
                 self.N = n
 
 
-        def drawWaitingTime(self, numLineages):
-                scale = 1 / (numLineages * (self.mu + self.gamma))
-                return np.random.exponential(scale)
+        def Qinv(self, r):
+                term1 = (1 / self.gamma - self.mu) 
+                term2 = 1 - ((self.mu / self.gamma) * math.pow(r, 1 / self.N))
+                term3 = 1 - math.pow(r, 1 / self.N)
+                return term1 * math.log(term2 / term3)
         
-        def event(self):
-                """
-                A speciation event occurs. Return 1 if it is a birth event,
-                or 0 for a death event.
-                """
-                draw = random.random()
+        def Finv(self, r, t):
+                term1 = (1 / self.gamma - self.mu)
+                term2 = self.gamma - (self.mu * math.exp(-1*t*(self.gamma - self.mu)))
+                term3 = 1 - math.exp(-1*t*(self.gamma - self.mu))
+                return term1 * math.log((term2 - self.mu*r*term3) /(term2 - self.gamma*r*term3))
 
-                if draw < (1 - self.pBirth):
-                        return 0 #death
+        def generateTree(self):
+
+                #step 1
+                r = [random.random() for dummy in range(self.N)]
+
+                #step 2
+                t = self.Qinv(r[0])
+                print(t)
+
+                #step 3
+                s = {self.Finv(r[i], t): (i + .5) for i in range(1, self.N)}
+                
+                #step 4 setup
+
+                sKeys = list(s.keys())
+                sKeys.sort()
+
+                nodes = []
+                edges = []
+
+                for j in range(2*self.N - 1):
+                        if j % 2 == 0:
+                                #leaf node
+                                leaf = Node(attr = {"t":0}, name= "species" + str(int(j/2)))
+                                nodes.append(leaf)
+                        else:
+                                internal = Node(attr={"t": sKeys[int((j-1)/2)]}, name= "internal" + str(int((j-1)/2)))
+                                nodes.append(internal)
+                
+                #step 4
+                for i in range(2*self.N - 1):
+                        edges.append(self.connect(i, nodes))
+                
+
+                tree = copy.deepcopy(DAG())
+                tree.addEdges(edges)
+                tree.addNodes(nodes)
+
+                return tree
+
+        
+
+        def connect(self, index, nodes):
+
+                #find right candidate
+                copyIndex = index + 1
+                rightCandidate = None
+                
+                while copyIndex < len(nodes):
+                        if nodes[copyIndex].attrLookup("t") > nodes[index].attrLookup("t"):
+                                rightCandidate = nodes[copyIndex]
+                                break
+                        copyIndex += 1
+
+
+                #find left candidate
+                copyIndex = index - 1
+                leftCandidate = None
+                while copyIndex >= 0:
+                        if nodes[copyIndex].attrLookup("t") > nodes[index].attrLookup("t"):
+                                leftCandidate = nodes[copyIndex]
+                                break
+                        copyIndex -= 1
+                
+                #take the minimum time (leafs being at time 0, root being at max time)
+                if leftCandidate == None and rightCandidate == None:
+                        #We're running this on the root
+                        return
+                elif leftCandidate == None:
+                        selection = rightCandidate
+                elif rightCandidate == None:
+                        selection = leftCandidate
                 else:
-                        return 1 #birth
+                        comp = rightCandidate.attrLookup("t") - leftCandidate.attrLookup("t")
+                        if comp >= 0:
+                                selection = leftCandidate
+                        else:
+                                selection = rightCandidate
+
+                #create new edge
+                nodeT = nodes[index].attrLookup("t")
+                futureT = selection.attrLookup("t")
+                newEdge = [selection, nodes[index]]
+
+                #set the branch length of the current node
+                nodes[index].setBranchLength(futureT - nodeT)
+                nodes[index].setParent(selection)
+
+                return newEdge
+
+                        
+
+
+
+
+
+
+
+
+
 
 
 
@@ -401,7 +503,10 @@ class ThreadSafeList():
 
 sim = Yule(.05, 6, 30)
 
-sim.generateTree("T").printGraph()
+#sim.generateTree("T").printGraph()
+
+sim2 = CBDP(.05, .01, 7)
+sim2.generateTree().printGraph()
 
 # startSeq = time.perf_counter()
 # sim.generateNTreesSeq(500000)
