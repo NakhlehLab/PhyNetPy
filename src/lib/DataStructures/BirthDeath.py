@@ -319,12 +319,6 @@ class Yule:
                 
                 
 
-
-
-                        
-
-
-
 class CBDP:
 
         def __init__(self, gamma, mu, n, sample=1):
@@ -340,20 +334,44 @@ class CBDP:
                 self.pDeath = self.mu / (self.gamma + self.mu)
                 self.N = n
 
+                self.generatedTrees = []
+
 
         def Qinv(self, r):
+                """
+                Draw a time from the Qinv distribution from https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
+
+                r-- r[0] from the n-1 samples from [0,1]
+
+                Returns: the time t, which is the age of a new simulated tree
+                """
                 term1 = (1 / self.gamma - self.mu) 
                 term2 = 1 - ((self.mu / self.gamma) * math.pow(r, 1 / self.N))
                 term3 = 1 - math.pow(r, 1 / self.N)
                 return term1 * math.log(term2 / term3)
         
         def Finv(self, r, t):
+                """
+                Draw a sample speciation time from the Finv distribution from  https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
+
+                r-- r_i, from the sampled values from [0,1]
+                t-- the age of the tree determined by Qinv(r[0])
+
+                Returns: s_i from r_i
+                """
                 term1 = (1 / self.gamma - self.mu)
                 term2 = self.gamma - (self.mu * math.exp(-1*t*(self.gamma - self.mu)))
                 term3 = 1 - math.exp(-1*t*(self.gamma - self.mu))
                 return term1 * math.log((term2 - self.mu*r*term3) /(term2 - self.gamma*r*term3))
 
         def generateTree(self):
+                """
+                Simulate a single tree under the Constant Rate Birth Death Selection Model.
+                Follows the algorithm laid out by: https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
+                (Hartmann, Wong, Stadler)
+
+                Returns: A tree with n taxa chosen from the proper distributions.
+                """
 
                 #step 1
                 r = [random.random() for dummy in range(self.N)]
@@ -368,11 +386,12 @@ class CBDP:
                 #step 4 setup
 
                 sKeys = list(s.keys())
-                sKeys.sort()
+                
 
                 nodes = []
                 edges = []
 
+                #set up leaf nodes and internal nodes in proper order (fig 5)
                 for j in range(2*self.N - 1):
                         if j % 2 == 0:
                                 #leaf node
@@ -384,24 +403,42 @@ class CBDP:
                 
                 #step 4
                 for i in range(2*self.N - 1):
+                        #for each node, connect it to the correct parent 
                         edges.append(self.connect(i, nodes))
                 
-
+                #add edges and nodes to a tree
                 tree = copy.deepcopy(DAG())
                 tree.addEdges(edges)
                 tree.addNodes(nodes)
 
                 return tree
-
         
 
         def connect(self, index, nodes):
+                """
+                nodes-- a list of nodes (list[i] is the ith node along a horizontal
+                axis that alternates between species and internal s_i nodes/speciation events)
+
+                index-- the node to connect to its parent in the tree
+
+                Given the nodes and a node to connect, create a new edge.
+
+                The parent node is defined to be the closest to nodes[index] in terms
+                of time and proximity in the list. There are two candidates, the left and right 
+                candidate. Each candidate is the nearest element in the list such that the time 
+                attribute is larger than nodes[index]. The parent is the minimum of the 
+                two candidates.
+
+                Returns: the edge from nodes[index] to its correct parent
+
+                """
 
                 #find right candidate
                 copyIndex = index + 1
                 rightCandidate = None
                 
                 while copyIndex < len(nodes):
+                        #search in the list to the right (ie increase the index)
                         if nodes[copyIndex].attrLookup("t") > nodes[index].attrLookup("t"):
                                 rightCandidate = nodes[copyIndex]
                                 break
@@ -412,12 +449,13 @@ class CBDP:
                 copyIndex = index - 1
                 leftCandidate = None
                 while copyIndex >= 0:
+                        #search in the left part of the list 
                         if nodes[copyIndex].attrLookup("t") > nodes[index].attrLookup("t"):
                                 leftCandidate = nodes[copyIndex]
                                 break
                         copyIndex -= 1
                 
-                #take the minimum time (leafs being at time 0, root being at max time)
+                #take the minimum time (leaves being at time 0, root being at max time)
                 if leftCandidate == None and rightCandidate == None:
                         #We're running this on the root
                         return
@@ -443,6 +481,23 @@ class CBDP:
 
                 return newEdge
 
+        def sampleTrees(self, m):
+                """
+                Generate m trees and add them to the list of generated trees
+
+                Returns: the list of all generated trees from this run and any prior
+                         uncleared runs.
+                """
+                for dummy in range(m):
+                        self.generatedTrees.append(self.generateTree())
+                
+                return self.generatedTrees
+        
+        def clearGenerated(self):
+                """
+                Clear out the generated trees list
+                """
+                self.generatedTrees = []
                         
 
 
@@ -505,7 +560,7 @@ sim = Yule(.05, 6, 30)
 
 #sim.generateTree("T").printGraph()
 
-sim2 = CBDP(.05, .01, 7)
+sim2 = CBDP(.05, .01, 6)
 sim2.generateTree().printGraph()
 
 # startSeq = time.perf_counter()
