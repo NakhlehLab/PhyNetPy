@@ -33,8 +33,12 @@ class Probability:
                 self.data = data
                 self.tree = network
 
-                #cache for storing computed matrix exponentials
-                self.cache = {}
+                #if branch length ever changes, update this
+                self.tensor = {}
+                for node in self.tree.nodes:
+                        self.tensor[node] = self.sub.expt(node.branchLen())
+
+               
 
         def setModel(self, subModel):
                 """
@@ -60,6 +64,60 @@ class Probability:
                 hyperparameters, and sequence data that are passed in
                 """
                 return 0
+
+
+        def likelihood(self):
+                return self.likelihoodHelper(self.tree.findRoot()[0])
+
+        def likelihoodHelper(self, startNode):
+
+                genes = ["A", "C", "G", "T"]
+                likelihoods = np.zeros((4,1))
+                
+                #if the node is a leaf node, simply grab the state from the data matrix and
+                #transform into array ie. [0,0,1,0] = G
+                if self.tree.outDegree(startNode) == 0:
+                        letter = genes.index(self.data.getIJ(self.data.rowGivenName(startNode.getName()), i))
+                        likelihoods[letter]=1
+                        return likelihoods
+
+                result = 1
+                children = self.tree.findDirectSuccessors(startNode)
+                if len(children) != 2:
+                        raise ProbabilityError("Malformed tree, node has an incorrect number of child nodes")
+                
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         def likelihood(self):
                 """

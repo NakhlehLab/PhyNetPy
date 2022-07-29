@@ -80,6 +80,9 @@ class Node:
 
         def getName(self):
                 return self.label
+
+        def setName(self, newName):
+                self.label = newName
         
         def addParent(self, par):
                 self.parent.append(par)
@@ -95,6 +98,12 @@ class Node:
         
         def setBranchLength(self, length):
                 self.branchLength = length
+        
+        def setIsReticulation(self, bool):
+                self.isReticulation = bool
+        
+        def isReticulation(self):
+                return self.isReticulation
 
         def attrLookup(self, attr):
                 if attr in self.attributes:
