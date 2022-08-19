@@ -2,6 +2,8 @@ from Matrix import Matrix
 import GTR
 import numpy as np
 import math
+from Bio import AlignIO
+from NetworkBuilder import NetworkBuilder
 
 class ProbabilityError(Exception):
         """
@@ -32,7 +34,7 @@ class Probability:
                 self.sub = model
                 self.data = data
                 self.tree = network
-
+                self.cache = {}
                 #if branch length ever changes, update this
                 self.tensor = {}
                 for node in self.tree.nodes:
@@ -71,16 +73,35 @@ class Probability:
 
         def likelihoodHelper(self, startNode):
 
-                genes = ["A", "C", "G", "T"]
-                likelihoods = np.zeros((4,1))
+                #uncertainty vectors???
+                A = [1, 0, 0, 0]
+                C = [0, 1, 0, 0]
+                G = [0, 0, 1, 0]
+                T = [0, 0, 0, 1]
+
+                likelihoods = np.zeros((self.data.siteCount(), 4))
                 
                 #if the node is a leaf node, simply grab the state from the data matrix and
                 #transform into array ie. [0,0,1,0] = G
                 if self.tree.outDegree(startNode) == 0:
-                        letter = genes.index(self.data.getIJ(self.data.rowGivenName(startNode.getName()), i))
-                        likelihoods[letter]=1
+                        seq = self.data.getSeq(startNode.getName())
+                        for col in range(self.data.siteCount()):
+                                if seq[col] == "A":
+                                        row = A
+                                elif seq[col] == "C":
+                                        row = C
+                                elif seq[col] == "G":
+                                        row = G
+                                elif seq[col] == "T":
+                                        row = T
+                                likelihoods[col, :] = row
+
+                        print("----THIS IS A LEAF----")
+                        print(likelihoods)
+                        print("-----------------------")
                         return likelihoods
 
+                # if not a leaf
                 result = 1
                 children = self.tree.findDirectSuccessors(startNode)
                 if len(children) != 2:
@@ -178,7 +199,7 @@ class Probability:
                 #if the node is a leaf node, simply grab the state from the data matrix and
                 #transform into array ie. [0,0,1,0] = G
                 if self.tree.outDegree(startNode) == 0:
-                        letter = genes.index(self.data.getIJ(self.data.rowGivenName(startNode.getName()), i))
+                        letter = genes.index(self.data.getIJ_char(self.data.rowGivenName(startNode.getName()), i))
                         likelihoods[letter]=1
                         return likelihoods
                 else:
@@ -196,7 +217,7 @@ class Probability:
                                         for k in range(childCount):
                                                 childLikelihood = childLikelihoods[children[k]][n] #index into child's likelihood array
                                                 #multiply child likelihood by the P_ij value for the branch length
-                                                tempValues[k] += childLikelihood * self.pij(genes[m], genes[n], children[k].branchLen())
+                                                tempValues[k] += childLikelihood * self.pij(m, n, children[k].branchLen())
                                 
                                 #multiply likelihoods
                                 product = 1.0
@@ -231,4 +252,25 @@ class Probability:
                         self.cache[branchLen] = self.sub.expt(branchLen)
                         return self.cache[branchLen][i][j]
                 
+
+
+
+
+
+## TESTS ##
+
+#test network
+
+n = NetworkBuilder("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex")
+#n.printNetworks()
+
+test = n.getNetwork(0)
+msa = AlignIO.read("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex", "nexus")
+data = Matrix(msa)  # default is to use the DNA alphabet
+prob = Probability(test, data=data)
+
+print(prob.computeColumnLikelihood(0, test.findRoot()[0]))
+
+
+
 

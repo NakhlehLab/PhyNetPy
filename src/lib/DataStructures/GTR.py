@@ -89,26 +89,26 @@ class GTR:
                 self.qIsUpdated = True
                 #do updates
 
-        @jit(target_backend="cuda")
-        def exptCUDA(self, t):
-                """
-                DOES NOT WORK RIGHT NOW
-
-                Compute the matrix exponential Q^t and store the result.
-                If the solution has been computed already but the Q matrix has not 
-                changed, simply return the value
-                """
-                if self.qIsUpdated:
-                        eigenvals, eigenvecs = lg.eigh(self.Q)
-                        self.q = eigenvecs
-                        self.qinv = np.transpose(self.q)
-                        self.diag = np.diag(eigenvals)
-
-                        self.Qt = np.real(np.matmul(np.matmul(self.q, lg.matrix_power(self.diag, t)), self.qinv))
-                        self.qIsUpdated = False
-   
-                return self.Qt
-        
+        # @jit(target_backend="cuda")
+        # def exptCUDA(self, t):
+        #         """
+        #         DOES NOT WORK RIGHT NOW
+        #
+        #         Compute the matrix exponential Q^t and store the result.
+        #         If the solution has been computed already but the Q matrix has not
+        #         changed, simply return the value
+        #         """
+        #         if self.qIsUpdated:
+        #                 eigenvals, eigenvecs = lg.eigh(self.Q)
+        #                 self.q = eigenvecs
+        #                 self.qinv = np.transpose(self.q)
+        #                 self.diag = np.diag(eigenvals)
+        #
+        #                 self.Qt = np.real(np.matmul(np.matmul(self.q, lg.matrix_power(self.diag, t)), self.qinv))
+        #                 self.qIsUpdated = False
+        #
+        #         return self.Qt
+        #
         
         def expt(self, t):
                 """
@@ -157,7 +157,7 @@ class K2P(GTR):
 class F81(GTR):
 
         def __init__(self, bases, states = 4):
-                trans = np.ones(((states * (states - 1)) / 2 , 1))
+                trans = np.ones((int((states * (states - 1)) / 2), 1))
                 super().__init__(bases, trans, states)
 
 
@@ -237,19 +237,6 @@ class TN93(GTR):
 
 
 
-
-
-
-model = GTR([.25, .25, .25, .25], [1,1,1,1,1,1])
-model2 = copy.deepcopy(GTR([.25, .25, .25, .25], [1,1,1,1,1,1]))
-
-start = timer()
-model.exptCUDA(50)
-print("with GPU:", timer()-start)    
-
-start = timer()
-model2.expt(50)
-print("without GPU:", timer()-start)
 
 
 

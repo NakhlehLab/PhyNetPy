@@ -24,13 +24,19 @@ def newickSubstring(children, node):
                                 retStr += newickSubstring(children, child)
                         else:
                                 retStr += child.getName()
+                                if child.branchLen is not None:
+                                        retStr += ":" + str(child.branchLen())
                         retStr += ", "
 
                 retStr = retStr[:-2] #Get rid of spurious comma
 
                 retStr += ")" + node.getName()
+                if node.branchLen() is not None:
+                        retStr += ":" + str(node.branchLen())
         else:
                 retStr = node.getName()
+                if node.branchLen() is not None:
+                        retStr += ":" + str(node.branchLen())
 
         return retStr
 
