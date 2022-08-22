@@ -15,19 +15,19 @@ seq_4
 END;
 
 BEGIN CHARACTERS;
-[You can either use the matchchar option or else include all characters for 
+[You can either use the matchchar option or else include all characters for
 all sequences.]
-DIMENSIONS NCHAR=1;
+DIMENSIONS NCHAR=5;
 FORMAT DATATYPE=DNA MISSING=? GAP=- MATCHCHAR=. ;
 MATRIX
 
-seq_1 C
+seq_1 GACCC
 
-seq_2 G
+seq_2 GACCG
 
-seq_3 C
+seq_3 CACCT
 
-seq_4 C
+seq_4 CACCC
 ;
 
 END;
@@ -38,7 +38,7 @@ END;
 
 
 
-Begin trees;  
+Begin trees;
 
 tree numeroZero = ((seq_1:.1, seq_2:.1):.1 , (seq_3:.1, seq_4:.1):.1);
 

@@ -40,7 +40,7 @@ class NetworkBuilder:
                 from the nodes
                 """
 
-
+        print(tree)
         # Build a parent dictionary from the biopython tree obj
         parents = {}
         for clade in tree.find_clades(order="level"):
@@ -59,7 +59,7 @@ class NetworkBuilder:
 
             childNode.addParent(parentNode)
             edges.append([parentNode, childNode])
-
+            print("ADDING EDGE FROM " + parentNode.getName() + " TO " + childNode.getName())
         net.addEdges(edges)
 
         return net
