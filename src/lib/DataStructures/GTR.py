@@ -23,39 +23,42 @@ class GTR:
         complexity of that operation
         """
 
-    def __init__(self, baseFreqs, transitions, states=4):
+    def __init__(self, base_freqs, transitions, states=4):
 
         # Check for malformed inputs
-        if len(baseFreqs) != states or sum(baseFreqs) != 1:
+        if len(base_freqs) != states or sum(base_freqs) != 1:
             raise SubstitutionModelError("Base frequency list either does not sum to 1 or is not of correct length")
 
         if len(transitions) != ((states - 1) * states) / 2:
             raise SubstitutionModelError("incorrect number of transition rates")
 
         self.states = states
-        self.freqs = baseFreqs
+        self.freqs = base_freqs
         self.trans = transitions
 
         # compute Q, the instantaneous probability matrix
         self.Q = self.buildQ()
-
-        self.qIsUpdated = True
         self.Qt = None
 
     def getQ(self):
+        """
+        Get Q matrix
+
+        Returns: np array obj
+        """
         return self.Q
 
-    def getHyperParams(self):
+    def get_hyperparams(self):
         return self.freqs, self.trans
 
-    def getStates(self):
+    def state_count(self):
         return self.states
 
     def buildQ(self):
         """
                 Populate the Q matrix with the correct values. 
                 Based on https://en.wikipedia.org/wiki/Substitution_model
-                """
+        """
         self.Q = np.zeros((self.states, self.states), dtype=np.double)
 
         for i in range(self.states):
@@ -79,52 +82,20 @@ class GTR:
         self.Q = self.Q * normFactor
         return self.Q
 
-    def updateQ(self):
-        """
-                If any parameters to the model are changed, repopulate the Q matrix
-                """
-        self.qIsUpdated = True
-        # do updates
-
-    # @jit(target_backend="cuda")
-    # def exptCUDA(self, t):
-    #         """
-    #         DOES NOT WORK RIGHT NOW
-    #
-    #         Compute the matrix exponential Q^t and store the result.
-    #         If the solution has been computed already but the Q matrix has not
-    #         changed, simply return the value
-    #         """
-    #         if self.qIsUpdated:
-    #                 eigenvals, eigenvecs = lg.eigh(self.Q)
-    #                 self.q = eigenvecs
-    #                 self.qinv = np.transpose(self.q)
-    #                 self.diag = np.diag(eigenvals)
-    #
-    #                 self.Qt = np.real(np.matmul(np.matmul(self.q, lg.matrix_power(self.diag, t)), self.qinv))
-    #                 self.qIsUpdated = False
-    #
-    #         return self.Qt
-    #
-
     def expt(self, t):
         """
-                Compute the matrix exponential Q^t and store the result.
-                If the solution has been computed already but the Q matrix has not 
-                changed, simply return the value
-                """
-        if self.qIsUpdated:
-            eigenvals, eigenvecs = lg.eigh(self.Q)
-            self.q = eigenvecs
-            self.qinv = np.transpose(self.q)
-            self.diag = np.diag(eigenvals)
-            print(t)
-            print(self.diag)
-            diagt = np.array(linalg.fractional_matrix_power(self.diag, t))
-            self.Qt = np.real(np.matmul(np.matmul(self.q, diagt), self.qinv))
-            print(self.Qt)
+            Compute the matrix exponential Q^t and store the result.
+            If the solution has been computed already but the Q matrix has not
+            changed, simply return the value
+        """
 
-            # self.qIsUpdated = False
+        eigenvals, eigenvecs = lg.eigh(self.Q)
+        q = eigenvecs
+        qinv = np.transpose(q)
+        diag = np.diag(eigenvals)
+        diagt = np.array(linalg.fractional_matrix_power(diag, t))
+        self.Qt = np.real(np.matmul(np.matmul(q, diagt), qinv))
+
         return self.Qt
 
 
@@ -149,7 +120,7 @@ class K2P(GTR):
         for i in range(self.states):
             for j in range(self.states):
                 self.Qt[i][j] = .25 * (
-                            1 - 2 * math.exp(-4 * t * (self.beta + self.alpha)) + math.exp(-8 * self.beta * t))
+                        1 - 2 * math.exp(-4 * t * (self.beta + self.alpha)) + math.exp(-8 * self.beta * t))
 
         return self.Qt
 
@@ -167,9 +138,9 @@ class F81(GTR):
         for i in range(self.states):
             for j in range(self.states):
                 if i == j:
-                    self.Qt[i][j] = .25 + (.75 * math.exp(-1.333333333*t))
+                    self.Qt[i][j] = .25 + (.75 * math.exp(-1.333333333 * t))
                 else:
-                    self.Qt[i][j] = .25 - (.25 * math.exp(-1.333333333*t))
+                    self.Qt[i][j] = .25 - (.25 * math.exp(-1.333333333 * t))
 
         print(self.Qt)
 
@@ -184,8 +155,8 @@ class JC(F81):
 
 class HKY(GTR):
 
-    def __init__(self, baseFreqs, transitions):
-        if len(baseFreqs) != 4 and len(transitions) != 6:
+    def __init__(self, base_freqs, transitions):
+        if len(base_freqs) != 4 and len(transitions) != 6:
             raise SubstitutionModelError("Incorrect parameter input length")
 
         if transitions[0] != transitions[2] or transitions[2] != transitions[3] or transitions[3] != transitions[5]:
@@ -194,12 +165,10 @@ class HKY(GTR):
         if transitions[1] != transitions[4]:
             raise SubstitutionModelError("Error in HKY Transitions. Not all equal")
 
-        super().__init__(baseFreqs, transitions, 4)
+        super().__init__(base_freqs, transitions, 4)
 
 
 class K3ST(GTR):
-
-    ##POTENTIAL SPEEDUP???
 
     def __init__(self, transitions):
         if len(transitions) != 6:
@@ -208,26 +177,26 @@ class K3ST(GTR):
         if transitions[0] != transitions[5] or transitions[1] != transitions[4] or transitions[2] != transitions[3]:
             raise SubstitutionModelError("K3ST parameter mismatch")
 
-        baseFreqs = [.25, .25, .25, .25]
+        base_freqs = [.25, .25, .25, .25]
 
-        super().__init__(baseFreqs, transitions, 4)
+        super().__init__(base_freqs, transitions, 4)
 
 
 class SYM(GTR):
 
     def __init__(self, transitions, states=4):
-        baseFreqs = np.ones((states, 1)) * (1 / states)
-        super().__init__(baseFreqs, transitions, states)
+        base_freqs = np.ones((states, 1)) * (1 / states)
+        super().__init__(base_freqs, transitions, states)
 
 
 class TN93(GTR):
 
-    def __init__(self, baseFreqs, transitions):
+    def __init__(self, base_freqs, transitions):
 
-        if len(baseFreqs) != 4 and len(transitions) != 6:
+        if len(base_freqs) != 4 and len(transitions) != 6:
             raise SubstitutionModelError("Incorrect parameter input length")
 
         if transitions[0] != transitions[2] or transitions[2] != transitions[3] or transitions[3] != transitions[5]:
             raise SubstitutionModelError("Error in TN93 Transversions. Not all equal")
 
-        super().__init__(baseFreqs, transitions, 4)
+        super().__init__(base_freqs, transitions, 4)

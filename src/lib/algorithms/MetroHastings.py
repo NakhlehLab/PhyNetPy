@@ -29,7 +29,7 @@ class MetroHastings:
                 for i in range(self.freq):
                         accept = False
                         logHastings = self.state.propose() ##
-                        op = self.state.getOperation().getName() ##
+                        op = self.state.getOperation().get_name() ##
 
                         if logHastings != MHSettings.INVALID_MOVE: ##
 

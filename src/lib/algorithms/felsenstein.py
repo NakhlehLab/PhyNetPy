@@ -10,7 +10,7 @@ class Felsenstein:
                 if (aNode.isLeaf()):
 
                         #The observation for this leaf
-                        obs = column.get(aNode.getName())
+                        obs = column.get(aNode.get_name())
 
                         #sets likelihood of leaf based on observation
                         index = -1

@@ -57,9 +57,9 @@ class NetworkBuilder:
             childNode = self.parseNode(node, net)
             parentNode = self.parseNode(par, net)
 
-            childNode.addParent(parentNode)
+            childNode.add_parent(parentNode)
             edges.append([parentNode, childNode])
-            print("ADDING EDGE FROM " + parentNode.getName() + " TO " + childNode.getName())
+            print("ADDING EDGE FROM " + parentNode.get_name() + " TO " + childNode.get_name())
         net.addEdges(edges)
 
         return net
@@ -118,7 +118,7 @@ class NetworkBuilder:
             if node.branch_length is None:
                 newNode = Node(name=newInternal)
             else:
-                newNode = Node(branchLen=node.branch_length, name=newInternal)
+                newNode = Node(branch_len=node.branch_length, name=newInternal)
             network.addNodes(newNode)
             return newNode
 
@@ -142,12 +142,12 @@ class NetworkBuilder:
         # create new node, with attributes if a reticulation node
         if (retValue):
             newNode = copy.deepcopy(
-                Node(node.branch_length, name=extendedNewickParsedLabel[0], isReticulation=retValue))
-            newNode.addAttribute("eventType", eventType)
-            newNode.addAttribute("index", num)
+                Node(node.branch_length, name=extendedNewickParsedLabel[0], is_reticulation=retValue))
+            newNode.add_attribute("eventType", eventType)
+            newNode.add_attribute("index", num)
         else:
             newNode = copy.deepcopy(
-                Node(node.branch_length, name=extendedNewickParsedLabel[0], isReticulation=retValue))
+                Node(node.branch_length, name=extendedNewickParsedLabel[0], is_reticulation=retValue))
 
         network.addNodes(newNode)
         return newNode

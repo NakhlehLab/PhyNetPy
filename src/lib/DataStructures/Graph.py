@@ -23,20 +23,20 @@ def newickSubstring(children, node):
                         if not children[node][1]:
                                 retStr += newickSubstring(children, child)
                         else:
-                                retStr += child.getName()
-                                if child.branchLen is not None:
-                                        retStr += ":" + str(child.branchLen())
+                                retStr += child.get_name()
+                                if child.__len__ is not None:
+                                        retStr += ":" + str(child.__len__())
                         retStr += ", "
 
                 retStr = retStr[:-2] #Get rid of spurious comma
 
-                retStr += ")" + node.getName()
-                if node.branchLen() is not None:
-                        retStr += ":" + str(node.branchLen())
+                retStr += ")" + node.get_name()
+                if node.__len__() is not None:
+                        retStr += ":" + str(node.__len__())
         else:
-                retStr = node.getName()
-                if node.branchLen() is not None:
-                        retStr += ":" + str(node.branchLen())
+                retStr = node.get_name()
+                if node.__len__() is not None:
+                        retStr += ":" + str(node.__len__())
 
         return retStr
 
@@ -273,7 +273,7 @@ class DAG(Graph):
 
         def hasNodeWithName(self, name):
                 for node in self.nodes:
-                        if node.getName() == name:
+                        if node.get_name() == name:
                                 #print(node)
                                 return node
 
@@ -317,9 +317,9 @@ class DAG(Graph):
                                 #tabulate whether node should be reprinted in any call
                                 #to newickSubstring. The subtree of a reticulation node
                                 #need only be printed once
-                                if neighbor.isReticulation and neighbor in visitedRetic:
+                                if neighbor.is_reticulation and neighbor in visitedRetic:
                                         children[cur][1] = True
-                                elif neighbor.isReticulation:
+                                elif neighbor.is_reticulation:
                                         visitedRetic.append(neighbor)
 
         

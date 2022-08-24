@@ -44,7 +44,7 @@ class UltrametricNetwork(StateNode):
             self.network = Networks.readNetwork(s) ## adopt topology only
             taxa = set()
             for leaf in self.network.getLeaves(): 
-                taxa.add(leaf.getName())
+                taxa.add(leaf.get_name())
             
             if(self.species2alleles != None and (not taxa.containsAll(self.species2alleles.keySet()) or not self.species2alleles.keySet().containsAll(taxa))):
                 #System.err.println("The starting network doesn't match the taxaMap")

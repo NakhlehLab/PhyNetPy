@@ -8,7 +8,7 @@ from NetworkBuilder import NetworkBuilder
 
 class ProbabilityError(Exception):
     """
-        Class that handles any probability exceptions
+    Class that handles any probability exceptions
     """
 
     def __init__(self, message="Error"):
@@ -29,7 +29,7 @@ class Probability:
         
         data-- A Matrix object that is a compressed MSA matrix containing site data
                 for each taxa
-        """
+    """
 
     def __init__(self, network, model=GTR.JC(), data=None):
         # init inputs
@@ -38,20 +38,20 @@ class Probability:
         self.tree = network
         self.cache = {}
 
-    def setModel(self, subModel):
+    def setModel(self, sub_model):
         """
         set the substitution model
 
         subModel-- the new substitution model of subtype GTR
         """
-        self.sub = subModel
+        self.sub = sub_model
 
     def setData(self, data_matrix):
         """
-                set the data matrix, must be of class type Matrix
+                Set the data matrix, must be of class type Matrix
 
                 dataMatrix-- a Matrix object
-                """
+        """
         if type(data_matrix) != Matrix:
             raise ProbabilityError("Tried to set data to type other than Matrix")
         self.data = data_matrix
@@ -63,7 +63,7 @@ class Probability:
                 """
         return 0
 
-    def likelihood1(self):
+    def felsenstein_likelihood(self):
         """
         Using a recursive subroutine, calculate the log likelihood
         of the tree/network given the data and substitution model.
@@ -79,10 +79,10 @@ class Probability:
 
         """
         # call subroutine on the root
-        matrix = self.likelihoodHelper(self.tree.findRoot()[0])
+        matrix = self.likelihood_helper(self.tree.findRoot()[0])
 
         # get the base frequencies from the model
-        base_freqs = np.array(self.sub.getHyperParams()[0])
+        base_freqs = np.array(self.sub.get_hyperparams()[0])
         base_freqs = base_freqs.reshape((4,))
 
         # tally up the logs of the dot products
@@ -93,7 +93,7 @@ class Probability:
 
         return result
 
-    def likelihoodHelper(self, start_node):
+    def likelihood_helper(self, start_node):
         """
         The recursive helper function for walking the tree
         Returns a matrix with size (siteCount, 4), where each row is the partial likelihood
@@ -111,7 +111,7 @@ class Probability:
             likelihoods = np.zeros((self.data.siteCount(), 4))
 
             # Get the sequence that corresponds with the node
-            seq = self.data.getSeq(start_node.getName())
+            seq = self.data.getSeq(start_node.get_name())
 
             # Map each character in the sequence to an array of length 4
             for col in range(self.data.siteCount()):
@@ -138,12 +138,12 @@ class Probability:
 
         if len(children) == 1:
             # Is this case necessary/correct?
-            return self.likelihoodHelper(children[0])
+            return self.likelihood_helper(children[0])
         else:
             # Use the combine function to merge all child partial likelihoods
-            return self.combineChildLikelihoods(children)
+            return self.combine_child_likelihoods(children)
 
-    def combineChildLikelihoods(self, children):
+    def combine_child_likelihoods(self, children):
         """
         Takes a list of child nodes and combines the partial likelihoods via Felsenstein's algo
 
@@ -154,10 +154,10 @@ class Probability:
         matrices = []
         for child in children:
             # recursively compute the child partial likelihood. Could be another internal node, but could be a leaf
-            matrix = self.likelihoodHelper(child)
+            matrix = self.likelihood_helper(child)
 
             # compute matrix * Pij transpose. Math explained in doc string
-            step1 = np.matmul(matrix, self.sub.expt(child.branchLen()).transpose())
+            step1 = np.matmul(matrix, self.sub.expt(child.__len__()).transpose())
 
             # add to list of child matrices
             matrices.append(step1)
@@ -323,7 +323,7 @@ prob3 = Probability(test3, data=data3)
 # print(prob2.likelihoodHelper(test2.findRoot()[0]))
 # print(prob2.likelihood1())
 
-print(prob3.likelihood1())
+print(prob3.felsenstein_likelihood())
 # print(prob3.likelihood())
 
 

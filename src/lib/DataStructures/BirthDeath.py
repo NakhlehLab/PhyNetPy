@@ -26,7 +26,7 @@ def numLiveSpecies(nodeList):
 
         nodeList -- an array/set of Node objects
         """
-        return len([node for node in nodeList if node.attrLookup("live") == True])
+        return len([node for node in nodeList if node.attribute_value_if_exists("live") == True])
 
 def randomSpeciesSelection(nodeList):
         """
@@ -45,7 +45,7 @@ def liveSpecies(nodeList):
 
         nodeList -- an array/set of Node objects
         """
-        return [node for node in nodeList if node.attrLookup("live") == True]
+        return [node for node in nodeList if node.attribute_value_if_exists("live") == True]
 
 
 class treeGen(Thread):
@@ -139,15 +139,15 @@ class Yule:
                 specNode = randomSpeciesSelection(nodes)
 
                 #keep track of the old parent, we need to disconnect edges
-                oldParent = specNode.getParent()
+                oldParent = specNode.get_parent()
 
                 #calculate the branch length to the internal node
                 nextTime = self.drawWaitingTime()
                 if condition == "N":
-                        branchLen = self.elapsedTime + nextTime - specNode.getParent().attrLookup("t")
+                        branchLen = self.elapsedTime + nextTime - specNode.get_parent().attribute_value_if_exists("t")
                         self.elapsedTime += nextTime
                 elif condition == "T" and self.elapsedTime + nextTime <= self.time:
-                        branchLen = self.elapsedTime + nextTime - specNode.getParent().attrLookup("t")
+                        branchLen = self.elapsedTime + nextTime - specNode.get_parent().attribute_value_if_exists("t")
                         self.elapsedTime += nextTime
                 elif condition == "T" and self.elapsedTime + nextTime > self.time:
                         return -1
@@ -155,18 +155,18 @@ class Yule:
                         # self.elapsedTime = self.time
 
                 #create the new internal node
-                newInternal = Node(branchLen, parNode=[specNode.getParent()], attr={"t":self.elapsedTime, "live":False}, name = "internal" + str(self.internalCount))
+                newInternal = Node(branchLen, parent_nodes=[specNode.get_parent()], attr={"t":self.elapsedTime, "live":False}, name ="internal" + str(self.internalCount))
                 self.internalCount+= 1
 
                 #set the extent species parent to be its direct ancestor
-                specNode.setParent(newInternal)
+                specNode.set_parent(newInternal)
 
                 #there's a new live lineage
                 self.lin+=1
                 newLabel = "spec" + str(self.lin)
 
                 #create the node for the new extent species
-                newSpecNode = Node(parNode = [newInternal], attr = {"live":True}, name = newLabel)
+                newSpecNode = Node(parent_nodes= [newInternal], attr = {"live":True}, name = newLabel)
 
                 #add the newly created nodes
                 nodes.append(newSpecNode)
@@ -194,8 +194,8 @@ class Yule:
 
                 #Set up the tree with 2 living lineages and an "internal" root node
                 node1 = Node(0, attr = {"t":0, "label": "root", "live":False}, name = "root")
-                node2 = Node(parNode=[node1], attr={"live":True}, name="spec1")
-                node3 = Node(parNode=[node1], attr={"live":True}, name="spec2")
+                node2 = Node(parent_nodes=[node1], attr={"live":True}, name="spec1")
+                node3 = Node(parent_nodes=[node1], attr={"live":True}, name="spec2")
 
                 nodes = [node1, node2, node3]
                 edges = [[node1, node2], [node1, node3]]
@@ -210,11 +210,11 @@ class Yule:
                         nextTime = self.drawWaitingTime()
 
                         for node in liveSpecies(nodes):
-                                node.addAttribute("t", self.elapsedTime + nextTime)
-                                if len(node.getParent(True)) != 0:
-                                        node.setBranchLength(self.elapsedTime + nextTime - node.getParent().attrLookup("t"))
+                                node.add_attribute("t", self.elapsedTime + nextTime)
+                                if len(node.get_parent(True)) != 0:
+                                        node.set_length(self.elapsedTime + nextTime - node.get_parent().attribute_value_if_exists("t"))
                                 else:
-                                        node.setBranchLength(0)
+                                        node.set_length(0)
                 
 
                         #return the simulated tree
@@ -234,11 +234,11 @@ class Yule:
                                         break
                         
                         for node in liveSpecies(nodes):
-                                node.addAttribute("t", self.time)
-                                if len(node.getParent(True)) != 0:
-                                        node.setBranchLength(self.time - node.getParent().attrLookup("t"))
+                                node.add_attribute("t", self.time)
+                                if len(node.get_parent(True)) != 0:
+                                        node.set_length(self.time - node.get_parent().attribute_value_if_exists("t"))
                                 else:
-                                        node.setBranchLength(0)
+                                        node.set_length(0)
 
                         tree = copy.deepcopy(DAG())
                         tree.addEdges(edges)
@@ -439,7 +439,7 @@ class CBDP:
                 
                 while copyIndex < len(nodes):
                         #search in the list to the right (ie increase the index)
-                        if nodes[copyIndex].attrLookup("t") > nodes[index].attrLookup("t"):
+                        if nodes[copyIndex].attribute_value_if_exists("t") > nodes[index].attribute_value_if_exists("t"):
                                 rightCandidate = nodes[copyIndex]
                                 break
                         copyIndex += 1
@@ -450,7 +450,7 @@ class CBDP:
                 leftCandidate = None
                 while copyIndex >= 0:
                         #search in the left part of the list 
-                        if nodes[copyIndex].attrLookup("t") > nodes[index].attrLookup("t"):
+                        if nodes[copyIndex].attribute_value_if_exists("t") > nodes[index].attribute_value_if_exists("t"):
                                 leftCandidate = nodes[copyIndex]
                                 break
                         copyIndex -= 1
@@ -471,13 +471,13 @@ class CBDP:
                                 selection = rightCandidate
 
                 #create new edge
-                nodeT = nodes[index].attrLookup("t")
+                nodeT = nodes[index].attribute_value_if_exists("t")
                 futureT = selection.attrLookup("t")
                 newEdge = [selection, nodes[index]]
 
                 #set the branch length of the current node
-                nodes[index].setBranchLength(futureT - nodeT)
-                nodes[index].setParent(selection)
+                nodes[index].set_length(futureT - nodeT)
+                nodes[index].set_parent(selection)
 
                 return newEdge
 

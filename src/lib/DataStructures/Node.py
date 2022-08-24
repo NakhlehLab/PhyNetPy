@@ -10,105 +10,119 @@ class NodeError(Exception):
 
 class Node:
     """
-        Node wrapper class for storing data in a graph object
+        Node class for storing data in a graph object
+    """
 
-        propose/reject/accept structure not parallelizable at this time.
-        """
-
-    def __init__(self, branchLen=None, parNode=None, attr=None, isReticulation=False, name=None):
-        self.branchLength = branchLen
+    def __init__(self, branch_len=None, parent_nodes=None, attr=None, is_reticulation=False, name=None):
+        self.branch_length = branch_len
         self.tempLen = None
         self.attributes = attr
-        self.isReticulation = isReticulation
-        self.parent = parNode
+        self.is_reticulation = is_reticulation
+        self.parent = parent_nodes
         self.label = name
 
-    def addAttribute(self, key, value):
+    def __len__(self):
         """
-                put a key and value pair into the node attribute dictionary
-                """
-        self.attributes[key] = value
+            The length of a node is its branch length.
 
-    def propose(self, newValue):
+            Returns: The branch length, a float
         """
-                Stores the current value in a temporary holder while the
-                newValue gets tested for viability 
-                """
-        self.tempLen = self.branchLength
-        self.branchLength = newValue
 
-    def accept(self):
-        """
-                If the proposed change is good, accept it by flushing the data 
-                out of the temp container, symbolically cementing .height as the 
-                official height
-                """
-        self.tempLen = None
+        return self.branch_length
 
-    def reject(self):
-        """
-                If the proposed change is bad, reset the official height to what it
-                was (the contents of the temp container).
-
-                Flush the temp container of all data.
-                """
-
-        self.branchLength = self.tempLen
-        self.tempLen = None
-
-    def branchLen(self):
-        """
-                Defines either the weight of the edge between this node and its parent, or
-                simply the difference in time between two nodes.
-                """
-
-        return self.branchLength
-
-    def asString(self):
+    def __str__(self):
         myStr = "Node " + str(self.label) + ": "
-        if self.branchLength != None:
-            myStr += str(round(self.branchLength, 2)) + " "
-        if self.parent != None:
-            myStr += " has parent(s) " + str([node.getName() for node in self.getParent(all=True)])
+        if self.branch_length is not None:
+            myStr += str(round(self.branch_length, 2)) + " "
+        if self.parent is not None:
+            myStr += " has parent(s) " + str([node.get_name() for node in self.get_parent(return_all=True)])
 
-        myStr += " is a reticulation node? " + str(self.isReticulation)
+        myStr += " is a reticulation node? " + str(self.is_reticulation)
         myStr += " has attributes: " + str(self.attributes)
 
         return myStr
 
-    def getName(self):
+    def get_name(self):
+        """
+        Returns the name of the node
+        """
         return self.label
 
-    def setName(self, newName):
-        self.label = newName
+    def set_name(self, new_name):
+        """
+        Sets the name of the node to new_name.
+        """
+        self.label = new_name
 
-    def addParent(self, par):
+    def add_parent(self, par):
+        """
+        Add 'par' to the list of parent nodes for this node
+        """
+
+        #check for lousy input
+        if type(par) is not Node:
+            raise NodeError("Attempted to add a non node entity as a parent")
+
         if self.parent is not None:
-            newParent = copy.deepcopy(self.parent)
-            newParent.append(par)
-            self.parent = newParent
+            new_parent = copy.deepcopy(self.parent)
+            new_parent.append(par)
+            self.parent = new_parent
         else:
             self.parent = [par]
 
-    def getParent(self, all=False):
-        if all:
+    def get_parent(self, return_all=False):
+        """
+        Retrieve either the one/first parent or the whole list of parents
+
+        If return_all is set to True, then the method will return the whole array.
+        The default behavior is just to return one.
+
+        Returns: Either a node obj, or a list of node objs
+        """
+        if return_all:
             return self.parent
         else:
             return self.parent[0]
 
-    def setParent(self, newPar):
-        self.parent = [newPar]
+    def set_parent(self, new_parents):
+        """
+        Set the parent array to new_parents, a list of Node objs
+        """
+        self.parent = list(new_parents)
 
-    def setBranchLength(self, length):
-        self.branchLength = length
+    def set_length(self, length):
+        """
+        Set the branch length of this Node to length
+        """
+        self.branch_length = length
 
-    def setIsReticulation(self, bool):
-        self.isReticulation = bool
+    def set_is_reticulation(self, is_retic):
+        """
+        Sets whether a node is a reticulation Node (or not)
+        """
+        self.is_reticulation = is_retic
 
-    def isReticulation(self):
-        return self.isReticulation
+    def is_reticulation(self):
+        """
+        Retrieves whether a node is a reticulation Node (or not)
+        """
+        return self.is_reticulation
 
-    def attrLookup(self, attr):
+    def add_attribute(self, key, value):
+        """
+        Put a key and value pair into the node attribute dictionary.
+
+        If the key is already present, it will overwrite the old value.
+        """
+        self.attributes[key] = value
+
+    def attribute_value_if_exists(self, attr):
+        """
+        If attr is a key in the attributes mapping, then
+        its value will be returned.
+
+        Otherwise, returns None.
+        """
         if attr in self.attributes:
             return self.attributes[attr]
         else:
@@ -119,9 +133,9 @@ class UltrametricNode(Node):
 
     def __init__(self, height=None, par=[], attributes={}, isRetNode=False, label=None):
         self.height = height
-        super().__init__(parNode=par, attr=attributes, isReticulation=isRetNode, name=label)
+        super().__init__(parent_nodes=par, attr=attributes, is_reticulation=isRetNode, name=label)
 
-    def branchLen(self, otherNode):
+    def __len__(self, otherNode):
         if (type(otherNode) != UltrametricNode):
             raise NodeError(
                 "Attempting to gather a branch length between an Ultrametric Node and a non-Ultrametric Node")
@@ -138,7 +152,7 @@ class UltrametricNode(Node):
         if self.parent != None:
             myStr += " has parent " + str(self.parent.name)
 
-        myStr += " is a reticulation node? " + str(self.isReticulation)
+        myStr += " is a reticulation node? " + str(self.is_reticulation)
 
         return myStr
 

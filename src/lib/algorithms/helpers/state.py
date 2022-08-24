@@ -97,14 +97,14 @@ class State:
 
         logHR = self.moveNode.propose()
         self.moveNode.setDirty(True)
-        if(self.getOperation().getName().contains("Scale-All")):
+        if(self.getOperation().get_name().contains("Scale-All")):
             # /*for(UltrametricTree ut : self.geneTrees) {
             #     ut.setDirty(True)
             # }*/
             logHR = MHSettings.INVALID_MOVE
         
 
-        if (self.getOperation().getName().contains("Add-Reticulation") and
+        if (self.getOperation().get_name().contains("Add-Reticulation") and
                 self.speciesNet.getNetwork().getReticulationCount() > MHSettings._NET_MAX_RETI):
             logHR = MHSettings.INVALID_MOVE
         elif (self.moveNode.mayViolate()):
