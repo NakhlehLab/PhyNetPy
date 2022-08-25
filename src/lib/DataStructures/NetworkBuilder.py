@@ -14,7 +14,9 @@ class NetworkBuilder:
         self.reader = NexusReader.from_file(filename)
         self.networks = []
         self.internalCount = 0
+        self.name_2_net = {}
         self.build()
+
 
     def build(self):
         """
@@ -24,7 +26,8 @@ class NetworkBuilder:
                 """
 
         for t in self.reader.trees:
-            # grab the right hand side of the tree definition
+            # grab the right hand side of the tree definition for the tree, and the left for the name
+            name = str(t).split("=")[0].split(" ")[1]
             handle = StringIO(str(t).split("=")[1])
 
             # parse the string handle
@@ -32,6 +35,7 @@ class NetworkBuilder:
             newNetwork = self.buildFromTreeObj(tree)
             # build the graph of the network
             self.networks.append(newNetwork)
+            self.name_2_net[newNetwork] = name
 
     def buildFromTreeObj(self, tree):
         """
@@ -110,7 +114,6 @@ class NetworkBuilder:
         # if type(node) != Phylo.Clade:
         #         raise NodeError("attempting to parse a node that is not of class Clade")
 
-
         if node.name is None:
             newInternal = "Internal" + str(self.internalCount)
             self.internalCount += 1
@@ -152,18 +155,11 @@ class NetworkBuilder:
         network.addNodes(newNode)
         return newNode
 
-    def printNetworks(self):
-        i = 0
-        for net in self.networks:
-            print("=========NETWORK #" + str(i) + "========")
-            net.asciiGraph()
-            i += 1
-
     def getNetwork(self, i):
         return self.networks[i]
 
-##n = NetworkBuilder("src/io/testfile3.nex")
-# n.printNetworks()
+    def get_all_networks(self):
+        return self.networks
 
-##test = n.getNetwork(1)
-##print(test.newickString())
+    def name_of_network(self, network):
+        return self.name_2_net[network]
