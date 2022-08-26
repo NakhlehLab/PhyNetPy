@@ -3,10 +3,8 @@ from queue import Queue
 from Node import Node
 
 
-
-
 def newickSubstring(children, node):
-        """
+    """
         Returns the newick string for a subtree beginning at node
 
         ie a whole tree (A, (B, C)D)E with newickSubstring(D) returns (B, C)D
@@ -15,418 +13,433 @@ def newickSubstring(children, node):
         children-- a mapping from parent nodes to a list of their children
         
         """
-        if node in children.keys():
-                
-                retStr = "("
+    if node in children.keys():
 
-                for child in children[node][0]:
-                        if not children[node][1]:
-                                retStr += newickSubstring(children, child)
-                        else:
-                                retStr += child.get_name()
-                                if child.__len__ is not None:
-                                        retStr += ":" + str(child.__len__())
-                        retStr += ", "
+        retStr = "("
 
-                retStr = retStr[:-2] #Get rid of spurious comma
+        for child in children[node][0]:
+            if not children[node][1]:
+                retStr += newickSubstring(children, child)
+            else:
+                retStr += child.get_name()
+                if child.length is not None:
+                    retStr += ":" + str(child.length())
+            retStr += ", "
 
-                retStr += ")" + node.get_name()
-                if node.__len__() is not None:
-                        retStr += ":" + str(node.__len__())
-        else:
-                retStr = node.get_name()
-                if node.__len__() is not None:
-                        retStr += ":" + str(node.__len__())
+        retStr = retStr[:-2]  # Get rid of spurious comma
 
-        return retStr
+        retStr += ")" + node.get_name()
+        if node.length() is not None:
+            retStr += ":" + str(node.length())
+    else:
+        retStr = node.get_name()
+        if node.length() is not None:
+            retStr += ":" + str(node.length())
 
-
+    return retStr
 
 
 class GraphTopologyError(Exception):
-        """
+    """
         This exception is raised when a graph is malformed in some way
         """
 
-        def __init__(self, message="Error. Graph is malformed."):
-                self.message = message
-                super().__init__(self.message)
+    def __init__(self, message="Error. Graph is malformed."):
+        self.message = message
+        super().__init__(self.message)
 
 
 class Graph:
-        """
+    """
         An "interface" level graph implementation. implements all common functionality
         between digraphs and undirected graphs
         """
-        edges = []
-        nodes = []
-        edgeWeights = {}
+    edges = []
+    nodes = []
+    edgeWeights = {}
 
-        def __init__(self, edges, nodes, weights):
-                self.edges = edges
-                self.nodes = nodes
-                self.edgeWeights = weights
+    def __init__(self, edges, nodes, weights):
+        self.edges = edges
+        self.nodes = nodes
+        self.edgeWeights = weights
 
-
-        def addNodes(self, nodes):
-                """
+    def addNodes(self, nodes):
+        """
                 if nodes is a list of data (doesn't matter what the data is), then add each data point to the list
                 if nodes is simply a piece of data, then just add the data to the nodes list.
                 """
-                if type(nodes) == list:
-                        for node in nodes:
-                                if node not in self.nodes:
-                                        self.nodes.append(node)
-                else:
-                        if nodes not in self.nodes:
-                                self.nodes.append(nodes)
-                return
-        
-        
-        
-        def addEdges(self, edges):
-                """
+        if type(nodes) == list:
+            for node in nodes:
+                if node not in self.nodes:
+                    self.nodes.append(node)
+        else:
+            if nodes not in self.nodes:
+                self.nodes.append(nodes)
+        return
+
+    def addEdges(self, edges):
+        """
                 if edges is a list of tuples, then add each tuple to the list of tuples
                 if edges is simply a tuple, then just add the tuple to the edge list.
                 """
-                if type(edges) == list:
-                        for edge in edges:
-                                if edge not in self.edges:
-                                        self.edges.append(edge)
-                else:
-                        if edges not in self.edges:
-                                self.edges.append(edges)
-                return
+        if type(edges) == list:
+            for edge in edges:
+                if edge not in self.edges:
+                    self.edges.append(edge)
+        else:
+            if edges not in self.edges:
+                self.edges.append(edges)
+        return
 
-
-        def removeNode(self, node, removeEdges):
-                """
+    def removeNode(self, node, removeEdges):
+        """
                 Removes node from the list of nodes. If removeEdges is true/enabled,
                 also prunes all edges from the graph that are connected to the node
                 """
-                if node in self.nodes:
-                        self.nodes.remove(node)
-                        if removeEdges:
-                                for edge in self.edges:
-                                        if node in edge:
-                                                self.edges.remove(edge)
-                return
-        
-        def removeEdge(self, edge):
-                """
+        if node in self.nodes:
+            self.nodes.remove(node)
+            if removeEdges:
+                for edge in self.edges:
+                    if node in edge:
+                        self.edges.remove(edge)
+        return
+
+    def removeEdge(self, edge):
+        """
                 Removes edge from the list of edges. Does not delete nodes with no edges
                 """
-                if edge in self.edges:
-                        self.edges.remove(edge)
-                return
+        if edge in self.edges:
+            self.edges.remove(edge)
+        return
 
-        def findShortestPathLength(self, nodeStart, nodeEnd):
-                """
+    def findShortestPathLength(self, nodeStart, nodeEnd):
+        """
                 TODO
                 """
-                return 0
+        return 0
 
-        def getNumberOfNodes(self):
-                """
+    def getNumberOfNodes(self):
+        """
                 returns the number of nodes in the graph
                 """
-                return len(self.nodes)
-        
-        def getNumberOfEdges(self):
-                """
+        return len(self.nodes)
+
+    def getNumberOfEdges(self):
+        """
                 returns the number of edges in the graph
                 """
-                return len(self.edges)
-        
-        def setEdgeWeights(self, edgeDict):
-                for key, value in edgeDict.items():
-                        if key in self.edges:
-                                self.edgeWeights[key] = value
-                return 
+        return len(self.edges)
 
-        def getTotalWeight(self):
-                sum = 0
-                for edge in self.edges:
-                        sum += self.edgeWeights[edge]
-                return sum 
+    def setEdgeWeights(self, edgeDict):
+        for key, value in edgeDict.items():
+            if key in self.edges:
+                self.edgeWeights[key] = value
+        return
+
+    def getTotalWeight(self):
+        sum = 0
+        for edge in self.edges:
+            sum += self.edgeWeights[edge]
+        return sum
+
 
 class DAG(Graph):
-        """
+    """
         This class represents a directed graph containing nodes of any data type, and edges.
         An edge is a tuple (a,b) where a and b are nodes in the graph, and the direction of the edge
         is from a to b. (a,b) is not the same as (b,a).
 
         This particular graph instance must only have one root and must be connected.
         """
-        
-        connectedBool = True
-        
-        def __init__(self, edges=[], nodes=[], weights=[]):
-                super().__init__(edges, nodes, weights)
-        
-        
-        def inDegree(self, node):
-                return len(self.inEdges(node))
-                
-        def outDegree(self, node):
-                return len(self.outEdges(node))
 
-        def inEdges(self, node):
-                return [edge for edge in self.edges if edge[1] == node]
-                
-        def outEdges(self, node):
-                return [edge for edge in self.edges if edge[0] == node]
-                
-        def findRoot(self):
-                """
+    connectedBool = True
+
+    def __init__(self, edges=[], nodes=[], weights=[]):
+        super().__init__(edges, nodes, weights)
+
+    def inDegree(self, node):
+        return len(self.inEdges(node))
+
+    def outDegree(self, node):
+        return len(self.outEdges(node))
+
+    def inEdges(self, node):
+        return [edge for edge in self.edges if edge[1] == node]
+
+    def outEdges(self, node):
+        return [edge for edge in self.edges if edge[0] == node]
+
+    def findRoot(self):
+        """
                 Finds the root of this DAG. It is an error if one does not exist
                 or if there are more than one.
                 """
-                root = [node for node in self.nodes if self.inDegree(node)==0]
-                if len(root) != 1:
-                        raise GraphTopologyError("This graph does not have 1 and only 1 root node")
-                return root
+        root = [node for node in self.nodes if self.inDegree(node) == 0]
+        if len(root) != 1:
+            raise GraphTopologyError("This graph does not have 1 and only 1 root node")
+        return root
 
-        def findDirectPredecessors(self, node):
-                """
+    def findDirectPredecessors(self, node):
+        """
                 Returns a list of the children of node
 
                 node-- A Node Object
                 """
-                return [edge[0] for edge in self.inEdges(node)]
-        
-        def findDirectSuccessors(self, node):
-                """
+        return [edge[0] for edge in self.inEdges(node)]
+
+    def findDirectSuccessors(self, node):
+        """
                 Returns a list of the parent(s) of node. For a tree, this 
                 list should be of length 1. For a network, a child may have more
                 than one.
 
                 node-- A Node Object
                 """
-                return [edge[1] for edge in self.outEdges(node)]
-        
-        
-        def getLeafs(self):
-                """
+        return [edge[1] for edge in self.outEdges(node)]
+
+    def getLeafs(self):
+        """
                 returns the list of leaves in the graph
                 """
-                return [node for node in self.nodes if self.outDegree(node)==0]
+        return [node for node in self.nodes if self.outDegree(node) == 0]
 
-        def top_sort(self):
-                """
+    def top_sort(self):
+        """
                 Execute a topological sort.
                 Returns a list of nodes
                 """
-                self.connectedBool = True
-                sorted_nodes, visited = deque(), set()
-                count = 0
-                for node in self.findRoot(): #start dfs at roots for correctness
-                        if node not in visited:
-                                self.dfs_recursive(node, visited, sorted_nodes)
-                                #if the initial dfs call is run more than once,
-                                #then nodes were not reached initially in which case
-                                #the graph is not connected
-                                if count != 0:
-                                        self.connectedBool = False
-                                count+=1
-                                
-                return list(sorted_nodes)
-        
-        def dfs_recursive(self, start_node, visited, sorted_nodes):
-                """
+        self.connectedBool = True
+        sorted_nodes, visited = deque(), set()
+        count = 0
+        for node in self.findRoot():  # start dfs at roots for correctness
+            if node not in visited:
+                self.dfs_recursive(node, visited, sorted_nodes)
+                # if the initial dfs call is run more than once,
+                # then nodes were not reached initially in which case
+                # the graph is not connected
+                if count != 0:
+                    self.connectedBool = False
+                count += 1
+
+        return list(sorted_nodes)
+
+    def dfs_recursive(self, start_node, visited, sorted_nodes):
+        """
                 recursive dfs helper
                 """
-                visited.add(start_node)
-                if start_node in self.nodes:
-                        neighbors = self.findDirectSuccessors(start_node)
-                        for neighbor in neighbors:
-                                if neighbor not in visited:
-                                        self.dfs(neighbor, visited, sorted_nodes)
-                sorted_nodes.appendleft(start_node)
-        
+        visited.add(start_node)
+        if start_node in self.nodes:
+            neighbors = self.findDirectSuccessors(start_node)
+            for neighbor in neighbors:
+                if neighbor not in visited:
+                    self.dfs(neighbor, visited, sorted_nodes)
+        sorted_nodes.appendleft(start_node)
 
-        def bfs(self, startNode):
-                """
+    def bfs(self, startNode):
+        """
                 Vanilla bfs
                 """
-                
-                dist = {startNode: 0}
-                parent = {startNode: None}
 
-                q = Queue(maxsize = 0) #unlimited length queue
-                q.put(startNode)
+        dist = {startNode: 0}
+        parent = {startNode: None}
 
-                while not q.empty():
-                        cur = q.get()
-                        for neighbor in self.findDirectSuccessors(cur):
-                                if neighbor not in dist.keys():   
-                                        dist[neighbor] = dist[cur] + 1
-                                        parent[neighbor] = cur
-                                        q.put(neighbor)
-                
-                return parent, dist
-        
-        def graphSize(self, node):
-                parent, dist = self.bfs(node)
-                return len(list(parent.keys()))
-        
+        q = Queue(maxsize=0)  # unlimited length queue
+        q.put(startNode)
 
-        def hasNodeWithName(self, name):
-                for node in self.nodes:
-                        if node.get_name() == name:
-                                #print(node)
-                                return node
+        while not q.empty():
+            cur = q.get()
+            for neighbor in self.findDirectSuccessors(cur):
+                if neighbor not in dist.keys():
+                    dist[neighbor] = dist[cur] + 1
+                    parent[neighbor] = cur
+                    q.put(neighbor)
 
-                return False
+        return parent, dist
 
-        def printGraph(self):
-                for node in self.nodes:
-                        if(type(node)==Node):
-                                print(node.asString())
-                        
+    def graphSize(self, node):
+        parent, dist = self.bfs(node)
+        return len(list(parent.keys()))
 
-        def newickString(self):
-                """
+    def hasNodeWithName(self, name):
+        for node in self.nodes:
+            if node.get_name() == name:
+                # print(node)
+                return node
+
+        return False
+
+    def printGraph(self):
+        for node in self.nodes:
+            if (type(node) == Node):
+                print(node.asString())
+
+    def newickString(self):
+        """
                 Build a map of parents to children using dfs, and then use that
                 to call newickSubstring on the root. That will give the newick
                 string for the network.
 
                 Returns: a newick string.
                 """
-                
-                root = self.findRoot()[0]
-                children = {root:[set(), False]}
-                visitedRetic = []
-                
-                #stack for dfs
-                q = deque()
-                q.append(root)
-         
-                
-                while len(q) != 0:
-                        cur = q.pop()
 
-                        for neighbor in self.findDirectSuccessors(cur):
-                                
-                                #properly handle children mapping for parent "cur"
-                                if cur in children.keys():
-                                        children[cur][0].add(neighbor)
-                                else:
-                                        children[cur] = [set([neighbor]), False]
-                                        
-                                #tabulate whether node should be reprinted in any call
-                                #to newickSubstring. The subtree of a reticulation node
-                                #need only be printed once
-                                if neighbor.is_reticulation and neighbor in visitedRetic:
-                                        children[cur][1] = True
-                                elif neighbor.is_reticulation:
-                                        visitedRetic.append(neighbor)
+        root = self.findRoot()[0]
+        children = {root: [set(), False]}
+        visitedRetic = []
 
-        
-                                q.append(neighbor)
-                
-                #call newickSubstring on the root of the graph to get the entire string
-                return newickSubstring(children, root) + ";"
+        # stack for dfs
+        q = deque()
+        q.append(root)
 
-                                        
-                
-        
+        while len(q) != 0:
+            cur = q.pop()
+
+            for neighbor in self.findDirectSuccessors(cur):
+
+                # properly handle children mapping for parent "cur"
+                if cur in children.keys():
+                    children[cur][0].add(neighbor)
+                else:
+                    children[cur] = [set([neighbor]), False]
+
+                # tabulate whether node should be reprinted in any call
+                # to newickSubstring. The subtree of a reticulation node
+                # need only be printed once
+                if neighbor.is_reticulation and neighbor in visitedRetic:
+                    children[cur][1] = True
+                elif neighbor.is_reticulation:
+                    visitedRetic.append(neighbor)
+
+                q.append(neighbor)
+
+        # call newickSubstring on the root of the graph to get the entire string
+        return newickSubstring(children, root) + ";"
 
 
-
-
-
-
-
-                
-
-
-
-
-        
-
-                        
-                        
-
-
-
-        
 class undiGraph(Graph):
 
-        def __init__(self, edges, nodes, weights):
-                super().__init__(edges, nodes, weights)
-        
-        def isConnected(self):
-                return True
-                
-        def minimumSpanningTree(self):
-                """
+    def __init__(self, edges, nodes, weights):
+        super().__init__(edges, nodes, weights)
+
+    def isConnected(self):
+        return True
+
+    def minimumSpanningTree(self):
+        """
                 implements kruskal's algorithm
                 returns a graph instance representing the MST
                 """
 
-                if self.isConnected() == False:
-                        return "Attempting to find MST of unconnected graph"
-                
-                mst = undiGraph([], [], {})
-                edgeCandidates = self.edgeWeights.copy()
+        if self.isConnected() == False:
+            return "Attempting to find MST of unconnected graph"
 
-                while mst.getNumberOfEdges() < self.getNumberOfNodes() - 1:
-                        edgeCandidates = self.findMinEdgeAndInsert(mst, edgeCandidates)
-                
-                return mst
+        mst = undiGraph([], [], {})
+        edgeCandidates = self.edgeWeights.copy()
 
+        while mst.getNumberOfEdges() < self.getNumberOfNodes() - 1:
+            edgeCandidates = self.findMinEdgeAndInsert(mst, edgeCandidates)
 
-        def findMinEdgeAndInsert(self, graph, potentialEdges):
-                
-                minKey = list(min(potentialEdges, key=potentialEdges.get))
-                
-                graph.addNodes([minKey[0], minKey[1]])
-                graph.addEdges(frozenset(minKey))
-                graph.setEdgeWeights({frozenset(minKey) : self.edgeWeights[frozenset(minKey)]})
-                print("Adding nodes", minKey[0], minKey[1])
+        return mst
 
-                if graph.containsCycle() == True:
-                        graph.removeNode(minKey[0], False)
-                        graph.removeNode(minKey[1], False)
-                        graph.removeEdge(minKey)
-                        del potentialEdges[frozenset(minKey)]
-                        self.findMinEdgeAndInsert(graph, potentialEdges)
-                else:
-                        del potentialEdges[frozenset(minKey)]
-                        return potentialEdges    
+    def findMinEdgeAndInsert(self, graph, potentialEdges):
 
+        minKey = list(min(potentialEdges, key=potentialEdges.get))
 
-        def containsCycle(self):
-                """
+        graph.addNodes([minKey[0], minKey[1]])
+        graph.addEdges(frozenset(minKey))
+        graph.setEdgeWeights({frozenset(minKey): self.edgeWeights[frozenset(minKey)]})
+        print("Adding nodes", minKey[0], minKey[1])
+
+        if graph.containsCycle() == True:
+            graph.removeNode(minKey[0], False)
+            graph.removeNode(minKey[1], False)
+            graph.removeEdge(minKey)
+            del potentialEdges[frozenset(minKey)]
+            self.findMinEdgeAndInsert(graph, potentialEdges)
+        else:
+            del potentialEdges[frozenset(minKey)]
+            return potentialEdges
+
+    def containsCycle(self):
+        """
                 need to implement this for correctness on graphs with cycles
                 """
-                return False
+        return False
 
 
-        
+class ModelGraph(Graph):
+    """
+        A DAG with restricted functionality
+    """
+
+    def __init__(self, edges=[], nodes=[], weights=[]):
+        super().__init__(edges, nodes, weights)
+
+    def inDegree(self, node):
+        return len(self.inEdges(node))
+
+    def outDegree(self, node):
+        return len(self.outEdges(node))
+
+    def inEdges(self, node):
+        return [edge for edge in self.edges if edge[1] == node]
+
+    def outEdges(self, node):
+        return [edge for edge in self.edges if edge[0] == node]
+
+    def findRoot(self):
+        """
+        Finds the root of this DAG. It is an error if one does not exist.
+        """
+        root = [node for node in self.nodes if self.outDegree(node) == 0]
+        if len(root) == 0:
+                raise GraphTopologyError("There is no root. There should be a root in a Model Graph")
+        return root
+
+    def findDirectPredecessors(self, node):
+        """
+                Returns a list of the children of node
+
+                node-- A Node Object
+                """
+        return [edge[0] for edge in self.inEdges(node)]
+
+    def findDirectSuccessors(self, node):
+        """
+                Returns a list of the parent(s) of node. For a tree, this
+                list should be of length 1. For a network, a child may have more
+                than one.
+
+                node-- A Node Object
+                """
+        return [edge[1] for edge in self.outEdges(node)]
+
+    def getLeafs(self):
+        """
+        returns the list of leaves in the graph
+        """
+        return [node for node in self.nodes if self.inDegree(node) == 0]
 
 
 def graphTestSuite():
-        g = undiGraph([frozenset(["a","b"]), frozenset(["a", "c"]), frozenset(["c","d"]), frozenset(["c","b"]), frozenset(["b", "e"])], ["a", "b", "c", "d", "e"], {frozenset(["a","b"]):1, frozenset(["c","d"]):1.2, frozenset(["c","b"]):2, frozenset(["b", "e"]):3})
-        # print(g.findDirectSuccessors("a"))
-        # print(g.getLeafs())
-        # print(g.getNumberOfNodes())
-        # print(g.getNumberOfEdges())
-        print(g.minimumSpanningTree().getNumberOfEdges())
-        print(g.minimumSpanningTree().getNumberOfNodes())
-        print(g.minimumSpanningTree().getTotalWeight())
-        # print(g.isConnected())
-        # g.addNodes("e")
-        # print(g.getNumberOfNodes())
-        # print(g.top_sort())
-        # print(g.isConnected())
-        # g.addEdges(("e", "a"))
-        # print(g.isConnected())
-        # print(g.getNumberOfEdges())
-        # g.removeNode("c", True)
-        # print(g.top_sort())
-        # print(g.getNumberOfEdges())
-
-
-
+    g = undiGraph([frozenset(["a", "b"]), frozenset(["a", "c"]), frozenset(["c", "d"]), frozenset(["c", "b"]),
+                   frozenset(["b", "e"])], ["a", "b", "c", "d", "e"],
+                  {frozenset(["a", "b"]): 1, frozenset(["c", "d"]): 1.2, frozenset(["c", "b"]): 2,
+                   frozenset(["b", "e"]): 3})
+    # print(g.findDirectSuccessors("a"))
+    # print(g.getLeafs())
+    # print(g.getNumberOfNodes())
+    # print(g.getNumberOfEdges())
+    print(g.minimumSpanningTree().getNumberOfEdges())
+    print(g.minimumSpanningTree().getNumberOfNodes())
+    print(g.minimumSpanningTree().getTotalWeight())
+    # print(g.isConnected())
+    # g.addNodes("e")
+    # print(g.getNumberOfNodes())
+    # print(g.top_sort())
+    # print(g.isConnected())
+    # g.addEdges(("e", "a"))
+    # print(g.isConnected())
+    # print(g.getNumberOfEdges())
+    # g.removeNode("c", True)
+    # print(g.top_sort())
+    # print(g.getNumberOfEdges())

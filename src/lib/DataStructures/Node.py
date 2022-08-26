@@ -21,7 +21,7 @@ class Node:
         self.parent = parent_nodes
         self.label = name
 
-    def __len__(self):
+    def length(self):
         """
             The length of a node is its branch length.
 
@@ -135,7 +135,7 @@ class UltrametricNode(Node):
         self.height = height
         super().__init__(parent_nodes=par, attr=attributes, is_reticulation=isRetNode, name=label)
 
-    def __len__(self, otherNode):
+    def length(self, otherNode):
         if (type(otherNode) != UltrametricNode):
             raise NodeError(
                 "Attempting to gather a branch length between an Ultrametric Node and a non-Ultrametric Node")
