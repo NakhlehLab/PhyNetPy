@@ -1,5 +1,5 @@
-from Graph import ModelGraph
 from abc import ABC, abstractmethod
+import numpy as np
 
 
 def a_in_b(a, b):
@@ -9,10 +9,34 @@ def a_in_b(a, b):
     return False
 
 
+def build_matrix_from_seq(sequence):
+    likelihoods = np.zeros((len(sequence), 4))
+
+    # Map each character in the sequence to an array of length 4
+    for row_no in range(len(sequence)):
+        if sequence[row_no] == "A":
+            row = np.array([1, 0, 0, 0])
+        elif sequence[row_no] == "C":
+            row = np.array([0, 1, 0, 0])
+        elif sequence[row_no] == "G":
+            row = np.array([0, 0, 1, 0])
+        elif sequence[row_no] == "T":
+            row = np.array([0, 0, 0, 1])
+
+        # append row to matrix
+        likelihoods[row_no, :] = row
+    return likelihoods
+
+
+class ModelGraphError(Exception):
+    def __init__(self, message="Model Graph is Malformed"):
+        super().__init__(message)
+
+
 class Model:
 
     def __init__(self):
-        self.graph = ModelGraph()
+        self.graph = None
 
     def build(self):
         return 0
@@ -28,12 +52,54 @@ class Model:
         return 0
 
 
-class CalculationNode(ABC):
+class ModelNode:
+    def __init__(self, successors=None, predecessors=None):
+        self.successors = successors
+        self.predecessors = predecessors
+
+    def add_successor(self, model_node):
+        self.successors.append(model_node)
+
+    def add_predecessor(self, model_node):
+        self.predecessors.append(model_node)
+
+    def remove_successor(self, model_node):
+        if model_node in self.successors:
+            self.successors.remove(model_node)
+
+    def remove_predecessor(self, model_node):
+        if model_node in self.predecessors:
+            self.predecessors.remove(model_node)
+
+    def get_predecessors(self):
+        return self.predecessors
+
+    def get_successors(self):
+        return self.successors
+
+    def in_degree(self):
+        return len(self.predecessors)
+
+    def out_degree(self):
+        return len(self.successors)
+
+    def find_root(self):
+        if self.out_degree() == 0:
+            return self
+        else:
+            roots = set()
+            for neighbor in self.successors():
+                roots.update(neighbor.find_root())
+
+            return roots
+
+
+class CalculationNode(ABC, ModelNode):
 
     def __init__(self):
+        super().__init__()
         self.updated = True  # on initialization, we should do the calculation
         self.cached = None
-
 
     @abstractmethod
     def update(self, *args, **kwargs):
@@ -66,22 +132,22 @@ class CalculationNode(ABC):
         """
         pass
 
-    def upstream(self, g):
+    def upstream(self):
         """
         Finds a path within the model graph from this node to the root, and marks each node along the way as updated
         using the switch_updated() method
         """
         self.switch_updated()
 
-        neighbors = g.findDirectSuccessors()
-        roots = g.findRoot()
+        neighbors = self.successors()
+        roots = self.find_root()
         flag = True
 
         while flag:
             for neighbor in neighbors:
                 neighbor.switch_updated()
 
-            if a_in_b(roots, neighbors):
+            if a_in_b(list(roots), neighbors):
                 flag = False
 
     def switch_updated(self):
@@ -94,9 +160,10 @@ class CalculationNode(ABC):
         self.updated = True
 
 
-class StateNode(ABC):
+class StateNode(ABC, ModelNode):
 
     def __init__(self, data=None):
+        super().__init__()
         self.data = data
 
     @abstractmethod
@@ -110,13 +177,20 @@ class BranchLengthNode(CalculationNode):
         super().__init__()
         self.index = vector_index
         self.branch_length = branch_length
+        self.sub = None
+        self.updated_sub = True
 
-    def update(self, new_data, g):
+    def update(self, new_bl):
         # update the branch length
-        self.branch_length = new_data
+        self.branch_length = new_bl
 
         # Mark this node and any nodes upstream as needing to be recalculated
-        self.upstream(g)
+        self.upstream()
+
+    def update_sub(self, new_sub):
+        self.sub = new_sub
+        self.updated_sub = False
+        self.upstream()
 
     def get(self):
         if self.updated:
@@ -125,7 +199,12 @@ class BranchLengthNode(CalculationNode):
             return self.cached
 
     def calc(self):
-        pass
+        # mark node as having been recalculated and cache the result
+        self.cached = self.branch_length
+        self.updated = False
+
+        # return calculation
+        return self.branch_length
 
     def switch_index(self, new_index):
         self.index = new_index
@@ -133,41 +212,142 @@ class BranchLengthNode(CalculationNode):
     def get_index(self):
         return self.index
 
+    def transition(self):
+        if self.updated_sub:
+            for child in self.get_predecessors():
+                if type(child) is SubstitutionModel:
+                    self.sub = child
+                    self.updated_sub = False
+                    return child.expt(self.branch_length)
+        else:
+            return self.sub.expt(self.branch_length)
+
 
 class TreeHeights(StateNode):
 
     def __init__(self, node_height_vec):
+        super().__init__()
         self.heights = node_height_vec
 
-    def update(self, new_vector, g):
+    def update(self, new_vector):
         self.heights = new_vector
 
-        for branch_node in g.findDirectSuccessors(self):
-            branch_node.update(self.heights[branch_node.get_index()], g)
+        ## NOT OPTIMAL, ONLY UPDATE VALUES THAT CHANGED...
+        for branch_node in self.get_successors():
+            branch_node.update(self.heights[branch_node.get_index()])
+
+    def swap(self, index1, index2):
+        pass
 
 
-class TreeNode(CalculationNode):
+class FelsensteinInternalNode(CalculationNode):
     def __init__(self):
         super().__init__()
+        self.partials = None
+        self.branch = None
 
-    def update(self, g):
-        self.upstream(g)
+    def update(self):
+        self.upstream()
 
-    def get(self, g):
+    def get(self):
         if self.updated:
-            return self.calc(g)
+            return self.calc()
         else:
             return self.cached
 
-    def calc(self, g):
-        
+    def calc(self):
 
+        children = self.get_predecessors()
+        matrices = []
+
+        for child in children:
+            # type check
+            if type(child) != FelsensteinInternalNode or type(child) != FelsensteinLeafNode:
+                continue
+
+            # get the child partial likelihood. Could be another internal node, but could be a leaf
+            matrix = child.get()
+
+            # compute matrix * Pij transpose
+            step1 = np.matmul(matrix, child.get_branch().transition().transpose())
+
+            # add to list of child matrices
+            matrices.append(step1)
+
+            # Element-wise multiply each matrix in the list
+            result = np.ones(np.shape(matrices[0]))
+            for matrix in matrices:
+                result = np.multiply(result, matrix)
+
+        self.partials = result
+
+        # mark node as having been recalculated and cache the result
+        self.cached = result
+        self.updated = False
+
+        # return calculation
+        return self.partials
+
+    def get_branch(self):
+        if self.branch is None:
+            for child in self.get_predecessors():
+                if type(child) is BranchLengthNode:
+                    self.branch = child
+                    return child
+        return self.branch
+
+
+class FelsensteinLeafNode(CalculationNode):
+
+    def __init__(self, partials=None, branch=None):
+        super().__init__()
+        self.matrix = partials
+        self.branch = branch
+
+    def update(self, new_partials):
+        self.matrix = new_partials
+        self.upstream()
+
+    def get(self):
+        if self.updated:
+            return self.calc()
+        else:
+            return self.cached
+
+    def calc(self):
+        # mark node as having been recalculated and cache the result
+        if self.matrix is None:
+            for child in self.get_predecessors():
+                if type(child) is ExtantSpecies:
+                    self.matrix = build_matrix_from_seq(child.get_seq())
+
+        self.cached = self.matrix
+        self.updated = False
+
+        # return calculation
+        return self.matrix
+
+    def get_branch(self):
+        if self.branch is None:
+            for child in self.get_predecessors():
+                if type(child) is BranchLengthNode:
+                    self.branch = child
+                    return child
+        return self.branch
 
 
 class ExtantSpecies(StateNode):
 
-    def update(self, new_data):
-        pass
+    def __init__(self, name, sequence):
+        super().__init__()
+        self.name = name
+        self.seq = sequence
+
+    def update(self, new_sequence):
+        self.successors()[0].update(build_matrix_from_seq(new_sequence))
+
+    def get_seq(self):
+        return self.seq
 
 
 class SubstitutionModelParams(StateNode):
