@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from GTR import *
+
 
 
 def a_in_b(a, b):
@@ -35,11 +37,97 @@ class ModelGraphError(Exception):
 
 class Model:
 
-    def __init__(self):
-        self.graph = None
+    def __init__(self, network, data, submodel=JC()):
+        self.network = network
+        self.sub = submodel
+        self.data = data
+        self.nodes = []
+        self.build_felsenstein()
 
-    def build(self):
-        return 0
+    def build_felsenstein(self):
+
+        submodelnode = SubstitutionModel(self.sub)
+        self.nodes.append(submodelnode)
+
+        branch_index = 0
+
+        # map of the TreeNode objs to network nodes
+        node_modelnode_map = {}
+
+        for node in self.network.get_nodes():
+            if self.network.outDegree(node) == 0:
+                # A leaf node
+
+                # Create branch
+                branch = BranchLengthNode(branch_index, node.length())
+
+                # Each branch has a substitution model for calculating transition matrix
+                branch.add_predecessor(submodelnode)
+                submodelnode.add_successor(branch)
+
+                # Calculate the leaf likelihoods
+                sequence = self.data.getSeq(node.get_name())
+                new_leaf_node = FelsensteinLeafNode(partials=build_matrix_from_seq(sequence), branch=branch)
+
+                # Point the branch length node to the leaf node
+                branch.add_successor(new_leaf_node)
+                new_leaf_node.add_predecessor(branch)
+
+                # Add to list of model nodes
+                self.nodes.append(new_leaf_node)
+                self.nodes.append(branch)
+
+                # Add to map
+                node_modelnode_map[node] = new_leaf_node
+
+            elif self.network.inDegree(node) != 0:
+                # An internal node that is not the root
+
+                # Create branch
+                branch = BranchLengthNode(branch_index, node.length())
+
+                # Link to the substitution model
+                branch.add_predecessor(submodelnode)
+                submodelnode.add_successor(branch)
+
+                # Create internal node and link to branch
+                new_internal_node = FelsensteinInternalNode(branch=branch)
+                branch.add_successor(new_internal_node)
+                new_internal_node.add_predecessor(branch)
+
+                # Add to nodes list
+                self.nodes.append(new_internal_node)
+                self.nodes.append(branch)
+
+                # Map node to the new internal node
+                node_modelnode_map[node] = new_internal_node
+            else:
+                # The root. TODO: Add dependency on the base frequencies
+                # The root doesn't have a branch.
+
+                # Create root
+                new_internal_node = FelsensteinInternalNode()
+
+                # Add to nodes list
+                self.nodes.append(new_internal_node)
+
+                # Add to node map
+                node_modelnode_map[node] = new_internal_node
+
+            # inc branch length vector index
+            branch_index += 1
+
+        for edge in self.network.get_edges():
+            # Handle network par-child relationships
+
+            # Edge is from modelnode1 to modelnode2 in network, which means
+            # modelnode2 is the parent
+            modelnode1 = node_modelnode_map[edge[0]]
+            modelnode2 = node_modelnode_map[edge[1]]
+
+            # Add modelnode1 as the child of modelnode2
+            modelnode1.add_predecessor(modelnode2)
+            modelnode2.add_successor(modelnode1)
 
     def likelihood(self):
         """
@@ -241,10 +329,10 @@ class TreeHeights(StateNode):
 
 
 class FelsensteinInternalNode(CalculationNode):
-    def __init__(self):
+    def __init__(self, branch=None):
         super().__init__()
         self.partials = None
-        self.branch = None
+        self.branch = branch
 
     def update(self):
         self.upstream()
@@ -357,6 +445,10 @@ class SubstitutionModelParams(StateNode):
 
 
 class SubstitutionModel(CalculationNode):
+
+    def __init__(self, submodel):
+        super().__init__()
+        self.sub = submodel
 
     def update(self, new_data):
         # Set the new parameters

@@ -142,6 +142,11 @@ class Graph:
             sum += self.edgeWeights[edge]
         return sum
 
+    def get_nodes(self):
+        return self.nodes
+
+    def get_edges(self):
+        return self.edges
 
 class DAG(Graph):
     """
