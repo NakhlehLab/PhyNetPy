@@ -56,8 +56,10 @@ class Model:
 
     def change_branch(self, index, value):
         current_vec = self.tree_heights.heights
+        print(current_vec)
         new_vec = copy.deepcopy(current_vec)
         new_vec[index] = value
+        print(new_vec)
         self.tree_heights.update(new_vec)
 
 
@@ -368,7 +370,10 @@ class BranchLengthNode(CalculationNode):
 
     def update(self, new_bl):
         # update the branch length
+        print(self.branch_length)
+        print(new_bl)
         self.branch_length = new_bl
+        print(self.branch_length)
 
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
@@ -425,7 +430,7 @@ class TreeHeights(StateNode):
         else:
             for branch_node in self.get_successors():
                 if new_vector[branch_node.get_index()] != self.heights[branch_node.get_index()]:
-                    branch_node.update(self.heights[branch_node.get_index()])
+                    branch_node.update(new_vector[branch_node.get_index()])
 
             self.heights = new_vector
 
