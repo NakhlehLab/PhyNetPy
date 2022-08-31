@@ -49,11 +49,24 @@ class Model:
         self.sub = submodel
         self.data = data
         self.nodes = []
+        self.tree_heights = None
         self.felsenstein_root = None
         self.submodel_node = None
         self.build_felsenstein()
 
+    def change_branch(self, index, value):
+        current_vec = self.tree_heights.heights
+        new_vec = copy.deepcopy(current_vec)
+        new_vec[index] = value
+        self.tree_heights.update(new_vec)
+
+
     def build_felsenstein(self):
+
+        tree_heights_node = TreeHeights()
+        self.tree_heights = tree_heights_node
+
+        tree_heights_vec = []
 
         submodelnode = SubstitutionModel(self.sub)
         self.submodel_node = submodelnode
@@ -74,9 +87,13 @@ class Model:
 
                 # Create branch
                 branch = BranchLengthNode(branch_index, node.length())
+                tree_heights_vec.append(node.length())
+                branch_index += 1
 
                 # Each branch has a substitution model for calculating transition matrix
                 branch.add_predecessor(submodelnode)
+                branch.add_predecessor(tree_heights_node)
+                tree_heights_node.add_successor(branch)
                 submodelnode.add_successor(branch)
 
                 # Calculate the leaf likelihoods
@@ -100,9 +117,13 @@ class Model:
 
                 # Create branch
                 branch = BranchLengthNode(branch_index, node.length())
+                tree_heights_vec.append(node.length())
+                branch_index += 1
 
                 # Link to the substitution model
                 branch.add_predecessor(submodelnode)
+                branch.add_predecessor(tree_heights_node)
+                tree_heights_node.add_successor(branch)
                 submodelnode.add_successor(branch)
 
                 # Create internal node and link to branch
@@ -130,12 +151,9 @@ class Model:
                 # Add to node map
                 node_modelnode_map[node] = new_internal_node
 
-            # inc branch length vector index
-            branch_index += 1
-
         for edge in self.network.get_edges():
             # Handle network par-child relationships
-            print("HANDLING EDGE FROM " + edge[0].get_name() + " TO " + edge[1].get_name())
+            # print("HANDLING EDGE FROM " + edge[0].get_name() + " TO " + edge[1].get_name())
             # Edge is from modelnode1 to modelnode2 in network, which means
             # modelnode2 is the parent
             modelnode1 = node_modelnode_map[edge[0]]
@@ -145,15 +163,17 @@ class Model:
             modelnode1.add_predecessor(modelnode2)
             modelnode2.add_successor(modelnode1)
 
-        for node in self.nodes:
+        tree_heights_node.update(tree_heights_vec)
 
-            print("----------------------")
-            print("TYPE: " + str(type(node)))
-            if type(node) is FelsensteinLeafNode or type(node) is FelsensteinInternalNode:
-                print("NAME OF NODE: " + node.name)
-            print("CHILDREN: " + str(node.get_predecessors()))
-            print("PARENTS: " + str(node.get_successors()))
-            print("----------------------")
+        # for node in self.nodes:
+        #
+        #     print("----------------------")
+        #     print("TYPE: " + str(type(node)))
+        #     if type(node) is FelsensteinLeafNode or type(node) is FelsensteinInternalNode:
+        #         print("NAME OF NODE: " + node.name)
+        #     print("CHILDREN: " + str(node.get_predecessors()))
+        #     print("PARENTS: " + str(node.get_successors()))
+        #     print("----------------------")
 
     def likelihood(self):
         """
@@ -193,13 +213,11 @@ class ModelNode:
         else:
             self.successors.append(model_node)
 
-
     def add_predecessor(self, model_node):
         if self.predecessors is None:
             self.predecessors = [model_node]
         else:
             self.predecessors.append(model_node)
-
 
     def remove_successor(self, model_node):
         if model_node in self.successors:
@@ -216,14 +234,18 @@ class ModelNode:
         return self.successors
 
     def in_degree(self):
+        if self.predecessors is None:
+            return 0
         return len(self.predecessors)
 
     def out_degree(self):
+        if self.successors is None:
+            return 0
         return len(self.successors)
 
     def find_root(self):
         if self.out_degree() == 0:
-            return self
+            return {self}
         else:
             roots = set()
             for neighbor in self.successors:
@@ -274,19 +296,42 @@ class CalculationNode(ABC, ModelNode):
         """
         Finds a path within the model graph from this node to the root, and marks each node along the way as updated
         using the switch_updated() method
+
+        If all neighbors need to be recalculated, then so must every node upstream of it, and so we may stop updating
         """
         self.switch_updated()
 
         neighbors = self.get_successors()
+        if neighbors is None:
+            return
+
         roots = self.find_root()
-        flag = True
+        all_updated = True
+        for neighbor in neighbors:
+            if not neighbor.updated:
+                all_updated = False
 
-        while flag:
+        if not all_updated:
             for neighbor in neighbors:
-                neighbor.switch_updated()
+                if neighbor in roots:
+                    neighbor.upstream()
+                    return
+                neighbor.upstream()
+        else:
+            print("Done looking")
 
-            if a_in_b(list(roots), neighbors):
-                flag = False
+        # flag = True
+        #
+        # while flag:
+        #     all_updated = True
+        #     for neighbor in neighbors:
+        #         if neighbor.updated is False:
+        #             all_updated = False
+        #         neighbor.switch_updated()
+        #     if all_updated:
+        #         break
+        #     if a_in_b(list(roots), neighbors):
+        #         flag = False
 
     def switch_updated(self):
         """
@@ -295,6 +340,9 @@ class CalculationNode(ABC, ModelNode):
         This method will be called when a downstream node calls its upstream() method, setting this node
         as a node that needs to be recalculated.
         """
+        print("THIS NODE NOW NEEDS TO BE RECALCULATED")
+        if type(self) is FelsensteinInternalNode or type(self) is FelsensteinLeafNode:
+            print(self.name)
         self.updated = True
 
 
@@ -354,25 +402,32 @@ class BranchLengthNode(CalculationNode):
         if self.updated_sub:
             for child in self.get_predecessors():
                 if type(child) is SubstitutionModel:
-                    self.sub = child
+                    self.sub = child.get_submodel()
                     self.updated_sub = False
+                    print("calculating Pij for branch length: "+ str(self.branch_length))
                     return child.get().expt(self.branch_length)
         else:
+            print("calculating Pij for branch length: " + str(self.branch_length))
             return self.sub.expt(self.branch_length)
 
 
 class TreeHeights(StateNode):
 
-    def __init__(self, node_height_vec):
+    def __init__(self, node_height_vec=None):
         super().__init__()
         self.heights = node_height_vec
 
     def update(self, new_vector):
-        self.heights = new_vector
+        if self.heights is None:
+            self.heights = new_vector
+            for branch_node in self.get_successors():
+                branch_node.update(self.heights[branch_node.get_index()])
+        else:
+            for branch_node in self.get_successors():
+                if new_vector[branch_node.get_index()] != self.heights[branch_node.get_index()]:
+                    branch_node.update(self.heights[branch_node.get_index()])
 
-        # TODO: NOT OPTIMAL, ONLY UPDATE VALUES THAT CHANGED...
-        for branch_node in self.get_successors():
-            branch_node.update(self.heights[branch_node.get_index()])
+            self.heights = new_vector
 
     def swap(self, index1, index2):
         pass
@@ -391,7 +446,7 @@ class FelsensteinInternalNode(CalculationNode):
     def get(self):
         if self.updated:
             print("Node <" + str(self.name) + "> needs to be recalculated!")
-            print(self.get_predecessors())
+            # print(self.get_predecessors())
             return self.calc()
         else:
             print("Node <" + str(self.name) + "> returning cached partials!")
@@ -400,8 +455,8 @@ class FelsensteinInternalNode(CalculationNode):
     def calc(self):
 
         children = self.get_predecessors()
-        print("CHILDREN of " + self.name + ": " + str(children))
-        print(self.predecessors)
+        # print("CHILDREN of " + self.name + ": " + str(children))
+        # print(self.predecessors)
         matrices = []
 
         for child in children:
@@ -411,8 +466,8 @@ class FelsensteinInternalNode(CalculationNode):
 
             # get the child partial likelihood. Could be another internal node, but could be a leaf
             matrix = child.get()
-            print("RETRIEVED CHILD " + child.name + " PARTIALS")
-            print("CHILD PARTIAL = " + str(matrix))
+            # print("RETRIEVED CHILD " + child.name + " PARTIALS")
+            # print("CHILD PARTIAL = " + str(matrix))
 
             # compute matrix * Pij transpose
             step1 = np.matmul(matrix, child.get_branch().transition().transpose())
@@ -570,6 +625,9 @@ class SubstitutionModel(CalculationNode):
         self.cached = self.sub
         return self.sub
 
+    def get_submodel(self):
+        return self.sub
+
 
 #### TESTS ######
 
@@ -594,4 +652,7 @@ model = Model(test2, data2)  # JC
 # model2 = Model(test3, data3)  # JC
 
 print(model.likelihood())
+model.change_branch(2, .5)
+print(model.likelihood())
+
 # print(model2.likelihood())

@@ -142,8 +142,6 @@ class F81(GTR):
                 else:
                     self.Qt[i][j] = .25 - (.25 * math.exp(-1.333333333 * t))
 
-        print(self.Qt)
-
         return self.Qt
 
 
