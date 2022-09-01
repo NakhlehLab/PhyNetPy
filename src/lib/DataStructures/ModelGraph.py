@@ -6,6 +6,7 @@ from GTR import *
 import math
 import typing
 import copy
+import time
 
 from src.lib.DataStructures.Matrix import Matrix
 from src.lib.DataStructures.NetworkBuilder import NetworkBuilder
@@ -82,7 +83,7 @@ class Model:
         new_vec[index] = value
         self.tree_heights.update(new_vec)
 
-    def build_felsenstein(self):
+    def build_felsenstein(self, as_length=True):
         """
         Make a felsenstein likelihood model graph.
 
@@ -93,6 +94,7 @@ class Model:
         tree_heights_node = TreeHeights()
         self.tree_heights = tree_heights_node
         tree_heights_vec = []
+        tree_heights_adj = []
 
         # Initialize substitution model node
         submodelnode = SubstitutionModel(self.sub)
@@ -173,6 +175,9 @@ class Model:
                 # Add to node map
                 node_modelnode_map[node] = new_internal_node
 
+        if as_length is False:
+            tree_heights_adj = np.array(len(tree_heights_vec))
+
         for edge in self.network.get_edges():
             # Handle network par-child relationships
             # Edge is from modelnode1 to modelnode2 in network, which means
@@ -180,11 +185,22 @@ class Model:
             modelnode1 = node_modelnode_map[edge[0]]
             modelnode2 = node_modelnode_map[edge[1]]
 
+            if as_length is False:
+                # Convert from node heights to branch lengths by subtracting the parent node height from the child node height
+                branch1 = modelnode1.get_branch()
+                branch2 = modelnode2.get_branch()
+                tree_heights_adj[branch2.get_index()] = tree_heights_vec[branch2.get_index()] - tree_heights_vec[branch1.get_index()]
+
             # Add modelnode1 as the child of modelnode2
             modelnode2.join(modelnode1)
 
         # all the branches have been added, set the vector for the TreeHeight nodes
-        tree_heights_node.update(tree_heights_vec)
+        if as_length is False:
+            # Use the branch length adjusted version
+            tree_heights_node.update(list(tree_heights_adj))
+        else:
+            # Passed in as branch lengths, no manipulation needed
+            tree_heights_node.update(tree_heights_vec)
 
     def likelihood(self):
         """
@@ -218,6 +234,7 @@ class ModelNode:
     Class that defines the graphical structure and shared interactions between
     any node in the Model.
     """
+
     def __init__(self, successors=None, predecessors=None):
         self.successors = successors
         self.predecessors = predecessors
@@ -422,13 +439,12 @@ class BranchLengthNode(CalculationNode):
     transition matrix Pij
     """
 
-    def __init__(self, vector_index, branch_length, height_length = "length"):
+    def __init__(self, vector_index, branch_length):
         super().__init__()
         self.index = vector_index
         self.branch_length = branch_length
         self.sub = None
         self.updated_sub = True
-        self.use_as = height_length
 
     def update(self, new_bl):
         # update the branch length
@@ -502,8 +518,6 @@ class TreeHeights(StateNode):
                     branch_node.update(new_vector[branch_node.get_index()])
 
             self.heights = new_vector
-
-
 
 
 class FelsensteinInternalNode(CalculationNode):
@@ -724,8 +738,16 @@ data2 = Matrix(msa2)  # default is to use the DNA alphabet
 model = Model(test2, data2)  # JC
 # model2 = Model(test3, data3)  # JC
 
-print(model.likelihood())
+startFirst = time.perf_counter()
+model.likelihood()
+endFirst = time.perf_counter()
+
 model.change_branch(2, .5)
-print(model.likelihood())
+startSecond = time.perf_counter()
+model.likelihood()
+endSecond = time.perf_counter()
+
+print("WHOLE GRAPH: " + str(endFirst - startFirst))
+print("RECALC GRAPH: " + str(endSecond - startSecond))
 
 # print(model2.likelihood())
