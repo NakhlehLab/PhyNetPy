@@ -89,7 +89,7 @@ class GTR:
             changed, simply return the value
         """
 
-        eigenvals, eigenvecs = lg.eig(self.Q)
+        eigenvals, eigenvecs = lg.eigh(self.Q)
         q = eigenvecs
         qinv = lg.inv(q)
         diag = np.diag(eigenvals)
@@ -98,7 +98,7 @@ class GTR:
             diagt[i][i] = math.exp(diag[i][i] * t)
 
         self.Qt = np.real(np.matmul(np.matmul(q, diagt), qinv))
-        
+
         return self.Qt
 
 
@@ -203,16 +203,3 @@ class TN93(GTR):
         super().__init__(base_freqs, transitions, 4)
 
 
-
-def test():
-    sub1 = GTR([.25, .25, .25, .25], [1, 1, 1, 1, 1, 1])
-    sub2 = JC()
-
-    sub1_half = sub1.expt(.5)
-    sub2_half = sub2.expt(.5)
-
-    print(sub1_half)
-    print(sub2_half)
-
-
-test()
