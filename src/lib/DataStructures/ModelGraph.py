@@ -61,10 +61,11 @@ class Model:
         self.sub = submodel
         self.data = data
         self.nodes = []
-        self.tree_heights = None
+        self.tree_heights = None  # type TreeHeights
         self.felsenstein_root = None
-        self.submodel_node = None
+        self.submodel_node = None  # type SubstitutionModel
         self.build_felsenstein()
+        self.network_node_map = {}
 
     def change_branch(self, index, value):
         """
@@ -111,9 +112,6 @@ class Model:
         # Keep track of which branch maps to what index
         branch_index = 0
 
-        # map of the TreeNode objs to network nodes
-        node_modelnode_map = {}
-
         # Add parsed phylogenetic network into the model
         for node in self.network.get_nodes():
             if self.network.outDegree(node) == 0:  # This is a leaf
@@ -140,7 +138,7 @@ class Model:
                 self.nodes.append(branch)
 
                 # Add to map
-                node_modelnode_map[node] = new_leaf_node
+                self.network_node_map[node] = new_leaf_node
 
             elif self.network.inDegree(node) != 0:  # An internal node that is not the root
 
@@ -162,7 +160,7 @@ class Model:
                 self.nodes.append(branch)
 
                 # Map node to the new internal node
-                node_modelnode_map[node] = new_internal_node
+                self.network_node_map[node] = new_internal_node
             else:  # The root. TODO: Add dependency on the base frequencies
 
                 # Create root
@@ -173,7 +171,7 @@ class Model:
                 self.nodes.append(new_internal_node)
 
                 # Add to node map
-                node_modelnode_map[node] = new_internal_node
+                self.network_node_map[node] = new_internal_node
 
         if as_length is False:
             tree_heights_adj = np.array(len(tree_heights_vec))
@@ -182,8 +180,8 @@ class Model:
             # Handle network par-child relationships
             # Edge is from modelnode1 to modelnode2 in network, which means
             # modelnode2 is the parent
-            modelnode1 = node_modelnode_map[edge[0]]
-            modelnode2 = node_modelnode_map[edge[1]]
+            modelnode1 = self.network_node_map[edge[0]]
+            modelnode2 = self.network_node_map[edge[1]]
 
             if as_length is False:
                 # Convert from node heights to branch lengths by subtracting the parent node height from the child node height
@@ -228,6 +226,18 @@ class Model:
         # right now, simply the felsensteins likelihood
         return result
 
+    def execute_move(self, move):
+        """
+        The operator move has asked for permission to work on this model.
+        Pass the move this model and get a new, separate model that is the result of the operation on this model
+
+        Input: move, a Move obj or any subtype
+        Output: a new Model obj that is the result of doing Move on this Model obj
+        """
+        return move.execute(self)
+
+    def get_tree_heights(self):
+        return self.tree_heights
 
 class ModelNode:
     """
@@ -519,6 +529,9 @@ class TreeHeights(StateNode):
 
             self.heights = new_vector
 
+    def get_heights(self):
+        return self.heights
+
 
 class FelsensteinInternalNode(CalculationNode):
     def __init__(self, branch=None, name: str = None):
@@ -526,6 +539,7 @@ class FelsensteinInternalNode(CalculationNode):
         self.partials = None
         self.branch = branch
         self.name = name
+        self.network_children = None
 
     def update(self):
         self.upstream()
@@ -574,6 +588,18 @@ class FelsensteinInternalNode(CalculationNode):
 
         # return calculation
         return self.partials
+
+    def get_children(self):
+        if self.network_children is None:
+            children = self.get_predecessors()
+            network_children = []
+            for child in children:
+                if type(child) is FelsensteinInternalNode or type(child) is FelsensteinLeafNode:
+                    network_children.append(child)
+
+            self.network_children = network_children
+
+        return self.network_children
 
     def get_branch(self):
         if self.branch is None:
@@ -654,7 +680,7 @@ class SubstitutionModelParams(StateNode):
         submodel_node = self.get_successors()[0]
 
         if new_freqs is None and new_trans is None:
-            raise ModelGraphError("Nonsensical update")
+            raise ModelError("Nonsensical update")
         elif new_freqs is not None and new_trans is not None:
             submodel_node.update(self.new_submodel(new_freqs, new_trans))
         elif new_freqs is not None:

@@ -22,7 +22,7 @@ class HillClimbing:
     """
 
     def __init__(self):
-        self.current_state = State("hi").bootstrap()
+        self.current_state = State().bootstrap()
 
     def run(self):
         """
