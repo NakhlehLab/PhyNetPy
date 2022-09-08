@@ -61,6 +61,7 @@ class Model:
         self.sub = submodel
         self.data = data
         self.nodes = []
+        self.netnodes_sans_root = []
         self.tree_heights = None  # type TreeHeights
         self.felsenstein_root = None
         self.submodel_node = None  # type SubstitutionModel
@@ -136,6 +137,7 @@ class Model:
                 # Add to list of model nodes
                 self.nodes.append(new_leaf_node)
                 self.nodes.append(branch)
+                self.netnodes_sans_root.append(new_leaf_node)
 
                 # Add to map
                 self.network_node_map[node] = new_leaf_node
@@ -158,6 +160,7 @@ class Model:
                 # Add to nodes list
                 self.nodes.append(new_internal_node)
                 self.nodes.append(branch)
+                self.netnodes_sans_root.append(new_internal_node)
 
                 # Map node to the new internal node
                 self.network_node_map[node] = new_internal_node
@@ -187,7 +190,8 @@ class Model:
                 # Convert from node heights to branch lengths by subtracting the parent node height from the child node height
                 branch1 = modelnode1.get_branch()
                 branch2 = modelnode2.get_branch()
-                tree_heights_adj[branch2.get_index()] = tree_heights_vec[branch2.get_index()] - tree_heights_vec[branch1.get_index()]
+                tree_heights_adj[branch2.get_index()] = tree_heights_vec[branch2.get_index()] - tree_heights_vec[
+                    branch1.get_index()]
 
             # Add modelnode1 as the child of modelnode2
             modelnode2.join(modelnode1)
@@ -238,6 +242,7 @@ class Model:
 
     def get_tree_heights(self):
         return self.tree_heights
+
 
 class ModelNode:
     """
@@ -449,12 +454,13 @@ class BranchLengthNode(CalculationNode):
     transition matrix Pij
     """
 
-    def __init__(self, vector_index, branch_length):
+    def __init__(self, vector_index, branch_length, heights=True):
         super().__init__()
         self.index = vector_index
         self.branch_length = branch_length
         self.sub = None
         self.updated_sub = True
+        self.as_height = heights
 
     def update(self, new_bl):
         # update the branch length
@@ -492,18 +498,28 @@ class BranchLengthNode(CalculationNode):
         """
         Calculate the Pij matrix
         """
+        if self.as_height:
+            try:
+                node = self.get_successors()[0]
+                parent_height = node.get_parent().get_branch().get()
+                branch_len = parent_height - self.branch_length
+            finally:
+                pass
+        else:
+            branch_len = self.branch_length
+
         if self.updated_sub:
             # grab current substitution model
             for child in self.get_predecessors():
                 if type(child) is SubstitutionModel:
                     self.sub = child.get_submodel()
                     self.updated_sub = False
-                    print("calculating Pij for branch length: " + str(self.branch_length))
-                    return child.get().expt(self.branch_length)
+                    print("calculating Pij for branch length: " + str(branch_len))
+                    return child.get().expt(branch_len)
         else:
-            print("calculating Pij for branch length: " + str(self.branch_length))
+            print("calculating Pij for branch length: " + str(branch_len))
             # TODO: cache this?
-            return self.sub.expt(self.branch_length)
+            return self.sub.expt(branch_len)
 
 
 class TreeHeights(StateNode):
@@ -540,6 +556,17 @@ class FelsensteinInternalNode(CalculationNode):
         self.branch = branch
         self.name = name
         self.network_children = None
+        self.network_parent = None
+
+    def node_move_bounds(self):
+
+        if self.network_parent is None:
+            # root node
+            return None
+        # Normal internal node
+        upper_limit = self.network_parent.get_branch().get()
+        lower_limit = max(0, max([child.get_branch().get() for child in self.network_children]))
+        return [lower_limit, upper_limit]
 
     def update(self):
         self.upstream()
@@ -590,16 +617,10 @@ class FelsensteinInternalNode(CalculationNode):
         return self.partials
 
     def get_children(self):
-        if self.network_children is None:
-            children = self.get_predecessors()
-            network_children = []
-            for child in children:
-                if type(child) is FelsensteinInternalNode or type(child) is FelsensteinLeafNode:
-                    network_children.append(child)
-
-            self.network_children = network_children
-
         return self.network_children
+
+    def get_parent(self):
+        return self.network_parent
 
     def get_branch(self):
         if self.branch is None:
@@ -609,6 +630,37 @@ class FelsensteinInternalNode(CalculationNode):
                     return child
         return self.branch
 
+    def add_successor(self, model_node):
+        """
+        Adds a successor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if self.successors is None:
+            self.successors = [model_node]
+        else:
+            self.successors.append(model_node)
+
+        if type(model_node) is FelsensteinInternalNode:
+            self.network_parent = model_node
+
+    def add_predecessor(self, model_node):
+        """
+        Adds a predecessor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if self.predecessors is None:
+            self.predecessors = [model_node]
+        else:
+            self.predecessors.append(model_node)
+
+        if type(model_node) is FelsensteinInternalNode or type(model_node) is FelsensteinLeafNode:
+            if self.network_children is None:
+                self.network_children = [model_node]
+            else:
+                self.network_children.append(model_node)
+
 
 class FelsensteinLeafNode(CalculationNode):
 
@@ -617,6 +669,10 @@ class FelsensteinLeafNode(CalculationNode):
         self.matrix = partials
         self.branch = branch
         self.name = name
+        self.parent = None
+
+    def node_move_bounds(self):
+        return [0, self.parent.get_branch().get()]
 
     def update(self, new_partials):
         self.matrix = new_partials
@@ -650,6 +706,24 @@ class FelsensteinLeafNode(CalculationNode):
                     self.branch = child
                     return child
         return self.branch
+
+    def get_parent(self):
+        return self.parent
+
+    def add_successor(self, model_node):
+        """
+        Adds a successor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if self.successors is None:
+            self.successors = [model_node]
+        else:
+            self.successors.append(model_node)
+
+        if type(model_node) is FelsensteinInternalNode:
+            if self.parent is None:
+                self.parent = model_node
 
 
 class ExtantSpecies(StateNode):

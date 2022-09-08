@@ -3,7 +3,7 @@ import random
 from abc import ABC, abstractmethod
 import numpy as np
 
-from src.lib.DataStructures.ModelGraph import ModelError
+from src.lib.DataStructures.ModelGraph import ModelError, FelsensteinLeafNode
 
 
 class Move(ABC):
@@ -21,21 +21,24 @@ class Move(ABC):
         pass
 
 
-class BranchMove(Move, ABC):
+class UniformBranchMove(Move, ABC):
 
     def execute(self, model):
 
-        #Make a copy of the model
+        # Make a copy of the model
         proposedModel = copy.deepcopy(model)
 
-        vector_of_heights = proposedModel.tree_heights.heights()
+        # Select random internal node
+        selected = random.randint(0, len(proposedModel.netnodes_sans_root)-1)
+        selected_node = proposedModel.netnodes_sans_root[selected]
 
-        selected = random.randint(0, len(proposedModel.network_internals)-1)
-        selected_node = proposedModel.network_internals[selected]
+        # If the node is a leaf, generate an upper limit based on the exp dist
+        bounds = selected_node.node_move_bounds()
+        new_node_height = np.random.uniform(bounds[0], bounds[1]) # Assumes time starts at root and leafs are at max time
 
-        upper_limit = selected_node.get_netparent().get_branch().get()
-        children = selected_node.get_children()
-        lower_limit = min([children[0].get_branch().get(), children[1].get_branch().get()])
+        proposedModel.change_branch(selected_node.get_index(), new_node_height)
+
+        return proposedModel
 
 
 
@@ -78,3 +81,5 @@ class RootBranchMove(Move, ABC):
 
         # return the slightly modified model
         return proposedModel
+
+
