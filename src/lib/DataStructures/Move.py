@@ -3,7 +3,7 @@ import random
 from abc import ABC, abstractmethod
 import numpy as np
 
-from src.lib.DataStructures.ModelGraph import ModelError, FelsensteinLeafNode
+from ModelGraph import ModelError
 
 
 class Move(ABC):

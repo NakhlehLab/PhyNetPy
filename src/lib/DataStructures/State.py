@@ -1,4 +1,6 @@
-
+from BirthDeath import Yule
+from GTR import *
+from ModelGraph import Model
 
 class State:
 
@@ -27,6 +29,10 @@ class State:
     def commit(self):
         self.cached_model = None
 
+    def cached(self):
+        return self.cached_model
 
+    def bootstrap(self):
+        network = Yule(.05, 10, 50).generateTree("T")
 
-
+        self.current_model = Model(network, None, JC()) # data not tied to this tree?

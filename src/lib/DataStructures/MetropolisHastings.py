@@ -1,4 +1,10 @@
+from Bio import AlignIO
+
 from State import State
+from src.lib.DataStructures.Matrix import Matrix
+from src.lib.DataStructures.NetworkBuilder import NetworkBuilder
+from src.lib.DataStructures.Probability import Probability
+import dendropy.simulate.treesim
 
 
 class ProposalKernel:
@@ -21,7 +27,7 @@ class HillClimbing:
         If the likelihood is better we take it. Simple Proposal Kernel
     """
 
-    def __init__(self):
+    def __init__(self, submodel):
         self.current_state = State().bootstrap()
 
     def run(self):
@@ -36,6 +42,7 @@ class HillClimbing:
         iter_no = 0
         iter_with_small_delta = 0
         iter_rejections = 0
+
         while iter_no < 10000:
 
             # propose a new state
@@ -43,14 +50,14 @@ class HillClimbing:
 
             # undo the state if the current state is mathematically impossible
             if self.current_state.is_illegal():
-                self.current_state.undo()
+                self.current_state.revert()
 
             # calculate the difference in score between the proposed state and the current state
-            delta = self.current_state.get_score() > self.current_state.previous().get_score()
+            delta = self.current_state.likelihood() > self.current_state.cached().get_score()
 
             if delta > 0:
                 # the new state is more likely. Take it
-                self.current_state.accept()
+                self.current_state.commit()
 
                 # reset the rejection counter, we accepted a new state
                 iter_rejections = 0
@@ -65,11 +72,14 @@ class HillClimbing:
 
             else:
                 iter_rejections += 1
-                self.current_state.reject()
+                self.current_state.revert()
 
                 # if too many rejections in a row, then a local max has been found.
                 if iter_rejections >= 100:
                     return self.current_state
+
+            if iter_no % 10 == 0:
+                print("ITER #" + iter_no + " LIKELIHOOD = " + self.current_state.likelihood())
 
         return self.current_state
 
@@ -121,3 +131,20 @@ class MetropolisHastings:
     def run(self):
         print("RUNNING METROPOLIS HASTINGS")
         return 0
+
+
+def test():
+    n = NetworkBuilder(
+        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\sample.nex")
+
+    testnet = n.getNetwork(0)
+
+    msa = AlignIO.read(
+        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex",
+        "nexus")
+
+    data = Matrix(msa)  # default is to use the DNA alphabet
+
+    goalprob = Probability(testnet, data=data).felsenstein_likelihood()
+
+    print(goalprob)
