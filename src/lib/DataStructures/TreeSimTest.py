@@ -6,7 +6,7 @@ import dendropy
 
 
 trees = dendropy.TreeList.get(
-        path="C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\sample.nex",
+        path="sample.nex",
         schema="nexus")
 s = seqgen.SeqGen()
 

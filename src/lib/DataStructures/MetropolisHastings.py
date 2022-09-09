@@ -28,7 +28,7 @@ class HillClimbing:
     """
 
     def __init__(self, submodel):
-        self.current_state = State().bootstrap()
+        self.current_state = State()
 
     def run(self):
         """
@@ -135,12 +135,12 @@ class MetropolisHastings:
 
 def test():
     n = NetworkBuilder(
-        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\sample.nex")
+        "/src/test/MetroHastingsTests/truePhylogeny.nex")
 
     testnet = n.getNetwork(0)
 
     msa = AlignIO.read(
-        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex",
+        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex",
         "nexus")
 
     data = Matrix(msa)  # default is to use the DNA alphabet
@@ -148,3 +148,6 @@ def test():
     goalprob = Probability(testnet, data=data).felsenstein_likelihood()
 
     print(goalprob)
+
+
+test()

@@ -556,12 +556,12 @@ class ThreadSafeList():
 
 
 
-sim = Yule(.05, 6, 30)
+#sim = Yule(.05, 6, 30)
 
 #sim.generateTree("T").printGraph()
 
-sim2 = CBDP(.05, .01, 6)
-sim2.generateTree().printGraph()
+#sim2 = CBDP(.05, .01, 6)
+#sim2.generateTree().printGraph()
 
 # startSeq = time.perf_counter()
 # sim.generateNTreesSeq(500000)

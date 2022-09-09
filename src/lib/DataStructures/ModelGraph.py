@@ -41,6 +41,33 @@ def build_matrix_from_seq(sequence):
     return likelihoods
 
 
+
+
+def convert_to_heights(node, adj_dict):
+    if node.get_parent() is None: # Root
+        adj_dict[node] = 0
+    else:
+        adj_dict[node] = node.get_branch().get() + adj_dict[node.get_parent()]
+
+    if type(node) is FelsensteinLeafNode:
+        return adj_dict
+
+    if node.get_children() is not None:
+        for child in node.get_children():
+            adj_dict.update(convert_to_heights(child, adj_dict))
+
+    return adj_dict
+
+
+
+
+
+
+
+
+
+
+
 class ModelError(Exception):
     """
     Class to handle any errors related to building the model or running likelihoods computations
@@ -65,8 +92,8 @@ class Model:
         self.tree_heights = None  # type TreeHeights
         self.felsenstein_root = None
         self.submodel_node = None  # type SubstitutionModel
-        self.build_felsenstein()
         self.network_node_map = {}
+        self.build_felsenstein(as_length=False)
 
     def change_branch(self, index, value):
         """
@@ -170,14 +197,24 @@ class Model:
                 new_internal_node = FelsensteinInternalNode(name=node.get_name())
                 self.felsenstein_root = new_internal_node
 
+                if not as_length:
+                    branch_height = BranchLengthNode(branch_index, 0)
+                    branch_index += 1
+                    tree_heights_vec.append(0)
+                    branch_height.join(new_internal_node)
+                    submodelnode.join(branch_height)
+                    tree_heights_node.join(branch_height)
+
+
                 # Add to nodes list
                 self.nodes.append(new_internal_node)
 
                 # Add to node map
                 self.network_node_map[node] = new_internal_node
 
-        if as_length is False:
-            tree_heights_adj = np.array(len(tree_heights_vec))
+
+
+
 
         for edge in self.network.get_edges():
             # Handle network par-child relationships
@@ -186,19 +223,26 @@ class Model:
             modelnode1 = self.network_node_map[edge[0]]
             modelnode2 = self.network_node_map[edge[1]]
 
-            if as_length is False:
-                # Convert from node heights to branch lengths by subtracting the parent node height from the child node height
-                branch1 = modelnode1.get_branch()
-                branch2 = modelnode2.get_branch()
-                tree_heights_adj[branch2.get_index()] = tree_heights_vec[branch2.get_index()] - tree_heights_vec[
-                    branch1.get_index()]
-
             # Add modelnode1 as the child of modelnode2
             modelnode2.join(modelnode1)
 
         # all the branches have been added, set the vector for the TreeHeight nodes
         if as_length is False:
             # Use the branch length adjusted version
+            tree_heights_adj = np.zeros(len(tree_heights_vec))
+            adj_dict = convert_to_heights(self.felsenstein_root, {})
+            print(adj_dict)
+            max_height = 0
+            for node, height in adj_dict.items():
+                print(node.get_branch().get_index())
+                print(len(tree_heights_adj))
+                tree_heights_adj[node.get_branch().get_index()] = height
+                if height > max_height:
+                    max_height = height
+                print("NODE: " + node.name + " HAS NEW HEIGHT: " + str(height))
+
+            tree_heights_adj = np.ones(len(tree_heights_adj))*max_height - tree_heights_adj
+            print(tree_heights_adj)
             tree_heights_node.update(list(tree_heights_adj))
         else:
             # Passed in as branch lengths, no manipulation needed
@@ -242,6 +286,9 @@ class Model:
 
     def get_tree_heights(self):
         return self.tree_heights
+
+
+
 
 
 class ModelNode:
@@ -465,6 +512,7 @@ class BranchLengthNode(CalculationNode):
     def update(self, new_bl):
         # update the branch length
         self.branch_length = new_bl
+        print("NEW BRANCH LENGTH IS UPDATED: <" + str(new_bl) + ">")
 
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
@@ -501,6 +549,7 @@ class BranchLengthNode(CalculationNode):
         if self.as_height:
             try:
                 node = self.get_successors()[0]
+                print(node.name)
                 parent_height = node.get_parent().get_branch().get()
                 branch_len = parent_height - self.branch_length
             finally:
@@ -839,15 +888,15 @@ model = Model(test2, data2)  # JC
 # model2 = Model(test3, data3)  # JC
 
 startFirst = time.perf_counter()
-model.likelihood()
+print(model.likelihood())
 endFirst = time.perf_counter()
 
-model.change_branch(2, .5)
-startSecond = time.perf_counter()
-model.likelihood()
-endSecond = time.perf_counter()
-
-print("WHOLE GRAPH: " + str(endFirst - startFirst))
-print("RECALC GRAPH: " + str(endSecond - startSecond))
+#model.change_branch(2, .5)
+#startSecond = time.perf_counter()
+# model.likelihood()
+# endSecond = time.perf_counter()
+#
+# print("WHOLE GRAPH: " + str(endFirst - startFirst))
+# print("RECALC GRAPH: " + str(endSecond - startSecond))
 
 # print(model2.likelihood())
