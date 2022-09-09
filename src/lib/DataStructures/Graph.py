@@ -165,7 +165,9 @@ class DAG(Graph):
     def inDegree(self, node):
         return len(self.inEdges(node))
 
-    def outDegree(self, node):
+    def outDegree(self, node, debug=False):
+        if debug:
+            print("OUT EDGES" + str(self.outEdges(node)))
         return len(self.outEdges(node))
 
     def inEdges(self, node):
@@ -275,7 +277,7 @@ class DAG(Graph):
 
     def printGraph(self):
         for node in self.nodes:
-            if (type(node) == Node):
+            if type(node) is Node:
                 print(node.asString())
 
     def newickString(self):
@@ -304,7 +306,7 @@ class DAG(Graph):
                 if cur in children.keys():
                     children[cur][0].add(neighbor)
                 else:
-                    children[cur] = [set([neighbor]), False]
+                    children[cur] = [{neighbor}, False]
 
                 # tabulate whether node should be reprinted in any call
                 # to newickSubstring. The subtree of a reticulation node

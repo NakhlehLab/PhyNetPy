@@ -1,4 +1,4 @@
-from BirthDeath import Yule
+from BirthDeath import Yule, CBDP
 from GTR import *
 from ModelGraph import Model
 
@@ -32,7 +32,11 @@ class State:
     def cached(self):
         return self.cached_model
 
-    def bootstrap(self):
-        network = Yule(.05, 10, 50).generateTree("T")
+    def bootstrap(self, data, submodel):
+        network = CBDP(1, .5, 10).generateTree()
 
-        self.current_model = Model(network, None, JC()) # data not tied to this tree?
+        network.printGraph()
+        self.current_model = Model(network, data, submodel)
+
+
+

@@ -36,7 +36,7 @@ class UniformBranchMove(Move, ABC):
         bounds = selected_node.node_move_bounds()
         new_node_height = np.random.uniform(bounds[0], bounds[1]) # Assumes time starts at root and leafs are at max time
 
-        proposedModel.change_branch(selected_node.get_index(), new_node_height)
+        proposedModel.change_branch(selected_node.get_branch().get_index(), new_node_height)
 
         return proposedModel
 

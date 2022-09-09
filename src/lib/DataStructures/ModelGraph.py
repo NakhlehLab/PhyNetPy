@@ -41,31 +41,38 @@ def build_matrix_from_seq(sequence):
     return likelihoods
 
 
-
-
 def convert_to_heights(node, adj_dict):
-    if node.get_parent() is None: # Root
-        adj_dict[node] = 0
+    """
+    This is a recusive function that is used to take a model that is initialized
+    with branch heights and turn it into a model based on node heights.
+
+    Usage: convert_to_heights(root_node, {})
+
+    The resulting heights are conditioned such that t=0 is at the root. Need to subtract dictionary value from
+    max(heights of all leaves) to get heights such that the root is the time furthest in the past
+
+    input: a ModelNode, to change the whole graph use the root.
+    output: a dictionary that maps each model node to a float height value
+
+    """
+    if node.get_parent() is None:  # Root
+        adj_dict[node] = 0  # Start root at t=0
     else:
+        # For all other nodes, the height will be the branch length plus the node height of its parent
         adj_dict[node] = node.get_branch().get() + adj_dict[node.get_parent()]
 
+    # Done at the leaves
     if type(node) is FelsensteinLeafNode:
         return adj_dict
 
+    # Otherwise, recursively call on the children of this node
     if node.get_children() is not None:
         for child in node.get_children():
+            # combine maps of all children
             adj_dict.update(convert_to_heights(child, adj_dict))
 
+    # Return the built-up mapping
     return adj_dict
-
-
-
-
-
-
-
-
-
 
 
 class ModelError(Exception):
@@ -142,7 +149,7 @@ class Model:
 
         # Add parsed phylogenetic network into the model
         for node in self.network.get_nodes():
-            if self.network.outDegree(node) == 0:  # This is a leaf
+            if self.network.outDegree(node, debug=True) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
                 branch = BranchLengthNode(branch_index, node.length())
@@ -205,16 +212,11 @@ class Model:
                     submodelnode.join(branch_height)
                     tree_heights_node.join(branch_height)
 
-
                 # Add to nodes list
                 self.nodes.append(new_internal_node)
 
                 # Add to node map
                 self.network_node_map[node] = new_internal_node
-
-
-
-
 
         for edge in self.network.get_edges():
             # Handle network par-child relationships
@@ -231,18 +233,20 @@ class Model:
             # Use the branch length adjusted version
             tree_heights_adj = np.zeros(len(tree_heights_vec))
             adj_dict = convert_to_heights(self.felsenstein_root, {})
-            print(adj_dict)
+
+            #Keep track of the maximum leaf height, this is used to switch the node heights from root centric to leaf centric
             max_height = 0
+
+            #Set each node height
             for node, height in adj_dict.items():
-                print(node.get_branch().get_index())
-                print(len(tree_heights_adj))
                 tree_heights_adj[node.get_branch().get_index()] = height
                 if height > max_height:
                     max_height = height
-                print("NODE: " + node.name + " HAS NEW HEIGHT: " + str(height))
 
-            tree_heights_adj = np.ones(len(tree_heights_adj))*max_height - tree_heights_adj
-            print(tree_heights_adj)
+            # Subtract dict height from max child height
+            tree_heights_adj = np.ones(len(tree_heights_adj)) * max_height - tree_heights_adj
+
+            #Update all the branch length nodes to be the proper calculated heights
             tree_heights_node.update(list(tree_heights_adj))
         else:
             # Passed in as branch lengths, no manipulation needed
@@ -286,9 +290,6 @@ class Model:
 
     def get_tree_heights(self):
         return self.tree_heights
-
-
-
 
 
 class ModelNode:
@@ -512,7 +513,6 @@ class BranchLengthNode(CalculationNode):
     def update(self, new_bl):
         # update the branch length
         self.branch_length = new_bl
-        print("NEW BRANCH LENGTH IS UPDATED: <" + str(new_bl) + ">")
 
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
@@ -891,8 +891,8 @@ startFirst = time.perf_counter()
 print(model.likelihood())
 endFirst = time.perf_counter()
 
-#model.change_branch(2, .5)
-#startSecond = time.perf_counter()
+# model.change_branch(2, .5)
+# startSecond = time.perf_counter()
 # model.likelihood()
 # endSecond = time.perf_counter()
 #

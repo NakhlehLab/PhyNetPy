@@ -5,6 +5,8 @@ from src.lib.DataStructures.Matrix import Matrix
 from src.lib.DataStructures.NetworkBuilder import NetworkBuilder
 from src.lib.DataStructures.Probability import Probability
 import dendropy.simulate.treesim
+from Move import *
+from GTR import *
 
 
 class ProposalKernel:
@@ -12,14 +14,15 @@ class ProposalKernel:
     def __init__(self):
         pass
 
-    def generate(self, state):
+    def generate(self):
         """
             Given a State obj, make changes to generate a new State that
             is "close" to the prior state.
 
             Input: the state to be manipulated
         """
-        return state
+
+        return UniformBranchMove()
 
 
 class HillClimbing:
@@ -27,8 +30,10 @@ class HillClimbing:
         If the likelihood is better we take it. Simple Proposal Kernel
     """
 
-    def __init__(self, submodel):
+    def __init__(self, pkernel, submodel, data):
         self.current_state = State()
+        self.current_state.bootstrap(data, submodel)
+        self.kernel = pkernel
 
     def run(self):
         """
@@ -43,17 +48,14 @@ class HillClimbing:
         iter_with_small_delta = 0
         iter_rejections = 0
 
-        while iter_no < 10000:
+        while iter_no < 10:
 
             # propose a new state
-            self.current_state.propose()
-
-            # undo the state if the current state is mathematically impossible
-            if self.current_state.is_illegal():
-                self.current_state.revert()
+            print(self.current_state)
+            self.current_state.generate_next(self.kernel.generate())
 
             # calculate the difference in score between the proposed state and the current state
-            delta = self.current_state.likelihood() > self.current_state.cached().get_score()
+            delta = self.current_state.likelihood() > self.current_state.cached().likelihood()
 
             if delta > 0:
                 # the new state is more likely. Take it
@@ -78,8 +80,9 @@ class HillClimbing:
                 if iter_rejections >= 100:
                     return self.current_state
 
-            if iter_no % 10 == 0:
-                print("ITER #" + iter_no + " LIKELIHOOD = " + self.current_state.likelihood())
+            #if iter_no % 10 == 0:
+            print("ITER #" + str(iter_no) + " LIKELIHOOD = " + str(self.current_state.likelihood()))
+            iter_no+=1
 
         return self.current_state
 
@@ -135,7 +138,7 @@ class MetropolisHastings:
 
 def test():
     n = NetworkBuilder(
-        "/src/test/MetroHastingsTests/truePhylogeny.nex")
+        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
 
     testnet = n.getNetwork(0)
 
@@ -148,6 +151,9 @@ def test():
     goalprob = Probability(testnet, data=data).felsenstein_likelihood()
 
     print(goalprob)
+
+    hill = HillClimbing(ProposalKernel(), JC(), data)
+    hill.run()
 
 
 test()

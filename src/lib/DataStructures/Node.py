@@ -30,7 +30,7 @@ class Node:
 
         return self.branch_length
 
-    def __str__(self):
+    def asString(self):
         myStr = "Node " + str(self.label) + ": "
         if self.branch_length is not None:
             myStr += str(round(self.branch_length, 2)) + " "
