@@ -7,6 +7,7 @@ from src.lib.DataStructures.Probability import Probability
 import dendropy.simulate.treesim
 from Move import *
 from GTR import *
+import random
 
 
 class ProposalKernel:
@@ -22,7 +23,14 @@ class ProposalKernel:
             Input: the state to be manipulated
         """
 
-        return UniformBranchMove()
+        random_num = random.random()
+
+        if random_num < .05:
+            return RootBranchMove()
+        elif random_num < .75:
+            return UniformBranchMove()
+        else:
+            return TaxaSwapMove()
 
 
 class HillClimbing:
@@ -45,13 +53,12 @@ class HillClimbing:
 
         # run a maximum of 10000 iterations
         iter_no = 0
-        iter_with_small_delta = 0
-        iter_rejections = 0
+        # iter_with_small_delta = 0
+        # iter_rejections = 0
 
-        while iter_no < 10:
+        while iter_no < 10000:
 
             # propose a new state
-            print(self.current_state)
             self.current_state.generate_next(self.kernel.generate())
 
             # calculate the difference in score between the proposed state and the current state
@@ -62,27 +69,27 @@ class HillClimbing:
                 self.current_state.commit()
 
                 # reset the rejection counter, we accepted a new state
-                iter_rejections = 0
-
-                # return state if we seem to be in a state that locally maximizes the likelihood
-                if delta < .001 and iter_with_small_delta >= 100:
-                    return self.current_state
-                elif delta < .001:
-                    iter_with_small_delta += 1
-                else:
-                    iter_with_small_delta = 0
+                # iter_rejections = 0
+                #
+                # # return state if we seem to be in a state that locally maximizes the likelihood
+                # if delta < .001 and iter_with_small_delta >= 100:
+                #     return self.current_state
+                # elif delta < .001:
+                #     iter_with_small_delta += 1
+                # else:
+                #     iter_with_small_delta = 0
 
             else:
-                iter_rejections += 1
+                # iter_rejections += 1
                 self.current_state.revert()
 
                 # if too many rejections in a row, then a local max has been found.
-                if iter_rejections >= 100:
-                    return self.current_state
+                # if iter_rejections >= 100:
+                #     return self.current_state
 
-            #if iter_no % 10 == 0:
+            # if iter_no % 10 == 0:
             print("ITER #" + str(iter_no) + " LIKELIHOOD = " + str(self.current_state.likelihood()))
-            iter_no+=1
+            iter_no += 1
 
         return self.current_state
 

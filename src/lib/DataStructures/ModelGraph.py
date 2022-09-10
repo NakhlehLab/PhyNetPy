@@ -96,6 +96,7 @@ class Model:
         self.data = data
         self.nodes = []
         self.netnodes_sans_root = []
+        self.network_leaves = []
         self.tree_heights = None  # type TreeHeights
         self.felsenstein_root = None
         self.submodel_node = None  # type SubstitutionModel
@@ -164,6 +165,11 @@ class Model:
                 sequence = self.data.getSeq(node.get_name())  # Get char sequence from the matrix data
                 new_leaf_node = FelsensteinLeafNode(partials=build_matrix_from_seq(sequence), branch=branch,
                                                     name=node.get_name())
+                new_ext_species = ExtantSpecies(node.get_name(), sequence)
+
+                new_ext_species.join(new_leaf_node)
+                self.nodes.append(new_ext_species)
+                self.network_leaves.append(new_leaf_node)
 
                 # Point the branch length node to the leaf node
                 branch.join(new_leaf_node)
@@ -290,6 +296,9 @@ class Model:
 
     def get_tree_heights(self):
         return self.tree_heights
+
+    def get_network_leaves(self):
+        return self.network_leaves
 
 
 class ModelNode:
@@ -723,8 +732,9 @@ class FelsensteinLeafNode(CalculationNode):
     def node_move_bounds(self):
         return [0, self.parent.get_branch().get()]
 
-    def update(self, new_partials):
+    def update(self, new_partials, new_name):
         self.matrix = new_partials
+        self.name = new_name
         self.upstream()
 
     def get(self):
@@ -782,12 +792,15 @@ class ExtantSpecies(StateNode):
         self.name = name
         self.seq = sequence
 
-    def update(self, new_sequence):
+    def update(self, new_sequence, new_name):
         # should only have a single leaf calc node as the parent
-        self.successors()[0].update(build_matrix_from_seq(new_sequence))
+        self.get_successors()[0].update(build_matrix_from_seq(new_sequence), new_name)
 
     def get_seq(self):
         return self.seq
+
+    def get_name(self):
+        return self.name
 
 
 class SubstitutionModelParams(StateNode):

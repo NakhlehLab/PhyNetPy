@@ -24,24 +24,21 @@ class Move(ABC):
 class UniformBranchMove(Move, ABC):
 
     def execute(self, model):
-
         # Make a copy of the model
         proposedModel = copy.deepcopy(model)
 
         # Select random internal node
-        selected = random.randint(0, len(proposedModel.netnodes_sans_root)-1)
+        selected = random.randint(0, len(proposedModel.netnodes_sans_root) - 1)
         selected_node = proposedModel.netnodes_sans_root[selected]
 
         # If the node is a leaf, generate an upper limit based on the exp dist
         bounds = selected_node.node_move_bounds()
-        new_node_height = np.random.uniform(bounds[0], bounds[1]) # Assumes time starts at root and leafs are at max time
+        new_node_height = np.random.uniform(bounds[0],
+                                            bounds[1])  # Assumes time starts at root and leafs are at max time
 
         proposedModel.change_branch(selected_node.get_branch().get_index(), new_node_height)
 
         return proposedModel
-
-
-
 
 
 class RootBranchMove(Move, ABC):
@@ -83,3 +80,34 @@ class RootBranchMove(Move, ABC):
         return proposedModel
 
 
+class TaxaSwapMove(Move, ABC):
+
+    def execute(self, model):
+        # Make a copy of the model
+        proposedModel = copy.deepcopy(model)
+
+        # Select two random leaf nodes
+        net_leaves = proposedModel.get_network_leaves()
+
+        if len(net_leaves) < 3:
+            raise ModelError("NOT ENOUGH TAXA")
+
+        indeces = np.random.choice(len(net_leaves), 2, replace=False)
+        first = net_leaves[indeces[0]]
+        second = net_leaves[indeces[1]]
+
+        # Grab ExtantTaxa nodes
+        first_taxa = first.get_predecessors()[0]
+        sec_taxa = second.get_predecessors()[0]
+
+        # Swap names and sequences
+        first_seq = first_taxa.get_seq()
+        sec_seq = sec_taxa.get_seq()
+        first_name = first_taxa.get_name()
+        sec_name = sec_taxa.get_name()
+
+        # Update the data
+        first_taxa.update(sec_seq, sec_name)
+        sec_taxa.update(first_seq, first_name)
+
+        return proposedModel
