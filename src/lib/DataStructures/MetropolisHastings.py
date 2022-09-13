@@ -13,7 +13,7 @@ import random
 class ProposalKernel:
 
     def __init__(self):
-        pass
+        self.taxa_move_count = 0
 
     def generate(self):
         """
@@ -22,12 +22,17 @@ class ProposalKernel:
 
             Input: the state to be manipulated
         """
-
+        # if self.taxa_move_count < 10:
+        #     self.taxa_move_count += 1
+        #     return TaxaSwapMove()
+        # else:
         random_num = random.random()
 
         if random_num < .05:
+            print("ROOT BRANCH MOVE")
             return RootBranchMove()
         elif random_num < .75:
+            print("BRANCH MOVE")
             return UniformBranchMove()
         else:
             return TaxaSwapMove()

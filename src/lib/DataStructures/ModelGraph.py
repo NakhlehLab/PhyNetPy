@@ -558,7 +558,7 @@ class BranchLengthNode(CalculationNode):
         if self.as_height:
             try:
                 node = self.get_successors()[0]
-                print(node.name)
+                #print(node.name)
                 parent_height = node.get_parent().get_branch().get()
                 branch_len = parent_height - self.branch_length
             finally:
@@ -572,10 +572,10 @@ class BranchLengthNode(CalculationNode):
                 if type(child) is SubstitutionModel:
                     self.sub = child.get_submodel()
                     self.updated_sub = False
-                    print("calculating Pij for branch length: " + str(branch_len))
+                    #print("calculating Pij for branch length: " + str(branch_len))
                     return child.get().expt(branch_len)
         else:
-            print("calculating Pij for branch length: " + str(branch_len))
+            #print("calculating Pij for branch length: " + str(branch_len))
             # TODO: cache this?
             return self.sub.expt(branch_len)
 
@@ -631,11 +631,11 @@ class FelsensteinInternalNode(CalculationNode):
 
     def get(self):
         if self.updated:
-            print("Node <" + str(self.name) + "> needs to be recalculated!")
+            #print("Node <" + str(self.name) + "> needs to be recalculated!")
             # print(self.get_predecessors())
             return self.calc()
         else:
-            print("Node <" + str(self.name) + "> returning cached partials!")
+            #print("Node <" + str(self.name) + "> returning cached partials!")
             return self.cached
 
     def calc(self):
@@ -739,10 +739,10 @@ class FelsensteinLeafNode(CalculationNode):
 
     def get(self):
         if self.updated:
-            print("Node <" + str(self.name) + "> needs to be recalculated!")
+            #print("Node <" + str(self.name) + "> needs to be recalculated!")
             return self.calc()
         else:
-            print("Node <" + str(self.name) + "> returning cached partials!")
+            #print("Node <" + str(self.name) + "> returning cached partials!")
             return self.cached
 
     def calc(self):
@@ -794,6 +794,8 @@ class ExtantSpecies(StateNode):
 
     def update(self, new_sequence, new_name):
         # should only have a single leaf calc node as the parent
+        self.seq = new_sequence
+        self.name = new_name
         self.get_successors()[0].update(build_matrix_from_seq(new_sequence), new_name)
 
     def get_seq(self):

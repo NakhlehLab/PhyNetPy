@@ -106,8 +106,10 @@ class TaxaSwapMove(Move, ABC):
         first_name = first_taxa.get_name()
         sec_name = sec_taxa.get_name()
 
+        print("SWAPPING " + first_name + " TO " + sec_name)
         # Update the data
         first_taxa.update(sec_seq, sec_name)
         sec_taxa.update(first_seq, first_name)
+
 
         return proposedModel

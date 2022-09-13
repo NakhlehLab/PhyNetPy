@@ -401,8 +401,6 @@ class CBDP:
         tree = copy.deepcopy(DAG())
         tree.addEdges(edges)
         tree.addNodes(nodes)
-        print("TREE NODES:" + str(tree.nodes))
-        print("TREE EDGES:" + str(tree.edges))
 
         return tree
 

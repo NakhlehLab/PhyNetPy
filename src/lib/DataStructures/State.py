@@ -35,6 +35,7 @@ class State:
     def bootstrap(self, data, submodel):
         network = CBDP(1, .5, 10).generateTree()
 
+        print("SIM BOOTSTRAP")
         network.printGraph()
         self.current_model = Model(network, data, submodel)
 
