@@ -4,6 +4,7 @@ from State import State
 from src.lib.DataStructures.Matrix import Matrix
 from src.lib.DataStructures.NetworkBuilder import NetworkBuilder
 from src.lib.DataStructures.Probability import Probability
+import cProfile
 import dendropy.simulate.treesim
 from Move import *
 from GTR import *
@@ -22,20 +23,18 @@ class ProposalKernel:
 
             Input: the state to be manipulated
         """
-        # if self.taxa_move_count < 10:
-        #     self.taxa_move_count += 1
-        #     return TaxaSwapMove()
-        # else:
-        random_num = random.random()
-
-        if random_num < .05:
-            print("ROOT BRANCH MOVE")
-            return RootBranchMove()
-        elif random_num < .75:
-            print("BRANCH MOVE")
-            return UniformBranchMove()
-        else:
+        if self.taxa_move_count < 30:
+            self.taxa_move_count += 1
             return TaxaSwapMove()
+        else:
+            random_num = random.random()
+
+            if random_num < .1:
+                return RootBranchMove()
+            elif random_num < .8:
+                return UniformBranchMove()
+            else:
+                return TopologyMove()
 
 
 class HillClimbing:
@@ -43,10 +42,13 @@ class HillClimbing:
         If the likelihood is better we take it. Simple Proposal Kernel
     """
 
-    def __init__(self, pkernel, submodel, data):
+    def __init__(self, pkernel, submodel, data, num_iter):
         self.current_state = State()
         self.current_state.bootstrap(data, submodel)
+        self.data = data
+        self.submodel = submodel
         self.kernel = pkernel
+        self.num_iter = num_iter
 
     def run(self):
         """
@@ -56,12 +58,13 @@ class HillClimbing:
         Outputs: The end state (a State obj) that locally minimizes the score
         """
 
+        self.current_state.write_line_to_summary("--------------------------")
+        self.current_state.write_line_to_summary("------Begin Hillclimb-----")
+
         # run a maximum of 10000 iterations
         iter_no = 0
-        # iter_with_small_delta = 0
-        # iter_rejections = 0
 
-        while iter_no < 10000:
+        while iter_no < self.num_iter:
 
             # propose a new state
             self.current_state.generate_next(self.kernel.generate())
@@ -72,29 +75,15 @@ class HillClimbing:
             if delta > 0:
                 # the new state is more likely. Take it
                 self.current_state.commit()
-
-                # reset the rejection counter, we accepted a new state
-                # iter_rejections = 0
-                #
-                # # return state if we seem to be in a state that locally maximizes the likelihood
-                # if delta < .001 and iter_with_small_delta >= 100:
-                #     return self.current_state
-                # elif delta < .001:
-                #     iter_with_small_delta += 1
-                # else:
-                #     iter_with_small_delta = 0
-
             else:
-                # iter_rejections += 1
                 self.current_state.revert()
 
-                # if too many rejections in a row, then a local max has been found.
-                # if iter_rejections >= 100:
-                #     return self.current_state
-
-            # if iter_no % 10 == 0:
-            print("ITER #" + str(iter_no) + " LIKELIHOOD = " + str(self.current_state.likelihood()))
+            self.current_state.write_line_to_summary(
+                "ITER #" + str(iter_no) + " LIKELIHOOD = " + str(self.current_state.likelihood()))
             iter_no += 1
+
+        self.current_state.write_line_to_summary("DONE. EXITED WITH 0 ERRORS")
+        self.current_state.write_line_to_summary("--------------------------")
 
         return self.current_state
 
@@ -109,12 +98,14 @@ class HillClimbing:
         """
         all_end_states = []
         for dummy in range(num_iter):
-            self.current_state = State("hi").bootstrap()
+            self.current_state = State()
+            self.current_state.bootstrap(self.data, self.submodel)
             end_state = self.run()
-            all_end_states.append(end_state.get_score())
+            all_end_states.append(end_state.likelihood())
 
         all_end_states.sort()
         length = len(all_end_states)
+
         if length % 2 == 0:
             median = .5 * (all_end_states[int(length / 2)] + all_end_states[int(length / 2) - 1])
         else:
@@ -149,6 +140,8 @@ class MetropolisHastings:
 
 
 def test():
+    pr = cProfile.Profile()
+
     n = NetworkBuilder(
         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
 
@@ -164,8 +157,16 @@ def test():
 
     print(goalprob)
 
-    hill = HillClimbing(ProposalKernel(), JC(), data)
-    hill.run()
+    hill = HillClimbing(ProposalKernel(), JC(), data, 1000)
+
+    pr.enable()
+    final_state = hill.run()
+    print(final_state)
+    print(final_state.current_model)
+    final_state.current_model.summary("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt", "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
+    pr.disable()
+    pr.print_stats(sort="calls")
+    print("----------------------")
 
 
 test()

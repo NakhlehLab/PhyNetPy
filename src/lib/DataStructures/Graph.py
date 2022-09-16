@@ -81,7 +81,7 @@ class Graph:
         """
                 if edges is a list of tuples, then add each tuple to the list of tuples
                 if edges is simply a tuple, then just add the tuple to the edge list.
-                """
+        """
         if type(edges) == list:
             for edge in edges:
                 if edge not in self.edges:
@@ -171,6 +171,7 @@ class DAG(Graph):
         return len(self.outEdges(node))
 
     def inEdges(self, node):
+        print(self.edges)
         return [edge for edge in self.edges if edge[1] == node]
 
     def outEdges(self, node):

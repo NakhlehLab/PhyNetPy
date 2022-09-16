@@ -186,29 +186,29 @@ class Probability:
 
 # test network
 
-n2 = NetworkBuilder(
-    "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\raxml.nex")
-n3 = NetworkBuilder(
-    "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
-
-test2 = n2.getNetwork(0)
-test3 = n3.getNetwork(0)
-
-msa2 = AlignIO.read(
-    "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\raxml.nex",
-    "nexus")
-msa3 = AlignIO.read(
-    "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex", "nexus")
-
-
-data2 = Matrix(msa2)  # default is to use the DNA alphabet
-data3 = Matrix(msa3)
-
-prob2 = Probability(test2, data=data2)
-prob3 = Probability(test3, data=data3)
-
-
-print(prob2.felsenstein_likelihood())
-print(prob3.felsenstein_likelihood())
+# n2 = NetworkBuilder(
+#     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\raxml.nex")
+# n3 = NetworkBuilder(
+#     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
+#
+# test2 = n2.getNetwork(0)
+# test3 = n3.getNetwork(0)
+#
+# msa2 = AlignIO.read(
+#     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\raxml.nex",
+#     "nexus")
+# msa3 = AlignIO.read(
+#     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex", "nexus")
+#
+#
+# data2 = Matrix(msa2)  # default is to use the DNA alphabet
+# data3 = Matrix(msa3)
+#
+# prob2 = Probability(test2, data=data2)
+# prob3 = Probability(test3, data=data3)
+#
+#
+# print(prob2.felsenstein_likelihood())
+# print(prob3.felsenstein_likelihood())
 
 

@@ -8,6 +8,7 @@ import typing
 import copy
 import time
 
+from src.lib.DataStructures.Graph import DAG
 from src.lib.DataStructures.Matrix import Matrix
 from src.lib.DataStructures.NetworkBuilder import NetworkBuilder
 
@@ -101,7 +102,10 @@ class Model:
         self.felsenstein_root = None
         self.submodel_node = None  # type SubstitutionModel
         self.network_node_map = {}
-        self.build_felsenstein(as_length=False)
+        self.as_length = False
+        self.build_felsenstein(as_length=self.as_length)
+        self.internal = [item for item in self.netnodes_sans_root if item not in self.network_leaves]
+        self.summary_str = ""
 
     def change_branch(self, index, value):
         """
@@ -150,7 +154,7 @@ class Model:
 
         # Add parsed phylogenetic network into the model
         for node in self.network.get_nodes():
-            if self.network.outDegree(node, debug=True) == 0:  # This is a leaf
+            if self.network.outDegree(node, debug=False) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
                 branch = BranchLengthNode(branch_index, node.length())
@@ -181,6 +185,7 @@ class Model:
 
                 # Add to map
                 self.network_node_map[node] = new_leaf_node
+
 
             elif self.network.inDegree(node) != 0:  # An internal node that is not the root
 
@@ -240,10 +245,10 @@ class Model:
             tree_heights_adj = np.zeros(len(tree_heights_vec))
             adj_dict = convert_to_heights(self.felsenstein_root, {})
 
-            #Keep track of the maximum leaf height, this is used to switch the node heights from root centric to leaf centric
+            # Keep track of the maximum leaf height, this is used to switch the node heights from root centric to leaf centric
             max_height = 0
 
-            #Set each node height
+            # Set each node height
             for node, height in adj_dict.items():
                 tree_heights_adj[node.get_branch().get_index()] = height
                 if height > max_height:
@@ -252,7 +257,7 @@ class Model:
             # Subtract dict height from max child height
             tree_heights_adj = np.ones(len(tree_heights_adj)) * max_height - tree_heights_adj
 
-            #Update all the branch length nodes to be the proper calculated heights
+            # Update all the branch length nodes to be the proper calculated heights
             tree_heights_node.update(list(tree_heights_adj))
         else:
             # Passed in as branch lengths, no manipulation needed
@@ -293,6 +298,62 @@ class Model:
         Output: a new Model obj that is the result of doing Move on this Model obj
         """
         return move.execute(self)
+
+    def summary(self, tree_filename, summary_filename):
+        """
+        Writes summary of calculations to a file, and gets the current state of the model
+        and creates a network obj so that the newick format can be output.
+        """
+        # Step 1: create network obj
+        net = DAG()
+
+        network_nodes = []
+        network_nodes.extend([self.felsenstein_root])
+        network_nodes.extend(self.network_leaves)
+        network_nodes.extend(self.netnodes_sans_root)
+
+        inv_map = {v: k for k, v in self.network_node_map.items()}
+        net.addNodes([inv_map[node] for node in network_nodes])
+
+        for node in network_nodes:
+
+            # Change branch length to the branch length value from the branch node attached to node
+            if self.as_length:
+                try:
+                    parent_height = node.get_parent().get_branch().get()
+                    branch_len = parent_height - node.get_branch.get()
+                finally:
+                    pass
+            else:
+                branch_len = node.get_branch().get()
+
+            inv_map[node].set_length(branch_len)
+
+            # Add edges
+            if node.get_children() is not None:
+                for child in node.get_children():
+                    net.addEdges((inv_map[node], inv_map[child]))  #switch order?
+
+        net.printGraph()
+        newick_str = net.newickString()
+
+        # Write newick string to output file
+        text_file = open(tree_filename, "w")
+        n = text_file.write(newick_str)
+        text_file.close()
+
+        # Step 2: write iter summary to a file
+        text_file2 = open(summary_filename, "w")
+        n = text_file2.write(self.summary_str)
+        text_file2.close()
+
+
+
+
+
+
+
+
 
     def get_tree_heights(self):
         return self.tree_heights
@@ -342,6 +403,10 @@ class ModelNode:
         """
         self.add_successor(other_node)
         other_node.add_predecessor(self)
+
+    def unjoin(self, other_node):
+        self.remove_successor(other_node)
+        other_node.remove_predecessor(self)
 
     def remove_successor(self, model_node):
         """
@@ -558,7 +623,7 @@ class BranchLengthNode(CalculationNode):
         if self.as_height:
             try:
                 node = self.get_successors()[0]
-                #print(node.name)
+                # print(node.name)
                 parent_height = node.get_parent().get_branch().get()
                 branch_len = parent_height - self.branch_length
             finally:
@@ -572,10 +637,10 @@ class BranchLengthNode(CalculationNode):
                 if type(child) is SubstitutionModel:
                     self.sub = child.get_submodel()
                     self.updated_sub = False
-                    #print("calculating Pij for branch length: " + str(branch_len))
+                    # print("calculating Pij for branch length: " + str(branch_len))
                     return child.get().expt(branch_len)
         else:
-            #print("calculating Pij for branch length: " + str(branch_len))
+            # print("calculating Pij for branch length: " + str(branch_len))
             # TODO: cache this?
             return self.sub.expt(branch_len)
 
@@ -631,11 +696,11 @@ class FelsensteinInternalNode(CalculationNode):
 
     def get(self):
         if self.updated:
-            #print("Node <" + str(self.name) + "> needs to be recalculated!")
+            # print("Node <" + str(self.name) + "> needs to be recalculated!")
             # print(self.get_predecessors())
             return self.calc()
         else:
-            #print("Node <" + str(self.name) + "> returning cached partials!")
+            # print("Node <" + str(self.name) + "> returning cached partials!")
             return self.cached
 
     def calc(self):
@@ -719,6 +784,27 @@ class FelsensteinInternalNode(CalculationNode):
             else:
                 self.network_children.append(model_node)
 
+    def remove_successor(self, model_node):
+        """
+        Removes a successor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if model_node in self.successors:
+            self.successors.remove(model_node)
+
+    def remove_predecessor(self, model_node):
+        """
+        Removes a predecessor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if model_node in self.predecessors:
+            self.predecessors.remove(model_node)
+            if self.network_children is not None:
+                if model_node in self.network_children:
+                    self.network_children.remove(model_node)
+
 
 class FelsensteinLeafNode(CalculationNode):
 
@@ -739,10 +825,10 @@ class FelsensteinLeafNode(CalculationNode):
 
     def get(self):
         if self.updated:
-            #print("Node <" + str(self.name) + "> needs to be recalculated!")
+            # print("Node <" + str(self.name) + "> needs to be recalculated!")
             return self.calc()
         else:
-            #print("Node <" + str(self.name) + "> returning cached partials!")
+            # print("Node <" + str(self.name) + "> returning cached partials!")
             return self.cached
 
     def calc(self):
@@ -769,6 +855,9 @@ class FelsensteinLeafNode(CalculationNode):
     def get_parent(self):
         return self.parent
 
+    def get_children(self):
+        return None
+
     def add_successor(self, model_node):
         """
         Adds a successor to this node.
@@ -783,6 +872,17 @@ class FelsensteinLeafNode(CalculationNode):
         if type(model_node) is FelsensteinInternalNode:
             if self.parent is None:
                 self.parent = model_node
+
+    def remove_successor(self, model_node):
+        """
+        Removes a predecessor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if model_node in self.successors:
+            self.successors.remove(model_node)
+            if self.parent is not None:
+                self.parent = None
 
 
 class ExtantSpecies(StateNode):
@@ -882,29 +982,29 @@ class SubstitutionModel(CalculationNode):
 
 #### TESTS ######
 
-n2 = NetworkBuilder(
-    "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex")
-# n3 = NetworkBuilder(
-# "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex")
-
-test2 = n2.getNetwork(0)
-# test3 = n3.getNetwork(0)
-
-msa2 = AlignIO.read(
-    "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex",
-    "nexus")
-# msa3 = AlignIO.read(
-# "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex", "nexus")
-
-data2 = Matrix(msa2)  # default is to use the DNA alphabet
-# data3 = Matrix(msa3)
-
-model = Model(test2, data2)  # JC
-# model2 = Model(test3, data3)  # JC
-
-startFirst = time.perf_counter()
-print(model.likelihood())
-endFirst = time.perf_counter()
+# n2 = NetworkBuilder(
+#     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex")
+# # n3 = NetworkBuilder(
+# # "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex")
+#
+# test2 = n2.getNetwork(0)
+# # test3 = n3.getNetwork(0)
+#
+# msa2 = AlignIO.read(
+#     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex",
+#     "nexus")
+# # msa3 = AlignIO.read(
+# # "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex", "nexus")
+#
+# data2 = Matrix(msa2)  # default is to use the DNA alphabet
+# # data3 = Matrix(msa3)
+#
+# model = Model(test2, data2)  # JC
+# # model2 = Model(test3, data3)  # JC
+#
+# startFirst = time.perf_counter()
+# print(model.likelihood())
+# endFirst = time.perf_counter()
 
 # model.change_branch(2, .5)
 # startSecond = time.perf_counter()

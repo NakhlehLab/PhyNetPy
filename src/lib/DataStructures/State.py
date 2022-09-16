@@ -34,10 +34,7 @@ class State:
 
     def bootstrap(self, data, submodel):
         network = CBDP(1, .5, 10).generateTree()
-
-        print("SIM BOOTSTRAP")
-        network.printGraph()
         self.current_model = Model(network, data, submodel)
 
-
-
+    def write_line_to_summary(self, line):
+        self.current_model.summary_str += line + "\n"

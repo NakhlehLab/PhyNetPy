@@ -3,6 +3,7 @@ from Matrix import Matrix
 from Bio import AlignIO
 from NetworkBuilder import NetworkBuilder
 from GTR import *
+from src.lib.DataStructures.MetropolisHastings import ProposalKernel, HillClimbing
 
 
 def felsenstein(filenames, model=JC()):
@@ -41,3 +42,33 @@ files = ["C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\fe
          "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex"]
 
 print(felsenstein(files))
+
+
+def ML_TREE(filenames, treeout, outfile, submodel=JC(), num_iter=3000):
+    """
+    Finds the maximum likelihood *tree* given a nexus file containing taxa and DNA sequences.
+
+    Using Hill Climbing with a random starting tree conditioned on the number of taxa
+
+    Inputs:
+        filenames: A list of nexus files to run ML_TREE on
+        outfile: A filename to write a summary of the calculations
+        treeout: A filename to write the final ML tree to (newick format)
+        submodel: A substitution model for the model graph. Default is JC
+        num_iter: Maximum number of iterations to use for hill climbing. Default is 3000 iterations
+
+    Outputs:
+        An array of likelihood values
+    """
+    likelihoods = []
+    for file in filenames:
+        msa = AlignIO.read(file, "nexus")
+
+        data = Matrix(msa)  # default is to use the DNA alphabet
+
+        hill = HillClimbing(ProposalKernel(), submodel, data, num_iter)
+
+        final_state = hill.run()
+
+        final_state.current_model.summary(treeout, outfile)
+        likelihoods.append(final_state.current_model.likelihood())
