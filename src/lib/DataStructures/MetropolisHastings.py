@@ -1,6 +1,7 @@
 from Bio import AlignIO
 
 from State import State
+from src.lib.DataStructures.MSA import MSA
 from src.lib.DataStructures.Matrix import Matrix
 from src.lib.DataStructures.NetworkBuilder import NetworkBuilder
 from src.lib.DataStructures.Probability import Probability
@@ -147,9 +148,8 @@ def test():
 
     testnet = n.getNetwork(0)
 
-    msa = AlignIO.read(
-        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex",
-        "nexus")
+    msa = MSA(
+        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
 
     data = Matrix(msa)  # default is to use the DNA alphabet
 
@@ -165,7 +165,7 @@ def test():
     print(final_state.current_model)
     final_state.current_model.summary("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt", "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
     pr.disable()
-    pr.print_stats(sort="calls")
+    pr.print_stats(sort="tottime")
     print("----------------------")
 
 

@@ -70,7 +70,7 @@ class Matrix:
         self.nextState = 0
 
         ##Parse the input file into a list of sequence records
-        self.seqRecords = list(alignment)
+        self.seqRecords = alignment.get_records()
 
         ##turn sequence record objects into the matrix data
         self.populateData()
@@ -98,10 +98,10 @@ class Matrix:
         # translate the data into the matrix
         index = 0
         for r in self.seqRecords:
-            self.taxa2Rows[r.name] = index
-            print("mapping " + str(r.name) + " to row number " + str(index))
+            self.taxa2Rows[r.get_name()] = index
+            print("mapping " + str(r.get_name()) + " to row number " + str(index))
             lenCount = 0
-            for char in r.seq:
+            for char in r.get_seq():
                 # use the alphabet to map characters to their bit states and add to
                 # the data as a column
                 self.data = np.append(self.data, np.array([self.alphabet.map(char)]), axis=0)
@@ -182,6 +182,9 @@ class Matrix:
 
     def getSeq(self, label):
         return self.charMatrix()[self.rowGivenName(label)]
+
+    def get_number_seq(self, label):
+        return self.data[self.rowGivenName(label)]
 
     def getColumn(self, i, data, sites):
         """
@@ -309,3 +312,8 @@ OUTPUT:
 
 
 """
+
+
+msa = MSA("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\NC_031969.f5.sub1.min4.bin.nexus")
+mat = Matrix(msa, Alphabet("SNP"))
+print(mat.charMatrix())

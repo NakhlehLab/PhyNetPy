@@ -62,6 +62,7 @@ def ML_TREE(filenames, treeout, outfile, submodel=JC(), num_iter=3000):
     """
     likelihoods = []
     for file in filenames:
+
         msa = AlignIO.read(file, "nexus")
 
         data = Matrix(msa)  # default is to use the DNA alphabet

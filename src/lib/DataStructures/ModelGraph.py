@@ -13,6 +13,25 @@ from src.lib.DataStructures.Matrix import Matrix
 from src.lib.DataStructures.NetworkBuilder import NetworkBuilder
 
 
+def vec_bin_array(arr, m):
+    """
+    Arguments:
+    arr: Numpy array of positive integers
+    m: Number of bits of each integer to retain
+
+    Returns a copy of arr with every element replaced with a bit vector.
+    Bits encoded as int8's.
+    """
+    to_str_func = np.vectorize(lambda x: np.binary_repr(x).zfill(m))
+    strs = to_str_func(arr)
+    ret = np.zeros(list(arr.shape) + [m], dtype=np.int8)
+    for bit_ix in range(0, m):
+        fetch_bit_func = np.vectorize(lambda x: x[bit_ix] == '1')
+        ret[..., m - bit_ix - 1] = fetch_bit_func(strs).astype("int8")
+
+    return ret
+
+
 def build_matrix_from_seq(sequence):
     """
     Given a char sequence of As, Cs, Gs, and Ts,
@@ -21,25 +40,25 @@ def build_matrix_from_seq(sequence):
     Inputs: sequence, a list of chars or a string
     Output: a numpy matrix with dimensions len(seq) x 4
     """
-    likelihoods = np.zeros((len(sequence), 4))
+    # likelihoods = np.zeros((len(sequence), 4))
+    #
+    # # Map each character in the sequence to an array of length 4
+    # for row_no in range(len(sequence)):
+    #     if sequence[row_no] == "A":
+    #         row = np.array([1, 0, 0, 0])
+    #     elif sequence[row_no] == "C":
+    #         row = np.array([0, 1, 0, 0])
+    #     elif sequence[row_no] == "G":
+    #         row = np.array([0, 0, 1, 0])
+    #     elif sequence[row_no] == "T":
+    #         row = np.array([0, 0, 0, 1])
+    #     else:
+    #         raise ModelError("Unknown sequence letter")
+    #
+    #     # append row to matrix
+    #     likelihoods[row_no, :] = row
 
-    # Map each character in the sequence to an array of length 4
-    for row_no in range(len(sequence)):
-        if sequence[row_no] == "A":
-            row = np.array([1, 0, 0, 0])
-        elif sequence[row_no] == "C":
-            row = np.array([0, 1, 0, 0])
-        elif sequence[row_no] == "G":
-            row = np.array([0, 0, 1, 0])
-        elif sequence[row_no] == "T":
-            row = np.array([0, 0, 0, 1])
-        else:
-            raise ModelError("Unknown sequence letter")
-
-        # append row to matrix
-        likelihoods[row_no, :] = row
-
-    return likelihoods
+    return vec_bin_array(sequence, 4)
 
 
 def convert_to_heights(node, adj_dict):
@@ -157,7 +176,7 @@ class Model:
             if self.network.outDegree(node, debug=False) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
-                branch = BranchLengthNode(branch_index, node.length())
+                branch = BranchLengthNode(branch_index, node.length(), heights=not self.as_length)
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -166,7 +185,7 @@ class Model:
                 submodelnode.join(branch)
 
                 # Calculate the leaf likelihoods
-                sequence = self.data.getSeq(node.get_name())  # Get char sequence from the matrix data
+                sequence = self.data.get_number_seq(node.get_name())  # Get sequence from the matrix data
                 new_leaf_node = FelsensteinLeafNode(partials=build_matrix_from_seq(sequence), branch=branch,
                                                     name=node.get_name())
                 new_ext_species = ExtantSpecies(node.get_name(), sequence)
@@ -186,11 +205,10 @@ class Model:
                 # Add to map
                 self.network_node_map[node] = new_leaf_node
 
-
             elif self.network.inDegree(node) != 0:  # An internal node that is not the root
 
                 # Create branch
-                branch = BranchLengthNode(branch_index, node.length())
+                branch = BranchLengthNode(branch_index, node.length(), heights=not self.as_length)
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -216,7 +234,7 @@ class Model:
                 self.felsenstein_root = new_internal_node
 
                 if not as_length:
-                    branch_height = BranchLengthNode(branch_index, 0)
+                    branch_height = BranchLengthNode(branch_index, 0, heights=not self.as_length)
                     branch_index += 1
                     tree_heights_vec.append(0)
                     branch_height.join(new_internal_node)
@@ -332,7 +350,7 @@ class Model:
             # Add edges
             if node.get_children() is not None:
                 for child in node.get_children():
-                    net.addEdges((inv_map[node], inv_map[child]))  #switch order?
+                    net.addEdges((inv_map[node], inv_map[child]))  # switch order?
 
         net.printGraph()
         newick_str = net.newickString()
@@ -346,14 +364,6 @@ class Model:
         text_file2 = open(summary_filename, "w")
         n = text_file2.write(self.summary_str)
         text_file2.close()
-
-
-
-
-
-
-
-
 
     def get_tree_heights(self):
         return self.tree_heights
@@ -450,7 +460,7 @@ class ModelNode:
 
     def out_degree(self):
         """
-        Calculates the out degree of the current node (ie number of parents
+        Calculates the out degree of the current node (ie number of parents)
 
         If 0, this node is a root of the Model
         """
@@ -1015,3 +1025,6 @@ class SubstitutionModel(CalculationNode):
 # print("RECALC GRAPH: " + str(endSecond - startSecond))
 
 # print(model2.likelihood())
+
+testarr = np.array([[1, 1, 2, 1, 4], [1, 2, 2, 1, 4]])
+print(vec_bin_array(testarr, 4))
