@@ -57,6 +57,8 @@ class Matrix:
 
         # ith element of the array = column i's distinct site pattern index in
         # the compressed matrix
+        self.uniqueSites = None
+        self.data = None
         self.locations = []
 
         # ith element of the array = count of the number of times
@@ -65,6 +67,7 @@ class Matrix:
         self.alphabet = alphabet
         self.type = alphabet.getType()
         self.taxa2Rows = {}
+        self.rows2Taxa = {}
 
         # the next binary state to map a new character to
         self.nextState = 0
@@ -99,6 +102,7 @@ class Matrix:
         index = 0
         for r in self.seqRecords:
             self.taxa2Rows[r.get_name()] = index
+            self.rows2Taxa[index] = r.get_name()
             print("mapping " + str(r.get_name()) + " to row number " + str(index))
             lenCount = 0
             for char in r.get_seq():
@@ -166,7 +170,7 @@ class Matrix:
         self.data = newData
 
     def verification(self):
-        print(self.data.reshape(self.numTaxa, self.uniqueSites))
+        print(self.data.reshape(self.get_num_taxa, self.uniqueSites))
         print(self.locations)
         print(self.count)
         print(self.stateMap)
@@ -253,8 +257,15 @@ class Matrix:
 
         return matrix
 
-    def numTaxa(self):
+    def get_num_taxa(self):
         return self.numTaxa
+
+    def name_given_row(self, index):
+        return self.rows2Taxa[index]
+
+    def get_type(self):
+        return self.type
+
 
 
 ##Simply use AlignIO.read
@@ -314,6 +325,3 @@ OUTPUT:
 """
 
 
-msa = MSA("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\NC_031969.f5.sub1.min4.bin.nexus")
-mat = Matrix(msa, Alphabet("SNP"))
-print(mat.charMatrix())

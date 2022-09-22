@@ -1,0 +1,37 @@
+#NEXUS
+
+
+BEGIN TAXA;
+
+DIMENSIONS NTAX=4;
+
+TAXLABELS
+seq_1
+seq_2
+seq_3
+seq_4
+;
+
+END;
+
+BEGIN CHARACTERS;
+DIMENSIONS NCHAR=5;
+FORMAT DATATYPE=SNP MISSING=? GAP=- MATCHCHAR=. ;
+MATRIX
+
+seq_1 01021
+
+seq_2 11021
+
+seq_3 22011
+
+seq_4 22111
+;
+
+END;
+
+Begin trees;
+
+tree numeroZero = ((seq_1:.1, seq_2:.1):.1 , (seq_3:.1, seq_4:.1):.1);
+
+End;

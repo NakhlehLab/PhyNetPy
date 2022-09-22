@@ -1,16 +1,13 @@
 from abc import ABC, abstractmethod
-import numpy as np
-from Bio import AlignIO
-
+from math import comb, pow
 from GTR import *
 import math
-import typing
 import copy
-import time
 
+from src.lib.DataStructures.Alphabet import Alphabet
 from src.lib.DataStructures.Graph import DAG
+from src.lib.DataStructures.MSA import MSA
 from src.lib.DataStructures.Matrix import Matrix
-from src.lib.DataStructures.NetworkBuilder import NetworkBuilder
 
 
 def vec_bin_array(arr, m):
@@ -30,35 +27,6 @@ def vec_bin_array(arr, m):
         ret[..., m - bit_ix - 1] = fetch_bit_func(strs).astype("int8")
 
     return ret
-
-
-def build_matrix_from_seq(sequence):
-    """
-    Given a char sequence of As, Cs, Gs, and Ts,
-    build a matrix of likelihoods for each site.
-
-    Inputs: sequence, a list of chars or a string
-    Output: a numpy matrix with dimensions len(seq) x 4
-    """
-    # likelihoods = np.zeros((len(sequence), 4))
-    #
-    # # Map each character in the sequence to an array of length 4
-    # for row_no in range(len(sequence)):
-    #     if sequence[row_no] == "A":
-    #         row = np.array([1, 0, 0, 0])
-    #     elif sequence[row_no] == "C":
-    #         row = np.array([0, 1, 0, 0])
-    #     elif sequence[row_no] == "G":
-    #         row = np.array([0, 0, 1, 0])
-    #     elif sequence[row_no] == "T":
-    #         row = np.array([0, 0, 0, 1])
-    #     else:
-    #         raise ModelError("Unknown sequence letter")
-    #
-    #     # append row to matrix
-    #     likelihoods[row_no, :] = row
-
-    return vec_bin_array(sequence, 4)
 
 
 def convert_to_heights(node, adj_dict):
@@ -122,7 +90,12 @@ class Model:
         self.submodel_node = None  # type SubstitutionModel
         self.network_node_map = {}
         self.as_length = False
-        self.build_felsenstein(as_length=self.as_length)
+        if self.data.get_type() == "DNA":
+            self.build_felsenstein(as_length=self.as_length)
+        elif self.data.get_type() == "SNP":
+            self.build_SNP(False, as_length=self.as_length)
+        elif self.data.get_type() == "BINARY":
+            self.build_SNP(True, as_length=self.as_length)
         self.internal = [item for item in self.netnodes_sans_root if item not in self.network_leaves]
         self.summary_str = ""
 
@@ -176,7 +149,7 @@ class Model:
             if self.network.outDegree(node, debug=False) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
-                branch = BranchLengthNode(branch_index, node.length(), heights=not self.as_length)
+                branch = BranchLengthNode(branch_index, node.length(), heights=self.as_length)
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -186,8 +159,133 @@ class Model:
 
                 # Calculate the leaf likelihoods
                 sequence = self.data.get_number_seq(node.get_name())  # Get sequence from the matrix data
-                new_leaf_node = FelsensteinLeafNode(partials=build_matrix_from_seq(sequence), branch=branch,
+                new_leaf_node = FelsensteinLeafNode(partials=vec_bin_array(sequence, 4), branch=branch,
                                                     name=node.get_name())
+                new_ext_species = ExtantSpecies(node.get_name(), sequence)
+
+                new_ext_species.join(new_leaf_node)
+                self.nodes.append(new_ext_species)
+                self.network_leaves.append(new_leaf_node)
+
+                # Point the branch length node to the leaf node
+                branch.join(new_leaf_node)
+
+                # Add to list of model nodes
+                self.nodes.append(new_leaf_node)
+                self.nodes.append(branch)
+                self.netnodes_sans_root.append(new_leaf_node)
+
+                # Add to map
+                self.network_node_map[node] = new_leaf_node
+
+            elif self.network.inDegree(node) != 0:  # An internal node that is not the root
+
+                # Create branch
+                branch = BranchLengthNode(branch_index, node.length(), heights=self.as_length)
+                tree_heights_vec.append(node.length())
+                branch_index += 1
+
+                # Link to the substitution model
+                tree_heights_node.join(branch)
+                submodelnode.join(branch)
+
+                # Create internal node and link to branch
+                new_internal_node = FelsensteinInternalNode(branch=branch, name=node.get_name())
+                branch.join(new_internal_node)
+
+                # Add to nodes list
+                self.nodes.append(new_internal_node)
+                self.nodes.append(branch)
+                self.netnodes_sans_root.append(new_internal_node)
+
+                # Map node to the new internal node
+                self.network_node_map[node] = new_internal_node
+            else:  # The root. TODO: Add dependency on the base frequencies
+
+                # Create root
+                new_internal_node = FelsensteinInternalNode(name=node.get_name())
+                self.felsenstein_root = new_internal_node
+
+                if not as_length:
+                    branch_height = BranchLengthNode(branch_index, 0, heights=self.as_length)
+                    branch_index += 1
+                    tree_heights_vec.append(0)
+                    branch_height.join(new_internal_node)
+                    submodelnode.join(branch_height)
+                    tree_heights_node.join(branch_height)
+
+                # Add to nodes list
+                self.nodes.append(new_internal_node)
+
+                # Add to node map
+                self.network_node_map[node] = new_internal_node
+
+        for edge in self.network.get_edges():
+            # Handle network par-child relationships
+            # Edge is from modelnode1 to modelnode2 in network, which means
+            # modelnode2 is the parent
+            modelnode1 = self.network_node_map[edge[0]]
+            modelnode2 = self.network_node_map[edge[1]]
+
+            # Add modelnode1 as the child of modelnode2
+            modelnode2.join(modelnode1)
+
+        # all the branches have been added, set the vector for the TreeHeight nodes
+        if as_length is False:
+            # Use the branch length adjusted version
+            tree_heights_adj = np.zeros(len(tree_heights_vec))
+            adj_dict = convert_to_heights(self.felsenstein_root, {})
+
+            # Keep track of the maximum leaf height, this is used to switch the node heights from root centric to leaf centric
+            max_height = 0
+
+            # Set each node height
+            for node, height in adj_dict.items():
+                tree_heights_adj[node.get_branch().get_index()] = height
+                if height > max_height:
+                    max_height = height
+
+            # Subtract dict height from max child height
+            tree_heights_adj = np.ones(len(tree_heights_adj)) * max_height - tree_heights_adj
+
+            # Update all the branch length nodes to be the proper calculated heights
+            tree_heights_node.update(list(tree_heights_adj))
+        else:
+            # Passed in as branch lengths, no manipulation needed
+            tree_heights_node.update(tree_heights_vec)
+
+    def build_SNP(self, phased, as_length=True):
+        """
+        Make a model graph for SNP likelihoods
+
+        """
+
+        # Initialize branch length/height vector and save it for update usage
+        tree_heights_node = TreeHeights()
+        self.tree_heights = tree_heights_node
+        tree_heights_vec = []
+        tree_heights_adj = []
+        partials = SNP_compute_partials(self.data, phased= phased)
+
+        # Keep track of which branch maps to what index
+        branch_index = 0
+
+        # Add parsed phylogenetic network into the model
+        for node in self.network.get_nodes():
+            if self.network.outDegree(node, debug=False) == 0:  # This is a leaf
+
+                # Create branch for this leaf and add it to the height/length vector
+                branch = BranchLengthNode(branch_index, node.length(), heights=not self.as_length)
+                tree_heights_vec.append(node.length())
+                branch_index += 1
+
+                # Each branch has a link to the vector
+                tree_heights_node.join(branch)
+
+                # Calculate the leaf likelihoods
+                sequence = self.data.get_number_seq(node.get_name())  # Get sequence from the matrix data
+                new_leaf_node = SNPLeafNode(partials=partials[node.get_name()], branch=branch,
+                                            name=node.get_name())
                 new_ext_species = ExtantSpecies(node.get_name(), sequence)
 
                 new_ext_species.join(new_leaf_node)
@@ -214,10 +312,9 @@ class Model:
 
                 # Link to the substitution model
                 tree_heights_node.join(branch)
-                submodelnode.join(branch)
 
                 # Create internal node and link to branch
-                new_internal_node = FelsensteinInternalNode(branch=branch, name=node.get_name())
+                new_internal_node = SNPInternalNode(branch=branch, name=node.get_name())
                 branch.join(new_internal_node)
 
                 # Add to nodes list
@@ -227,18 +324,16 @@ class Model:
 
                 # Map node to the new internal node
                 self.network_node_map[node] = new_internal_node
-            else:  # The root. TODO: Add dependency on the base frequencies
-
+            else:  # The root.
                 # Create root
-                new_internal_node = FelsensteinInternalNode(name=node.get_name())
+                new_internal_node = SNPInternalNode(name=node.get_name())
                 self.felsenstein_root = new_internal_node
 
                 if not as_length:
-                    branch_height = BranchLengthNode(branch_index, 0, heights=not self.as_length)
+                    branch_height = BranchLengthNode(branch_index, 0, heights=self.as_length)
                     branch_index += 1
                     tree_heights_vec.append(0)
                     branch_height.join(new_internal_node)
-                    submodelnode.join(branch_height)
                     tree_heights_node.join(branch_height)
 
                 # Add to nodes list
@@ -387,6 +482,7 @@ class ModelNode:
         Adds a successor to this node.
 
         Input: model_node (type ModelNode)
+
         """
         if self.successors is None:
             self.successors = [model_node]
@@ -489,7 +585,8 @@ class CalculationNode(ABC, ModelNode):
     """
 
     def __init__(self):
-        super().__init__()
+        print("Init of Calc Node")
+        super(CalculationNode, self).__init__()
         self.updated = True  # on initialization, we should do the calculation
         self.cached = None
 
@@ -580,6 +677,93 @@ class StateNode(ABC, ModelNode):
         pass
 
 
+class NetworkNode(ABC, ModelNode):
+    """
+    Class that handles common functionality of all network nodes
+    and all the height/branch length hookups.
+    """
+
+    def __init__(self, branch=None):
+        print("Init of Network Node")
+        super(NetworkNode, self).__init__()
+        self.branch = branch
+        self.parent = None
+        self.children = None
+
+    def get_branch(self):
+        if self.branch is None:
+            for child in self.get_predecessors():
+                if type(child) is BranchLengthNode:
+                    self.branch = child
+                    return child
+        return self.branch
+
+    def add_successor(self, model_node):
+        """
+        Adds a successor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if self.successors is None:
+            self.successors = [model_node]
+        else:
+            self.successors.append(model_node)
+
+        if type(model_node) is FelsensteinInternalNode:
+            if self.parent is None:
+                self.parent = model_node
+
+    def remove_successor(self, model_node):
+        """
+        Removes a predecessor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if model_node in self.successors:
+            self.successors.remove(model_node)
+            if self.parent is not None and model_node == self.parent:
+                self.parent = None
+
+    def add_predecessor(self, model_node):
+        """
+        Adds a predecessor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if self.predecessors is None:
+            self.predecessors = [model_node]
+        else:
+            self.predecessors.append(model_node)
+
+        if type(model_node) is FelsensteinInternalNode or type(model_node) is FelsensteinLeafNode:
+            if self.children is None:
+                self.children = [model_node]
+            else:
+                self.children.append(model_node)
+
+    def remove_predecessor(self, model_node):
+        """
+        Removes a predecessor to this node.
+
+        Input: model_node (type ModelNode)
+        """
+        if model_node in self.predecessors:
+            self.predecessors.remove(model_node)
+            if self.children is not None:
+                if model_node in self.children:
+                    self.children.remove(model_node)
+
+    @abstractmethod
+    def node_move_bounds(self):
+        pass
+
+    def get_parent(self):
+        return self.parent
+
+    def get_children(self):
+        return self.children
+
+
 class BranchLengthNode(CalculationNode):
     """
     A calculation node that uses the substitution model to calculate the
@@ -592,7 +776,7 @@ class BranchLengthNode(CalculationNode):
         self.branch_length = branch_length
         self.sub = None
         self.updated_sub = True
-        self.as_height = heights
+        self.as_height = True
 
     def update(self, new_bl):
         # update the branch length
@@ -633,7 +817,8 @@ class BranchLengthNode(CalculationNode):
         if self.as_height:
             try:
                 node = self.get_successors()[0]
-                # print(node.name)
+                print(node.name)
+                print(node.parent)
                 parent_height = node.get_parent().get_branch().get()
                 branch_len = parent_height - self.branch_length
             finally:
@@ -680,239 +865,6 @@ class TreeHeights(StateNode):
 
     def get_heights(self):
         return self.heights
-
-
-class FelsensteinInternalNode(CalculationNode):
-    def __init__(self, branch=None, name: str = None):
-        super().__init__()
-        self.partials = None
-        self.branch = branch
-        self.name = name
-        self.network_children = None
-        self.network_parent = None
-
-    def node_move_bounds(self):
-
-        if self.network_parent is None:
-            # root node
-            return None
-        # Normal internal node
-        upper_limit = self.network_parent.get_branch().get()
-        lower_limit = max(0, max([child.get_branch().get() for child in self.network_children]))
-        return [lower_limit, upper_limit]
-
-    def update(self):
-        self.upstream()
-
-    def get(self):
-        if self.updated:
-            # print("Node <" + str(self.name) + "> needs to be recalculated!")
-            # print(self.get_predecessors())
-            return self.calc()
-        else:
-            # print("Node <" + str(self.name) + "> returning cached partials!")
-            return self.cached
-
-    def calc(self):
-
-        children = self.get_predecessors()
-        # print("CHILDREN of " + self.name + ": " + str(children))
-        # print(self.predecessors)
-        matrices = []
-
-        for child in children:
-            # type check
-            if type(child) != FelsensteinInternalNode and type(child) != FelsensteinLeafNode:
-                continue
-
-            # get the child partial likelihood. Could be another internal node, but could be a leaf
-            matrix = child.get()
-            # print("RETRIEVED CHILD " + child.name + " PARTIALS")
-            # print("CHILD PARTIAL = " + str(matrix))
-
-            # compute matrix * Pij transpose
-            step1 = np.matmul(matrix, child.get_branch().transition().transpose())
-
-            # add to list of child matrices
-            matrices.append(step1)
-
-            # Element-wise multiply each matrix in the list
-            result = np.ones(np.shape(matrices[0]))
-            for matrix in matrices:
-                result = np.multiply(result, matrix)
-            self.partials = result
-
-        # mark node as having been recalculated and cache the result
-        self.cached = self.partials
-        self.updated = False
-
-        # return calculation
-        return self.partials
-
-    def get_children(self):
-        return self.network_children
-
-    def get_parent(self):
-        return self.network_parent
-
-    def get_branch(self):
-        if self.branch is None:
-            for child in self.get_predecessors():
-                if type(child) is BranchLengthNode:
-                    self.branch = child
-                    return child
-        return self.branch
-
-    def add_successor(self, model_node):
-        """
-        Adds a successor to this node.
-
-        Input: model_node (type ModelNode)
-        """
-        if self.successors is None:
-            self.successors = [model_node]
-        else:
-            self.successors.append(model_node)
-
-        if type(model_node) is FelsensteinInternalNode:
-            self.network_parent = model_node
-
-    def add_predecessor(self, model_node):
-        """
-        Adds a predecessor to this node.
-
-        Input: model_node (type ModelNode)
-        """
-        if self.predecessors is None:
-            self.predecessors = [model_node]
-        else:
-            self.predecessors.append(model_node)
-
-        if type(model_node) is FelsensteinInternalNode or type(model_node) is FelsensteinLeafNode:
-            if self.network_children is None:
-                self.network_children = [model_node]
-            else:
-                self.network_children.append(model_node)
-
-    def remove_successor(self, model_node):
-        """
-        Removes a successor to this node.
-
-        Input: model_node (type ModelNode)
-        """
-        if model_node in self.successors:
-            self.successors.remove(model_node)
-
-    def remove_predecessor(self, model_node):
-        """
-        Removes a predecessor to this node.
-
-        Input: model_node (type ModelNode)
-        """
-        if model_node in self.predecessors:
-            self.predecessors.remove(model_node)
-            if self.network_children is not None:
-                if model_node in self.network_children:
-                    self.network_children.remove(model_node)
-
-
-class FelsensteinLeafNode(CalculationNode):
-
-    def __init__(self, partials=None, branch=None, name: str = None):
-        super().__init__()
-        self.matrix = partials
-        self.branch = branch
-        self.name = name
-        self.parent = None
-
-    def node_move_bounds(self):
-        return [0, self.parent.get_branch().get()]
-
-    def update(self, new_partials, new_name):
-        self.matrix = new_partials
-        self.name = new_name
-        self.upstream()
-
-    def get(self):
-        if self.updated:
-            # print("Node <" + str(self.name) + "> needs to be recalculated!")
-            return self.calc()
-        else:
-            # print("Node <" + str(self.name) + "> returning cached partials!")
-            return self.cached
-
-    def calc(self):
-        # mark node as having been recalculated and cache the result
-        if self.matrix is None:
-            for child in self.get_predecessors():
-                if type(child) is ExtantSpecies:
-                    self.matrix = build_matrix_from_seq(child.get_seq())
-
-        self.cached = self.matrix
-        self.updated = False
-
-        # return calculation
-        return self.matrix
-
-    def get_branch(self):
-        if self.branch is None:
-            for child in self.get_predecessors():
-                if type(child) is BranchLengthNode:
-                    self.branch = child
-                    return child
-        return self.branch
-
-    def get_parent(self):
-        return self.parent
-
-    def get_children(self):
-        return None
-
-    def add_successor(self, model_node):
-        """
-        Adds a successor to this node.
-
-        Input: model_node (type ModelNode)
-        """
-        if self.successors is None:
-            self.successors = [model_node]
-        else:
-            self.successors.append(model_node)
-
-        if type(model_node) is FelsensteinInternalNode:
-            if self.parent is None:
-                self.parent = model_node
-
-    def remove_successor(self, model_node):
-        """
-        Removes a predecessor to this node.
-
-        Input: model_node (type ModelNode)
-        """
-        if model_node in self.successors:
-            self.successors.remove(model_node)
-            if self.parent is not None:
-                self.parent = None
-
-
-class ExtantSpecies(StateNode):
-
-    def __init__(self, name, sequence):
-        super().__init__()
-        self.name = name
-        self.seq = sequence
-
-    def update(self, new_sequence, new_name):
-        # should only have a single leaf calc node as the parent
-        self.seq = new_sequence
-        self.name = new_name
-        self.get_successors()[0].update(build_matrix_from_seq(new_sequence), new_name)
-
-    def get_seq(self):
-        return self.seq
-
-    def get_name(self):
-        return self.name
 
 
 class SubstitutionModelParams(StateNode):
@@ -990,6 +942,131 @@ class SubstitutionModel(CalculationNode):
         return self.sub
 
 
+class ExtantSpecies(StateNode):
+
+    def __init__(self, name, sequence):
+        super().__init__()
+        self.name = name
+        self.seq = sequence
+
+    def update(self, new_sequence, new_name):
+        # should only have a single leaf calc node as the parent
+        # TODO: make SNP flexible
+        self.seq = new_sequence
+        self.name = new_name
+        self.get_successors()[0].update(vec_bin_array(new_sequence, 4), new_name)
+
+    def get_seq(self):
+        return self.seq
+
+    def get_name(self):
+        return self.name
+
+
+class FelsensteinLeafNode(NetworkNode, CalculationNode):
+
+    def __init__(self, partials=None, branch=None, name: str = None):
+        super(FelsensteinLeafNode, self).__init__(branch=branch)
+        super(CalculationNode).__init__()
+        self.matrix = partials
+        self.name = name
+
+    def node_move_bounds(self):
+        return [0, self.parent.get_branch().get()]
+
+    def update(self, new_partials, new_name):
+        self.matrix = new_partials
+        self.name = new_name
+        self.upstream()
+
+    def get(self):
+        if self.updated:
+            # print("Node <" + str(self.name) + "> needs to be recalculated!")
+            return self.calc()
+        else:
+            # print("Node <" + str(self.name) + "> returning cached partials!")
+            return self.cached
+
+    def calc(self):
+        # mark node as having been recalculated and cache the result
+        if self.matrix is None:
+            for child in self.get_predecessors():
+                if type(child) is ExtantSpecies:
+                    self.matrix = vec_bin_array(child.get_seq(), 4)
+
+        self.cached = self.matrix
+        self.updated = False
+
+        # return calculation
+        return self.matrix
+
+
+class FelsensteinInternalNode(NetworkNode, CalculationNode):
+    def __init__(self, branch=None, name: str = None):
+        super(FelsensteinInternalNode, self).__init__(branch=branch)
+        super(CalculationNode).__init__()
+        self.partials = None
+        self.name = name
+
+    def node_move_bounds(self):
+
+        if self.parent is None:
+            # root node
+            return None
+        # Normal internal node
+        upper_limit = self.parent.get_branch().get()
+        lower_limit = max(0, max([child.get_branch().get() for child in self.children]))
+        return [lower_limit, upper_limit]
+
+    def update(self):
+        self.upstream()
+
+    def get(self):
+        if self.updated:
+            # print("Node <" + str(self.name) + "> needs to be recalculated!")
+            # print(self.get_predecessors())
+            return self.calc()
+        else:
+            # print("Node <" + str(self.name) + "> returning cached partials!")
+            return self.cached
+
+    def calc(self):
+
+        children = self.get_predecessors()
+        # print("CHILDREN of " + self.name + ": " + str(children))
+        # print(self.predecessors)
+        matrices = []
+
+        for child in children:
+            # type check
+            if type(child) != FelsensteinInternalNode and type(child) != FelsensteinLeafNode:
+                continue
+
+            # get the child partial likelihood. Could be another internal node, but could be a leaf
+            matrix = child.get()
+            # print("RETRIEVED CHILD " + child.name + " PARTIALS")
+            # print("CHILD PARTIAL = " + str(matrix))
+
+            # compute matrix * Pij transpose
+            step1 = np.matmul(matrix, child.get_branch().transition().transpose())
+
+            # add to list of child matrices
+            matrices.append(step1)
+
+            # Element-wise multiply each matrix in the list
+            result = np.ones(np.shape(matrices[0]))
+            for matrix in matrices:
+                result = np.multiply(result, matrix)
+            self.partials = result
+
+        # mark node as having been recalculated and cache the result
+        self.cached = self.partials
+        self.updated = False
+
+        # return calculation
+        return self.partials
+
+
 #### TESTS ######
 
 # n2 = NetworkBuilder(
@@ -1026,5 +1103,137 @@ class SubstitutionModel(CalculationNode):
 
 # print(model2.likelihood())
 
-testarr = np.array([[1, 1, 2, 1, 4], [1, 2, 2, 1, 4]])
-print(vec_bin_array(testarr, 4))
+
+def SNP_compute_partials(matrix: Matrix, phased=False):
+    if phased:
+        r = [matrix.get_num_taxa() - sum(matrix.getColumnAt(i)) for i in
+             range(matrix.siteCount())]  # sum of the columns
+        x = [r[i] / matrix.get_num_taxa() for i in range(matrix.siteCount())]  # r_i / n
+    else:
+        r = [2 * matrix.get_num_taxa() - sum(matrix.getColumnAt(i)) for i in range(matrix.siteCount())]
+        x = [r[i] / (2 * matrix.get_num_taxa()) for i in range(matrix.siteCount())]
+
+    print(r)
+    print(x)
+    partials = {}
+
+    for taxa in range(matrix.get_num_taxa()):
+        likelihoods = np.zeros(matrix.siteCount())
+        for site in range(matrix.siteCount()):
+            likelihoods[site] = comb(2 * matrix.get_num_taxa(), r[site]) * pow(x[site], r[site]) * pow((1 - x[site]),
+                                                                                                       2 * matrix.get_num_taxa() -
+                                                                                                       r[site])
+
+        partials[matrix.name_given_row(taxa)] = likelihoods
+
+    return partials
+
+
+class SNPLeafNode(NetworkNode, CalculationNode):
+
+    def __init__(self, partials=None, branch=None, name: str = None):
+        super(SNPLeafNode, self).__init__(branch=branch)
+        self.matrix = partials
+        self.name = name
+
+    def node_move_bounds(self):
+        return [0, self.parent.get_branch().get()]
+
+    def update(self, new_partials, new_name):
+        self.matrix = new_partials
+        self.name = new_name
+        self.upstream()
+
+    def get(self):
+        if self.updated:
+            # print("Node <" + str(self.name) + "> needs to be recalculated!")
+            return self.calc()
+        else:
+            # print("Node <" + str(self.name) + "> returning cached partials!")
+            return self.cached
+
+    def calc(self):
+        # mark node as having been recalculated and cache the result
+        if self.matrix is None:
+            for child in self.get_predecessors():
+                if type(child) is ExtantSpecies:
+                    self.matrix = vec_bin_array(child.get_seq(), 4)
+
+        self.cached = self.matrix
+        self.updated = False
+
+        # return calculation
+        return self.matrix
+
+
+class SNPInternalNode(NetworkNode, CalculationNode):
+
+    def __init__(self, branch=None, name: str = None):
+        super(SNPInternalNode, self).__init__(branch=branch)
+        self.partials = None
+        self.name = name
+
+    def node_move_bounds(self):
+
+        if self.parent is None:
+            # root node
+            return None
+        # Normal internal node
+        upper_limit = self.parent.get_branch().get()
+        lower_limit = max(0, max([child.get_branch().get() for child in self.children]))
+        return [lower_limit, upper_limit]
+
+    def update(self):
+        self.upstream()
+
+    def get(self):
+        if self.updated:
+            # print("Node <" + str(self.name) + "> needs to be recalculated!")
+            # print(self.get_predecessors())
+            return self.calc()
+        else:
+            # print("Node <" + str(self.name) + "> returning cached partials!")
+            return self.cached
+
+    def calc(self):
+        # TODO: CHANGE THIS FUNC
+        children = self.get_predecessors()
+        # print("CHILDREN of " + self.name + ": " + str(children))
+        # print(self.predecessors)
+        matrices = []
+
+        for child in children:
+            # type check
+            if type(child) != FelsensteinInternalNode and type(child) != FelsensteinLeafNode:
+                continue
+
+            # get the child partial likelihood. Could be another internal node, but could be a leaf
+            matrix = child.get()
+            # print("RETRIEVED CHILD " + child.name + " PARTIALS")
+            # print("CHILD PARTIAL = " + str(matrix))
+
+            # compute matrix * Pij transpose
+            step1 = np.matmul(matrix, child.get_branch().transition().transpose())
+
+            # add to list of child matrices
+            matrices.append(step1)
+
+            # Element-wise multiply each matrix in the list
+            result = np.ones(np.shape(matrices[0]))
+            for matrix in matrices:
+                result = np.multiply(result, matrix)
+            self.partials = result
+
+        # mark node as having been recalculated and cache the result
+        self.cached = self.partials
+        self.updated = False
+
+        # return calculation
+        return self.partials
+
+
+msa = MSA("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex")
+mat = Matrix(msa, Alphabet("SNP"))
+print(mat.charMatrix())
+
+print(SNP_compute_partials(mat))

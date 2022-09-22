@@ -71,7 +71,7 @@ class RootBranchMove(Move, ABC):
         speciesTreeRoot = proposedModel.felsenstein_root
         currentRootHeight = speciesTreeRoot.get_branch().get()
 
-        children = speciesTreeRoot.network_children
+        children = speciesTreeRoot.get_children()
         if len(children) != 2:
             raise ModelError("NOT A TREE, There are either too many or not enough children for the root")
 
