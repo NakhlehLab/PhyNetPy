@@ -171,7 +171,6 @@ class DAG(Graph):
         return len(self.outEdges(node))
 
     def inEdges(self, node):
-        print(self.edges)
         return [edge for edge in self.edges if edge[1] == node]
 
     def outEdges(self, node):

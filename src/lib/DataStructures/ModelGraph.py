@@ -14,10 +14,10 @@ def vec_bin_array(arr, m):
     """
     Arguments:
     arr: Numpy array of positive integers
-    m: Number of bits of each integer to retain
+    m: Number of bits of each integer to retain (in the case of DNA, 4)
 
     Returns a copy of arr with every element replaced with a bit vector.
-    Bits encoded as int8's.
+    Bits encoded as int8's, read from left to right. [1, 0, 1, 1] is 13.
     """
     to_str_func = np.vectorize(lambda x: np.binary_repr(x).zfill(m))
     strs = to_str_func(arr)
@@ -91,7 +91,7 @@ class Model:
         self.network_node_map = {}
         self.as_length = False
         if self.data.get_type() == "DNA":
-            self.build_felsenstein(as_length=self.as_length)
+            self.build_felsenstein()
         elif self.data.get_type() == "SNP":
             self.build_SNP(False, as_length=self.as_length)
         elif self.data.get_type() == "BINARY":
@@ -116,7 +116,7 @@ class Model:
         new_vec[index] = value
         self.tree_heights.update(new_vec)
 
-    def build_felsenstein(self, as_length=True):
+    def build_felsenstein(self):
         """
         Make a felsenstein likelihood model graph.
 
@@ -127,7 +127,6 @@ class Model:
         tree_heights_node = TreeHeights()
         self.tree_heights = tree_heights_node
         tree_heights_vec = []
-        tree_heights_adj = []
 
         # Initialize substitution model node
         submodelnode = SubstitutionModel(self.sub)
@@ -149,7 +148,7 @@ class Model:
             if self.network.outDegree(node, debug=False) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
-                branch = BranchLengthNode(branch_index, node.length(), heights=self.as_length)
+                branch = BranchLengthNode(branch_index, node.length(), heights= not self.as_length)
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -181,7 +180,7 @@ class Model:
             elif self.network.inDegree(node) != 0:  # An internal node that is not the root
 
                 # Create branch
-                branch = BranchLengthNode(branch_index, node.length(), heights=self.as_length)
+                branch = BranchLengthNode(branch_index, node.length(), heights= not self.as_length)
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -206,8 +205,8 @@ class Model:
                 new_internal_node = FelsensteinInternalNode(name=node.get_name())
                 self.felsenstein_root = new_internal_node
 
-                if not as_length:
-                    branch_height = BranchLengthNode(branch_index, 0, heights=self.as_length)
+                if not self.as_length:
+                    branch_height = BranchLengthNode(branch_index, 0, heights= not self.as_length)
                     branch_index += 1
                     tree_heights_vec.append(0)
                     branch_height.join(new_internal_node)
@@ -231,7 +230,7 @@ class Model:
             modelnode2.join(modelnode1)
 
         # all the branches have been added, set the vector for the TreeHeight nodes
-        if as_length is False:
+        if self.as_length is False:
             # Use the branch length adjusted version
             tree_heights_adj = np.zeros(len(tree_heights_vec))
             adj_dict = convert_to_heights(self.felsenstein_root, {})
@@ -264,8 +263,8 @@ class Model:
         tree_heights_node = TreeHeights()
         self.tree_heights = tree_heights_node
         tree_heights_vec = []
-        tree_heights_adj = []
-        partials = SNP_compute_partials(self.data, phased= phased)
+
+        partials = SNP_compute_partials(self.data, phased=phased)
 
         # Keep track of which branch maps to what index
         branch_index = 0
@@ -393,14 +392,7 @@ class Model:
         base_freqs = params_state.base_freqs.reshape((4,))
 
         # tally up the logs of the dot products
-        result = 0
-        for row in range(np.shape(partials)[0]):
-            logLikelihoodSite = math.log(np.dot(base_freqs, partials[row]))
-            result += logLikelihoodSite
-
-        # TODO: Include/multiply result with the kingman coalescent result
-        # right now, simply the felsensteins likelihood
-        return result
+        return np.sum(np.log(np.matmul(partials, base_freqs)))
 
     def execute_move(self, move):
         """
@@ -585,7 +577,6 @@ class CalculationNode(ABC, ModelNode):
     """
 
     def __init__(self):
-        print("Init of Calc Node")
         super(CalculationNode, self).__init__()
         self.updated = True  # on initialization, we should do the calculation
         self.cached = None
@@ -684,7 +675,6 @@ class NetworkNode(ABC, ModelNode):
     """
 
     def __init__(self, branch=None):
-        print("Init of Network Node")
         super(NetworkNode, self).__init__()
         self.branch = branch
         self.parent = None
@@ -817,8 +807,6 @@ class BranchLengthNode(CalculationNode):
         if self.as_height:
             try:
                 node = self.get_successors()[0]
-                print(node.name)
-                print(node.parent)
                 parent_height = node.get_parent().get_branch().get()
                 branch_len = parent_height - self.branch_length
             finally:
@@ -954,7 +942,7 @@ class ExtantSpecies(StateNode):
         # TODO: make SNP flexible
         self.seq = new_sequence
         self.name = new_name
-        self.get_successors()[0].update(vec_bin_array(new_sequence, 4), new_name)
+        self.get_successors()[0].update(new_sequence, new_name)  # Delegate what to do with the sequence to the leaf node, DONT KNOW DONT CARE
 
     def get_seq(self):
         return self.seq
@@ -975,7 +963,7 @@ class FelsensteinLeafNode(NetworkNode, CalculationNode):
         return [0, self.parent.get_branch().get()]
 
     def update(self, new_partials, new_name):
-        self.matrix = new_partials
+        self.matrix = vec_bin_array(new_partials, 4)
         self.name = new_name
         self.upstream()
 
@@ -1140,7 +1128,7 @@ class SNPLeafNode(NetworkNode, CalculationNode):
         return [0, self.parent.get_branch().get()]
 
     def update(self, new_partials, new_name):
-        self.matrix = new_partials
+        self.matrix = SNP_compute_partials(new_partials)
         self.name = new_name
         self.upstream()
 
@@ -1232,8 +1220,8 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         return self.partials
 
 
-msa = MSA("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex")
-mat = Matrix(msa, Alphabet("SNP"))
-print(mat.charMatrix())
-
-print(SNP_compute_partials(mat))
+# msa = MSA("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex")
+# mat = Matrix(msa, Alphabet("SNP"))
+# print(mat.charMatrix())
+#
+# print(SNP_compute_partials(mat))

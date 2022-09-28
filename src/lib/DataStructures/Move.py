@@ -16,6 +16,8 @@ class Move(ABC):
 
     def __init__(self):
         self.model = None
+        self.undo_info = None
+        self.same_move_info = None #Same move info needs to be information that is decoupled from the model objects itself
 
     @abstractmethod
     def execute(self, model):
@@ -24,6 +26,14 @@ class Move(ABC):
         Output: a new Model obj that is the result of this operation on model
 
         """
+        pass
+
+    @abstractmethod
+    def undo(self, model):
+        pass
+
+    @abstractmethod
+    def same_move(self, model):
         pass
 
 
@@ -37,7 +47,8 @@ class UniformBranchMove(Move, ABC):
         Outputs: new Model obj that is the result of changing one branch
         """
         # Make a copy of the model
-        proposedModel = copy.deepcopy(model)
+        # proposedModel = copy.deepcopy(model)
+        proposedModel = model
 
         # Select random internal node
         selected = random.randint(0, len(proposedModel.netnodes_sans_root) - 1)
@@ -48,10 +59,18 @@ class UniformBranchMove(Move, ABC):
         new_node_height = np.random.uniform(bounds[0],
                                             bounds[1])  # Assumes time starts at root and leafs are at max time
 
+        self.undo_info = [selected_node, selected_node.get_branch().get()]
+        self.same_move_info = [selected_node.get_branch().get_index(), new_node_height]
         # Update the branch in the model
         proposedModel.change_branch(selected_node.get_branch().get_index(), new_node_height)
 
         return proposedModel
+
+    def undo(self, model):
+        model.change_branch(self.undo_info[0].get_branch().get_index(), self.undo_info[1])
+
+    def same_move(self, model):
+        model.change_branch(self.same_move_info[0], self.same_move_info[1])
 
 
 class RootBranchMove(Move, ABC):
@@ -82,13 +101,22 @@ class RootBranchMove(Move, ABC):
         # the youngest age the species tree root node can be(preserving topologies)
         # Lowest number that can be drawn from exp dist is 0, so we guarantee that the root doesn't encroach on child
         # heights.
-        uniformShift = np.random.exponential(10) - min([currentRootHeight - leftChildHeight, currentRootHeight - rightChildHeight])
+        uniformShift = np.random.exponential(10) - min(
+            [currentRootHeight - leftChildHeight, currentRootHeight - rightChildHeight])
 
+        self.undo_info = [speciesTreeRoot, speciesTreeRoot.get_branch().get()]
+        self.same_move_info = [speciesTreeRoot.get_branch().get_index(), currentRootHeight + uniformShift]
         # Change the node height of the root in the new model
         proposedModel.change_branch(speciesTreeRoot.get_branch().get_index(), currentRootHeight + uniformShift)
 
         # return the slightly modified model
         return proposedModel
+
+    def undo(self, model):
+        model.change_branch(self.undo_info[0].get_branch().get_index(), self.undo_info[1])
+
+    def same_move(self, model):
+        model.change_branch(self.same_move_info[0], self.same_move_info[1])
 
 
 class TaxaSwapMove(Move, ABC):
@@ -120,17 +148,59 @@ class TaxaSwapMove(Move, ABC):
         first_name = first_taxa.get_name()
         sec_name = sec_taxa.get_name()
 
+        self.undo_info = [first_taxa, sec_taxa]
+        self.same_move_info = indeces
+
         # Update the data
         first_taxa.update(sec_seq, sec_name)
         sec_taxa.update(first_seq, first_name)
 
         return proposedModel
 
+    def undo(self, model):
+        """
+        Literally just swap them back
+        """
+        first_taxa = self.undo_info[0]
+        sec_taxa = self.undo_info[1]
+        # Swap names and sequences
+        first_seq = first_taxa.get_seq()
+        sec_seq = sec_taxa.get_seq()
+        first_name = first_taxa.get_name()
+        sec_name = sec_taxa.get_name()
+
+        # Update the data
+        first_taxa.update(sec_seq, sec_name)
+        sec_taxa.update(first_seq, first_name)
+
+    def same_move(self, model):
+
+        net_leaves = model.get_network_leaves()
+
+        indeces = self.same_move_info
+        first = net_leaves[indeces[0]]
+        second = net_leaves[indeces[1]]
+
+        # Grab ExtantTaxa nodes
+        first_taxa = first.get_predecessors()[0]
+        sec_taxa = second.get_predecessors()[0]
+
+        # Swap names and sequences
+        first_seq = first_taxa.get_seq()
+        sec_seq = sec_taxa.get_seq()
+        first_name = first_taxa.get_name()
+        sec_name = sec_taxa.get_name()
+
+
+        # Update the data
+        first_taxa.update(sec_seq, sec_name)
+        sec_taxa.update(first_seq, first_name)
+
 
 class TopologyMove(Move):
 
     def execute(self, model):
-        proposedModel = copy.deepcopy(model)
+        proposedModel = model
 
         valid_focals = {}
 
@@ -149,6 +219,7 @@ class TopologyMove(Move):
         choice = random.choice(list(valid_focals.keys()))
 
         relatives = valid_focals[choice]
+        self.undo_info = [choice, relatives]
         relatives[2].unjoin(choice)  # disconnect c1 from n
         relatives[0].unjoin(relatives[1])  # disconnect s from par
         relatives[2].join(relatives[1])  # connect c1 to par
@@ -162,3 +233,23 @@ class TopologyMove(Move):
         relatives[2].upstream()
 
         return proposedModel
+
+    def undo(self, model):
+
+        relatives = self.undo_info[1]
+        choice = self.undo_info[0]
+
+        # Do the reverse operations
+        relatives[2].join(choice)  # connect c1 back to n
+        relatives[0].join(relatives[1])  # connect s back to par
+        relatives[2].unjoin(relatives[1])  # disconnect c1 from par
+        relatives[0].unjoin(choice)  # disconnect s from n
+
+        # mark each of c1 and choice as needing updating
+        relatives[0].upstream()
+        relatives[2].upstream()
+
+
+    def same_move(self, model):
+        pass
+

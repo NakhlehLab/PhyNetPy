@@ -35,7 +35,7 @@ class ProposalKernel:
             elif random_num < .8:
                 return UniformBranchMove()
             else:
-                return TopologyMove()
+                return UniformBranchMove()
 
 
 class HillClimbing:
@@ -68,16 +68,17 @@ class HillClimbing:
         while iter_no < self.num_iter:
 
             # propose a new state
-            self.current_state.generate_next(self.kernel.generate())
+            next_move = self.kernel.generate()
+            self.current_state.generate_next(next_move)
 
             # calculate the difference in score between the proposed state and the current state
-            delta = self.current_state.likelihood() > self.current_state.cached().likelihood()
+            delta = self.current_state.likelihood() - self.current_state.proposed().likelihood()
 
-            if delta > 0:
+            if delta <= 0:
                 # the new state is more likely. Take it
-                self.current_state.commit()
+                self.current_state.commit(next_move)
             else:
-                self.current_state.revert()
+                self.current_state.revert(next_move)
 
             self.current_state.write_line_to_summary(
                 "ITER #" + str(iter_no) + " LIKELIHOOD = " + str(self.current_state.likelihood()))
@@ -143,27 +144,29 @@ class MetropolisHastings:
 def test():
     pr = cProfile.Profile()
 
-    n = NetworkBuilder(
-        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
+    # n = NetworkBuilder(
+    # "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
 
-    testnet = n.getNetwork(0)
+    # testnet = n.getNetwork(0)
 
     msa = MSA(
         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
 
     data = Matrix(msa)  # default is to use the DNA alphabet
 
-    goalprob = Probability(testnet, data=data).felsenstein_likelihood()
+    # goalprob = Probability(testnet, data=data).felsenstein_likelihood()
 
-    print(goalprob)
+    # print(goalprob)
 
-    hill = HillClimbing(ProposalKernel(), JC(), data, 1000)
+    hill = HillClimbing(ProposalKernel(), JC(), data, 3000)
 
     pr.enable()
     final_state = hill.run()
     print(final_state)
     print(final_state.current_model)
-    final_state.current_model.summary("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt", "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
+    final_state.current_model.summary(
+        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
+        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
     pr.disable()
     pr.print_stats(sort="tottime")
     print("----------------------")

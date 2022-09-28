@@ -74,6 +74,7 @@ class Matrix:
 
         ##Parse the input file into a list of sequence records
         self.seqRecords = alignment.get_records()
+        self.aln = alignment
 
         ##turn sequence record objects into the matrix data
         self.populateData()
@@ -113,8 +114,10 @@ class Matrix:
 
             index += 1
 
+
+
         # the dimensions of the uncompressed matrix
-        self.numTaxa = index
+        self.numTaxa = self.aln.num_groups() # = num taxa if each group is only made of one taxa
         self.seqLen = lenCount
 
         # compress the matrix and fill out the locations and count fields
