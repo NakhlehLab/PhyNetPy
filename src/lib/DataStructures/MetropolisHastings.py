@@ -158,16 +158,17 @@ def test():
 
     # print(goalprob)
 
-    hill = HillClimbing(ProposalKernel(), JC(), data, 3000)
-
     pr.enable()
+    hill = HillClimbing(ProposalKernel(), JC(), data, 1000)
+    pr.disable()
+    #pr.enable()
     final_state = hill.run()
     print(final_state)
     print(final_state.current_model)
     final_state.current_model.summary(
         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
-    pr.disable()
+    #pr.disable()
     pr.print_stats(sort="tottime")
     print("----------------------")
 

@@ -109,12 +109,14 @@ class Model:
         """
 
         # Grab current vector and make a copy TODO: more efficient way than copying fs
-        current_vec = self.tree_heights.heights
-        new_vec = copy.deepcopy(current_vec)
-
-        # Make new list and give it to the tree height node to update
-        new_vec[index] = value
-        self.tree_heights.update(new_vec)
+        # current_vec = self.tree_heights.heights
+        # new_vec = copy.deepcopy(current_vec)
+        #
+        # # Make new list and give it to the tree height node to update
+        # new_vec[index] = value
+        # # new_vec = self.tree_heights.heights
+        # # new_vec[index] = value
+        self.tree_heights.singular_update(index, value)
 
     def build_felsenstein(self):
         """
@@ -397,10 +399,10 @@ class Model:
     def execute_move(self, move):
         """
         The operator move has asked for permission to work on this model.
-        Pass the move this model and get a new, separate model that is the result of the operation on this model
+        Pass the move this model and get the model that is the result of the operation on this model. IT IS THE SAME OBJ
 
         Input: move, a Move obj or any subtype
-        Output: a new Model obj that is the result of doing Move on this Model obj
+        Output: the !same! obj that is the result of doing Move on this Model obj
         """
         return move.execute(self)
 
@@ -408,6 +410,17 @@ class Model:
         """
         Writes summary of calculations to a file, and gets the current state of the model
         and creates a network obj so that the newick format can be output.
+
+        Inputs:
+        1) tree_filename : a string that is the name of the file to output a newick string to.
+                           if the filename does not exist, a new file will be created in the directory in which
+                           one is operating in.
+
+        2) summary_filename : a string that is the name of the file to output logging information.
+                              if the filename does not exist, a new file will be created in the current directory
+
+        TODO: TEST FILE CREATION
+
         """
         # Step 1: create network obj
         net = DAG()
@@ -851,6 +864,12 @@ class TreeHeights(StateNode):
 
             self.heights = new_vector
 
+    def singular_update(self, index, value):
+        for branch_node in self.get_successors():
+            if branch_node.get_index() == index:
+                branch_node.update(value)
+
+
     def get_heights(self):
         return self.heights
 
@@ -1041,11 +1060,11 @@ class FelsensteinInternalNode(NetworkNode, CalculationNode):
             # add to list of child matrices
             matrices.append(step1)
 
-            # Element-wise multiply each matrix in the list
-            result = np.ones(np.shape(matrices[0]))
-            for matrix in matrices:
-                result = np.multiply(result, matrix)
-            self.partials = result
+        # Element-wise multiply each matrix in the list
+        result = np.ones(np.shape(matrices[0]))
+        for matrix in matrices:
+            result = np.multiply(result, matrix)
+        self.partials = result
 
         # mark node as having been recalculated and cache the result
         self.cached = self.partials

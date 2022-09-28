@@ -84,7 +84,7 @@ class RootBranchMove(Move, ABC):
 
         """
         # Make a copy of model that is identical
-        proposedModel = copy.deepcopy(model)
+        proposedModel = model
 
         # get the root and its height
         speciesTreeRoot = proposedModel.felsenstein_root
@@ -126,7 +126,7 @@ class TaxaSwapMove(Move, ABC):
         
         """
         # Make a copy of the model
-        proposedModel = copy.deepcopy(model)
+        proposedModel = model
 
         # Select two random leaf nodes
         net_leaves = proposedModel.get_network_leaves()
