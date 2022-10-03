@@ -4,10 +4,6 @@ from Node import Node
 from Graph import DAG
 import math
 import copy
-from threading import Thread
-from threading import Lock
-import time
-from collections import deque
 
 
 class BirthDeathSimError(Exception):
@@ -95,7 +91,7 @@ class Yule:
     def drawWaitingTime(self):
         """
                 Draw a waiting time until the next speciation event from 
-                a memoryless exponential distribution.
+                a memory-less exponential distribution.
 
                 Since each lineage is equally likely for each event 
                 under the Yule Model, the waiting time is given by the parameter 
@@ -125,6 +121,7 @@ class Yule:
 
         # calculate the branch length to the internal node
         nextTime = self.drawWaitingTime()
+        branchLen = 0
         if condition == "N":
             branchLen = self.elapsedTime + nextTime - specNode.get_parent().attribute_value_if_exists("t")
             self.elapsedTime += nextTime
@@ -273,7 +270,8 @@ class CBDP:
 
     def Qinv(self, r):
         """
-                Draw a time from the Qinv distribution from https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
+                Draw a time from the Qinv distribution from
+                https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
 
                 r-- r[0] from the n-1 samples from [0,1]
 
@@ -286,7 +284,8 @@ class CBDP:
 
     def Finv(self, r, t):
         """
-                Draw a sample speciation time from the Finv distribution from  https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
+        Draw a sample speciation time from the Finv distribution from
+        https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
 
                 r-- r_i, from the sampled values from [0,1]
                 t-- the age of the tree determined by Qinv(r[0])
@@ -308,7 +307,7 @@ class CBDP:
         """
 
         # step 1
-        r = [random.random() for dummy in range(self.N)]
+        r = [random.random() for _ in range(self.N)]
 
         # step 2
         t = self.Qinv(r[0])

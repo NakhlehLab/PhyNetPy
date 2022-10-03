@@ -1,12 +1,7 @@
 from abc import ABC, abstractmethod
 from math import comb, pow
 from GTR import *
-import math
-import copy
-
-from src.lib.DataStructures.Alphabet import Alphabet
 from src.lib.DataStructures.Graph import DAG
-from src.lib.DataStructures.MSA import MSA
 from src.lib.DataStructures.Matrix import Matrix
 
 
@@ -31,7 +26,7 @@ def vec_bin_array(arr, m):
 
 def convert_to_heights(node, adj_dict):
     """
-    This is a recusive function that is used to take a model that is initialized
+    This is a recursive function that is used to take a model that is initialized
     with branch heights and turn it into a model based on node heights.
 
     Usage: convert_to_heights(root_node, {})
@@ -107,15 +102,6 @@ class Model:
                 value - new height/length to replace the old one
 
         """
-
-        # Grab current vector and make a copy TODO: more efficient way than copying fs
-        # current_vec = self.tree_heights.heights
-        # new_vec = copy.deepcopy(current_vec)
-        #
-        # # Make new list and give it to the tree height node to update
-        # new_vec[index] = value
-        # # new_vec = self.tree_heights.heights
-        # # new_vec[index] = value
         self.tree_heights.singular_update(index, value)
 
     def build_felsenstein(self):
@@ -150,7 +136,7 @@ class Model:
             if self.network.outDegree(node, debug=False) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
-                branch = BranchLengthNode(branch_index, node.length(), heights= not self.as_length)
+                branch = BranchLengthNode(branch_index, node.length())
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -182,7 +168,7 @@ class Model:
             elif self.network.inDegree(node) != 0:  # An internal node that is not the root
 
                 # Create branch
-                branch = BranchLengthNode(branch_index, node.length(), heights= not self.as_length)
+                branch = BranchLengthNode(branch_index, node.length())
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -208,7 +194,7 @@ class Model:
                 self.felsenstein_root = new_internal_node
 
                 if not self.as_length:
-                    branch_height = BranchLengthNode(branch_index, 0, heights= not self.as_length)
+                    branch_height = BranchLengthNode(branch_index, 0)
                     branch_index += 1
                     tree_heights_vec.append(0)
                     branch_height.join(new_internal_node)
@@ -237,7 +223,8 @@ class Model:
             tree_heights_adj = np.zeros(len(tree_heights_vec))
             adj_dict = convert_to_heights(self.felsenstein_root, {})
 
-            # Keep track of the maximum leaf height, this is used to switch the node heights from root centric to leaf centric
+            # Keep track of the maximum leaf height, this is used to switch the node heights from root centric to
+            # leaf centric
             max_height = 0
 
             # Set each node height
@@ -276,7 +263,7 @@ class Model:
             if self.network.outDegree(node, debug=False) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
-                branch = BranchLengthNode(branch_index, node.length(), heights=not self.as_length)
+                branch = BranchLengthNode(branch_index, node.length())
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -307,7 +294,7 @@ class Model:
             elif self.network.inDegree(node) != 0:  # An internal node that is not the root
 
                 # Create branch
-                branch = BranchLengthNode(branch_index, node.length(), heights=not self.as_length)
+                branch = BranchLengthNode(branch_index, node.length())
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -331,7 +318,7 @@ class Model:
                 self.felsenstein_root = new_internal_node
 
                 if not as_length:
-                    branch_height = BranchLengthNode(branch_index, 0, heights=self.as_length)
+                    branch_height = BranchLengthNode(branch_index, 0)
                     branch_index += 1
                     tree_heights_vec.append(0)
                     branch_height.join(new_internal_node)
@@ -359,7 +346,8 @@ class Model:
             tree_heights_adj = np.zeros(len(tree_heights_vec))
             adj_dict = convert_to_heights(self.felsenstein_root, {})
 
-            # Keep track of the maximum leaf height, this is used to switch the node heights from root centric to leaf centric
+            # Keep track of the maximum leaf height, this is used to switch the node heights from root centric
+            # to leaf centric
             max_height = 0
 
             # Set each node height
@@ -457,12 +445,12 @@ class Model:
 
         # Write newick string to output file
         text_file = open(tree_filename, "w")
-        n = text_file.write(newick_str)
+        text_file.write(newick_str)
         text_file.close()
 
         # Step 2: write iter summary to a file
         text_file2 = open(summary_filename, "w")
-        n = text_file2.write(self.summary_str)
+        text_file2.write(self.summary_str)
         text_file2.close()
 
     def get_tree_heights(self):
@@ -773,13 +761,14 @@ class BranchLengthNode(CalculationNode):
     transition matrix Pij
     """
 
-    def __init__(self, vector_index, branch_length, heights=True):
+    def __init__(self, vector_index, branch_length):
         super().__init__()
         self.index = vector_index
         self.branch_length = branch_length
         self.sub = None
         self.updated_sub = True
         self.as_height = True
+        # TODO: TEST AS BRANCH LENGTH
 
     def update(self, new_bl):
         # update the branch length
@@ -868,7 +857,6 @@ class TreeHeights(StateNode):
         for branch_node in self.get_successors():
             if branch_node.get_index() == index:
                 branch_node.update(value)
-
 
     def get_heights(self):
         return self.heights
@@ -961,7 +949,10 @@ class ExtantSpecies(StateNode):
         # TODO: make SNP flexible
         self.seq = new_sequence
         self.name = new_name
-        self.get_successors()[0].update(new_sequence, new_name)  # Delegate what to do with the sequence to the leaf node, DONT KNOW DONT CARE
+        self.get_successors()[0].update(new_sequence,
+                                        new_name)
+        # Delegate what to do with the sequence to the leaf node,
+        # DON'T KNOW DON'T CARE
 
     def get_seq(self):
         return self.seq
@@ -1074,43 +1065,6 @@ class FelsensteinInternalNode(NetworkNode, CalculationNode):
         return self.partials
 
 
-#### TESTS ######
-
-# n2 = NetworkBuilder(
-#     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex")
-# # n3 = NetworkBuilder(
-# # "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex")
-#
-# test2 = n2.getNetwork(0)
-# # test3 = n3.getNetwork(0)
-#
-# msa2 = AlignIO.read(
-#     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex",
-#     "nexus")
-# # msa3 = AlignIO.read(
-# # "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex", "nexus")
-#
-# data2 = Matrix(msa2)  # default is to use the DNA alphabet
-# # data3 = Matrix(msa3)
-#
-# model = Model(test2, data2)  # JC
-# # model2 = Model(test3, data3)  # JC
-#
-# startFirst = time.perf_counter()
-# print(model.likelihood())
-# endFirst = time.perf_counter()
-
-# model.change_branch(2, .5)
-# startSecond = time.perf_counter()
-# model.likelihood()
-# endSecond = time.perf_counter()
-#
-# print("WHOLE GRAPH: " + str(endFirst - startFirst))
-# print("RECALC GRAPH: " + str(endSecond - startSecond))
-
-# print(model2.likelihood())
-
-
 def SNP_compute_partials(matrix: Matrix, phased=False):
     if phased:
         r = [matrix.get_num_taxa() - sum(matrix.getColumnAt(i)) for i in
@@ -1127,9 +1081,9 @@ def SNP_compute_partials(matrix: Matrix, phased=False):
     for taxa in range(matrix.get_num_taxa()):
         likelihoods = np.zeros(matrix.siteCount())
         for site in range(matrix.siteCount()):
-            likelihoods[site] = comb(2 * matrix.get_num_taxa(), r[site]) * pow(x[site], r[site]) * pow((1 - x[site]),
-                                                                                                       2 * matrix.get_num_taxa() -
-                                                                                                       r[site])
+            likelihoods[site] = comb(2 * matrix.get_num_taxa(),
+                                     r[site]) * pow(x[site], r[site]) * pow((1 - x[site]),
+                                                                            2 * matrix.get_num_taxa() - r[site])
 
         partials[matrix.name_given_row(taxa)] = likelihoods
 
@@ -1203,21 +1157,17 @@ class SNPInternalNode(NetworkNode, CalculationNode):
             return self.cached
 
     def calc(self):
-        # TODO: CHANGE THIS FUNC
+        # TODO: CODE THIS
         children = self.get_predecessors()
-        # print("CHILDREN of " + self.name + ": " + str(children))
-        # print(self.predecessors)
         matrices = []
 
         for child in children:
             # type check
-            if type(child) != FelsensteinInternalNode and type(child) != FelsensteinLeafNode:
+            if type(child) != SNPInternalNode and type(child) != SNPLeafNode:
                 continue
 
             # get the child partial likelihood. Could be another internal node, but could be a leaf
             matrix = child.get()
-            # print("RETRIEVED CHILD " + child.name + " PARTIALS")
-            # print("CHILD PARTIAL = " + str(matrix))
 
             # compute matrix * Pij transpose
             step1 = np.matmul(matrix, child.get_branch().transition().transpose())
@@ -1238,9 +1188,3 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         # return calculation
         return self.partials
 
-
-# msa = MSA("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex")
-# mat = Matrix(msa, Alphabet("SNP"))
-# print(mat.charMatrix())
-#
-# print(SNP_compute_partials(mat))

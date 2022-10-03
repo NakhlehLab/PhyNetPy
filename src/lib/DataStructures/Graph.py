@@ -1,5 +1,4 @@
 from collections import deque
-from queue import Queue
 from Node import Node
 
 
@@ -53,7 +52,7 @@ class Graph:
     """
         An "interface" level graph implementation. implements all common functionality
         between digraphs and undirected graphs
-        """
+    """
     edges = []
     nodes = []
     edgeWeights = {}
@@ -91,14 +90,14 @@ class Graph:
                 self.edges.append(edges)
         return
 
-    def removeNode(self, node, removeEdges):
+    def removeNode(self, node, remove_edges):
         """
                 Removes node from the list of nodes. If removeEdges is true/enabled,
                 also prunes all edges from the graph that are connected to the node
                 """
         if node in self.nodes:
             self.nodes.remove(node)
-            if removeEdges:
+            if remove_edges:
                 for edge in self.edges:
                     if node in edge:
                         self.edges.remove(edge)
@@ -112,12 +111,6 @@ class Graph:
             self.edges.remove(edge)
         return
 
-    def findShortestPathLength(self, nodeStart, nodeEnd):
-        """
-                TODO
-                """
-        return 0
-
     def getNumberOfNodes(self):
         """
                 returns the number of nodes in the graph
@@ -130,17 +123,17 @@ class Graph:
                 """
         return len(self.edges)
 
-    def setEdgeWeights(self, edgeDict):
-        for key, value in edgeDict.items():
+    def setEdgeWeights(self, edge_dict):
+        for key, value in edge_dict.items():
             if key in self.edges:
                 self.edgeWeights[key] = value
         return
 
     def getTotalWeight(self):
-        sum = 0
+        tot = 0
         for edge in self.edges:
-            sum += self.edgeWeights[edge]
-        return sum
+            tot += self.edgeWeights[edge]
+        return tot
 
     def get_nodes(self):
         return self.nodes
@@ -158,17 +151,20 @@ class DAG(Graph):
         This particular graph instance must only have one root and must be connected.
     """
 
-    connectedBool = True
+    def __init__(self, edges=None, nodes=None, weights=None):
+        if edges is None:
+            edges = []
+        if nodes is None:
+            nodes = []
+        if weights is None:
+            weights = []
 
-    def __init__(self, edges=[], nodes=[], weights=[]):
         super().__init__(edges, nodes, weights)
 
     def inDegree(self, node):
         return len(self.inEdges(node))
 
-    def outDegree(self, node, debug=False):
-        if debug:
-            print("OUT EDGES" + str(self.outEdges(node)))
+    def outDegree(self, node):
         return len(self.outEdges(node))
 
     def inEdges(self, node):
@@ -211,67 +207,9 @@ class DAG(Graph):
                 """
         return [node for node in self.nodes if self.outDegree(node) == 0]
 
-    def top_sort(self):
-        """
-                Execute a topological sort.
-                Returns a list of nodes
-                """
-        self.connectedBool = True
-        sorted_nodes, visited = deque(), set()
-        count = 0
-        for node in self.findRoot():  # start dfs at roots for correctness
-            if node not in visited:
-                self.dfs_recursive(node, visited, sorted_nodes)
-                # if the initial dfs call is run more than once,
-                # then nodes were not reached initially in which case
-                # the graph is not connected
-                if count != 0:
-                    self.connectedBool = False
-                count += 1
-
-        return list(sorted_nodes)
-
-    def dfs_recursive(self, start_node, visited, sorted_nodes):
-        """
-                recursive dfs helper
-                """
-        visited.add(start_node)
-        if start_node in self.nodes:
-            neighbors = self.findDirectSuccessors(start_node)
-            for neighbor in neighbors:
-                if neighbor not in visited:
-                    self.dfs(neighbor, visited, sorted_nodes)
-        sorted_nodes.appendleft(start_node)
-
-    def bfs(self, startNode):
-        """
-                Vanilla bfs
-                """
-
-        dist = {startNode: 0}
-        parent = {startNode: None}
-
-        q = Queue(maxsize=0)  # unlimited length queue
-        q.put(startNode)
-
-        while not q.empty():
-            cur = q.get()
-            for neighbor in self.findDirectSuccessors(cur):
-                if neighbor not in dist.keys():
-                    dist[neighbor] = dist[cur] + 1
-                    parent[neighbor] = cur
-                    q.put(neighbor)
-
-        return parent, dist
-
-    def graphSize(self, node):
-        parent, dist = self.bfs(node)
-        return len(list(parent.keys()))
-
     def hasNodeWithName(self, name):
         for node in self.nodes:
             if node.get_name() == name:
-                # print(node)
                 return node
 
         return False
@@ -321,4 +259,3 @@ class DAG(Graph):
 
         # call newickSubstring on the root of the graph to get the entire string
         return newickSubstring(children, root) + ";"
-

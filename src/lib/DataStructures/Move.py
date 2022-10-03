@@ -1,4 +1,4 @@
-import copy
+
 import random
 from abc import ABC, abstractmethod
 import numpy as np
@@ -17,7 +17,8 @@ class Move(ABC):
     def __init__(self):
         self.model = None
         self.undo_info = None
-        self.same_move_info = None #Same move info needs to be information that is decoupled from the model objects itself
+        # Same move info needs to be information that is decoupled from the model objects itself
+        self.same_move_info = None
 
     @abstractmethod
     def execute(self, model):
@@ -47,7 +48,7 @@ class UniformBranchMove(Move, ABC):
         Outputs: new Model obj that is the result of changing one branch
         """
         # Make a copy of the model
-        # proposedModel = copy.deepcopy(model)
+
         proposedModel = model
 
         # Select random internal node
@@ -99,7 +100,7 @@ class RootBranchMove(Move, ABC):
         rightChildHeight = children[1].get_branch().get()
 
         # the youngest age the species tree root node can be(preserving topologies)
-        # Lowest number that can be drawn from exp dist is 0, so we guarantee that the root doesn't encroach on child
+        # The lowest number that can be drawn from exp dist is 0, we guarantee that the root doesn't encroach on child
         # heights.
         uniformShift = np.random.exponential(10) - min(
             [currentRootHeight - leftChildHeight, currentRootHeight - rightChildHeight])
@@ -174,7 +175,6 @@ class TaxaSwapMove(Move, ABC):
         sec_taxa.update(first_seq, first_name)
 
     def same_move(self, model):
-
         net_leaves = model.get_network_leaves()
 
         indeces = self.same_move_info
@@ -190,7 +190,6 @@ class TaxaSwapMove(Move, ABC):
         sec_seq = sec_taxa.get_seq()
         first_name = first_taxa.get_name()
         sec_name = sec_taxa.get_name()
-
 
         # Update the data
         first_taxa.update(sec_seq, sec_name)
@@ -249,7 +248,5 @@ class TopologyMove(Move):
         relatives[0].upstream()
         relatives[2].upstream()
 
-
     def same_move(self, model):
         pass
-

@@ -1,4 +1,4 @@
-from BirthDeath import Yule, CBDP
+from BirthDeath import CBDP
 from GTR import *
 from ModelGraph import Model
 
@@ -30,7 +30,6 @@ class State:
                        data.get_num_taxa()).generateTree()  # base number of leaves to be the number of groups/taxa
         self.current_model = Model(network, data, submodel)
         self.proposed_model = copy.deepcopy(self.current_model)
-
 
     def write_line_to_summary(self, line):
         self.current_model.summary_str += line + "\n"
