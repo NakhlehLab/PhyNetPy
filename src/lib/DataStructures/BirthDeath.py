@@ -14,55 +14,41 @@ class BirthDeathSimError(Exception):
     """
         This exception is thrown whenever something irrecoverably wrong happens
         during the process of generating trees
-        """
+    """
 
     def __init__(self, message="Something went wrong simulating a tree"):
         self.message = message
         super().__init__(self.message)
 
 
-def numLiveSpecies(nodeList):
+def numLiveSpecies(nodes):
     """
         Returns the number of live lineages in a list of node objects
 
         nodeList -- an array/set of Node objects
         """
-    return len([node for node in nodeList if node.attribute_value_if_exists("live") == True])
+    return len(liveSpecies(nodes))
 
 
-def randomSpeciesSelection(nodeList):
+def randomSpeciesSelection(nodes):
     """
         Returns a random live Node from an array/set. The Node returned
         will be operated on during a birth or death event
 
         nodeList -- an array/set of Node objects
         """
-    liveNodes = liveSpecies(nodeList)
+    liveNodes = liveSpecies(nodes)
     randomInt = random.randint(0, len(liveNodes) - 1)
     return liveNodes[randomInt]
 
 
-def liveSpecies(nodeList):
+def liveSpecies(nodes):
     """
         Returns a subset of Nodes that represent live lineages
 
         nodeList -- an array/set of Node objects
         """
-    return [node for node in nodeList if node.attribute_value_if_exists("live") == True]
-
-
-class treeGen(Thread):
-    def __init__(self, thread_name, thread_ID, yuleObj, tasks):
-        Thread.__init__(self)
-        self.thread_name = thread_name
-        self.thread_ID = thread_ID
-        self.model = yuleObj
-        self.tasks = tasks
-
-    # helper function to execute the threads
-    def run(self):
-        self.model.generateTrees(self.tasks)
-        # print("Thread "+ str(self.thread_ID) + " has completed")
+    return [node for node in nodes if node.attribute_value_if_exists("live") is True]
 
 
 class Yule:
@@ -105,7 +91,6 @@ class Yule:
 
         # a list of trees generated under this model
         self.generatedTrees = []
-        self.parallelTrees = ThreadSafeList()
 
     def drawWaitingTime(self):
         """
@@ -130,7 +115,7 @@ class Yule:
 
                 edges-- an array of 2-tuples (as arrays) that represents the current state of the tree
                 
-                """
+        """
 
         # select random live lineage to branch from
         specNode = randomSpeciesSelection(nodes)
@@ -148,8 +133,6 @@ class Yule:
             self.elapsedTime += nextTime
         elif condition == "T" and self.elapsedTime + nextTime > self.time:
             return -1
-            # branchLen = self.time - specNode.getParent().attrLookup("t")
-            # self.elapsedTime = self.time
 
         # create the new internal node
         newInternal = Node(branchLen, parent_nodes=[specNode.get_parent()], attr={"t": self.elapsedTime, "live": False},
@@ -186,7 +169,7 @@ class Yule:
 
                 After the nth event, draw one more time and fill out the remaining
                 branch lengths.
-                """
+        """
 
         # Set up the tree with 2 living lineages and an "internal" root node
         node1 = Node(0, attr={"t": 0, "label": "root", "live": False}, name="root")
@@ -197,7 +180,7 @@ class Yule:
         edges = [[node1, node2], [node1, node3]]
 
         # until the tree contains N extant taxa, keep having speciation events
-        if (condition == "N"):
+        if condition == "N":
             while numLiveSpecies(nodes) < self.N:
                 self.event(nodes, edges)
 
@@ -235,7 +218,7 @@ class Yule:
                 else:
                     node.set_length(0)
 
-            tree = copy.deepcopy(DAG())
+            tree = DAG()
             tree.addEdges(edges)
             tree.addNodes(nodes)
 
@@ -254,64 +237,24 @@ class Yule:
                 """
         self.generatedTrees = []
 
-    def generateNTreesParallel(self, numTrees, numThreads):
-        """
-                Return a list of numTrees number of simulated trees.
-                Runs using numThreads number of threads, for exact results
-                numThreads should be a divisor of numTrees.
-
-                numTrees-- number of trees to generate
-
-                numThreads-- number of threads to use
-
-                Outputs: A list (length numThreads) of lists, each inner list being the results of one
-                thread of execution. The total number of trees is still numTrees.
-        
-                """
-        threads = []
-        ids = 0
-        for dummy in range(numThreads):
-            # create a thread with a unique name and id, and give it the right number of tasks
-            newThread = treeGen("thread" + str(ids), ids, self, int(numTrees / numThreads))
-            threads.append(newThread)
-            ids += 1
-
-            # run the thread and append the results
-            newThread.start()
-
-        for thread in threads:
-            thread.join()
-
-        return self.parallelTrees
-
-    def generateNTreesSeq(self, numTrees):
+    def generate_trees(self, num_trees):
         """
                 The sequential version of generating a set number of trees.
 
                 numTrees-- number of trees to generate and place into the generatedTrees database
 
                 Outputs: the array of generated trees, includes all that have been previously generated
-                """
-        for dummy in range(numTrees):
+        """
+        for dummy in range(num_trees):
             self.generatedTrees.append(self.generateTree())
 
         return self.generatedTrees
 
-    def generateTrees(self, tasks):
-        """
-                Parallel helper function that generates a set number of trees and 
-                places them into an array
-
-                tasks-- number of trees to generate
-
-                Outputs: the array of trees
-                """
-
-        for dummy in range(tasks):
-            self.parallelTrees.append(self.generateTree())
-
 
 class CBDP:
+    """
+    Constant Rate Birth Death Process tree simulation
+    """
 
     def __init__(self, gamma, mu, n, sample=1):
 
@@ -335,7 +278,7 @@ class CBDP:
                 r-- r[0] from the n-1 samples from [0,1]
 
                 Returns: the time t, which is the age of a new simulated tree
-                """
+        """
         term1 = (1 / self.gamma - self.mu)
         term2 = 1 - ((self.mu / self.gamma) * math.pow(r, 1 / self.N))
         term3 = 1 - math.pow(r, 1 / self.N)
@@ -349,7 +292,7 @@ class CBDP:
                 t-- the age of the tree determined by Qinv(r[0])
 
                 Returns: s_i from r_i
-                """
+        """
         term1 = (1 / self.gamma - self.mu)
         term2 = self.gamma - (self.mu * math.exp(-1 * t * (self.gamma - self.mu)))
         term3 = 1 - math.exp(-1 * t * (self.gamma - self.mu))
@@ -362,7 +305,7 @@ class CBDP:
                 (Hartmann, Wong, Stadler)
 
                 Returns: A tree with n taxa chosen from the proper distributions.
-                """
+        """
 
         # step 1
         r = [random.random() for dummy in range(self.N)]
@@ -398,13 +341,14 @@ class CBDP:
                 edges.append(new_edge)
 
         # add edges and nodes to a tree
-        tree = copy.deepcopy(DAG())
+        tree = DAG()
         tree.addEdges(edges)
         tree.addNodes(nodes)
 
         return tree
 
-    def connect(self, index, nodes):
+    @staticmethod
+    def connect(index, nodes):
         """
                 nodes-- a list of nodes (list[i] is the ith node along a horizontal
                 axis that alternates between species and internal s_i nodes/speciation events)
@@ -487,68 +431,3 @@ class CBDP:
                 Clear out the generated trees list
                 """
         self.generatedTrees = []
-
-
-class ThreadSafeList():
-    # constructor
-    def __init__(self):
-        # initialize the list
-        self._list = list()
-        # initialize the lock
-        self._lock = Lock()
-
-    # add a value to the list
-    def append(self, value):
-        # acquire the lock
-        with self._lock:
-            # append the value
-            self._list.append(value)
-
-    # remove and return the last value from the list
-    def pop(self):
-        # acquire the lock
-        with self._lock:
-            # pop a value from the list
-            return self._list.pop()
-
-    # read a value from the list at an index
-    def get(self, index):
-        # acquire the lock
-        with self._lock:
-            # read a value at the index
-            return self._list[index]
-
-    # return the number of items in the list
-    def length(self):
-        # acquire the lock
-        with self._lock:
-            return len(self._list)
-
-        # add items to the list
-
-    def add_items(safe_list):
-        for i in range(100000):
-            safe_list.append(i)
-
-# sim = Yule(.05, 6, 30)
-
-# sim.generateTree("T").printGraph()
-
-# sim2 = CBDP(.05, .01, 6)
-# sim2.generateTree().printGraph()
-
-# startSeq = time.perf_counter()
-# sim.generateNTreesSeq(500000)
-# endSeq = time.perf_counter()
-# print(len(sim.generatedTrees))
-# sim.clearGenerated()
-
-
-# startPar = time.perf_counter()
-# sim.generateNTreesParallel(500000, 4)
-# endPar = time.perf_counter()
-
-# print(sim.parallelTrees.length())
-
-# print("SEQUENTIAL TIME:" + str(endSeq-startSeq))
-# print("PARALLEL TIME:" + str(endPar-startPar))

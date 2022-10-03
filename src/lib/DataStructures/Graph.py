@@ -148,6 +148,7 @@ class Graph:
     def get_edges(self):
         return self.edges
 
+
 class DAG(Graph):
     """
         This class represents a directed graph containing nodes of any data type, and edges.
@@ -155,7 +156,7 @@ class DAG(Graph):
         is from a to b. (a,b) is not the same as (b,a).
 
         This particular graph instance must only have one root and must be connected.
-        """
+    """
 
     connectedBool = True
 
@@ -321,132 +322,3 @@ class DAG(Graph):
         # call newickSubstring on the root of the graph to get the entire string
         return newickSubstring(children, root) + ";"
 
-
-class undiGraph(Graph):
-
-    def __init__(self, edges, nodes, weights):
-        super().__init__(edges, nodes, weights)
-
-    def isConnected(self):
-        return True
-
-    def minimumSpanningTree(self):
-        """
-                implements kruskal's algorithm
-                returns a graph instance representing the MST
-                """
-
-        if self.isConnected() == False:
-            return "Attempting to find MST of unconnected graph"
-
-        mst = undiGraph([], [], {})
-        edgeCandidates = self.edgeWeights.copy()
-
-        while mst.getNumberOfEdges() < self.getNumberOfNodes() - 1:
-            edgeCandidates = self.findMinEdgeAndInsert(mst, edgeCandidates)
-
-        return mst
-
-    def findMinEdgeAndInsert(self, graph, potentialEdges):
-
-        minKey = list(min(potentialEdges, key=potentialEdges.get))
-
-        graph.addNodes([minKey[0], minKey[1]])
-        graph.addEdges(frozenset(minKey))
-        graph.setEdgeWeights({frozenset(minKey): self.edgeWeights[frozenset(minKey)]})
-        print("Adding nodes", minKey[0], minKey[1])
-
-        if graph.containsCycle() == True:
-            graph.removeNode(minKey[0], False)
-            graph.removeNode(minKey[1], False)
-            graph.removeEdge(minKey)
-            del potentialEdges[frozenset(minKey)]
-            self.findMinEdgeAndInsert(graph, potentialEdges)
-        else:
-            del potentialEdges[frozenset(minKey)]
-            return potentialEdges
-
-    def containsCycle(self):
-        """
-                need to implement this for correctness on graphs with cycles
-                """
-        return False
-
-
-class ModelGraph(Graph):
-    """
-        A DAG with restricted functionality
-    """
-
-    def __init__(self, edges=[], nodes=[], weights=[]):
-        super().__init__(edges, nodes, weights)
-
-    def inDegree(self, node):
-        return len(self.inEdges(node))
-
-    def outDegree(self, node):
-        return len(self.outEdges(node))
-
-    def inEdges(self, node):
-        return [edge for edge in self.edges if edge[1] == node]
-
-    def outEdges(self, node):
-        return [edge for edge in self.edges if edge[0] == node]
-
-    def findRoot(self):
-        """
-        Finds the root of this DAG. It is an error if one does not exist.
-        """
-        root = [node for node in self.nodes if self.outDegree(node) == 0]
-        if len(root) == 0:
-                raise GraphTopologyError("There is no root. There should be a root in a Model Graph")
-        return root
-
-    def findDirectPredecessors(self, node):
-        """
-                Returns a list of the children of node
-
-                node-- A Node Object
-                """
-        return [edge[0] for edge in self.inEdges(node)]
-
-    def findDirectSuccessors(self, node):
-        """
-                Returns a list of the parent(s) of node. For a tree, this
-                list should be of length 1. For a network, a child may have more
-                than one.
-
-                node-- A Node Object
-                """
-        return [edge[1] for edge in self.outEdges(node)]
-
-    def getLeafs(self):
-        """
-        returns the list of leaves in the graph
-        """
-        return [node for node in self.nodes if self.inDegree(node) == 0]
-
-
-def graphTestSuite():
-    g = undiGraph([frozenset(["a", "b"]), frozenset(["a", "c"]), frozenset(["c", "d"]), frozenset(["c", "b"]),
-                   frozenset(["b", "e"])], ["a", "b", "c", "d", "e"],
-                  {frozenset(["a", "b"]): 1, frozenset(["c", "d"]): 1.2, frozenset(["c", "b"]): 2,
-                   frozenset(["b", "e"]): 3})
-    # print(g.findDirectSuccessors("a"))
-    # print(g.getLeafs())
-    # print(g.getNumberOfNodes())
-    # print(g.getNumberOfEdges())
-    print(g.minimumSpanningTree().getNumberOfEdges())
-    print(g.minimumSpanningTree().getNumberOfNodes())
-    print(g.minimumSpanningTree().getTotalWeight())
-    # print(g.isConnected())
-    # g.addNodes("e")
-    # print(g.getNumberOfNodes())
-    # print(g.top_sort())
-    # print(g.isConnected())
-    # g.addEdges(("e", "a"))
-    # print(g.isConnected())
-    # print(g.getNumberOfEdges())
-    # g.removeNode("c", True)
-    # print(g.top_sort())
-    # print(g.getNumberOfEdges())
