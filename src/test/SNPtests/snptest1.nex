@@ -3,35 +3,35 @@
 
 BEGIN TAXA;
 
-DIMENSIONS NTAX=4;
+DIMENSIONS NTAX=6;
 
 TAXLABELS
-seq_1
-seq_2
-seq_3
-seq_4
+human1
+human2
+human3
+chimp1
+chimp2
+gorilla1
 ;
 
 END;
 
 BEGIN CHARACTERS;
-DIMENSIONS NCHAR=5;
+DIMENSIONS NCHAR=4;
 FORMAT DATATYPE=SNP MISSING=? GAP=- MATCHCHAR=. ;
 MATRIX
 
-seq_1 01021
+human1 0100
 
-seq_2 11021
+human2 0100
 
-seq_3 22011
+human3 0110
 
-seq_4 22111
+chimp1 2222
+
+chimp2 2221
+
+gorilla1 1111
 ;
 
 END;
-
-Begin trees;
-
-tree numeroZero = ((seq_1:.1, seq_2:.1):.1 , (seq_3:.1, seq_4:.1):.1);
-
-End;

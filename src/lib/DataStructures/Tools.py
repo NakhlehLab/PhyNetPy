@@ -3,7 +3,11 @@ from Matrix import Matrix
 from Bio import AlignIO
 from NetworkBuilder import NetworkBuilder
 from GTR import *
+from src.lib.DataStructures.Alphabet import Alphabet
+from src.lib.DataStructures.BirthDeath import CBDP
+from src.lib.DataStructures.MSA import MSA
 from src.lib.DataStructures.MetropolisHastings import ProposalKernel, HillClimbing
+from src.lib.DataStructures.ModelGraph import Model
 
 
 def felsenstein(filenames, model=JC()):
@@ -62,7 +66,6 @@ def ML_TREE(filenames, treeout, outfile, submodel=JC(), num_iter=3000):
     """
     likelihoods = []
     for file in filenames:
-
         msa = AlignIO.read(file, "nexus")
 
         data = Matrix(msa)  # default is to use the DNA alphabet
@@ -73,3 +76,23 @@ def ML_TREE(filenames, treeout, outfile, submodel=JC(), num_iter=3000):
 
         final_state.current_model.summary(treeout, outfile)
         likelihoods.append(final_state.current_model.likelihood())
+
+
+def SNAPP_Likelihood(filename, grouping=None):
+    """
+    Computes the SNAPP Likelihood for a nexus file that contains Bi-allelic data for a sampled set of taxa
+
+    filename-- the path to a nexus file
+    grouping-- an array that tells the MSA how to group the taxa for sampling. If left None, then each taxon will be its
+               own group. Format is the number of taxa in each group, ie for 6 total, [2, 3, 1] is a valid grouping
+    """
+
+    aln = MSA(filename, grouping)
+    network = CBDP(1, .5,
+                   aln.num_groups()).generateTree()
+    snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None)
+
+    return snp_model.SNP_likelihood()
+
+
+print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex", [3,2,1]))

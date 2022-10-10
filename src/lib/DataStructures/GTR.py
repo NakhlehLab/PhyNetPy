@@ -1,11 +1,6 @@
 import numpy as np
 from numpy import linalg as lg
-import random
 import math
-from numba import jit, cuda
-from timeit import default_timer as timer
-import copy
-from scipy import linalg
 
 
 class SubstitutionModelError(Exception):
@@ -201,5 +196,3 @@ class TN93(GTR):
             raise SubstitutionModelError("Error in TN93 Transversions. Not all equal")
 
         super().__init__(base_freqs, transitions, 4)
-
-

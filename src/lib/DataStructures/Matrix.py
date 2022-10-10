@@ -114,14 +114,16 @@ class Matrix:
 
             index += 1
 
-
-
         # the dimensions of the uncompressed matrix
-        self.numTaxa = self.aln.num_groups() # = num taxa if each group is only made of one taxa
+        self.numTaxa = self.aln.num_groups()  # = num taxa if each group is only made of one taxa
         self.seqLen = lenCount
 
         # compress the matrix and fill out the locations and count fields
-        self.simplify()
+        # TODO: ASK ABOUT SIMPLIFICATION SCHEME
+        if self.type is "DNA":
+            self.simplify()
+        else:
+            self.uniqueSites = self.seqLen
 
     def map(self, state):
         """
@@ -270,7 +272,6 @@ class Matrix:
         return self.type
 
 
-
 ##Simply use AlignIO.read
 """
 msa = AlignIO.read("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\io\\testfile.nex", "nexus")
@@ -326,5 +327,3 @@ OUTPUT:
 
 
 """
-
-

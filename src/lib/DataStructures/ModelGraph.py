@@ -384,6 +384,9 @@ class Model:
         # tally up the logs of the dot products
         return np.sum(np.log(np.matmul(partials, base_freqs)))
 
+    def SNP_likelihood(self):
+        pass
+
     def execute_move(self, move):
         """
         The operator move has asked for permission to work on this model.
@@ -1188,3 +1191,78 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         # return calculation
         return self.partials
 
+
+class SNPBranchNode(CalculationNode):
+
+    def __init__(self, vector_index, branch_length, Q):
+        super().__init__()
+        self.top = []
+        self.bottom = []
+        self.index = vector_index
+        self.branch_length = branch_length
+        self.as_height = True
+        self.Q = Q
+
+    def update(self, new_bl):
+        # update the branch length
+        self.branch_length = new_bl
+
+        # Mark this node and any nodes upstream as needing to be recalculated
+        self.upstream()
+
+    def switch_index(self, new_index):
+        self.index = new_index
+
+    def get_index(self):
+        return self.index
+
+    def get(self):
+        if self.updated:
+            return self.calc()
+        else:
+            return self.cached
+
+    def calc(self):
+        """
+        Calculates both the top and bottom partial likelihoods, based on Eq 14 and 19.
+
+        Returns a list of length 2, element [0] is the bottom likelihoods, element [1] is the top likelihoods
+        """
+
+        # BOTTOM: Case 1, the branch is an external branch, so bottom likelihood is just the red counts
+
+        # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
+
+
+        F_b = np.zeros(20)
+        
+        # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 19. Different impl for external branches?
+
+        m_y  = 0 # Sum of possible lineages
+        n_t = 0  # Number of lineages at the top
+
+        matrix_exp = self.Q.expt(self.branch_length)
+
+        F_t = np.zeros((partials_index(m_y + 1), 1))
+
+        for ft_index in range(0, partials_index(m_y + 1)):
+            for n_b in range(n_t, m_y + 1): # n_b always at least 1
+                for r_b in range(0, n_b + 1):
+                    index = partials_index(n_b) + r_b
+                    nt_rt = undo_index(ft_index)
+                    F_t[ft_index] = matrix_exp[nt_rt[0]][nt_rt[1]] * F_b[index]
+
+
+
+
+        pass
+
+
+
+def partials_index(n):
+    return int(.5 * (n-1) * (n+2))
+
+def undo_index(num):
+    n = math.ceil(math.sqrt(num)) + 1
+    r = num - n
+    return [n, r]

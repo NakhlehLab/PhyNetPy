@@ -1,3 +1,5 @@
+import copy
+
 from BirthDeath import CBDP
 from GTR import *
 from ModelGraph import Model

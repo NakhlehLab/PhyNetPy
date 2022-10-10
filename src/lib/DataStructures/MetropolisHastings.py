@@ -1,12 +1,9 @@
-from Bio import AlignIO
-
 from State import State
 from src.lib.DataStructures.MSA import MSA
 from src.lib.DataStructures.Matrix import Matrix
-from src.lib.DataStructures.NetworkBuilder import NetworkBuilder
-from src.lib.DataStructures.Probability import Probability
+
 import cProfile
-import dendropy.simulate.treesim
+
 from Move import *
 from GTR import *
 import random
@@ -136,10 +133,6 @@ class MetropolisHastings:
         self.kernel = kernel
         self.hill_climb = hc
 
-    def run(self):
-        print("RUNNING METROPOLIS HASTINGS")
-        return 0
-
 
 def test():
     pr = cProfile.Profile()
@@ -161,14 +154,14 @@ def test():
     pr.enable()
     hill = HillClimbing(ProposalKernel(), JC(), data, 1000)
     pr.disable()
-    #pr.enable()
+    # pr.enable()
     final_state = hill.run()
     print(final_state)
     print(final_state.current_model)
     final_state.current_model.summary(
         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
-    #pr.disable()
+    # pr.disable()
     pr.print_stats(sort="tottime")
     print("----------------------")
 
