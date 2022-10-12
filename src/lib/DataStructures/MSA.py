@@ -29,6 +29,7 @@ class MSA:
         self.filename = file
         self.grouping = grouping
         self.records = self.parse()
+        self.hash = {}
 
         if self.grouping is None:  # Either the number of records (1 taxa per group) or the number of groups
             self.groups = len(self.records)
@@ -42,10 +43,12 @@ class MSA:
         recs = []
         ids = []
         gid = 0
-        for groupsize in self.grouping:
-            for dummy in range(groupsize):
-                ids.append(gid)
-            gid += 1
+        if self.grouping is not None:
+            for groupsize in self.grouping:
+                for dummy in range(groupsize):
+                    ids.append(gid)
+                self.hash[gid] = []
+                gid += 1
 
         try:
             # If the nexus file is in a Biopython supported data type
@@ -56,7 +59,9 @@ class MSA:
                 if self.grouping is None:
                     recs.append(SeqRecord(rec.seq, rec.name))
                 else:
-                    recs.append(SeqRecord(rec.seq, rec.name, gid=ids[index]))
+                    new_record = SeqRecord(rec.seq, rec.name, gid=ids[index])
+                    recs.append(new_record)
+                    self.hash[ids[index]].append(new_record)
                     index += 1
 
         except NexusError:
@@ -75,3 +80,8 @@ class MSA:
 
     def num_groups(self):
         return self.groups
+
+    def group_given_id(self, gid):
+        return self.hash[gid]
+
+

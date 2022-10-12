@@ -1,8 +1,11 @@
+import math
 from abc import ABC, abstractmethod
 from math import comb, pow
 from GTR import *
 from src.lib.DataStructures.Graph import DAG
 from src.lib.DataStructures.Matrix import Matrix
+from src.lib.DataStructures.Move import Move
+from src.lib.DataStructures.SNPTransition import SNPTransition
 
 
 def vec_bin_array(arr, m):
@@ -73,7 +76,7 @@ class Model:
     Class that describes a DAG structure that lazily computes a model likelihood.
     """
 
-    def __init__(self, network, data, submodel=JC()):
+    def __init__(self, network: DAG, data: Matrix, submodel=JC()):
         self.network = network
         self.sub = submodel
         self.data = data
@@ -94,7 +97,7 @@ class Model:
         self.internal = [item for item in self.netnodes_sans_root if item not in self.network_leaves]
         self.summary_str = ""
 
-    def change_branch(self, index, value):
+    def change_branch(self, index: int, value: float):
         """
         Change a branch length in the model and update any nodes upstream from the changed node
 
@@ -133,7 +136,7 @@ class Model:
 
         # Add parsed phylogenetic network into the model
         for node in self.network.get_nodes():
-            if self.network.outDegree(node, debug=False) == 0:  # This is a leaf
+            if self.network.outDegree(node) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
                 branch = BranchLengthNode(branch_index, node.length())
@@ -253,28 +256,31 @@ class Model:
         self.tree_heights = tree_heights_node
         tree_heights_vec = []
 
-        partials = SNP_compute_partials(self.data, phased=phased)
+        Q = SNPTransition(6, .4, .6, .1)
 
         # Keep track of which branch maps to what index
         branch_index = 0
+        group_no = 0
 
         # Add parsed phylogenetic network into the model
         for node in self.network.get_nodes():
-            if self.network.outDegree(node, debug=False) == 0:  # This is a leaf
+            if self.network.outDegree(node) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
-                branch = BranchLengthNode(branch_index, node.length())
+                branch = SNPBranchNode(branch_index, node.length(), Q)
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
                 # Each branch has a link to the vector
                 tree_heights_node.join(branch)
 
-                # Calculate the leaf likelihoods
-                sequence = self.data.get_number_seq(node.get_name())  # Get sequence from the matrix data
-                new_leaf_node = SNPLeafNode(partials=partials[node.get_name()], branch=branch,
+                # Add sequences for each group to a new SNP leaf node
+                sequences = self.data.aln.group_given_id(group_no)
+                group_no += 1
+
+                new_leaf_node = SNPLeafNode(partials=sequences, branch=branch,
                                             name=node.get_name())
-                new_ext_species = ExtantSpecies(node.get_name(), sequence)
+                new_ext_species = ExtantSpecies(node.get_name(), sequences)
 
                 new_ext_species.join(new_leaf_node)
                 self.nodes.append(new_ext_species)
@@ -294,7 +300,7 @@ class Model:
             elif self.network.inDegree(node) != 0:  # An internal node that is not the root
 
                 # Create branch
-                branch = BranchLengthNode(branch_index, node.length())
+                branch = SNPBranchNode(branch_index, node.length(), Q)
                 tree_heights_vec.append(node.length())
                 branch_index += 1
 
@@ -387,7 +393,7 @@ class Model:
     def SNP_likelihood(self):
         pass
 
-    def execute_move(self, move):
+    def execute_move(self, move: Move):
         """
         The operator move has asked for permission to work on this model.
         Pass the move this model and get the model that is the result of the operation on this model. IT IS THE SAME OBJ
@@ -397,7 +403,7 @@ class Model:
         """
         return move.execute(self)
 
-    def summary(self, tree_filename, summary_filename):
+    def summary(self, tree_filename: str, summary_filename: str):
         """
         Writes summary of calculations to a file, and gets the current state of the model
         and creates a network obj so that the newick format can be output.
@@ -764,7 +770,7 @@ class BranchLengthNode(CalculationNode):
     transition matrix Pij
     """
 
-    def __init__(self, vector_index, branch_length):
+    def __init__(self, vector_index: int, branch_length: float):
         super().__init__()
         self.index = vector_index
         self.branch_length = branch_length
@@ -773,14 +779,14 @@ class BranchLengthNode(CalculationNode):
         self.as_height = True
         # TODO: TEST AS BRANCH LENGTH
 
-    def update(self, new_bl):
+    def update(self, new_bl: float):
         # update the branch length
         self.branch_length = new_bl
 
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
 
-    def update_sub(self, new_sub):
+    def update_sub(self, new_sub: GTR):
         self.sub = new_sub
         self.updated_sub = False
         self.upstream()
@@ -799,7 +805,7 @@ class BranchLengthNode(CalculationNode):
         # return calculation
         return self.branch_length
 
-    def switch_index(self, new_index):
+    def switch_index(self, new_index: int):
         self.index = new_index
 
     def get_index(self):
@@ -842,7 +848,7 @@ class TreeHeights(StateNode):
         super().__init__()
         self.heights = node_height_vec
 
-    def update(self, new_vector):
+    def update(self, new_vector: list):
 
         # Only update the parts of the vector that have changed
         if self.heights is None:
@@ -856,7 +862,7 @@ class TreeHeights(StateNode):
 
             self.heights = new_vector
 
-    def singular_update(self, index, value):
+    def singular_update(self, index: int, value: float):
         for branch_node in self.get_successors():
             if branch_node.get_index() == index:
                 branch_node.update(value)
@@ -915,11 +921,11 @@ class SubstitutionModelParams(StateNode):
 
 class SubstitutionModel(CalculationNode):
 
-    def __init__(self, submodel):
+    def __init__(self, submodel: GTR):
         super().__init__()
         self.sub = submodel
 
-    def update(self, new_sub_model):
+    def update(self, new_sub_model: GTR):
         # Set the new parameters
         self.sub = new_sub_model
         # Mark this node and any nodes upstream as needing to be recalculated
@@ -942,20 +948,22 @@ class SubstitutionModel(CalculationNode):
 
 class ExtantSpecies(StateNode):
 
-    def __init__(self, name, sequence):
+    def __init__(self, name: str, sequence: list):
         super().__init__()
         self.name = name
         self.seq = sequence
 
-    def update(self, new_sequence, new_name):
+    def update(self, new_sequence: list, new_name: str):
         # should only have a single leaf calc node as the parent
-        # TODO: make SNP flexible
         self.seq = new_sequence
         self.name = new_name
-        self.get_successors()[0].update(new_sequence,
-                                        new_name)
-        # Delegate what to do with the sequence to the leaf node,
-        # DON'T KNOW DON'T CARE
+        self.get_successors()[0].update(new_sequence, new_name)
+
+    def seq_len(self):
+        if type(self.seq) is list:
+            return len(self.seq[0])
+        else:
+            return len(self.seq)
 
     def get_seq(self):
         return self.seq
@@ -1094,27 +1102,47 @@ def SNP_compute_partials(matrix: Matrix, phased=False):
 
 
 class SNPLeafNode(NetworkNode, CalculationNode):
+    """
+    SNPLeafNode is a node that holds all group member's SeqRecord objs,
+    for reference when its branch tries to calculate partial likelihoods based on the number of red alleles
+
+    self.sequences is a list of SeqRecord objs
+    self.name is a string
+    """
 
     def __init__(self, partials=None, branch=None, name: str = None):
         super(SNPLeafNode, self).__init__(branch=branch)
-        self.matrix = partials
+        self.sequences = partials
         self.name = name
 
     def node_move_bounds(self):
         return [0, self.parent.get_branch().get()]
 
-    def update(self, new_partials, new_name):
-        self.matrix = SNP_compute_partials(new_partials)
+    def update(self, new_sequences: list, new_name: str):
+        self.sequences = new_sequences
         self.name = new_name
         self.upstream()
 
     def get(self):
         if self.updated:
-            # print("Node <" + str(self.name) + "> needs to be recalculated!")
             return self.calc()
         else:
-            # print("Node <" + str(self.name) + "> returning cached partials!")
             return self.cached
+
+    def samples(self):
+        return len(self.sequences)
+
+    def seq_len(self):
+        for child in self.predecessors:
+            if type(child) is ExtantSpecies:
+                return child.seq_len()
+        raise ModelError("SNP Leaf Node does not have an ExtantSpecies node as a child")
+
+    def red_count(self):
+        tot = np.zeros(self.sequences[0].get_seq().shape)
+        for seq_rec in self.sequences:
+            np.add(tot, seq_rec.get_seq())
+        return tot
 
     def calc(self):
         # mark node as having been recalculated and cache the result
@@ -1152,11 +1180,8 @@ class SNPInternalNode(NetworkNode, CalculationNode):
 
     def get(self):
         if self.updated:
-            # print("Node <" + str(self.name) + "> needs to be recalculated!")
-            # print(self.get_predecessors())
             return self.calc()
         else:
-            # print("Node <" + str(self.name) + "> returning cached partials!")
             return self.cached
 
     def calc(self):
@@ -1194,7 +1219,7 @@ class SNPInternalNode(NetworkNode, CalculationNode):
 
 class SNPBranchNode(CalculationNode):
 
-    def __init__(self, vector_index, branch_length, Q):
+    def __init__(self, vector_index: int, branch_length: float, Q: SNPTransition):
         super().__init__()
         self.top = []
         self.bottom = []
@@ -1229,38 +1254,73 @@ class SNPBranchNode(CalculationNode):
         Returns a list of length 2, element [0] is the bottom likelihoods, element [1] is the top likelihoods
         """
 
+        node_par: SNPLeafNode = self.get_successors()[0]
+        site_count = node_par.seq_len()
+
+        F_b = np.zeros((partials_index(node_par.samples()), site_count))
+
         # BOTTOM: Case 1, the branch is an external branch, so bottom likelihood is just the red counts
+        if type(node_par) is SNPLeafNode:
+            reds = node_par.red_count()
+            for site in range(site_count):
+                for index in range(len(F_b)):  # Wrong len?
+                    actual_index = undo_index(index)
+                    n = actual_index[0]
+                    r = actual_index[1]
+
+                    if reds[site] == r and n == node_par.samples():
+                        F_b[index][site] = 1
 
         # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
+        else:
 
+            # Get the top likelihoods of each of the child branches
+            net_children = self.successors[0].get_children()
+            F_t_y = net_children[0].get_branch().get()[1]
+            F_t_z = net_children[1].get_branch().get()[1]
 
-        F_b = np.zeros(20)
-        
+            for site in range(site_count):
+                for index in range(len(F_b)):
+                    actual_index = undo_index(index)
+                    n = actual_index[0]
+                    r = actual_index[1]
+                    tot = 0
+                    for n_y in range(1, n):
+                        for r_y in range(0, r):
+                            const = math.comb(n_y, r_y) * math.comb(n - n_y, r - r_y) / math.comb(n, r)
+                            tot += F_t_y[partials_index(n_y) + r_y][site] * F_t_z[
+                                partials_index(n - n_y) + r - r_y] * const
+
+                    F_b[index][site] = tot
+
         # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 19. Different impl for external branches?
 
-        m_y  = 0 # Sum of possible lineages
+        m_y = 0  # Sum of possible lineages
         n_t = 0  # Number of lineages at the top
 
         matrix_exp = self.Q.expt(self.branch_length)
 
-        F_t = np.zeros((partials_index(m_y + 1), 1))
+        F_t = np.zeros((partials_index(m_y + 1), site_count))
 
-        for ft_index in range(0, partials_index(m_y + 1)):
-            for n_b in range(n_t, m_y + 1): # n_b always at least 1
-                for r_b in range(0, n_b + 1):
-                    index = partials_index(n_b) + r_b
-                    nt_rt = undo_index(ft_index)
-                    F_t[ft_index] = matrix_exp[nt_rt[0]][nt_rt[1]] * F_b[index]
+        # Do this for each marker
+        for site in range(site_count):
+            for ft_index in range(0, partials_index(m_y + 1)):
+                tot = 0
+                for n_b in range(n_t, m_y + 1):  # n_b always at least 1
+                    for r_b in range(0, n_b + 1):
+                        index = partials_index(n_b) + r_b
+                        nt_rt = undo_index(ft_index)
+                        tot += matrix_exp[nt_rt[0]][nt_rt[1]] * F_b[index][site]
 
+                F_t[ft_index][site] = tot
 
-
-
-        pass
-
+        self.cached = [F_b, F_t]
+        return [F_b, F_t]
 
 
 def partials_index(n):
-    return int(.5 * (n-1) * (n+2))
+    return int(.5 * (n - 1) * (n + 2))
+
 
 def undo_index(num):
     n = math.ceil(math.sqrt(num)) + 1

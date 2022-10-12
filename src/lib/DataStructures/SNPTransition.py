@@ -23,7 +23,7 @@ class SNPTransition:
     Assumption: Matrix indexes start with n=1, r=0, so Q[0][0] is Q(1,0);(1,0)
     """
 
-    def __init__(self, n, u, v, coal):
+    def __init__(self, n: int, u: float, v: float, coal: float):
 
         # Build Q matrix
 
@@ -47,5 +47,3 @@ class SNPTransition:
 
     def expt(self, t):
         return np.real(fractional_matrix_power(self.Q, t))
-
-
