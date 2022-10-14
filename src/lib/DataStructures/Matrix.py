@@ -120,7 +120,7 @@ class Matrix:
 
         # compress the matrix and fill out the locations and count fields
         # TODO: ASK ABOUT SIMPLIFICATION SCHEME
-        if self.type is "DNA":
+        if self.type == "DNA":
             self.simplify()
         else:
             self.uniqueSites = self.seqLen

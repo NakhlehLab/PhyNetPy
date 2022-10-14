@@ -42,10 +42,10 @@ def felsenstein(filenames, model=JC()):
     return trees_2_likelihood
 
 
-files = ["C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex",
-         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex"]
-
-print(felsenstein(files))
+# files = ["C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex",
+#          "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxa1Site.nex"]
+#
+# print(felsenstein(files))
 
 
 def ML_TREE(filenames, treeout, outfile, submodel=JC(), num_iter=3000):

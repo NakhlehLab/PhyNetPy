@@ -1,9 +1,12 @@
-
 import random
 from abc import ABC, abstractmethod
 import numpy as np
 
-from ModelGraph import ModelError
+
+class MoveError(Exception):
+    def __init__(self, message="Error making a move"):
+        self.message = message
+        super().__init__(self.message)
 
 
 class Move(ABC):
@@ -93,7 +96,7 @@ class RootBranchMove(Move, ABC):
 
         children = speciesTreeRoot.get_children()
         if len(children) != 2:
-            raise ModelError("NOT A TREE, There are either too many or not enough children for the root")
+            raise MoveError("NOT A TREE, There are either too many or not enough children for the root")
 
         # Calculate height that is the closest to the root
         leftChildHeight = children[0].get_branch().get()
@@ -133,7 +136,7 @@ class TaxaSwapMove(Move, ABC):
         net_leaves = proposedModel.get_network_leaves()
 
         if len(net_leaves) < 3:
-            raise ModelError("NOT ENOUGH TAXA")
+            raise MoveError("TAXA SWAP: NOT ENOUGH TAXA")
 
         indeces = np.random.choice(len(net_leaves), 2, replace=False)
         first = net_leaves[indeces[0]]

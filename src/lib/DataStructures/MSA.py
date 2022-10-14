@@ -15,6 +15,10 @@ class SeqRecord:
     def get_seq(self):
         return self.seq
 
+    def get_numerical_seq(self):
+        #TODO: TEMPORARY METHOD
+        return [int(char) for char in self.seq]
+
     def get_gid(self):
         return self.gid
 
@@ -28,8 +32,9 @@ class MSA:
     def __init__(self, file, grouping=None):
         self.filename = file
         self.grouping = grouping
-        self.records = self.parse()
         self.hash = {}
+
+        self.records = self.parse()
 
         if self.grouping is None:  # Either the number of records (1 taxa per group) or the number of groups
             self.groups = len(self.records)
@@ -72,7 +77,9 @@ class MSA:
                 if self.grouping is None:
                     recs.append(SeqRecord(chars, taxa))
                 else:
-                    recs.append(SeqRecord(chars, taxa, gid=ids[index]))
+                    new_record = SeqRecord(chars, taxa, gid=ids[index])
+                    recs.append(new_record)
+                    self.hash[ids[index]].append(new_record)
                     index += 1
 
         finally:

@@ -26,6 +26,10 @@ class SNPTransition:
     def __init__(self, n: int, u: float, v: float, coal: float):
 
         # Build Q matrix
+        self.n = n
+        self.u = u
+        self.v = v
+        self.coal = coal
 
         rows = int(.5 * n * (n + 3))
         self.Q = np.zeros((rows, rows))
@@ -47,3 +51,74 @@ class SNPTransition:
 
     def expt(self, t):
         return np.real(fractional_matrix_power(self.Q, t))
+
+    def cols(self):
+        return self.Q.shape[1]
+
+    def solveCentralBlockTransposed(self, _n, y, offset):
+
+        x = np.zeros(_n + 1)
+        K = -(self.coal * (_n * (_n - 1.0))) / (2.0 - _n * self.v + offset)
+
+        if self.u == 0.0 and self.v == 0.0:
+            for r in range(0, _n + 1):
+                x[r] = y[r] / K
+        elif self.u == 0.0:
+            Mrr = K
+            x[0] = y[0] / Mrr
+            for r in range(1, _n + 1):
+                Mrr = K + r * (self.v - self.u)
+                x[r] = (y[r] - ((_n - r + 1.0) * self.v) * x[r - 1]) / Mrr
+        elif self.v == 0.0:
+            Mrr = K + _n * (self.v - self.u)
+            x[_n] = y[_n] / Mrr
+            for r in range(0, _n):
+                r = _n - r - 1
+                Mrr = (K + r * (self.v - self.u))
+                x[r] = (y[r] - ((r + 1.0) * self.u) * x[r + 1]) / Mrr
+        else:
+            d = np.zeros(_n + 1)
+            e = np.zeros(_n + 1)
+            d[0] = K
+            e[0] = y[0]
+            for r in range(1, _n + 1):
+                m = ((_n - r + 1.0) * self.v) / d[r - 1]
+                d[r] = K + r * (self.v - self.u) - m * r * self.u
+                e[r] = y[r] - m * e[r - 1]
+
+            x[_n] = e[_n] / d[_n]
+            for r in range(0, _n):
+                r = _n - r - 1
+                x[r] = (e[r] - (r + 1) * self.u * x[r + 1]) / d[r]
+
+        return x
+
+    def findOrthogonalVector(self):
+
+        dim = self.cols()
+
+        x = np.zeros(dim + 1)
+        xn = np.zeros(self.n + 1)
+        yn = np.zeros(self.n + 1)
+
+        xn[0] = self.u
+        xn[1] = self.v
+        x[1] = self.u
+        x[2] = self.v
+        xptr = 3
+
+        for _n in range(2, self.n + 1):
+            yn[0] = - ((self.coal * (_n - 1.0) * _n) / 2.0) * xn[0]
+            for r in range(1, _n):
+                yn[r] = - ((self.coal * (r - 1.0) * _n) / 2.0) * xn[r - 1] - ((self.coal * (_n - 1.0 - r) * _n) / 2.0) * \
+                        xn[r]
+
+            yn[_n] = - ((self.coal * (_n - 1.0) * _n) / 2.0) * xn[_n - 1]
+
+            xn = self.solveCentralBlockTransposed(_n, yn, 0)
+
+            for i in range(0, len(xn)):
+                x[xptr] = xn[i]
+                xptr += 1
+
+        return x
