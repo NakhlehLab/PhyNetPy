@@ -4,6 +4,14 @@ from scipy.linalg import fractional_matrix_power
 
 
 def map_nr_to_index(n, r):
+    """
+    Takes an (n,r) pair and maps it to a 1d vector index
+
+    (1,0) -> 0
+    (1,1) -> 1
+    (2,0) -> 2
+    ...
+    """
     starts = int(.5 * (n - 1) * (n + 2))
     return starts + r
 
@@ -21,6 +29,12 @@ class SNPTransition:
     4) coal-- the coalescent rate constant, theta
 
     Assumption: Matrix indexes start with n=1, r=0, so Q[0][0] is Q(1,0);(1,0)
+
+    Q Matrix is given by Equation 15 from:
+
+    David Bryant, Remco Bouckaert, Joseph Felsenstein, Noah A. Rosenberg, Arindam RoyChoudhury, Inferring Species Trees
+    Directly from Biallelic Genetic Markers: Bypassing Gene Trees in a Full Coalescent Analysis, Molecular Biology and
+    Evolution, Volume 29, Issue 8, August 2012, Pages 1917–1932, https://doi.org/10.1093/molbev/mss086
     """
 
     def __init__(self, n: int, u: float, v: float, coal: float):
@@ -35,30 +49,34 @@ class SNPTransition:
         self.Q = np.zeros((rows, rows))
         for n_prime in range(1, n + 1):  # n ranges from 1 to individuals sampled (both inclusive)
             for r_prime in range(n_prime + 1):  # r ranges from 0 to n (both inclusive)
-                index = map_nr_to_index(n_prime, r_prime)
+                index = map_nr_to_index(n_prime, r_prime)  # get index from n,r pair
 
+                # EQ 15
                 self.Q[index][index] = -(n_prime * (n_prime - 1) / coal) - (v * (n_prime - r_prime)) - (r_prime * u)
 
-                if n_prime > 0 and r_prime > 0:
+                if 0 < r_prime <= n_prime:
                     self.Q[index][map_nr_to_index(n_prime - 1, r_prime - 1)] = (r_prime - 1) * n_prime / coal
-                elif r_prime > 0:
                     self.Q[index][map_nr_to_index(n_prime, r_prime - 1)] = (n_prime - r_prime + 1) * v
-                elif n_prime > 0 and n_prime > r_prime:
+                if 0 <= r_prime < n_prime:
                     self.Q[index][map_nr_to_index(n_prime - 1, r_prime)] = (n_prime - 1 - r_prime) * n_prime / coal
-
-                if r_prime < n_prime:
                     self.Q[index][map_nr_to_index(n_prime, r_prime + 1)] = (r_prime + 1) * u
 
     def expt(self, t):
+        """
+        Compute exp(Q^t) efficiently using scipy fractional matrix power
+        """
         return np.real(fractional_matrix_power(self.Q, t))
 
     def cols(self):
+        """
+        return the dimension of the Q matrix
+        """
         return self.Q.shape[1]
 
     def solveCentralBlockTransposed(self, _n, y, offset):
 
         x = np.zeros(_n + 1)
-        K = -(self.coal * (_n * (_n - 1.0))) / (2.0 - _n * self.v + offset)
+        K = (-(self.coal * (_n * (_n - 1.0))) / 2.0) - ((_n * self.v) + offset)
 
         if self.u == 0.0 and self.v == 0.0:
             for r in range(0, _n + 1):
@@ -110,8 +128,7 @@ class SNPTransition:
         for _n in range(2, self.n + 1):
             yn[0] = - ((self.coal * (_n - 1.0) * _n) / 2.0) * xn[0]
             for r in range(1, _n):
-                yn[r] = - ((self.coal * (r - 1.0) * _n) / 2.0) * xn[r - 1] - ((self.coal * (_n - 1.0 - r) * _n) / 2.0) * \
-                        xn[r]
+                yn[r] = - ((self.coal * (r - 1.0) * _n) / 2.0) * xn[r - 1] - ((self.coal * (_n - 1.0 - r) * _n) / 2.0) * xn[r]
 
             yn[_n] = - ((self.coal * (_n - 1.0) * _n) / 2.0) * xn[_n - 1]
 
@@ -122,3 +139,18 @@ class SNPTransition:
                 xptr += 1
 
         return x
+
+
+Q = SNPTransition(6, .5, 0, .1)
+print(Q.Q)
+eigvals, eigvecs = np.linalg.eig(Q.Q)
+
+print("--------------------------------")
+#(np.linalg.inv(Q.Q))
+x = Q.findOrthogonalVector()[1:]
+print(x)
+print(np.matmul(Q.Q, x))
+
+print("--------------------------------")
+for vec in eigvecs:
+    print(np.matmul(Q.Q, vec))

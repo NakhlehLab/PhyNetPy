@@ -261,7 +261,7 @@ class Model:
         self.tree_heights = tree_heights_node
         tree_heights_vec = []
 
-        self.snp_Q = SNPTransition(6, .4, .6, .1)
+        self.snp_Q = SNPTransition(6, .5, 0, .1)
 
         # Keep track of which branch maps to what index
         branch_index = 0
@@ -400,7 +400,7 @@ class Model:
         x = self.snp_Q.findOrthogonalVector()[1:]
 
         print("X = " + str(x))
-        print(np.matmul(x, self.snp_Q.Q))
+        print(np.matmul(self.snp_Q.Q, x))
         F_b = self.snp_root.get()
         L = np.zeros(self.data.siteCount())
         for site in range(self.data.siteCount()):

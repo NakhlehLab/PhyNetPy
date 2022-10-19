@@ -51,8 +51,8 @@ class GTR:
 
     def buildQ(self):
         """
-                Populate the Q matrix with the correct values. 
-                Based on https://en.wikipedia.org/wiki/Substitution_model
+        Populate the Q matrix with the correct values.
+        Based on https://en.wikipedia.org/wiki/Substitution_model
         """
         self.Q = np.zeros((self.states, self.states), dtype=np.double)
 

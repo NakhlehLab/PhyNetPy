@@ -252,4 +252,28 @@ class TopologyMove(Move):
         relatives[2].upstream()
 
     def same_move(self, model):
-        pass
+        relatives = self.undo_info[1]
+        choice = self.undo_info[0]
+
+        relatives_model = [None, None, None]
+        node_names = {node.get_name(): node for node in relatives}
+        choice_model = None
+        choice_name = choice.get_name()
+
+        # Use names to map this model instances nodes to the proposed_model nodes
+        for node in model.nodes:
+            if node.get_name() in node_names.keys():
+                index = relatives.index(node_names[node.get_name()])
+                relatives_model[index] = node
+            if node.get_name() == choice_name:
+                choice_model = node
+
+        # Do the operations
+        relatives_model[2].unjoin(choice_model)  # disconnect c1 from n
+        relatives_model[0].unjoin(relatives_model[1])  # disconnect s from par
+        relatives_model[2].join(relatives_model[1])  # connect c1 to par
+        relatives_model[0].join(choice_model)
+
+        # mark each of c1 and choice as needing updating
+        relatives_model[0].upstream()
+        relatives_model[2].upstream()
