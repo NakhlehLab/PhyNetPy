@@ -60,8 +60,7 @@ class UniformBranchMove(Move, ABC):
 
         # Change the branch to a value chosen uniformly from the allowable bounds
         bounds = selected_node.node_move_bounds()
-        new_node_height = np.random.uniform(bounds[0],
-                                            bounds[1])  # Assumes time starts at root and leafs are at max time
+        new_node_height = np.random.uniform(bounds[0], bounds[1])  # Assumes time starts at root and leafs are at max time
 
         self.undo_info = [selected_node, selected_node.get_branch().get()]
         self.same_move_info = [selected_node.get_branch().get_index(), new_node_height]
@@ -92,7 +91,9 @@ class RootBranchMove(Move, ABC):
 
         # get the root and its height
         speciesTreeRoot = proposedModel.felsenstein_root
+
         currentRootHeight = speciesTreeRoot.get_branch().get()
+        print("CURRENT ROOT HEIGHT: " + str(currentRootHeight))
 
         children = speciesTreeRoot.get_children()
         if len(children) != 2:
@@ -200,13 +201,14 @@ class TaxaSwapMove(Move, ABC):
 
 
 class TopologyMove(Move):
-
+    # TODO: Investigate what happens if root node is involved
     def execute(self, model):
         proposedModel = model
 
         valid_focals = {}
 
         for n in proposedModel.internal:
+            print(n.get_name())
             par = n.get_parent()
             children = par.get_children()
             if children[1] == n:
@@ -261,7 +263,9 @@ class TopologyMove(Move):
         choice_name = choice.get_name()
 
         # Use names to map this model instances nodes to the proposed_model nodes
-        for node in model.nodes:
+        netnodes = model.netnodes_sans_root
+        netnodes.append(model.felsenstein_root)  # include root???????
+        for node in netnodes:
             if node.get_name() in node_names.keys():
                 index = relatives.index(node_names[node.get_name()])
                 relatives_model[index] = node

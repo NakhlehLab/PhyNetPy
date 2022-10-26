@@ -71,7 +71,10 @@ class MSA:
 
             for rec in list(msa):
                 if self.grouping is None:  # Do nothing special, no GID applied
-                    recs.append(SeqRecord(rec.seq, rec.name))
+                    new_record = SeqRecord(rec.seq, rec.name, gid=index)
+                    recs.append(new_record)
+                    self.hash[index] = [new_record]
+                    index += 1
                 else:
                     # assign new SeqRecord its own correct GID based on grouping specified
                     new_record = SeqRecord(rec.seq, rec.name, gid=ids[index])
@@ -87,7 +90,10 @@ class MSA:
             index = 0
             for taxa, chars in reader.data:
                 if self.grouping is None:
-                    recs.append(SeqRecord(chars, taxa))
+                    new_record = SeqRecord(chars, taxa, gid=index)
+                    recs.append(new_record)
+                    self.hash[index] = [new_record]
+                    index += 1
                 else:
                     new_record = SeqRecord(chars, taxa, gid=ids[index])
                     recs.append(new_record)

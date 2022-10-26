@@ -88,11 +88,22 @@ def SNAPP_Likelihood(filename, grouping=None):
     """
 
     aln = MSA(filename, grouping)
-    network = CBDP(1, .5,
-                   aln.num_groups()).generateTree()
+    network = CBDP(1, .5, aln.num_groups()).generateTree()
+    network.printGraph()
     snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None)
 
     return snp_model.SNP_likelihood()
 
 
-print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex", [3,2,1]))
+def SNAPP_with_tree(filename):
+    aln = MSA(filename)
+    network = NetworkBuilder(filename).get_all_networks()[0]
+    network.printGraph()
+    snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None)
+
+    return snp_model.SNP_likelihood()
+
+
+# print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex",
+#                        [3, 2, 1]))
+print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex"))

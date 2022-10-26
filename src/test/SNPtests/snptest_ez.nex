@@ -1,0 +1,32 @@
+#NEXUS
+
+
+BEGIN TAXA;
+
+DIMENSIONS NTAX=3;
+
+TAXLABELS
+human
+chimp
+gorilla
+;
+
+END;
+
+BEGIN CHARACTERS;
+DIMENSIONS NCHAR=4;
+FORMAT DATATYPE=SNP MISSING=? GAP=- MATCHCHAR=. ;
+MATRIX
+
+human 0001
+chimp 1111
+gorilla 1111
+;
+
+END;
+
+BEGIN TREES;
+
+TREE uno = ((human:1, chimp:1):1 , gorilla:2);
+
+END;

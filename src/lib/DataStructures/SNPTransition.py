@@ -141,16 +141,16 @@ class SNPTransition:
         return x
 
 
-Q = SNPTransition(6, .5, 0, .1)
-print(Q.Q)
-eigvals, eigvecs = np.linalg.eig(Q.Q)
-
-print("--------------------------------")
-#(np.linalg.inv(Q.Q))
-x = Q.findOrthogonalVector()[1:]
-print(x)
-print(np.matmul(Q.Q, x))
-
-print("--------------------------------")
-for vec in eigvecs:
-    print(np.matmul(Q.Q, vec))
+Q = SNPTransition(3, .5, .5, 1)
+print(Q.expt(2))
+# eigvals, eigvecs = np.linalg.eig(Q.Q)
+#
+# print("--------------------------------")
+# #(np.linalg.inv(Q.Q))
+# x = Q.findOrthogonalVector()[1:]
+# print(x)
+# print(np.matmul(Q.Q, x))
+#
+# print("--------------------------------")
+# for vec in eigvecs:
+#     print(np.matmul(Q.Q, vec))

@@ -46,8 +46,7 @@ class State:
         Generate an initial state by simulating a network and building a model based on that network and some input data.
 
         """
-        network = CBDP(1, .5,
-                       data.get_num_taxa()).generateTree()  # base number of leaves to be the number of groups/taxa
+        network = CBDP(1, .5, data.get_num_taxa()).generateTree()  # base number of leaves to be the number of groups/taxa
         self.current_model = Model(network, data, submodel)
         self.proposed_model = copy.deepcopy(self.current_model)
 

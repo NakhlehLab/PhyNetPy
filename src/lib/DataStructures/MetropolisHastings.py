@@ -32,7 +32,7 @@ class ProposalKernel:
             elif random_num < .8:
                 return UniformBranchMove()
             else:
-                return UniformBranchMove()
+                return TopologyMove()
 
 
 class HillClimbing:
@@ -166,4 +166,4 @@ def test():
     print("----------------------")
 
 
-# test()
+test()
