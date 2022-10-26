@@ -16,7 +16,10 @@ class Node:
     def __init__(self, branch_len=None, parent_nodes=None, attr=None, is_reticulation=False, name=None):
         self.branch_length = branch_len
         self.tempLen = None
-        self.attributes = attr
+        if attr is None:
+            self.attributes = {}
+        else:
+            self.attributes = attr
         self.is_reticulation = is_reticulation
         self.parent = parent_nodes
         self.label = name

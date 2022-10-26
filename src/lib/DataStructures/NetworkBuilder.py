@@ -63,7 +63,7 @@ class NetworkBuilder:
 
             childNode.add_parent(parentNode)
             edges.append([parentNode, childNode])
-            print("ADDING EDGE FROM " + parentNode.get_name() + " TO " + childNode.get_name())
+            #print("ADDING EDGE FROM " + parentNode.get_name() + " TO " + childNode.get_name())
         net.addEdges(edges)
 
         return net
@@ -76,7 +76,8 @@ class NetworkBuilder:
                 IE: #H1 returns "Hybridization", 1
                 IE: #LGT21 returns "Lateral Gene Transfer", 21
 
-                """
+        """
+        print(attrStr)
         if len(attrStr) < 2:
             raise NodeError("reticulation event label formatting incorrect")
 
@@ -163,3 +164,5 @@ class NetworkBuilder:
 
     def name_of_network(self, network):
         return self.name_2_net[network]
+
+
