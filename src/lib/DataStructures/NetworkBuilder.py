@@ -17,7 +17,6 @@ class NetworkBuilder:
         self.name_2_net = {}
         self.build()
 
-
     def build(self):
         """
                 Using the reader object, iterate through each of the trees 
@@ -28,7 +27,7 @@ class NetworkBuilder:
         for t in self.reader.trees:
             # grab the right hand side of the tree definition for the tree, and the left for the name
             name = str(t).split("=")[0].split(" ")[1]
-            handle = StringIO(str(t).split("=")[1])
+            handle = StringIO("=".join(str(t).split("=")[1:]))
 
             # parse the string handle
             tree = Phylo.read(handle, "newick")
@@ -63,7 +62,7 @@ class NetworkBuilder:
 
             childNode.add_parent(parentNode)
             edges.append([parentNode, childNode])
-            #print("ADDING EDGE FROM " + parentNode.get_name() + " TO " + childNode.get_name())
+            # print("ADDING EDGE FROM " + parentNode.get_name() + " TO " + childNode.get_name())
         net.addEdges(edges)
 
         return net
@@ -144,15 +143,17 @@ class NetworkBuilder:
             raise NodeError("Node has a name that contains too many '#' characters. Must only contain 1")
 
         # create new node, with attributes if a reticulation node
-        if (retValue):
+        if retValue:
             newNode = copy.deepcopy(
-                Node(node.branch_length, name=extendedNewickParsedLabel[0], is_reticulation=retValue))
+                Node(node.branch_length, name=extendedNewickParsedLabel[1], is_reticulation=retValue))
             newNode.add_attribute("eventType", eventType)
             newNode.add_attribute("index", num)
         else:
             newNode = copy.deepcopy(
                 Node(node.branch_length, name=extendedNewickParsedLabel[0], is_reticulation=retValue))
 
+        if node.comment is not None:
+            newNode.add_attribute("comment", node.comment)
         network.addNodes(newNode)
         return newNode
 
@@ -166,3 +167,6 @@ class NetworkBuilder:
         return self.name_2_net[network]
 
 
+nb = NetworkBuilder("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\berk_test.nex")
+net = nb.getNetwork(1)
+net.printGraph()
