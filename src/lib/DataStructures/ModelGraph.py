@@ -1,4 +1,5 @@
 import math
+import random
 from abc import ABC, abstractmethod
 from math import comb, pow
 from GTR import *
@@ -91,7 +92,7 @@ class Model:
         self.snp_root = None
         self.submodel_node = None  # type SubstitutionModel
         self.network_node_map = {}
-        self.as_length = True
+        self.as_length = False
         self.snp_Q = None
         if self.data.get_type() == "DNA":
             self.build_felsenstein()
@@ -201,7 +202,7 @@ class Model:
                 new_internal_node = FelsensteinInternalNode(name=node.get_name())
                 self.felsenstein_root = new_internal_node
 
-                #if not self.as_length:
+                # if not self.as_length:
                 branch_height = BranchLengthNode(branch_index, 0)
                 branch_index += 1
                 tree_heights_vec.append(0)
@@ -226,29 +227,29 @@ class Model:
             modelnode2.join(modelnode1)
 
         # all the branches have been added, set the vector for the TreeHeight nodes
-        if self.as_length is False:
-            # Use the branch length adjusted version
-            tree_heights_adj = np.zeros(len(tree_heights_vec))
-            adj_dict = convert_to_heights(self.felsenstein_root, {})
+        # if self.as_length is False:
+        # ADJUST BRANCH LENGTHS TO HEIGHTS
+        tree_heights_adj = np.zeros(len(tree_heights_vec))
+        adj_dict = convert_to_heights(self.felsenstein_root, {})
 
-            # Keep track of the maximum leaf height, this is used to switch the node heights from root centric to
-            # leaf centric
-            max_height = 0
+        # Keep track of the maximum leaf height, this is used to switch the node heights from root centric to
+        # leaf centric
+        max_height = 0
 
-            # Set each node height
-            for node, height in adj_dict.items():
-                tree_heights_adj[node.get_branch().get_index()] = height
-                if height > max_height:
-                    max_height = height
+        # Set each node height
+        for node, height in adj_dict.items():
+            tree_heights_adj[node.get_branch().get_index()] = height
+            if height > max_height:
+                max_height = height
 
-            # Subtract dict height from max child height
-            tree_heights_adj = np.ones(len(tree_heights_adj)) * max_height - tree_heights_adj
+        # Subtract dict height from max child height
+        tree_heights_adj = np.ones(len(tree_heights_adj)) * max_height - tree_heights_adj
 
-            # Update all the branch length nodes to be the proper calculated heights
-            tree_heights_node.update(list(tree_heights_adj))
-        else:
-            # Passed in as branch lengths, no manipulation needed
-            tree_heights_node.update(tree_heights_vec)
+        # Update all the branch length nodes to be the proper calculated heights
+        tree_heights_node.update(list(tree_heights_adj))
+        # else:
+        #     # Passed in as branch lengths, no manipulation needed
+        #     tree_heights_node.update(tree_heights_vec)
 
     def build_SNP(self):
         """
@@ -373,7 +374,7 @@ class Model:
         #     # Update all the branch length nodes to be the proper calculated heights
         #     tree_heights_node.update(list(tree_heights_adj))
         # else:
-            # Passed in as branch lengths, no manipulation needed
+        # Passed in as branch lengths, no manipulation needed
         tree_heights_node.update(tree_heights_vec)
 
     def likelihood(self):
@@ -410,7 +411,7 @@ class Model:
             for n in range(1, self.snp_root.possible_lineages() + 1):
                 for r in range(0, n + 1):
                     print(F_b[partials_index(n) + r][site])
-                    #print(x[partials_index(n)+r])
+                    # print(x[partials_index(n)+r])
                     tot += F_b[partials_index(n) + r][site] * x[partials_index(n) + r]
             L[site] = tot
 
@@ -736,7 +737,7 @@ class NetworkNode(ABC, ModelNode):
             self.successors.append(model_node)
 
         if type(model_node) is FelsensteinInternalNode or type(model_node) is SNPInternalNode:
-            #if self.parent is None:
+            # if self.parent is None:
             self.parent = model_node
 
     def remove_successor(self, model_node):
@@ -803,8 +804,7 @@ class BranchLengthNode(CalculationNode):
         self.branch_length = branch_length
         self.sub = None
         self.updated_sub = True
-        self.as_height = False
-        # TODO: TEST AS BRANCH LENGTH
+        self.as_height = True
 
     def update(self, new_bl: float):
         # update the branch length
@@ -1009,7 +1009,15 @@ class FelsensteinLeafNode(NetworkNode, CalculationNode):
         self.name = name
 
     def node_move_bounds(self):
-        return [0, self.parent.get_branch().get()]
+        """
+        For a leaf node at a given height, it's height may be legally changed within a certain bounds.
+        The height of the node may go as low as the closest parent's height.
+        The height of the node may go as high as its current height
+
+        Returns: interval (low, hi) that gives the parameters for a uniform selection to be made for a new node height.
+        """
+        # TODO: ADAPT FOR NETWORKS TO BE MAX(PARENTS' HEIGHTS)
+        return [self.parent.get_branch().get(), self.branch.get()]
 
     def update(self, new_partials, new_name):
         self.matrix = vec_bin_array(new_partials, 4)
@@ -1047,16 +1055,23 @@ class FelsensteinInternalNode(NetworkNode, CalculationNode):
         self.name = name
 
     def node_move_bounds(self):
+        """
+        For an internal node at a given height, it's height may be legally changed within a certain bounds.
+        The height of the node may go as low as the closest parent's height.
+        The height of the node may go as high as the closest child's height
 
+        Returns: interval (low, hi) that gives the parameters for a uniform selection to be made for a new node height.
+        """
+        # Node can go from its current height up towards parent
         if self.parent is None:
             # root node
-            return None
+            raise ModelError("NODE BOUNDS FUNCTION UNDEFINED FOR ROOT.")
         # Normal internal node
-        if self.parent.get_parent() is None:
-            upper_limit = 0
-        else:
-            upper_limit = self.parent.get_branch().get()
-        lower_limit = max(0, max([child.get_branch().get() for child in self.children]))
+        # TODO: ADAPT FOR NETWORKS, MAX PARENT HEIGHTS
+        lower_limit = self.parent.get_branch().get()
+
+        # Upper limit is defined by the closest (in height) child to the root, which is going to be min(child heights)
+        upper_limit = max(lower_limit, min([child.get_branch().get() for child in self.children]))
         return [lower_limit, upper_limit]
 
     def update(self):
@@ -1257,23 +1272,20 @@ class SNPBranchNode(CalculationNode):
         node_par = self.get_successors()[0]
         if type(node_par) is SNPLeafNode:
             site_count = node_par.seq_len()
-            vector_len = partials_index(node_par.samples() + 1)
         elif type(node_par) is SNPInternalNode:
             site_count = node_par.site_count
-            vector_len = partials_index(node_par.possible_lineages() + 1)
         else:
             raise ModelError("site count error")
 
-        vector_len = partials_index(4) #hard code for now
-
-        #print("VECTOR LENGTH : " + str(vector_len))
-        F_b = np.zeros((vector_len, site_count))
+        vector_len = partials_index(4)  # hard code for now. This is an assumption that I'm using a file with 3 samples
+        F_b = np.zeros((vector_len, site_count))  # Set the size of F_b
 
         # BOTTOM: Case 1, the branch is an external branch, so bottom likelihood is just the red counts
         if type(node_par) is SNPLeafNode:
 
             m_y = node_par.samples()
 
+            # Compute leaf partials via EQ 12
             reds = node_par.red_count()
             print("RED COUNTS: " + str(reds))
             for site in range(site_count):
@@ -1292,7 +1304,7 @@ class SNPBranchNode(CalculationNode):
 
         # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
         else:
-
+            # EQ 19
             # Get the top likelihoods of each of the child branches
             net_children = self.successors[0].get_children()
             F_t_y = net_children[0].get_branch().get()[1]
@@ -1308,28 +1320,32 @@ class SNPBranchNode(CalculationNode):
                     tot = 0
                     for n_y in range(1, n):
                         for r_y in range(0, r + 1):
-                            print("N,R,NY,RY = (" + str(n) + ", " + str(r)+ ", " + str(n_y) + ", " + str(r) + ")")
-                            const = math.comb(n_y, r_y) * math.comb(n - n_y, r - r_y) / math.comb(n, r)
-                            print("CONST = " + str(const))
-                            print("INDEX FTZ: " + str(partials_index(n_y) + r_y))
-                            term1 = F_t_z[partials_index(n_y) + r_y][site]
-                            print("INDEX FTY: " + str(partials_index(n - n_y) + r - r_y))
-                            term2 = F_t_y[partials_index(n - n_y) + r - r_y][site]
+                            if r_y <= n_y and r - r_y <= n - n_y:
+                                print(
+                                    "N,R,NY,RY = (" + str(n) + ", " + str(r) + ", " + str(n_y) + ", " + str(r_y) + ")")
+                                # print("N_y choose R_y: " + str(math.comb(n_y, r_y)))
+                                # print("N - N_y choose R - R_y: " + str(math.comb(n - n_y, r - r_y)))
+                                # print("N choose R: " + str(math.comb(n, r)))
+                                const = math.comb(n_y, r_y) * math.comb(n - n_y, r - r_y) / math.comb(n, r)
+                                # print("CONST = " + str(const))
+                                # print("INDEX FTZ: " + str(partials_index(n_y) + r_y))
+                                term1 = F_t_z[partials_index(n_y) + r_y][site]
+                                # print("INDEX FTY: " + str(partials_index(n - n_y) + r - r_y))
+                                term2 = F_t_y[partials_index(n - n_y) + r - r_y][site]
 
-                            tot += term1 * term2 * const
+                                tot += term1 * term2 * const
 
-                    #print("PRINTING F_b TOT: " + str(tot))
+                    # print("PRINTING F_b TOT: " + str(tot))
                     F_b[index][site] = tot
             print("------------Fb INTERNAL-------------")
             print(node_par.get_name())
             print(F_b)
             print("------------------------------------")
 
-        # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 19
+        # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
         if node_par.parent is not None:
             # ONLY CALCULATE F_T FOR NON ROOT BRANCHES
             F_t = np.zeros((vector_len, site_count))
-            print(self.Qt)
 
             # Do this for each marker
             for site in range(site_count):
@@ -1341,8 +1357,9 @@ class SNPBranchNode(CalculationNode):
                     for n_b in range(n_t, m_y + 1):  # n_b always at least 1
                         for r_b in range(0, n_b + 1):
                             index = partials_index(n_b) + r_b
-                            exp_val = self.Qt[index][ft_index]
-                            print("Nt, Rt, Nb, Rb = [" + str(n_t) + ", " + str(r_t) + ", " + str(n_b) + ", " + str(r_b) + "]")
+                            exp_val = self.Qt[index][ft_index]  # Q(n,r);(n_t, r_t)
+                            print("Nt, Rt, Nb, Rb = [" + str(n_t) + ", " + str(r_t) + ", " + str(n_b) + ", " + str(
+                                r_b) + "]")
                             print("EXP VALUE IS := " + str(exp_val))
                             tot += exp_val * F_b[index][site]
 
@@ -1374,5 +1391,5 @@ def undo_index(num):
     n = int(sol)
     r = num - partials_index(n)
 
-    #print("NUM: " + str(num) + " N: " + str(n) + " R: " + str(r))
+    # print("NUM: " + str(num) + " N: " + str(n) + " R: " + str(r))
     return [n, r]

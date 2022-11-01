@@ -21,7 +21,7 @@ class ProposalKernel:
 
             Input: the state to be manipulated
         """
-        if self.taxa_move_count < 30:
+        if self.taxa_move_count < 300:  #TODO: DOESN'T SCALE
             self.taxa_move_count += 1
             return TaxaSwapMove()
         else:
@@ -152,7 +152,7 @@ def test():
     # print(goalprob)
 
     pr.enable()
-    hill = HillClimbing(ProposalKernel(), JC(), data, 1000)
+    hill = HillClimbing(ProposalKernel(), JC(), data, 3000)
     pr.disable()
     # pr.enable()
     final_state = hill.run()

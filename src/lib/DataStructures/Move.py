@@ -281,3 +281,5 @@ class TopologyMove(Move):
         # mark each of c1 and choice as needing updating
         relatives_model[0].upstream()
         relatives_model[2].upstream()
+
+

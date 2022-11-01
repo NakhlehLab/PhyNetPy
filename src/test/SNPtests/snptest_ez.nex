@@ -14,13 +14,13 @@ gorilla
 END;
 
 BEGIN CHARACTERS;
-DIMENSIONS NCHAR=4;
+DIMENSIONS NCHAR=1;
 FORMAT DATATYPE=SNP MISSING=? GAP=- MATCHCHAR=. ;
 MATRIX
 
-human 0001
-chimp 1111
-gorilla 1111
+human 1
+chimp 1
+gorilla 0
 ;
 
 END;

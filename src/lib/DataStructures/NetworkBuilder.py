@@ -167,6 +167,6 @@ class NetworkBuilder:
         return self.name_2_net[network]
 
 
-nb = NetworkBuilder("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\berk_test.nex")
-net = nb.getNetwork(1)
-net.printGraph()
+# nb = NetworkBuilder("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\berk_test.nex")
+# net = nb.getNetwork(1)
+# net.printGraph()
