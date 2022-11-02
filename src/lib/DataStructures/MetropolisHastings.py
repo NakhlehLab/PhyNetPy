@@ -21,7 +21,7 @@ class ProposalKernel:
 
             Input: the state to be manipulated
         """
-        if self.taxa_move_count < 300:  #TODO: DOESN'T SCALE
+        if self.taxa_move_count < 100:  # TODO: DOESN'T SCALE
             self.taxa_move_count += 1
             return TaxaSwapMove()
         else:
@@ -29,10 +29,13 @@ class ProposalKernel:
 
             if random_num < .1:
                 return RootBranchMove()
-            elif random_num < .8:
+            elif random_num < .6:
                 return UniformBranchMove()
             else:
                 return TopologyMove()
+
+    def reset(self):
+        self.taxa_move_count = 0
 
 
 class HillClimbing:
@@ -101,6 +104,7 @@ class HillClimbing:
             self.current_state.bootstrap(self.data, self.submodel)
             end_state = self.run()
             all_end_states.append(end_state.likelihood())
+            self.kernel.reset()
 
         all_end_states.sort()
         length = len(all_end_states)
@@ -152,16 +156,15 @@ def test():
     # print(goalprob)
 
     pr.enable()
-    hill = HillClimbing(ProposalKernel(), JC(), data, 3000)
+    hill = HillClimbing(ProposalKernel(), JC(), data, 800)
+    final_state = hill.runMany(200)
     pr.disable()
-    # pr.enable()
-    final_state = hill.run()
-    print(final_state)
-    print(final_state.current_model)
-    final_state.current_model.summary(
-        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
-        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
-    # pr.disable()
+    # print(final_state)
+    # print(final_state.current_model)
+    # final_state.current_model.summary(
+    #     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
+    #     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
+    # # pr.disable()
     pr.print_stats(sort="tottime")
     print("----------------------")
 

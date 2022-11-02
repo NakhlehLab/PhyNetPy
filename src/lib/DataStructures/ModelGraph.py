@@ -1071,7 +1071,7 @@ class FelsensteinInternalNode(NetworkNode, CalculationNode):
         lower_limit = self.parent.get_branch().get()
 
         # Upper limit is defined by the closest (in height) child to the root, which is going to be min(child heights)
-        upper_limit = max(lower_limit, min([child.get_branch().get() for child in self.children]))
+        upper_limit = max(0, min([child.get_branch().get() for child in self.children]))
         return [lower_limit, upper_limit]
 
     def update(self):
