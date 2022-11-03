@@ -52,18 +52,29 @@ class SNPTransition:
                 index = map_nr_to_index(n_prime, r_prime)  # get index from n,r pair
 
                 # EQ 15
+
+                # THE DIAGONAL. always calculated
                 self.Q[index][index] = -(n_prime * (n_prime - 1) / coal) - (v * (n_prime - r_prime)) - (r_prime * u)
 
+                # These equations only make sense if r isn't 0 (and the second, if n isn't 1).
                 if 0 < r_prime <= n_prime:
-                    self.Q[index][map_nr_to_index(n_prime - 1, r_prime - 1)] = (r_prime - 1) * n_prime / coal
+                    if n_prime > 1:
+                        self.Q[index][map_nr_to_index(n_prime - 1, r_prime - 1)] = (r_prime - 1) * n_prime / coal
                     self.Q[index][map_nr_to_index(n_prime, r_prime - 1)] = (n_prime - r_prime + 1) * v
+
+                # These equations only make sense if r is strictly less than n (and the second, if n is not 1).
                 if 0 <= r_prime < n_prime:
-                    self.Q[index][map_nr_to_index(n_prime - 1, r_prime)] = (n_prime - 1 - r_prime) * n_prime / coal
+                    if n_prime > 1:
+                        self.Q[index][map_nr_to_index(n_prime - 1, r_prime)] = (n_prime - 1 - r_prime) * n_prime / coal
                     self.Q[index][map_nr_to_index(n_prime, r_prime + 1)] = (r_prime + 1) * u
 
     def expt(self, t):
         """
         Compute exp(Q^t) efficiently using scipy fractional matrix power
+        WARNING: USING VALUES LIKE 1.5 IS DANGEROUS. IF THERE DOES NOT EXIST MATRIX A such that A*A = Q, THERE WILL BE
+        NO SOLUTION, AND THAT IS NOT GUARANTEED.
+
+        TODO: What happens when branch lengths are 1.5????
         """
         return np.real(fractional_matrix_power(self.Q, t))
 
@@ -142,15 +153,5 @@ class SNPTransition:
 
 
 Q = SNPTransition(3, .5, .5, 1)
-print(Q.expt(2))
-# eigvals, eigvecs = np.linalg.eig(Q.Q)
-#
-# print("--------------------------------")
-# #(np.linalg.inv(Q.Q))
-# x = Q.findOrthogonalVector()[1:]
-# print(x)
-# print(np.matmul(Q.Q, x))
-#
-# print("--------------------------------")
-# for vec in eigvecs:
-#     print(np.matmul(Q.Q, vec))
+print(Q.Q)
+

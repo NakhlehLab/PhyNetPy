@@ -262,7 +262,7 @@ class Model:
         self.tree_heights = tree_heights_node
         tree_heights_vec = []
 
-        self.snp_Q = SNPTransition(3, .5, .5, 1)
+        self.snp_Q = SNPTransition(3, .6, .4, .1)
 
         # Keep track of which branch maps to what index
         branch_index = 0
@@ -401,7 +401,7 @@ class Model:
         x = self.snp_Q.findOrthogonalVector()[1:]
 
         print("X = " + str(x))
-        print(np.matmul(self.snp_Q.Q, x))
+        print(np.matmul(x, self.snp_Q.Q))
         F_b = self.snp_root.get()
         L = np.zeros(self.data.siteCount())
 
@@ -1163,8 +1163,8 @@ class SNPLeafNode(NetworkNode, CalculationNode):
     def red_count(self):
         tot = np.zeros(len(self.sequences[0].get_seq()))
         for seq_rec in self.sequences:
-            print("NAME OF SNP NODE: " + self.name)
-            print("NAME OF SEQ: " + seq_rec.get_name())
+            # print("NAME OF SNP NODE: " + self.name)
+            # print("NAME OF SEQ: " + seq_rec.get_name())
             tot = np.add(tot, np.array(seq_rec.get_numerical_seq()))
         return tot
 
@@ -1236,12 +1236,10 @@ class SNPBranchNode(CalculationNode):
         self.as_height = True
         self.Q = Q
         self.Qt = self.Q.expt(self.branch_length)
-        print("CALC EXPT ON NEW BL: " + str(self.branch_length))
 
     def update(self, new_bl):
         # update the branch length
         self.branch_length = new_bl
-        print("CALC EXPT ON NEW BL: " + str(new_bl))
         self.Qt = self.Q.expt(self.branch_length)  # Eager compute exp(Qt) only after having updated the branch length
 
         # Mark this node and any nodes upstream as needing to be recalculated
@@ -1268,6 +1266,8 @@ class SNPBranchNode(CalculationNode):
 
         Returns a list of length 2, element [0] is the bottom likelihoods, element [1] is the top likelihoods
         """
+        # SET TO FALSE IF YOU DON'T WANT EXCESSIVE OUTPUT
+        debug = True
 
         node_par = self.get_successors()[0]
         if type(node_par) is SNPLeafNode:
@@ -1277,6 +1277,7 @@ class SNPBranchNode(CalculationNode):
         else:
             raise ModelError("site count error")
 
+        # SET VECTOR LENGTH TO 1 MORE THAN THE NUMBER OF SAMPLES. THIS NEEDS TO BE FIXED LONG TERM DUH
         vector_len = partials_index(4)  # hard code for now. This is an assumption that I'm using a file with 3 samples
         F_b = np.zeros((vector_len, site_count))  # Set the size of F_b
 
@@ -1287,20 +1288,24 @@ class SNPBranchNode(CalculationNode):
 
             # Compute leaf partials via EQ 12
             reds = node_par.red_count()
-            print("RED COUNTS: " + str(reds))
+            if debug:
+                print("RED COUNTS: " + str(reds))
+
             for site in range(site_count):
                 for index in range(vector_len):
                     actual_index = undo_index(index)
                     n = actual_index[0]
                     r = actual_index[1]
 
+                    # EQUATION 12
                     if reds[site] == r and n == node_par.samples():
                         F_b[index][site] = 1
 
-            print("------------Fb LEAF-------------")
-            print(node_par.get_name())
-            print(F_b)
-            print("--------------------------------")
+            if debug:
+                print("------------Fb LEAF-------------")
+                print(node_par.get_name())
+                print(F_b)
+                print("--------------------------------")
 
         # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
         else:
@@ -1318,29 +1323,29 @@ class SNPBranchNode(CalculationNode):
                     n = actual_index[0]
                     r = actual_index[1]
                     tot = 0
+
+                    # EQUATION 19
                     for n_y in range(1, n):
                         for r_y in range(0, r + 1):
-                            if r_y <= n_y and r - r_y <= n - n_y:
-                                print(
-                                    "N,R,NY,RY = (" + str(n) + ", " + str(r) + ", " + str(n_y) + ", " + str(r_y) + ")")
-                                # print("N_y choose R_y: " + str(math.comb(n_y, r_y)))
-                                # print("N - N_y choose R - R_y: " + str(math.comb(n - n_y, r - r_y)))
-                                # print("N choose R: " + str(math.comb(n, r)))
+                            if r_y <= n_y and r - r_y <= n - n_y:  # Ensure that the combinatorics makes sense
+                                # Compute the constant term
                                 const = math.comb(n_y, r_y) * math.comb(n - n_y, r - r_y) / math.comb(n, r)
-                                # print("CONST = " + str(const))
-                                # print("INDEX FTZ: " + str(partials_index(n_y) + r_y))
+
+                                # Grab Ftz(n_y, r_y)
                                 term1 = F_t_z[partials_index(n_y) + r_y][site]
-                                # print("INDEX FTY: " + str(partials_index(n - n_y) + r - r_y))
+
+                                # Grab Fty(n - n_y, r - r_y)
                                 term2 = F_t_y[partials_index(n - n_y) + r - r_y][site]
 
                                 tot += term1 * term2 * const
 
-                    # print("PRINTING F_b TOT: " + str(tot))
                     F_b[index][site] = tot
-            print("------------Fb INTERNAL-------------")
-            print(node_par.get_name())
-            print(F_b)
-            print("------------------------------------")
+
+            if debug:
+                print("------------Fb INTERNAL-------------")
+                print(node_par.get_name())
+                print(F_b)
+                print("------------------------------------")
 
         # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
         if node_par.parent is not None:
@@ -1358,17 +1363,22 @@ class SNPBranchNode(CalculationNode):
                         for r_b in range(0, n_b + 1):
                             index = partials_index(n_b) + r_b
                             exp_val = self.Qt[index][ft_index]  # Q(n,r);(n_t, r_t)
-                            print("Nt, Rt, Nb, Rb = [" + str(n_t) + ", " + str(r_t) + ", " + str(n_b) + ", " + str(
-                                r_b) + "]")
-                            print("EXP VALUE IS := " + str(exp_val))
+
+                            if debug:
+                                print("Nt, Rt, Nb, Rb = [" + str(n_t) + ", " + str(r_t) + ", " + str(n_b) + ", " + str(
+                                    r_b) + "]")
+                                print("EXP VALUE IS := " + str(exp_val))
+
                             tot += exp_val * F_b[index][site]
 
                     F_t[ft_index][site] = tot
 
-            print("------------Ft-------------")
-            print(node_par.get_name())
-            print(F_t)
-            print("---------------------------")
+            if debug:
+                print("------------Ft-------------")
+                print(node_par.get_name())
+                print(F_t)
+                print("---------------------------")
+
             self.cached = [F_b, F_t]
             self.updated = False
             return [F_b, F_t]
@@ -1391,5 +1401,4 @@ def undo_index(num):
     n = int(sol)
     r = num - partials_index(n)
 
-    # print("NUM: " + str(num) + " N: " + str(n) + " R: " + str(r))
     return [n, r]
