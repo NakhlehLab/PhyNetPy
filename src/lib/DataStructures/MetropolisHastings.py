@@ -1,6 +1,6 @@
 from State import State
-from src.lib.DataStructures.MSA import MSA
-from src.lib.DataStructures.Matrix import Matrix
+from MSA import MSA
+from Matrix import Matrix
 
 import cProfile
 
@@ -169,4 +169,4 @@ def test():
     print("----------------------")
 
 
-test()
+#test()

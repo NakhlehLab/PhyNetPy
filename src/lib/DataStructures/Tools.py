@@ -3,11 +3,11 @@ from Matrix import Matrix
 from Bio import AlignIO
 from NetworkBuilder import NetworkBuilder
 from GTR import *
-from src.lib.DataStructures.Alphabet import Alphabet
-from src.lib.DataStructures.BirthDeath import CBDP
-from src.lib.DataStructures.MSA import MSA
-from src.lib.DataStructures.MetropolisHastings import ProposalKernel, HillClimbing
-from src.lib.DataStructures.ModelGraph import Model
+from Alphabet import Alphabet
+from BirthDeath import CBDP
+from MSA import MSA
+from MetropolisHastings import ProposalKernel, HillClimbing
+from ModelGraph import Model
 
 
 def felsenstein(filenames, model=JC()):
