@@ -114,5 +114,11 @@ class MSA:
         Returns: the set (as a list) of SeqRecords that have a given gid
         """
         return self.hash[gid]
+    
+    def seq_by_name(self, name):
+        for record in self.records:
+            if record.get_name() == name:
+                return [record]
+                
 
 

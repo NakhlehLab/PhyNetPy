@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.linalg
 from scipy.linalg import fractional_matrix_power
+from scipy.linalg import expm
 
 
 def map_nr_to_index(n, r):
@@ -76,7 +77,7 @@ class SNPTransition:
 
         TODO: What happens when branch lengths are 1.5????
         """
-        return np.real(fractional_matrix_power(self.Q, t))
+        return expm(self.Q * t)
 
     def cols(self):
         """
@@ -152,6 +153,6 @@ class SNPTransition:
         return x
 
 
-Q = SNPTransition(3, .5, .5, 1)
+Q = SNPTransition(3, 1, 1, .2)
 print(Q.Q)
 

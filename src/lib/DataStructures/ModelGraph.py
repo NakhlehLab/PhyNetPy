@@ -3,11 +3,12 @@ import random
 from abc import ABC, abstractmethod
 from math import comb, pow
 from GTR import *
-from src.lib.DataStructures.Graph import DAG
-from src.lib.DataStructures.Matrix import Matrix
-from src.lib.DataStructures.Move import Move
-from src.lib.DataStructures.SNPTransition import SNPTransition
-
+from Graph import DAG
+from Matrix import Matrix
+from Move import Move
+from SNPTransition import SNPTransition
+from scipy.special import binom
+import scipy
 
 def vec_bin_array(arr, m):
     """
@@ -262,7 +263,7 @@ class Model:
         self.tree_heights = tree_heights_node
         tree_heights_vec = []
 
-        self.snp_Q = SNPTransition(3, .6, .4, .1)
+        self.snp_Q = SNPTransition(3, 1, 1, .2)
 
         # Keep track of which branch maps to what index
         branch_index = 0
@@ -281,7 +282,8 @@ class Model:
                 tree_heights_node.join(branch)
 
                 # Add sequences for each group to a new SNP leaf node
-                sequences = self.data.aln.group_given_id(group_no)
+                #sequences = self.data.aln.group_given_id(group_no)
+                sequences = self.data.aln.seq_by_name(node.get_name())
                 group_no += 1
 
                 new_leaf_node = SNPLeafNode(partials=sequences, branch=branch,
@@ -397,23 +399,24 @@ class Model:
         return np.sum(np.log(np.matmul(partials, base_freqs)))
 
     def SNP_likelihood(self):
+        
+        q_null_space = scipy.linalg.null_space(self.snp_Q.Q)
+        x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
 
-        x = self.snp_Q.findOrthogonalVector()[1:]
+        # x = self.snp_Q.findOrthogonalVector()[1:]
 
-        print("X = " + str(x))
-        print(np.matmul(x, self.snp_Q.Q))
         F_b = self.snp_root.get()
         L = np.zeros(self.data.siteCount())
-
+        print("---root fb----")
+        print(F_b)
+        print("--------------")
         # EQ 20, Root probabilities
         for site in range(self.data.siteCount()):
-            tot = 0
-            for n in range(1, self.snp_root.possible_lineages() + 1):
-                for r in range(0, n + 1):
-                    print(F_b[partials_index(n) + r][site])
-                    # print(x[partials_index(n)+r])
-                    tot += F_b[partials_index(n) + r][site] * x[partials_index(n) + r]
-            L[site] = tot
+            # tot = 0
+            # for n in range(1, self.snp_root.possible_lineages() + 1):
+            #     for r in range(0, n + 1):                    
+            #         tot += F_b[partials_index(n) + r][site] * x[partials_index(n) + r]
+            L[site] = np.dot(F_b[:, site], x)
 
         print(L)
         return np.sum(np.log(L))
@@ -1163,8 +1166,6 @@ class SNPLeafNode(NetworkNode, CalculationNode):
     def red_count(self):
         tot = np.zeros(len(self.sequences[0].get_seq()))
         for seq_rec in self.sequences:
-            # print("NAME OF SNP NODE: " + self.name)
-            # print("NAME OF SEQ: " + seq_rec.get_name())
             tot = np.add(tot, np.array(seq_rec.get_numerical_seq()))
         return tot
 
@@ -1266,10 +1267,10 @@ class SNPBranchNode(CalculationNode):
 
         Returns a list of length 2, element [0] is the bottom likelihoods, element [1] is the top likelihoods
         """
-        # SET TO FALSE IF YOU DON'T WANT EXCESSIVE OUTPUT
-        debug = True
-
+        
+        #Get the network node parent of this branch object
         node_par = self.get_successors()[0]
+        
         if type(node_par) is SNPLeafNode:
             site_count = node_par.seq_len()
         elif type(node_par) is SNPInternalNode:
@@ -1288,8 +1289,6 @@ class SNPBranchNode(CalculationNode):
 
             # Compute leaf partials via EQ 12
             reds = node_par.red_count()
-            if debug:
-                print("RED COUNTS: " + str(reds))
 
             for site in range(site_count):
                 for index in range(vector_len):
@@ -1301,12 +1300,6 @@ class SNPBranchNode(CalculationNode):
                     if reds[site] == r and n == node_par.samples():
                         F_b[index][site] = 1
 
-            if debug:
-                print("------------Fb LEAF-------------")
-                print(node_par.get_name())
-                print(F_b)
-                print("--------------------------------")
-
         # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
         else:
             # EQ 19
@@ -1315,8 +1308,8 @@ class SNPBranchNode(CalculationNode):
             F_t_y = net_children[0].get_branch().get()[1]
             F_t_z = net_children[1].get_branch().get()[1]
 
-            m_y = node_par.possible_lineages()  # Sum of possible lineages
-
+            m_y = node_par.possible_lineages()  # Sum of possible 
+            
             for site in range(site_count):
                 for index in range(vector_len):
                     actual_index = undo_index(index)
@@ -1341,43 +1334,26 @@ class SNPBranchNode(CalculationNode):
 
                     F_b[index][site] = tot
 
-            if debug:
-                print("------------Fb INTERNAL-------------")
-                print(node_par.get_name())
-                print(F_b)
-                print("------------------------------------")
-
         # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
         if node_par.parent is not None:
             # ONLY CALCULATE F_T FOR NON ROOT BRANCHES
             F_t = np.zeros((vector_len, site_count))
-
+            
             # Do this for each marker
             for site in range(site_count):
                 for ft_index in range(0, vector_len):
                     tot = 0
                     actual_index = undo_index(ft_index)
                     n_t = actual_index[0]
-                    r_t = actual_index[1]
+        
                     for n_b in range(n_t, m_y + 1):  # n_b always at least 1
                         for r_b in range(0, n_b + 1):
                             index = partials_index(n_b) + r_b
                             exp_val = self.Qt[index][ft_index]  # Q(n,r);(n_t, r_t)
 
-                            if debug:
-                                print("Nt, Rt, Nb, Rb = [" + str(n_t) + ", " + str(r_t) + ", " + str(n_b) + ", " + str(
-                                    r_b) + "]")
-                                print("EXP VALUE IS := " + str(exp_val))
-
                             tot += exp_val * F_b[index][site]
 
                     F_t[ft_index][site] = tot
-
-            if debug:
-                print("------------Ft-------------")
-                print(node_par.get_name())
-                print(F_t)
-                print("---------------------------")
 
             self.cached = [F_b, F_t]
             self.updated = False
