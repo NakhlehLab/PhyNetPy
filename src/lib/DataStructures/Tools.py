@@ -84,7 +84,7 @@ def SNAPP_Likelihood(filename, grouping=None):
 
     filename-- the path to a nexus file
     grouping-- an array that tells the MSA how to group the taxa for sampling. If left None, then each taxon will be its
-               own group. Format is the number of taxa in each group, ie for 6 total, [2, 3, 1] is a valid grouping
+               own group. Format is the number of taxa in each group, ie for 6 total, [3, 2, 1] is a valid grouping
     """
 
     aln = MSA(filename, grouping)
@@ -109,8 +109,9 @@ def SNAPP_with_tree(filename, u, v, coal, show_partials = False, path=None):
 # print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex",
 #                        [3, 2, 1]))
 
-print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
+#print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
 
 # print(ML_TREE(["C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex"], ))
 
-n = CBDP(.2, .02, 50).generateTree().visualize_graph("tree2.html")
+n = CBDP(.2, .02, 50).generateTree()
+print(n.sim_seqs(15))

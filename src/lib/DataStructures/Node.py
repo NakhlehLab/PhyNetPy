@@ -23,6 +23,7 @@ class Node:
         self.is_reticulation = is_reticulation
         self.parent = parent_nodes
         self.label = name
+        self.seq = None
 
     def length(self):
         """
@@ -130,6 +131,12 @@ class Node:
             return self.attributes[attr]
         else:
             return None
+    
+    def set_seq(self, sequence : str):
+        self.seq = sequence
+    
+    def get_seq(self)->str:
+        return self.seq
 
 
 class UltrametricNode(Node):

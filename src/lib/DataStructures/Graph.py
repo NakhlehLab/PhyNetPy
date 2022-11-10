@@ -2,7 +2,10 @@ from collections import deque
 from Node import Node
 from pyvis.network import Network as N
 from IPython.display import display, HTML
-import webbrowser
+from GTR import *
+import numpy as np
+from SequenceSim import *
+
 
 
 def newickSubstring(children, node):
@@ -288,7 +291,7 @@ class DAG(Graph):
             
             for neighbor in children:
 
-                dist[neighbor] = dist[cur] + 1 #(neighbor.length())
+                dist[neighbor] = dist[cur] + (neighbor.length())
                 net.add_node(node_id, label=neighbor.get_name(), level=dist[neighbor])
                 ids[neighbor] = node_id
                 node_id += 1
@@ -304,6 +307,31 @@ class DAG(Graph):
         else:
             net.show(path)
             
+    def sim_seqs(self, seq_len:int , submodel=JC()) -> dict:
+        
+        root = self.findRoot()[0]
+        sim = SeqSim()
+        alphabet = ['A', 'C', 'G', 'T']
+        seqs = {root.get_name() : np.random.choice(alphabet, seq_len, p=submodel.get_hyperparams()[0].reshape((4,)))}
+        
+        q = deque()
+        q.appendleft(root)
+
+        while len(q) != 0:
+            cur = q.pop()
+            
+            children = self.findDirectSuccessors(cur)
+            
+            for neighbor in children:
+                #Modify substitution model?
+                
+                sim.change_transition(neighbor.length())
+                seqs[neighbor.get_name()] = sim.modify_seq(seqs[cur.get_name()])
+                q.appendleft(neighbor)
+
+    
+        return seqs
+        
         
     
         
