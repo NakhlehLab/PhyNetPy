@@ -196,3 +196,5 @@ class TN93(GTR):
             raise SubstitutionModelError("Error in TN93 Transversions. Not all equal")
 
         super().__init__(base_freqs, transitions, 4)
+
+
