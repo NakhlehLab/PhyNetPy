@@ -95,15 +95,22 @@ def SNAPP_Likelihood(filename, grouping=None):
     return snp_model.SNP_likelihood()
 
 
-def SNAPP_with_tree(filename):
+def SNAPP_with_tree(filename, u, v, coal, show_partials = False, path=None):
     aln = MSA(filename)
     network = NetworkBuilder(filename).get_all_networks()[0]
     network.printGraph()
-    snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None)
+    snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal}
+    snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None, snp_params=snp_params, verbose = show_partials)
+    snp_model.network.visualize_graph(path)
 
     return snp_model.SNP_likelihood()
 
 
 # print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex",
 #                        [3, 2, 1]))
-print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex"))
+
+print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
+
+# print(ML_TREE(["C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex"], ))
+
+n = CBDP(.2, .02, 50).generateTree().visualize_graph("tree2.html")
