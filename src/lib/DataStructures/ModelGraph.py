@@ -9,6 +9,7 @@ from Move import Move
 from SNPTransition import SNPTransition
 from scipy.special import binom
 import scipy
+from SNPModule import *
 
 def vec_bin_array(arr, m):
     """
@@ -81,26 +82,54 @@ class Model:
     Class that describes a DAG structure that lazily computes a model likelihood.
     """
 
-    def __init__(self, network: DAG, data: Matrix, submodel=JC()):
+    def __init__(self, network: DAG, data: Matrix, submodel=JC(), snp_params:dict = None, verbose = False):
+        """
+
+        Args:
+            network (DAG): The network/tree
+            data (Matrix): The sequence data
+            submodel (GTR, optional): Any subclass of GTR. Defaults to JC().
+            snp_params (dict, optional): dict that holds snp parameters u,v, 
+                                         and theta (coalescent rate), as well as 
+                                         the total number of samples. Defaults to None.
+            verbose (bool, optional): Flag that, if enabled, prints out partial likelihoods for each node. Defaults to False.
+
+        Raises:
+            ModelError: _description_
+            ModelError: _description_
+            
+        """
         self.network = network
         self.sub = submodel
         self.data = data
+        self.verbose_out = verbose
+        
         self.nodes = []
         self.netnodes_sans_root = []
         self.network_leaves = []
+        
         self.tree_heights = None  # type TreeHeights
         self.felsenstein_root = None
         self.snp_root = None
-        self.submodel_node = None  # type SubstitutionModel
+        self.submodel_node = None # type SubstitutionModel
+       
         self.network_node_map = {}
         self.as_length = False
         self.snp_Q = None
+        
         if self.data.get_type() == "DNA":
             self.build_felsenstein()
         elif self.data.get_type() == "SNP":
-            self.build_SNP()
+            if snp_params is None:
+                raise ModelError("No parameters passed in for SNP model")
+            else:
+                self.build_SNP(snp_params)
         elif self.data.get_type() == "BINARY":
-            self.build_SNP()
+            if snp_params is None:
+                raise ModelError("No parameters passed in for Binary/SNP model")
+            else:
+                self.build_SNP(snp_params)
+                
         self.internal = [item for item in self.netnodes_sans_root if item not in self.network_leaves]
         self.summary_str = ""
 
@@ -252,7 +281,7 @@ class Model:
         #     # Passed in as branch lengths, no manipulation needed
         #     tree_heights_node.update(tree_heights_vec)
 
-    def build_SNP(self):
+    def build_SNP(self, snp_params):
         """
         Make a model graph for SNP likelihoods
 
@@ -263,7 +292,7 @@ class Model:
         self.tree_heights = tree_heights_node
         tree_heights_vec = []
 
-        self.snp_Q = SNPTransition(3, 1, 1, .2)
+        self.snp_Q = SNPTransition(snp_params["samples"], snp_params["u"], snp_params["v"], snp_params["coal"])
 
         # Keep track of which branch maps to what index
         branch_index = 0
@@ -394,6 +423,14 @@ class Model:
         # Should be the only child of the substitution model node
         params_state = self.submodel_node.get_predecessors()[0]
         base_freqs = params_state.base_freqs.reshape((4,))
+        
+        if self.verbose_out: #Display all cached partials
+            for node in self.netnodes_sans_root:
+                
+                print("------" + node.get_name() + "------")
+                print(node.get())
+                print("-------------------------------")
+                print("       ")
 
         # tally up the logs of the dot products
         return np.sum(np.log(np.matmul(partials, base_freqs)))
@@ -403,22 +440,34 @@ class Model:
         q_null_space = scipy.linalg.null_space(self.snp_Q.Q)
         x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
 
-        # x = self.snp_Q.findOrthogonalVector()[1:]
-
         F_b = self.snp_root.get()
         L = np.zeros(self.data.siteCount())
-        print("---root fb----")
-        print(F_b)
-        print("--------------")
+       
         # EQ 20, Root probabilities
         for site in range(self.data.siteCount()):
-            # tot = 0
-            # for n in range(1, self.snp_root.possible_lineages() + 1):
-            #     for r in range(0, n + 1):                    
-            #         tot += F_b[partials_index(n) + r][site] * x[partials_index(n) + r]
             L[site] = np.dot(F_b[:, site], x)
+            
+        if self.verbose_out: #Display all cached partials
+            for node in self.netnodes_sans_root:
+                branch = node.get_branch()
+                f_t = branch.get()[1]
+                f_b = branch.get()[0]
+                print("------" + node.get_name() + "------")
+                print("F_t :")
+                print(f_t)
+                print("F_b :")
+                print(f_b)
+                print("-------------------------------")
+                print("       ")
+            
+            # finally, print root probabilities
+            print("------ROOT PROBS------")
+            print("F_b :")
+            print(F_b)
+            print("-------------------------------")
+            print("       ")
+            
 
-        print(L)
         return np.sum(np.log(L))
 
     def execute_move(self, move: Move):
@@ -1228,7 +1277,7 @@ class SNPInternalNode(NetworkNode, CalculationNode):
 
 class SNPBranchNode(CalculationNode):
 
-    def __init__(self, vector_index: int, branch_length: float, Q: SNPTransition):
+    def __init__(self, vector_index: int, branch_length: float, Q: SNPTransition, verbose = False):
         super().__init__()
         self.top = []
         self.bottom = []
@@ -1237,6 +1286,7 @@ class SNPBranchNode(CalculationNode):
         self.as_height = True
         self.Q = Q
         self.Qt = self.Q.expt(self.branch_length)
+        self.verbose = verbose
 
     def update(self, new_bl):
         # update the branch length
@@ -1299,7 +1349,7 @@ class SNPBranchNode(CalculationNode):
                     # EQUATION 12
                     if reds[site] == r and n == node_par.samples():
                         F_b[index][site] = 1
-
+                       
         # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
         else:
             # EQ 19
@@ -1348,7 +1398,7 @@ class SNPBranchNode(CalculationNode):
         
                     for n_b in range(n_t, m_y + 1):  # n_b always at least 1
                         for r_b in range(0, n_b + 1):
-                            index = partials_index(n_b) + r_b
+                            index = map_nr_to_index(n_b, r_b)
                             exp_val = self.Qt[index][ft_index]  # Q(n,r);(n_t, r_t)
 
                             tot += exp_val * F_b[index][site]
@@ -1364,17 +1414,4 @@ class SNPBranchNode(CalculationNode):
             return F_b
 
 
-def partials_index(n):
-    return int(.5 * (n - 1) * (n + 2))
 
-
-def undo_index(num):
-    a = 1
-    b = 1
-    c = -2 - 2 * num
-    d = (b ** 2) - (4 * a * c)
-    sol = (-b + math.sqrt(d)) / (2 * a)
-    n = int(sol)
-    r = num - partials_index(n)
-
-    return [n, r]

@@ -1,20 +1,6 @@
 import numpy as np
-import scipy.linalg
-from scipy.linalg import fractional_matrix_power
 from scipy.linalg import expm
-
-
-def map_nr_to_index(n, r):
-    """
-    Takes an (n,r) pair and maps it to a 1d vector index
-
-    (1,0) -> 0
-    (1,1) -> 1
-    (2,0) -> 2
-    ...
-    """
-    starts = int(.5 * (n - 1) * (n + 2))
-    return starts + r
+from SNPModule import map_nr_to_index
 
 
 class SNPTransition:
@@ -71,11 +57,7 @@ class SNPTransition:
 
     def expt(self, t):
         """
-        Compute exp(Q^t) efficiently using scipy fractional matrix power
-        WARNING: USING VALUES LIKE 1.5 IS DANGEROUS. IF THERE DOES NOT EXIST MATRIX A such that A*A = Q, THERE WILL BE
-        NO SOLUTION, AND THAT IS NOT GUARANTEED.
-
-        TODO: What happens when branch lengths are 1.5????
+        Compute exp(Qt) efficiently
         """
         return expm(self.Q * t)
 
@@ -85,74 +67,5 @@ class SNPTransition:
         """
         return self.Q.shape[1]
 
-    def solveCentralBlockTransposed(self, _n, y, offset):
-
-        x = np.zeros(_n + 1)
-        K = (-(self.coal * (_n * (_n - 1.0))) / 2.0) - ((_n * self.v) + offset)
-
-        if self.u == 0.0 and self.v == 0.0:
-            for r in range(0, _n + 1):
-                x[r] = y[r] / K
-        elif self.u == 0.0:
-            Mrr = K
-            x[0] = y[0] / Mrr
-            for r in range(1, _n + 1):
-                Mrr = K + r * (self.v - self.u)
-                x[r] = (y[r] - ((_n - r + 1.0) * self.v) * x[r - 1]) / Mrr
-        elif self.v == 0.0:
-            Mrr = K + _n * (self.v - self.u)
-            x[_n] = y[_n] / Mrr
-            for r in range(0, _n):
-                r = _n - r - 1
-                Mrr = (K + r * (self.v - self.u))
-                x[r] = (y[r] - ((r + 1.0) * self.u) * x[r + 1]) / Mrr
-        else:
-            d = np.zeros(_n + 1)
-            e = np.zeros(_n + 1)
-            d[0] = K
-            e[0] = y[0]
-            for r in range(1, _n + 1):
-                m = ((_n - r + 1.0) * self.v) / d[r - 1]
-                d[r] = K + r * (self.v - self.u) - m * r * self.u
-                e[r] = y[r] - m * e[r - 1]
-
-            x[_n] = e[_n] / d[_n]
-            for r in range(0, _n):
-                r = _n - r - 1
-                x[r] = (e[r] - (r + 1) * self.u * x[r + 1]) / d[r]
-
-        return x
-
-    def findOrthogonalVector(self):
-
-        dim = self.cols()
-
-        x = np.zeros(dim + 1)
-        xn = np.zeros(self.n + 1)
-        yn = np.zeros(self.n + 1)
-
-        xn[0] = self.u
-        xn[1] = self.v
-        x[1] = self.u
-        x[2] = self.v
-        xptr = 3
-
-        for _n in range(2, self.n + 1):
-            yn[0] = - ((self.coal * (_n - 1.0) * _n) / 2.0) * xn[0]
-            for r in range(1, _n):
-                yn[r] = - ((self.coal * (r - 1.0) * _n) / 2.0) * xn[r - 1] - ((self.coal * (_n - 1.0 - r) * _n) / 2.0) * xn[r]
-
-            yn[_n] = - ((self.coal * (_n - 1.0) * _n) / 2.0) * xn[_n - 1]
-
-            xn = self.solveCentralBlockTransposed(_n, yn, 0)
-
-            for i in range(0, len(xn)):
-                x[xptr] = xn[i]
-                xptr += 1
-
-        return x
-
-
-Q = SNPTransition(3, 1, 1, .2)
-print(Q.Q)
+    
 

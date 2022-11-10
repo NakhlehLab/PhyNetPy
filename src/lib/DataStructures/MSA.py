@@ -30,18 +30,18 @@ class MSA:
     """
 
     def __init__(self, file, grouping=None):
-        self.filename = file
-        self.grouping = grouping
-        self.hash = {}  # map GIDs to a list of SeqRecords
+        self.filename : str = file
+        self.grouping  = grouping
+        self.hash : dict = {}  # map GIDs to a list of SeqRecords
 
-        self.records = self.parse()
+        self.records : list = self.parse()
 
         if self.grouping is None:  # Either the number of records (1 taxa per group) or the number of groups
-            self.groups = len(self.records)
+            self.groups : int  = len(self.records)
         else:
-            self.groups = len(self.grouping)
+            self.groups : int  = len(self.grouping)
 
-    def get_records(self):
+    def get_records(self) -> list:
         return self.records
 
     def parse(self) -> list:
@@ -115,7 +115,7 @@ class MSA:
         """
         return self.hash[gid]
     
-    def seq_by_name(self, name):
+    def seq_by_name(self, name) -> list:
         for record in self.records:
             if record.get_name() == name:
                 return [record]

@@ -14,19 +14,19 @@ gorilla
 END;
 
 BEGIN CHARACTERS;
-DIMENSIONS NCHAR=1;
+DIMENSIONS NCHAR=2;
 FORMAT DATATYPE=SNP MISSING=? GAP=- MATCHCHAR=. ;
 MATRIX
 
-human 1
-chimp 1
-gorilla 0
+human 01
+chimp 11
+gorilla 00
 ;
 
 END;
 
 BEGIN TREES;
 
-TREE uno = ((human:1, chimp:1):1 , gorilla:2);
+TREE uno = ((human:0.3079429072013367,gorilla:0.30794290720133694):0.37234262467408746,chimp:0.6802855318754237);
 
 END;

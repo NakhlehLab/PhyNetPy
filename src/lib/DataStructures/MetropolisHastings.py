@@ -139,7 +139,7 @@ class MetropolisHastings:
 
 
 def test():
-    pr = cProfile.Profile()
+    # pr = cProfile.Profile()
 
     # n = NetworkBuilder(
     # "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
@@ -155,18 +155,18 @@ def test():
 
     # print(goalprob)
 
-    pr.enable()
+    # pr.enable()
     hill = HillClimbing(ProposalKernel(), JC(), data, 800)
-    final_state = hill.runMany(200)
-    pr.disable()
+    final_state = hill.run()
+    # pr.disable()
     # print(final_state)
     # print(final_state.current_model)
     # final_state.current_model.summary(
     #     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
     #     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
     # # pr.disable()
-    pr.print_stats(sort="tottime")
-    print("----------------------")
+    # pr.print_stats(sort="tottime")
+    # print("----------------------")
 
 
 #test()
