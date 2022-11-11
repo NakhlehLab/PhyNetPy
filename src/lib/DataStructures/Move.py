@@ -39,6 +39,10 @@ class Move(ABC):
     @abstractmethod
     def same_move(self, model):
         pass
+    
+    @abstractmethod
+    def hastings_ratio(self):
+        pass
 
 
 class UniformBranchMove(Move, ABC):
@@ -74,9 +78,19 @@ class UniformBranchMove(Move, ABC):
 
     def same_move(self, model):
         model.change_branch(self.same_move_info[0], self.same_move_info[1])
+    
+    def hastings_ratio(self):
+        return 1
 
 
 class RootBranchMove(Move, ABC):
+    # NOT SYMMETRIC
+    
+    def __init__(self):
+        super().__init__()
+        self.exp_param = 1
+        self.old_root_height = None
+        self.new_root_height = None
 
     def execute(self, model):
         """
@@ -93,7 +107,8 @@ class RootBranchMove(Move, ABC):
         speciesTreeRoot = proposedModel.felsenstein_root
 
         currentRootHeight = speciesTreeRoot.get_branch().get()
-        print("CURRENT ROOT HEIGHT: " + str(currentRootHeight))
+        # print("CURRENT ROOT HEIGHT: " + str(currentRootHeight))
+        # print([node.get_branch().get() for node in proposedModel.netnodes_sans_root])
 
         children = speciesTreeRoot.get_children()
         if len(children) != 2:
@@ -106,11 +121,13 @@ class RootBranchMove(Move, ABC):
         # the youngest age the species tree root node can be(preserving topologies)
         # The lowest number that can be drawn from exp dist is 0, we guarantee that the root doesn't encroach on child
         # heights.
-        uniformShift = np.random.exponential(1) - min(
-            [currentRootHeight - leftChildHeight, currentRootHeight - rightChildHeight])
-
+        uniformShift = np.random.exponential(self.exp_param) - min([currentRootHeight - leftChildHeight, currentRootHeight - rightChildHeight])
+        
+        
         self.undo_info = [speciesTreeRoot, speciesTreeRoot.get_branch().get()]
         self.same_move_info = [speciesTreeRoot.get_branch().get_index(), currentRootHeight + uniformShift]
+        self.new_root_height = currentRootHeight + uniformShift
+        self.old_root_height = currentRootHeight
         # Change the node height of the root in the new model
         proposedModel.change_branch(speciesTreeRoot.get_branch().get_index(), currentRootHeight + uniformShift)
 
@@ -122,6 +139,10 @@ class RootBranchMove(Move, ABC):
 
     def same_move(self, model):
         model.change_branch(self.same_move_info[0], self.same_move_info[1])
+    
+    def hastings_ratio(self):
+        return -1 * self.exp_param * (self.old_root_height - self.new_root_height)
+
 
 
 class TaxaSwapMove(Move, ABC):
@@ -199,9 +220,11 @@ class TaxaSwapMove(Move, ABC):
         first_taxa.update(sec_seq, sec_name)
         sec_taxa.update(first_seq, first_name)
 
+    def hastings_ratio(self):
+        return 1
 
 class TopologyMove(Move):
-    # TODO: Investigate what happens if root node is involved
+    # TODO: Check if symmetric
     def execute(self, model):
         proposedModel = model
 
@@ -282,5 +305,8 @@ class TopologyMove(Move):
             # mark each of c1 and choice as needing updating
             relatives_model[0].upstream()
             relatives_model[2].upstream()
+    
+    def hastings_ratio(self):
+        return 1
 
 
