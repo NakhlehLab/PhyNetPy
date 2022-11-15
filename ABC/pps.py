@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 
 rates_arr = abc_tree.run_main(is_summary = True, is_plot = True, num_accept=75) # get array of inferred rates from ABC
 
-
 # extract specific arrays of inferred rates
 d_rate_arr = rates_arr[0]
 r_rate_arr = rates_arr[1]
