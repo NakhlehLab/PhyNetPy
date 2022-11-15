@@ -8,8 +8,9 @@ import matplotlib.pyplot as plt
 import statistics
 import random
 import math
+import cProfile
 
-d_dist = elfi.Prior(scipy.stats.expon, 0, 6) # prior distribution for diversification
+d_dist = elfi.Prior(scipy.stats.expon, 8, 12) # prior distribution for diversification
 r_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for turnover
 sub_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for sub
 sampling_rate_arr = []
@@ -51,7 +52,7 @@ def get_leaves(t, lst_leaves):
 def sample_leaves(tree, goal_leaves):
     global sampling_rate_arr
     curr_leaves = growtree.tree_nleaf(tree)
-    print(curr_leaves)
+    #print(curr_leaves)
     sampling_rate = goal_leaves/curr_leaves
     sampling_rate_arr.append(sampling_rate)
     num_delete_goal = math.ceil(curr_leaves * (1-sampling_rate))
@@ -61,7 +62,7 @@ def sample_leaves(tree, goal_leaves):
     for leaf in deleted_leaf_lst:
         leaf.delete()
 
-    print("sampled leaves ", growtree.tree_nleaf(tree))
+    #print("sampled leaves ", growtree.tree_nleaf(tree))
     #print(tree)
     return tree
 
@@ -176,8 +177,8 @@ def tree_stat(tree_arr, summ_fn):
     sd = (statistics.pstdev(res_arr))
     if(sd == 0):
         sd = 1
-        print("FAIL: SD = 0")
-        print(res_arr)
+        #print("FAIL: SD = 0")
+        #print(res_arr)
     wres_arr = [x/sd for x in res_arr]
     return wres_arr # return array of summary statistics
 
@@ -595,11 +596,15 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
         res.append(death_s_true)
         res.append(sub_s_true)
 
+    #print(sampling_rate_arr)
+    print(sum(sampling_rate_arr)/len(sampling_rate_arr))
     # reset global var
     sampling_rate_arr = []
     return res
 
-pr = cProfile.Profile()   
-pr.enable()
-run_main(is_summary = True, is_print = True, num_accept = 10, isreal_obs=True) # uncomment to run abc directly by running this file
-pr.disable()
+#pr = cProfile.Profile()   
+#pr.enable()
+#run_main(is_summary = True, is_print = True, num_accept = 10, isreal_obs=True) # uncomment to run abc directly by running this file
+
+#pr.disable()
+#pr.print_stats(25)
