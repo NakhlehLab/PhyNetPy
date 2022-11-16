@@ -15,6 +15,7 @@ class State:
         """
         Returns: a float that is the model likelihood for the current accepted state
         """
+        #TODO: Delegate to correct model likelihood, set at felsenstein's
         return self.current_model.likelihood()
 
     def generate_next(self, move):

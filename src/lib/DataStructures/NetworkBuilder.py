@@ -8,6 +8,7 @@ import copy
 from Node import NodeError
 
 
+
 class NetworkBuilder:
 
     def __init__(self, filename):
@@ -51,18 +52,19 @@ class NetworkBuilder:
                 parents[child] = clade
 
         # create new empty directed acyclic graph
-        net = copy.deepcopy(DAG())
+        net = DAG()
 
         # populate said graph with nodes and their attributes
         edges = []
+        
+        print(parents)
 
         for node, par in parents.items():
             childNode = self.parseNode(node, net)
-            parentNode = self.parseNode(par, net)
+            parentNode = self.parseNode(par, net, called_as_parent = True)
 
             childNode.add_parent(parentNode)
             edges.append([parentNode, childNode])
-            # print("ADDING EDGE FROM " + parentNode.get_name() + " TO " + childNode.get_name())
         net.addEdges(edges)
 
         return net
@@ -76,7 +78,6 @@ class NetworkBuilder:
                 IE: #LGT21 returns "Lateral Gene Transfer", 21
 
         """
-        print(attrStr)
         if len(attrStr) < 2:
             raise NodeError("reticulation event label formatting incorrect")
 
@@ -107,13 +108,8 @@ class NetworkBuilder:
         except:
             raise NodeError("Invalid label format string (number error)")
 
-    def parseNode(self, node, network):
-        """
-                Takes in a clade, and outputs a Node object with the appropriate attributes
-                """
-        # if type(node) != Phylo.Clade:
-        #         raise NodeError("attempting to parse a node that is not of class Clade")
-
+    def parseNode(self, node, network, called_as_parent = False):
+        
         if node.name is None:
             newInternal = "Internal" + str(self.internalCount)
             self.internalCount += 1
@@ -121,15 +117,17 @@ class NetworkBuilder:
             if node.branch_length is None:
                 newNode = Node(name=newInternal)
             else:
-                newNode = Node(branch_len=node.branch_length, name=newInternal)
+                newNode = Node(branch_len=[node.branch_length], name=newInternal)
             network.addNodes(newNode)
             return newNode
 
         extendedNewickParsedLabel = node.name.split("#")
 
         # if node already exists, just add its other parent
-        oldNode = network.hasNodeWithName(extendedNewickParsedLabel[0])
+        oldNode = network.hasNodeWithName(extendedNewickParsedLabel[-1])
         if oldNode != False:
+            if oldNode.is_reticulation() and not called_as_parent:
+                oldNode.add_length(node.branch_length)
             return oldNode
 
         # if its a reticulation node, grab the formatting information
@@ -144,16 +142,15 @@ class NetworkBuilder:
 
         # create new node, with attributes if a reticulation node
         if retValue:
-            newNode = copy.deepcopy(
-                Node(node.branch_length, name=extendedNewickParsedLabel[1], is_reticulation=retValue))
+            newNode = Node([node.branch_length], name=extendedNewickParsedLabel[1], is_reticulation=retValue)
             newNode.add_attribute("eventType", eventType)
             newNode.add_attribute("index", num)
         else:
-            newNode = copy.deepcopy(
-                Node(node.branch_length, name=extendedNewickParsedLabel[0], is_reticulation=retValue))
+            newNode = Node([node.branch_length], name=extendedNewickParsedLabel[0])
 
         if node.comment is not None:
             newNode.add_attribute("comment", node.comment)
+            
         network.addNodes(newNode)
         return newNode
 
@@ -167,6 +164,6 @@ class NetworkBuilder:
         return self.name_2_net[network]
 
 
-# nb = NetworkBuilder("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\berk_test.nex")
-# net = nb.getNetwork(1)
-# net.printGraph()
+nb = NetworkBuilder("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\berk_test.nex")
+net = nb.getNetwork(1)
+net.printGraph()
