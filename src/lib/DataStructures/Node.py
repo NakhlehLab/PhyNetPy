@@ -31,7 +31,6 @@ class Node:
 
             Returns: A list of branch lengths
         """
-
         return self.branch_lengths
 
     def asString(self):

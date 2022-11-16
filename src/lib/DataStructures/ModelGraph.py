@@ -44,14 +44,18 @@ def convert_to_heights(node, adj_dict):
     output: a dictionary that maps each model node to a float height value
 
     """
+    #TODO: TEST FOR NETWORKS
+    
     if node.get_parent() is None:  # Root
         adj_dict[node] = 0  # Start root at t=0
     else:
         # For all other nodes, the height will be the branch length plus the node height of its parent
-        if type(node.get_branch()) is SNPBranchNode:
-            adj_dict[node] = node.get_branch().get_length() + adj_dict[node.get_parent()]
-        else:
-            adj_dict[node] = node.get_branch().get() + adj_dict[node.get_parent()]
+        for branch in node.get_branches():
+            # Doesn't matter which parent is used to calculate node height, so just use the first one
+            if type(branch) is SNPBranchNode:
+                adj_dict[node] = branch.get_length() + adj_dict[node.get_parent()]
+            else:
+                adj_dict[node] = branch.get() + adj_dict[node.get_parent()]
 
     # Done at the leaves
     if type(node) is FelsensteinLeafNode or type(node) is SNPLeafNode:
@@ -257,7 +261,6 @@ class Model:
             modelnode2.join(modelnode1)
 
         # all the branches have been added, set the vector for the TreeHeight nodes
-        # if self.as_length is False:
         # ADJUST BRANCH LENGTHS TO HEIGHTS
         tree_heights_adj = np.zeros(len(tree_heights_vec))
         adj_dict = convert_to_heights(self.felsenstein_root, {})
@@ -268,7 +271,8 @@ class Model:
 
         # Set each node height
         for node, height in adj_dict.items():
-            tree_heights_adj[node.get_branch().get_index()] = height
+            #Only one branch, since felsensteins is for trees only
+            tree_heights_adj[node.get_branches()[0].get_index()] = height
             if height > max_height:
                 max_height = height
 
@@ -277,9 +281,7 @@ class Model:
 
         # Update all the branch length nodes to be the proper calculated heights
         tree_heights_node.update(list(tree_heights_adj))
-        # else:
-        #     # Passed in as branch lengths, no manipulation needed
-        #     tree_heights_node.update(tree_heights_vec)
+        
 
     def build_SNP(self, snp_params):
         """
@@ -303,19 +305,25 @@ class Model:
             if self.network.outDegree(node) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
-                branch = SNPBranchNode(branch_index, node.length(), self.snp_Q)
-                tree_heights_vec.append(node.length())
-                branch_index += 1
-
-                # Each branch has a link to the vector
-                tree_heights_node.join(branch)
+                branches = []
+                for branch_len in node.length():
+                    #Create new branch
+                    branch = SNPBranchNode(branch_index, branch_len, self.snp_Q)
+                    tree_heights_vec.append(node.length())
+                    branch_index += 1
+                    branches.append(branch)
+                    
+                    # Each branch has a link to the vector
+                    tree_heights_node.join(branch)
+                    # Add to list of nodes
+                    self.nodes.append(branch)
 
                 # Add sequences for each group to a new SNP leaf node
                 #sequences = self.data.aln.group_given_id(group_no)
                 sequences = self.data.aln.seq_by_name(node.get_name())
                 group_no += 1
 
-                new_leaf_node = SNPLeafNode(partials=sequences, branch=branch,
+                new_leaf_node = SNPLeafNode(partials=sequences, branch=branches,
                                             name=node.get_name())
                 new_ext_species = ExtantSpecies(node.get_name(), sequences)
 
@@ -324,11 +332,11 @@ class Model:
                 self.network_leaves.append(new_leaf_node)
 
                 # Point the branch length node to the leaf node
-                branch.join(new_leaf_node)
+                for branch in branches:
+                    branch.join(new_leaf_node)
 
                 # Add to list of model nodes
                 self.nodes.append(new_leaf_node)
-                self.nodes.append(branch)
                 self.netnodes_sans_root.append(new_leaf_node)
 
                 # Add to map
@@ -336,36 +344,45 @@ class Model:
 
             elif self.network.inDegree(node) != 0:  # An internal node that is not the root
 
-                # Create branch
-                branch = SNPBranchNode(branch_index, node.length(), self.snp_Q)
-                tree_heights_vec.append(node.length())
-                branch_index += 1
 
-                # Link to the substitution model
-                tree_heights_node.join(branch)
-
+                branches = []
+                for branch_len in node.length():
+                    #Create new branch
+                    branch = SNPBranchNode(branch_index, branch_len, self.snp_Q)
+                    tree_heights_vec.append(node.length())
+                    branch_index += 1
+                    branches.append(branch)
+                    
+                    # Each branch has a link to the vector
+                    tree_heights_node.join(branch)
+                    # Add to list of nodes
+                    self.nodes.append(branch)
+                    
+               
                 # Create internal node and link to branch
-                new_internal_node = SNPInternalNode(self.data.siteCount(), branch=branch, name=node.get_name())
-                branch.join(new_internal_node)
+                new_internal_node = SNPInternalNode(self.data.siteCount(), branch=branches, name=node.get_name())
+                
+                for branch in branches:
+                    branch.join(new_internal_node)
 
                 # Add to nodes list
                 self.nodes.append(new_internal_node)
-                self.nodes.append(branch)
                 self.netnodes_sans_root.append(new_internal_node)
 
                 # Map node to the new internal node
                 self.network_node_map[node] = new_internal_node
             else:  # The root.
-                # Create root
-                new_internal_node = SNPInternalNode(self.data.siteCount(), name=node.get_name())
-                self.snp_root = new_internal_node
-
+            
                 branch_height = SNPBranchNode(branch_index, 0, self.snp_Q)
                 branch_index += 1
                 tree_heights_vec.append(0)
-                branch_height.join(new_internal_node)
                 tree_heights_node.join(branch_height)
-
+                
+                # Create root
+                new_internal_node = SNPInternalNode(self.data.siteCount(), name=node.get_name(), branch=[branch_height])
+                branch_height.join(new_internal_node)
+                self.snp_root = new_internal_node
+                
                 # Add to nodes list
                 self.nodes.append(new_internal_node)
                 self.nodes.append(branch_height)
@@ -378,35 +395,40 @@ class Model:
             # Edge is from modelnode1 to modelnode2 in network, which means
             # modelnode2 is the parent
             modelnode1 = self.network_node_map[edge[0]]
-            modelnode2 = self.network_node_map[edge[1]]
+            modelnode2 = self.network_node_map[edge[1]] 
 
             # Add modelnode1 as the child of modelnode2
             modelnode2.join(modelnode1)
 
         # all the branches have been added, set the vector for the TreeHeight nodes
-        # if self.as_length is False:
-        #     # Use the branch length adjusted version
-        #     tree_heights_adj = np.zeros(len(tree_heights_vec))
-        #     adj_dict = convert_to_heights(self.snp_root, {})
-        #
-        #     # Keep track of the maximum leaf height, this is used to switch the node heights from root centric
-        #     # to leaf centric
-        #     max_height = 0
-        #
-        #     # Set each node height
-        #     for node, height in adj_dict.items():
-        #         tree_heights_adj[node.get_branch().get_index()] = height
-        #         if height > max_height:
-        #             max_height = height
-        #
-        #     # Subtract dict height from max child height
-        #     tree_heights_adj = np.ones(len(tree_heights_adj)) * max_height - tree_heights_adj
-        #
-        #     # Update all the branch length nodes to be the proper calculated heights
-        #     tree_heights_node.update(list(tree_heights_adj))
-        # else:
-        # Passed in as branch lengths, no manipulation needed
-        tree_heights_node.update(tree_heights_vec)
+        # ADJUST BRANCH LENGTHS TO HEIGHTS
+        tree_heights_adj = np.zeros(len(tree_heights_vec))
+        adj_dict = convert_to_heights(self.snp_root, {})
+
+        # Keep track of the maximum leaf height, this is used to switch the node heights from root centric to
+        # leaf centric
+        max_height = 0
+
+        # Set each node height
+        for node, height in adj_dict.items():
+            for branch in node.get_branches():
+                tree_heights_adj[branch.get_index()] = height
+                if height > max_height:
+                    max_height = height
+
+        # Subtract dict height from max child height
+        tree_heights_adj = np.ones(len(tree_heights_adj)) * max_height - tree_heights_adj
+        
+        for node in self.netnodes_sans_root:
+            for parent in node.parents:
+                for branch in node.get_branches():
+                    branch_len = tree_heights_adj[parent.get_branches()[0].get_index()] - tree_heights_adj[branch.get_index()]
+                    if branch.get_length() == branch_len:
+                        branch.set_net_parent(parent)
+            
+
+        # Update all the branch length nodes to be the proper calculated heights
+        tree_heights_node.update(list(tree_heights_adj))
 
     def likelihood(self):
         """
@@ -440,7 +462,7 @@ class Model:
         q_null_space = scipy.linalg.null_space(self.snp_Q.Q)
         x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
 
-        F_b = self.snp_root.get()
+        F_b = self.snp_root.get()[0]       
         L = np.zeros(self.data.siteCount())
        
         # EQ 20, Root probabilities
@@ -449,16 +471,17 @@ class Model:
             
         if self.verbose_out: #Display all cached partials
             for node in self.netnodes_sans_root:
-                branch = node.get_branch()
-                f_t = branch.get()[1]
-                f_b = branch.get()[0]
-                print("------" + node.get_name() + "------")
-                print("F_t :")
-                print(f_t)
-                print("F_b :")
-                print(f_b)
-                print("-------------------------------")
-                print("       ")
+                branches = node.get_branches()
+                for branch in branches:
+                    f_t = branch.get()[1]
+                    f_b = branch.get()[0]
+                    print("------" + node.get_name() + "------")
+                    print("F_t :")
+                    print(f_t)
+                    print("F_b :")
+                    print(f_b)
+                    print("-------------------------------")
+                    print("       ")
             
             # finally, print root probabilities
             print("------ROOT PROBS------")
@@ -508,19 +531,10 @@ class Model:
         net.addNodes([inv_map[node] for node in network_nodes])
 
         for node in network_nodes:
+            for branch in node.get_branches():
+                branch_len = branch.get()
 
-            # Change branch length to the branch length value from the branch node attached to node
-            # if not self.as_length:
-            #     try:
-            #         parent_height = node.get_parent().get_branch().get()
-            #         branch_len = parent_height - node.get_branch.get()
-            #     finally:
-            #         pass
-            # else:
-            #
-            branch_len = node.get_branch().get()
-
-            inv_map[node].set_length(branch_len)
+                inv_map[node].set_length(branch_len)
 
             # Add edges
             if node.get_children() is not None:
@@ -764,18 +778,17 @@ class NetworkNode(ABC, ModelNode):
 
     def __init__(self, branch=None):
         super(NetworkNode, self).__init__()
-        self.branch = branch
-        self.parent = None
+        self.branches = branch
+        self.parents = None
         self.children = None
 
-    def get_branch(self):
-
-        if self.branch is None:
+    def get_branches(self):
+        if self.branches is None:
+            self.branches = []
             for child in self.get_predecessors():
                 if type(child) is BranchLengthNode or type(child) is SNPBranchNode:
-                    self.branch = child
-                    return child
-        return self.branch
+                    self.branches.append(child)
+        return self.branches
 
     def add_successor(self, model_node):
         """
@@ -789,8 +802,10 @@ class NetworkNode(ABC, ModelNode):
             self.successors.append(model_node)
 
         if type(model_node) is FelsensteinInternalNode or type(model_node) is SNPInternalNode:
-            # if self.parent is None:
-            self.parent = model_node
+            if self.parents is None:
+                self.parents = [model_node]
+            else:
+                self.parents.append(model_node)
 
     def remove_successor(self, model_node):
         """
@@ -800,8 +815,10 @@ class NetworkNode(ABC, ModelNode):
         """
         if model_node in self.successors:
             self.successors.remove(model_node)
-            if self.parent is not None and model_node == self.parent:
-                self.parent = None
+            if self.parents is not None and model_node in self.parents:
+                self.parents.remove(model_node)
+                if len(self.parents) == 0:
+                    self.parents = None
 
     def add_predecessor(self, model_node):
         """
@@ -837,8 +854,14 @@ class NetworkNode(ABC, ModelNode):
     def node_move_bounds(self):
         pass
 
-    def get_parent(self):
-        return self.parent
+    def get_parent(self, return_all = False):
+        if return_all:
+            return self.parents
+        else:
+            if self.parents is not None:
+                return self.parents[0]
+            else:
+                return None
 
     def get_children(self):
         return self.children
@@ -900,7 +923,8 @@ class BranchLengthNode(CalculationNode):
                 if node.get_parent() is None:
                     branch_len = 0
                 else:
-                    parent_height = node.get_parent().get_branch().get()
+                    #Only trees, grab [0]
+                    parent_height = node.get_parent().get_branches()[0].get()
                     branch_len = parent_height - self.branch_length
             finally:
                 pass
@@ -1068,8 +1092,7 @@ class FelsensteinLeafNode(NetworkNode, CalculationNode):
 
         Returns: interval (low, hi) that gives the parameters for a uniform selection to be made for a new node height.
         """
-        # TODO: ADAPT FOR NETWORKS TO BE MAX(PARENTS' HEIGHTS)
-        return [self.parent.get_branch().get(), self.branch.get()]
+        return [self.parents[0].get_branches()[0].get(), self.branches[0].get()]
 
     def update(self, new_partials, new_name):
         self.matrix = vec_bin_array(new_partials, 4)
@@ -1115,15 +1138,15 @@ class FelsensteinInternalNode(NetworkNode, CalculationNode):
         Returns: interval (low, hi) that gives the parameters for a uniform selection to be made for a new node height.
         """
         # Node can go from its current height up towards parent
-        if self.parent is None:
+        if self.parents is None:
             # root node
             raise ModelError("NODE BOUNDS FUNCTION UNDEFINED FOR ROOT.")
         # Normal internal node
         # TODO: ADAPT FOR NETWORKS, MAX PARENT HEIGHTS
-        lower_limit = self.parent.get_branch().get()
+        lower_limit = self.parents[0].get_branches()[0].get()
 
         # Upper limit is defined by the closest (in height) child to the root, which is going to be min(child heights)
-        upper_limit = max(0, min([child.get_branch().get() for child in self.children]))
+        upper_limit = max(0, min([child.get_branches()[0].get() for child in self.children]))
         return [lower_limit, upper_limit]
 
     def update(self):
@@ -1150,7 +1173,7 @@ class FelsensteinInternalNode(NetworkNode, CalculationNode):
             matrix = child.get()
 
             # compute matrix * Pij transpose
-            step1 = np.matmul(matrix, child.get_branch().transition().transpose())
+            step1 = np.matmul(matrix, child.get_branches()[0].transition().transpose())
 
             # add to list of child matrices
             matrices.append(step1)
@@ -1187,7 +1210,11 @@ class SNPLeafNode(NetworkNode, CalculationNode):
         self.name = name
 
     def node_move_bounds(self):
-        return [0, self.parent.get_branch().get()]
+        branches = []
+        for par in self.parents:
+            for branch in par.get_branches():
+                branches.append(branch)
+        return [0, min([branch.get_length() for branch in branches])]
 
     def update(self, new_sequences: list, new_name: str):
         self.sequences = new_sequences
@@ -1219,7 +1246,7 @@ class SNPLeafNode(NetworkNode, CalculationNode):
         return tot
 
     def calc(self):
-        self.cached = self.get_branch().get()
+        self.cached = [branch.get() for branch in self.get_branches()]
         self.updated = False
         return self.cached
 
@@ -1236,13 +1263,22 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         self.site_count = site_count
 
     def node_move_bounds(self):
-
-        if self.parent is None:
+        if self.parents is None:
             # root node
             return None
         # Normal internal node
-        upper_limit = self.parent.get_branch().get()
-        lower_limit = max(0, max([child.get_branch().get() for child in self.children]))
+        par_branches = []
+        for par in self.parents:
+            for branch in par.get_branches():
+                par_branches.append(branch)       
+                
+        child_branches = []
+        for child in self.children:
+            for branch in child.get_branches():
+                child_branches.append(branch) 
+                    
+        upper_limit = min([branch.get() for branch in par_branches])
+        lower_limit = max(0, max([branch.get() for branch in child_branches]))
         return [lower_limit, upper_limit]
 
     def update(self):
@@ -1267,7 +1303,7 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         """
         Return the likelihoods, or in the case of the root, return the model likelihood.
         """
-        self.cached = self.get_branch().get()
+        self.cached = [branch.get() for branch in self.get_branches()]
         self.updated = False
         return self.cached
 
@@ -1279,19 +1315,19 @@ class SNPBranchNode(CalculationNode):
 
     def __init__(self, vector_index: int, branch_length: float, Q: SNPTransition, verbose = False):
         super().__init__()
-        self.top = []
-        self.bottom = []
         self.index = vector_index
         self.branch_length = branch_length
-        self.as_height = True
         self.Q = Q
-        self.Qt = self.Q.expt(self.branch_length)
+        self.Qt = None
         self.verbose = verbose
+        self.net_parent = 1
+        self.branch_height = None
+    
 
     def update(self, new_bl):
         # update the branch length
+        self.branch_height = new_bl
         self.branch_length = new_bl
-        self.Qt = self.Q.expt(self.branch_length)  # Eager compute exp(Qt) only after having updated the branch length
 
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
@@ -1301,6 +1337,9 @@ class SNPBranchNode(CalculationNode):
 
     def get_index(self):
         return self.index
+    
+    def set_net_parent(self, parent):
+        self.net_parent = parent
 
     def get(self):
         if self.updated:
@@ -1320,6 +1359,9 @@ class SNPBranchNode(CalculationNode):
         
         #Get the network node parent of this branch object
         node_par = self.get_successors()[0]
+        
+        #Calculate Q^t before calculating likelihoods
+        self.transition()
         
         if type(node_par) is SNPLeafNode:
             site_count = node_par.seq_len()
@@ -1355,8 +1397,8 @@ class SNPBranchNode(CalculationNode):
             # EQ 19
             # Get the top likelihoods of each of the child branches
             net_children = self.successors[0].get_children()
-            F_t_y = net_children[0].get_branch().get()[1]
-            F_t_z = net_children[1].get_branch().get()[1]
+            F_t_y = net_children[0].get_branches()[0].get()[1]
+            F_t_z = net_children[1].get_branches()[0].get()[1]
 
             m_y = node_par.possible_lineages()  # Sum of possible 
             
@@ -1385,7 +1427,7 @@ class SNPBranchNode(CalculationNode):
                     F_b[index][site] = tot
 
         # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
-        if node_par.parent is not None:
+        if node_par.parents is not None:
             # ONLY CALCULATE F_T FOR NON ROOT BRANCHES
             F_t = np.zeros((vector_len, site_count))
             
@@ -1413,5 +1455,22 @@ class SNPBranchNode(CalculationNode):
             self.cached = F_b
             return F_b
 
+    def transition(self):
+        """
+        Calculate the Pij matrix
+        """
+        node_par = self.successors[0]
+        
+        if node_par.parents is None or len(node_par.parents) == 0:
+            #Root branch.
+            return
+        else:
+            #any branch should return the correct parent height
+            parent_height = self.net_parent.get_branches()[0].get_length()
+            branch_len = parent_height - self.branch_height
+            self.Qt = self.Q.expt(branch_len)
+        
+        
+        
 
 
