@@ -132,10 +132,90 @@ class MetropolisHastings:
     """
         A special case of Hill Climbing, with a special proposal kernel
     """
+        
+    def __init__(self, pkernel, submodel, data, num_iter):
+        self.current_state = State()
+        self.current_state.bootstrap(data, submodel)
+        self.data = data
+        self.submodel = submodel
+        self.kernel = pkernel
+        self.num_iter = num_iter
 
-    def __init__(self, kernel, hc):
-        self.kernel = kernel
-        self.hill_climb = hc
+    def run(self):
+        """
+        Run the Metropolis-Hastings algorithm on a bootstrapped starting state.
+
+        Inputs: none
+        Outputs: The end state (a State obj) that locally minimizes the score
+        """
+
+        self.current_state.write_line_to_summary("-------------------------------")
+        self.current_state.write_line_to_summary("------Begin Metro-Hastings-----")
+
+        # run a maximum of 10000 iterations
+        iter_no = 0
+
+        while iter_no < self.num_iter:
+
+            # propose a new state
+            next_move = self.kernel.generate()
+            self.current_state.generate_next(next_move)
+            
+            current_prob = self.current_state.likelihood() 
+            proposed_prob = self.current_state.proposed().likelihood()
+
+            #(logP(B) - logP(A)) + (logP(A|B) - logP(B|A)) > r ~ log(Unif(0, 1))
+            if proposed_prob - current_prob + next_move.hastings_ratio() > random.random():
+                self.current_state.commit(next_move)
+            else:
+                self.current_state.revert(next_move)
+
+            self.current_state.write_line_to_summary(
+                "ITER #" + str(iter_no) + " LIKELIHOOD = " + str(self.current_state.likelihood()))
+            iter_no += 1
+
+        self.current_state.write_line_to_summary("DONE. EXITED WITH 0 ERRORS")
+        self.current_state.write_line_to_summary("--------------------------")
+
+        return self.current_state
+    
+    def runMany(self, num_iter):
+        """
+            Runs the MH algorithm num_iter times, with different starting states.
+
+            Inputs: num_iter, the number of times to run the algo
+            Outputs: Prints out the statistics for the scores on each run. Returns a list of numbers
+             [mean, median, max, min]
+
+        """
+        all_end_states = []
+        for dummy in range(num_iter):
+            self.current_state = State()
+            self.current_state.bootstrap(self.data, self.submodel)
+            end_state = self.run()
+            all_end_states.append(end_state.likelihood())
+            self.kernel.reset()
+
+        all_end_states.sort()
+        length = len(all_end_states)
+
+        if length % 2 == 0:
+            median = .5 * (all_end_states[int(length / 2)] + all_end_states[int(length / 2) - 1])
+        else:
+            median = all_end_states[int((length + 1) * .5) - 1]
+
+        mean = sum(all_end_states) / length
+        max_val = all_end_states[-1]
+        min_val = all_end_states[0]
+
+        print("===============================================")
+        print("MH ran " + str(num_iter) + " times...")
+        print("===============================================")
+        print("Mean score: " + str(mean) + "\nMedian score: " + str(median) + "\nMaximum score: " + str(max_val) +
+              "\nMinimum score: " + str(min_val))
+        print("===============================================")
+
+        return [mean, median, max_val, min_val]
 
 
 def test():
@@ -157,7 +237,11 @@ def test():
 
     # pr.enable()
     hill = HillClimbing(ProposalKernel(), JC(), data, 800)
-    final_state = hill.run()
+    
+    MetH = MetropolisHastings(ProposalKernel(), JC(),data, 800)
+    
+    final_state = hill.runMany(200)
+    MetH.runMany(200)
     # pr.disable()
     # print(final_state)
     # print(final_state.current_model)
@@ -169,4 +253,4 @@ def test():
     # print("----------------------")
 
 
-#test()
+test()
