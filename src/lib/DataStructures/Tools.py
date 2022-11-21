@@ -85,7 +85,12 @@ def SNAPP_Likelihood(filename, grouping=None):
     aln = MSA(filename, grouping)
     network = CBDP(1, .5, aln.num_groups()).generateTree()
     network.printGraph()
-    snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None)
+    u = 1
+    v = 1
+    coal = .2
+    snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":True}
+    m = Matrix(aln, Alphabet("SNP"))
+    snp_model = Model(network, m, snp_params=snp_params)
 
     return snp_model.SNP_likelihood()
 
@@ -94,19 +99,21 @@ def SNAPP_with_tree(filename, u, v, coal, show_partials = False, path=None):
     aln = MSA(filename)
     network = NetworkBuilder(filename).get_all_networks()[0]
     network.printGraph()
-    snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal}
+    snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":False}
     snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None, snp_params=snp_params, verbose = show_partials)
-    snp_model.network.visualize_graph(path)
+    #snp_model.network.visualize_graph(path)
 
     return snp_model.SNP_likelihood()
 
 
-# print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest1.nex",
-#                        [3, 2, 1]))
+#print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snp_samples.nex", [3, 3, 3]))
 
-#print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
+#
+# print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
+
+print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snp_network_test.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
 
 # print(ML_TREE(["C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex"], ))
 
-n = CBDP(.2, .02, 50).generateTree()
-print(n.sim_seqs(15))
+# n = CBDP(.2, .02, 50).generateTree()
+# print(n.sim_seqs(15))

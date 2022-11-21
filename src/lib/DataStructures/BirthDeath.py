@@ -343,6 +343,8 @@ class CBDP:
         tree = DAG()
         tree.addEdges(edges)
         tree.addNodes(nodes)
+        
+        tree.generate_branch_lengths()
 
         return tree
 

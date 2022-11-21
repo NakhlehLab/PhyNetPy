@@ -101,22 +101,22 @@ class Matrix:
 
         # translate the data into the matrix
         index = 0
+        
         for r in self.seqRecords:
             self.taxa2Rows[r.get_name()] = index
             self.rows2Taxa[index] = r.get_name()
             print("mapping " + str(r.get_name()) + " to row number " + str(index))
-            lenCount = 0
+            
             for char in r.get_seq():
                 # use the alphabet to map characters to their bit states and add to
                 # the data as a column
                 self.data = np.append(self.data, np.array([self.alphabet.map(char)]), axis=0)
-                lenCount += 1
-
+        
             index += 1
 
         # the dimensions of the uncompressed matrix
         self.numTaxa = self.aln.num_groups()  # = num taxa if each group is only made of one taxa
-        self.seqLen = lenCount
+        self.seqLen = len(self.seqRecords[0].get_seq())
 
         # compress the matrix and fill out the locations and count fields
         # TODO: ASK ABOUT SIMPLIFICATION SCHEME

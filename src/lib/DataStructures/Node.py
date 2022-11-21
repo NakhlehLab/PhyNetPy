@@ -13,9 +13,8 @@ class Node:
         Node class for storing data in a graph object
     """
 
-    def __init__(self, branch_len:list=None, parent_nodes=None, attr=None, is_reticulation=False, name=None):
+    def __init__(self, branch_len:dict=None, parent_nodes=None, attr=None, is_reticulation=False, name=None):
         self.branch_lengths = branch_len
-        self.tempLen = None
         if attr is None:
             self.attributes = {}
         else:
@@ -25,7 +24,7 @@ class Node:
         self.label = name
         self.seq = None
 
-    def length(self)->list:
+    def length(self)->dict:
         """
             The length of a node is its branch length.
 
@@ -36,7 +35,7 @@ class Node:
     def asString(self):
         myStr = "Node " + str(self.label) + ": "
         if self.branch_lengths is not None:
-            for branch in self.branch_lengths:
+            for branch in self.branch_lengths.values():
                 myStr += str(round(branch, 4)) + " "
         if self.parent is not None:
             myStr += " has parent(s) " + str([node.get_name() for node in self.get_parent(return_all=True)])
@@ -94,13 +93,16 @@ class Node:
         """
         self.parent = list(new_parents)
 
-    def set_length(self, length):
+    def set_length(self, length, par):
         """
         Set the branch length of this Node to length
         """
-        self.branch_length = [length]
+        if self.branch_lengths is not None:
+            self.branch_length[length] = par
+        else:
+            self.branch_lengths = {par: length}
     
-    def add_length(self, new_len:float):
+    def add_length(self, new_len:float, new_par):
         """
         Add a branch length value to the node. 
         This node is a reticulation node.
@@ -109,9 +111,9 @@ class Node:
             new_len (float): a branch length value
         """
         if self.branch_lengths is None:
-            self.branch_lengths = [new_len]
+            self.branch_lengths = {new_par: new_len}
         else:
-            self.branch_lengths.append(new_len)
+            self.branch_lengths[new_par] = new_len
 
     def set_is_reticulation(self, is_retic):
         """
