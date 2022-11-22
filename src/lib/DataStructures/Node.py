@@ -93,7 +93,7 @@ class Node:
         """
         self.parent = list(new_parents)
 
-    def set_length(self, length, par):
+    def set_length(self, length:float, par):
         """
         Set the branch length of this Node to length
         """

@@ -1249,6 +1249,7 @@ class SNPLeafNode(NetworkNode, CalculationNode):
         super(SNPLeafNode, self).__init__(branch=branch)
         self.sequences = partials
         self.name = name
+        self.leaf_descendants:set = set()
 
     def node_move_bounds(self):
         branches = []
@@ -1302,7 +1303,7 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         self.partials = None
         self.name = name
         self.site_count = site_count
-        self.leaf_descendants = set()
+        self.leaf_descendants:set = set()
 
     def node_move_bounds(self):
         if self.parents is None:
@@ -1327,10 +1328,17 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         self.upstream()
     
     def calc_leaf_descendants(self):
+        """
+        Calculate the leaves that are descendants of a lineage/node.
+        
+        Returns:
+            leaf_descendants (set) : a set of node descendants
+        """
         for child in self.get_children():
             if type(child) is SNPLeafNode:
                 self.leaf_descendants.add(child)
             else:
+                #The union of all its children's descendants
                 self.leaf_descendants = self.leaf_descendants.union(child.calc_leaf_descendants())
         
         return self.leaf_descendants
@@ -1343,11 +1351,23 @@ class SNPInternalNode(NetworkNode, CalculationNode):
             return self.cached
 
     def possible_lineages(self):
+        """
+        Calculate the number of lineages that flow through this node.
+        For non-reticulation nodes, if branch x has children y,z:
+        
+        num_lineages(x) = num_lineages(y) + num_lineages(z)
+        if y is a leaf, num_lineages(y) = samples(y)
+
+        Returns:
+            int: number of lineages
+        """
         pl = 0
         for child in self.get_children():
             if type(child) is SNPLeafNode:
+                #base case, = number of samples
                 pl += child.samples()
             elif type(child) is SNPInternalNode:
+                #recurse over the internal node children
                 pl += child.possible_lineages()
         return pl
 
@@ -1360,7 +1380,14 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         return self.cached
     
     def is_reticulation(self):
-        return len(node_par.get_parent(return_all = True)) > 1
+        """
+        Returns:
+            bool: True if this node is a reticulation node 
+                    (more than 1 parent), False otherwise
+        """
+        if self.parents is None:
+            return False
+        return len(self.get_parent(return_all = True)) > 1
 
     def get_name(self):
         return self.name
@@ -1381,7 +1408,12 @@ class SNPBranchNode(CalculationNode):
         self.total_samples = total_samples
     
 
-    def update(self, new_bl):
+    def update(self, new_bl: float)->None:
+        """
+        update the branch length of this branch
+        Args:
+            new_bl (float): the new branch length/height for this branch
+        """
         # update the branch length
         self.branch_height = new_bl
         self.branch_length = new_bl
@@ -1389,13 +1421,29 @@ class SNPBranchNode(CalculationNode):
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
 
-    def switch_index(self, new_index):
+    def switch_index(self, new_index:int):
+        """
+        Change the lookup index of this branch in the TreeHeight node
+
+        Args:
+            new_index (int): a new index
+        """
         self.index = new_index
 
     def get_index(self):
+        """
+        Returns:
+            int: The index into the TreeHeight vector
+        """
         return self.index
     
-    def set_net_parent(self, parent):
+    def set_net_parent(self, parent:NetworkNode):
+        """
+        Set the network parent 
+
+        Args:
+            parent (NetworkNode): the node that this branch points to
+        """
         self.net_parent = parent
 
     def get(self):
@@ -1412,6 +1460,14 @@ class SNPBranchNode(CalculationNode):
         Calculates both the top and bottom partial likelihoods, based on Eq 14 and 19.
 
         Returns a list of length 2, element [0] is the bottom likelihoods, element [1] is the top likelihoods
+        
+        Calculated using eqs 12,14,16,19 from David Bryant, Remco Bouckaert, Joseph Felsenstein, Noah A. Rosenberg, Arindam RoyChoudhury, 
+        Inferring Species Trees Directly from Biallelic Genetic Markers: Bypassing Gene Trees in a Full Coalescent Analysis, Molecular Biology and 
+        Evolution, Volume 29, Issue 8, August 2012, Pages 1917–1932, https://doi.org/10.1093/molbev/mss086
+        
+        Also, Rule 3,4 for networks Rabier CE, Berry V, Stoltz M, Santos JD, Wang W, et al. 
+        (2021) On the inference of complex phylogenetic networks by Markov Chain Monte-Carlo. 
+        PLOS Computational Biology 17(9): e1008380. https://doi.org/10.1371/journal.pcbi.1008380
         """
         
         #Get the network node parent of this branch object
@@ -1463,16 +1519,16 @@ class SNPBranchNode(CalculationNode):
                 F_t_z = net_children[1].get_branches()[0].get()[1]
                 
                 #Find out whether lineage y and z have leaves in common 
-                common_leaves : set = net_children[1].leaf_descendents.difference(net_children[0].leaf_descendents)
+                common_leaves : set = net_children[1].leaf_descendants.difference(net_children[0].leaf_descendants)
                 
-                if common_leaves: 
+                if common_leaves: #If two sets are not disjoint
                     #Rule 4
                     for leaf in common_leaves:
                         print(leaf.name)
                         
                     raise ModelError("NOT IMPLEMENTED YET")
-                else:
-                    m_y = node_par.possible_lineages()  # Sum of possible 
+                else: # Then use Rule 2
+                    m_y = node_par.possible_lineages()  # Sum of possible lineages 
                     
                     for site in range(site_count):
                         for index in range(vector_len):
@@ -1529,10 +1585,12 @@ class SNPBranchNode(CalculationNode):
 
     def transition(self):
         """
-        Calculate the Pij matrix
+        Calculate exp(Q^branch_len)
+        
+        This function may only be called after making the adjustment to treating
+        everything as a height!!
         """
         node_par = self.successors[0]
-        print("CALCULATING TRANSITION FOR NODE: " + node_par.name)
         
         if node_par.parents is None or len(node_par.parents) == 0:
             #Root branch.

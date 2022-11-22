@@ -410,8 +410,8 @@ class CBDP:
         newEdge = [selection, nodes[index]]
 
         # set the branch length of the current node
-        nodes[index].set_length(futureT - nodeT)
-        nodes[index].set_parent([selection])
+        nodes[index].set_length(futureT - nodeT, selection)
+        #nodes[index].set_parent([selection])
 
         return newEdge
 

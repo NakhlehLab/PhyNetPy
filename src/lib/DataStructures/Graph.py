@@ -278,8 +278,6 @@ class DAG(Graph):
         ids = {root: 0}
         dist = {root: 0}
         
-        scale_factor = 1 / (min([node.length() for node in self.nodes if node.length() != None]) + .00000001)
-        print(scale_factor)
         
         q = deque()
         q.appendleft(root)
@@ -288,15 +286,15 @@ class DAG(Graph):
             cur = q.pop()
             
             children = self.findDirectSuccessors(cur)
-            
+            #TODO: FIX FOR NETWORKS
             for neighbor in children:
 
-                dist[neighbor] = dist[cur] + (neighbor.length())
+                dist[neighbor] = dist[cur] + (neighbor.length()[0])
                 net.add_node(node_id, label=neighbor.get_name(), level=dist[neighbor])
                 ids[neighbor] = node_id
                 node_id += 1
                 
-                net.add_edge(ids[cur], ids[neighbor], value = .5, title = str(neighbor.length()))
+                net.add_edge(ids[cur], ids[neighbor], value = .5, title = str(neighbor.length()[0]))
                 q.appendleft(neighbor)
 
     
@@ -331,7 +329,35 @@ class DAG(Graph):
 
     
         return seqs
-        
+    
+    def generate_branch_lengths(self):
+        """
+        Assumes that each node in the graph does not yet have a branch length associated with it,
+        but has a defined "t" attribute.
+        """
+        root = self.findRoot()[0]
+        root.add_length(0, None)
+        # stack for dfs
+        q = deque()
+        q.append(root)
+        visited = set()
+
+        while len(q) != 0:
+            cur = q.pop()
+
+            for neighbor in self.findDirectSuccessors(cur):
+                if neighbor not in visited:
+                    t_par = cur.attribute_value_if_exists("t")
+                    t_nei = neighbor.attribute_value_if_exists("t")
+                    neighbor.add_length(t_par - t_nei, cur)
+                
+                    q.append(neighbor)
+                    visited.add(neighbor)
+
+    
+    
+    def generate_node_heights(self):
+        pass
         
     
         
