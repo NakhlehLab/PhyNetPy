@@ -1,6 +1,10 @@
+from __future__ import annotations
 import random
 from abc import ABC, abstractmethod
 import numpy as np
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ModelGraph import *
 
 
 class MoveError(Exception):
@@ -24,7 +28,7 @@ class Move(ABC):
         self.same_move_info = None
 
     @abstractmethod
-    def execute(self, model):
+    def execute(self, model: Model) -> Model:
         """
         Input: model, a Model obj
         Output: a new Model obj that is the result of this operation on model
@@ -33,21 +37,21 @@ class Move(ABC):
         pass
 
     @abstractmethod
-    def undo(self, model):
+    def undo(self, model: Model):
         pass
 
     @abstractmethod
-    def same_move(self, model):
+    def same_move(self, model: Model):
         pass
     
     @abstractmethod
-    def hastings_ratio(self):
+    def hastings_ratio(self) -> float:
         pass
 
 
 class UniformBranchMove(Move, ABC):
 
-    def execute(self, model):
+    def execute(self, model: Model) -> Model:
         """
         Changes either the node height or branch length of a randomly selected node that is not the root.
 
@@ -66,21 +70,21 @@ class UniformBranchMove(Move, ABC):
         bounds = selected_node.node_move_bounds()
         new_node_height = np.random.uniform(bounds[0], bounds[1])  # Assumes time starts at root and leafs are at max time
 
-        self.undo_info = [selected_node, selected_node.get_branch().get()]
-        self.same_move_info = [selected_node.get_branch().get_index(), new_node_height]
+        self.undo_info = [selected_node, selected_node.get_branches()[0].get()]
+        self.same_move_info = [selected_node.get_branches()[0].get_index(), new_node_height]
         # Update the branch in the model
-        proposedModel.change_branch(selected_node.get_branch().get_index(), new_node_height)
+        proposedModel.change_branch(selected_node.get_branches()[0].get_index(), new_node_height)
 
         return proposedModel
 
-    def undo(self, model):
-        model.change_branch(self.undo_info[0].get_branch().get_index(), self.undo_info[1])
+    def undo(self, model: Model)-> None:
+        model.change_branch(self.undo_info[0].get_branches()[0].get_index(), self.undo_info[1])
 
-    def same_move(self, model):
+    def same_move(self, model: Model) -> None:
         model.change_branch(self.same_move_info[0], self.same_move_info[1])
     
-    def hastings_ratio(self):
-        return 1
+    def hastings_ratio(self) -> float:
+        return 1.0
 
 
 class RootBranchMove(Move, ABC):
@@ -91,7 +95,7 @@ class RootBranchMove(Move, ABC):
         self.old_root_height = None
         self.new_root_height = None
 
-    def execute(self, model):
+    def execute(self, model: Model) -> Model:
         """
         Change the age of the tree by changing the height of the root node.
 
@@ -103,19 +107,18 @@ class RootBranchMove(Move, ABC):
         proposedModel = model
 
         # get the root and its height
-        speciesTreeRoot = proposedModel.felsenstein_root
+        #TODO: be flexible for snp root
+        speciesTreeRoot : FelsensteinInternalNode = proposedModel.felsenstein_root
 
-        currentRootHeight = speciesTreeRoot.get_branch().get()
-        # print("CURRENT ROOT HEIGHT: " + str(currentRootHeight))
-        # print([node.get_branch().get() for node in proposedModel.netnodes_sans_root])
+        currentRootHeight = speciesTreeRoot.get_branches()[0].get()
 
         children = speciesTreeRoot.get_children()
         if len(children) != 2:
             raise MoveError("NOT A TREE, There are either too many or not enough children for the root")
 
         # Calculate height that is the closest to the root
-        leftChildHeight = children[0].get_branch().get()
-        rightChildHeight = children[1].get_branch().get()
+        leftChildHeight = children[0].get_branches()[0].get()
+        rightChildHeight = children[1].get_branches()[0].get()
 
         # the youngest age the species tree root node can be(preserving topologies)
         # The lowest number that can be drawn from exp dist is 0, we guarantee that the root doesn't encroach on child
@@ -123,32 +126,41 @@ class RootBranchMove(Move, ABC):
         uniformShift = np.random.exponential(self.exp_param) - min([currentRootHeight - leftChildHeight, currentRootHeight - rightChildHeight])
         
         
-        self.undo_info = [speciesTreeRoot, speciesTreeRoot.get_branch().get()]
-        self.same_move_info = [speciesTreeRoot.get_branch().get_index(), currentRootHeight + uniformShift]
+        self.undo_info = [speciesTreeRoot, speciesTreeRoot.get_branches()[0].get()]
+        self.same_move_info = [speciesTreeRoot.get_branches()[0].get_index(), currentRootHeight + uniformShift]
         self.new_root_height = currentRootHeight + uniformShift
         self.old_root_height = currentRootHeight
         # Change the node height of the root in the new model
-        proposedModel.change_branch(speciesTreeRoot.get_branch().get_index(), currentRootHeight + uniformShift)
+        proposedModel.change_branch(speciesTreeRoot.get_branches()[0].get_index(), currentRootHeight + uniformShift)
 
         # return the slightly modified model
         return proposedModel
 
-    def undo(self, model):
-        model.change_branch(self.undo_info[0].get_branch().get_index(), self.undo_info[1])
+    def undo(self, model: Model) -> None:
+        model.change_branch(self.undo_info[0].get_branches()[0].get_index(), self.undo_info[1])
 
-    def same_move(self, model):
+    def same_move(self, model: Model) -> None:
         model.change_branch(self.same_move_info[0], self.same_move_info[1])
     
-    def hastings_ratio(self):
+    def hastings_ratio(self) -> float:
         return -1 * self.exp_param * (self.old_root_height - self.new_root_height)
 
 
 
 class TaxaSwapMove(Move, ABC):
+    #TODO: Figure out why I even need this
 
-    def execute(self, model):
+    def execute(self, model: Model) -> Model:
         """
-        
+
+        Args:
+            model (Model): A model
+
+        Raises:
+            MoveError: if there aren't enough taxa to warrant a swap
+
+        Returns:
+            Model: An altered model that is the result of swapping around taxa sequences
         """
         # Make a copy of the model
         proposedModel = model
@@ -182,7 +194,7 @@ class TaxaSwapMove(Move, ABC):
 
         return proposedModel
 
-    def undo(self, model):
+    def undo(self, model: Model) -> None:
         """
         Literally just swap them back
         """
@@ -198,7 +210,7 @@ class TaxaSwapMove(Move, ABC):
         first_taxa.update(sec_seq, sec_name)
         sec_taxa.update(first_seq, first_name)
 
-    def same_move(self, model):
+    def same_move(self, model: Model) -> None:
         net_leaves = model.get_network_leaves()
 
         indeces = self.same_move_info
@@ -219,12 +231,17 @@ class TaxaSwapMove(Move, ABC):
         first_taxa.update(sec_seq, sec_name)
         sec_taxa.update(first_seq, first_name)
 
-    def hastings_ratio(self):
-        return 1
+    def hastings_ratio(self) -> None:
+        return 1.0
 
 class TopologyMove(Move):
-    # TODO: Check if symmetric
-    def execute(self, model):
+    
+    def __init__(self):
+        super().__init__()
+        self.legal_forward_moves = None
+        self.legal_backwards_moves = None
+
+    def execute(self, model: Model) -> Model:
         proposedModel = model
 
         valid_focals = {}
@@ -237,11 +254,12 @@ class TopologyMove(Move):
             else:
                 s = children[1]
 
-            if s.get_branch().get() < n.get_branch().get():
+            if s.get_branches()[0].get() < n.get_branches()[0].get():
                 chosen_child = n.get_children()[random.randint(0, 1)]
                 valid_focals[n] = [s, par, chosen_child]
 
         if len(list(valid_focals.keys())) != 0:
+            self.legal_forward_moves = len(list(valid_focals.keys()))
             choice = random.choice(list(valid_focals.keys()))
 
             relatives = valid_focals[choice]
@@ -257,10 +275,31 @@ class TopologyMove(Move):
             # mark each of c1 and choice as needing updating
             relatives[0].upstream()
             relatives[2].upstream()
+        else:
+            raise MoveError("DID NOT FIND A LEGAL TOPOLOGY MOVE")
+        
+        
+        # Calculate legal backwards moves for hastings ratio
+        valid_focals2 = {}
+        for n in proposedModel.internal:
+            par = n.get_parent()
+            children = par.get_children()
+            if children[1] == n:
+                s = children[0]
+            else:
+                s = children[1]
 
+            if s.get_branches()[0].get() < n.get_branches()[0].get():
+                chosen_child = n.get_children()[random.randint(0, 1)]
+                valid_focals2[n] = [s, par, chosen_child]
+
+        self.legal_backwards_moves = len(list(valid_focals2.keys()))
+        if self.legal_backwards_moves == 0:
+            raise MoveError("ENTERED INTO STATE WHERE THERE ARE NO MORE LEGAL TOPOLOGY MOVES")
+        
         return proposedModel
 
-    def undo(self, model):
+    def undo(self, model: Model) -> None:
         if self.undo_info is not None:
             relatives = self.undo_info[1]
             choice = self.undo_info[0]
@@ -275,7 +314,7 @@ class TopologyMove(Move):
             relatives[0].upstream()
             relatives[2].upstream()
 
-    def same_move(self, model):
+    def same_move(self, model: Model) -> None:
         if self.undo_info is not None:
             relatives = self.undo_info[1]
             choice = self.undo_info[0]
@@ -287,6 +326,8 @@ class TopologyMove(Move):
 
             # Use names to map this model instances nodes to the proposed_model nodes
             netnodes = model.netnodes_sans_root
+            
+            #TODO: be flexible for SNP stuff
             netnodes.append(model.felsenstein_root)  # include root???????
             for node in netnodes:
                 if node.get_name() in node_names.keys():
@@ -305,8 +346,8 @@ class TopologyMove(Move):
             relatives_model[0].upstream()
             relatives_model[2].upstream()
     
-    def hastings_ratio(self):
-        return 1
+    def hastings_ratio(self) -> float:
+        return self.legal_forward_moves / self.legal_backwards_moves
 
 
 class NetworkTopologyMove(Move):

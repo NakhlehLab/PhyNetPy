@@ -12,6 +12,7 @@ import sys
 import numpy as np
 import math
 from Alphabet import Alphabet
+import cProfile
 
 
 def list2Str(myList):
@@ -77,7 +78,11 @@ class Matrix:
         self.aln = alignment
 
         ##turn sequence record objects into the matrix data
+        pr = cProfile.Profile()
+        pr.enable()
         self.populateData()
+        pr.disable()
+        pr.print_stats(sort="tottime")
 
     def populateData(self):
         # init the map from chars to binary
@@ -122,6 +127,7 @@ class Matrix:
         # TODO: ASK ABOUT SIMPLIFICATION SCHEME
         if self.type == "DNA":
             self.simplify()
+            #self.uniqueSites = self.seqLen
         else:
             self.uniqueSites = self.seqLen
 
@@ -227,7 +233,7 @@ class Matrix:
             for k in range(self.seqLen):
                 col2 = self.getColumn(k, self.data, 0)
 
-                if np.array_equiv(col, col2):
+                if list(col) == list(col2):
                     if first:
                         self.count.append(1)
                         first = False

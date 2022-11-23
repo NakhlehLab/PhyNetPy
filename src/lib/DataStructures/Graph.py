@@ -27,19 +27,20 @@ def newickSubstring(children, node):
                 retStr += newickSubstring(children, child)
             else:
                 retStr += child.get_name()
-                if child.length is not None:
-                    retStr += ":" + str(child.length())
+                if child.length() is not None:
+                    #TODO: NETWORKS?
+                    retStr += ":" + str(list(child.length().values())[0])
             retStr += ", "
 
         retStr = retStr[:-2]  # Get rid of spurious comma
 
         retStr += ")" + node.get_name()
         if node.length() is not None:
-            retStr += ":" + str(node.length())
+            retStr += ":" + str(list(node.length().values())[0])
     else:
         retStr = node.get_name()
         if node.length() is not None:
-            retStr += ":" + str(node.length())
+            retStr += ":" + str(list(node.length().values())[0])
 
     return retStr
 

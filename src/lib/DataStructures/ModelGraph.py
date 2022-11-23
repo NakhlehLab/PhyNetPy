@@ -44,19 +44,14 @@ def convert_to_heights(node, adj_dict):
     output: a dictionary that maps each model node to a float height value
 
     """
-    #TODO: TEST FOR NETWORKS
-    print("UPDATING FOR NODE: " + node.name)
+    
     if node.get_parent() is None:  # Root
         adj_dict[node] = 0  # Start root at t=0
     else:
         # For all other nodes, the height will be the branch length plus the node height of its parent
         for branch in node.get_branches():
-            print("THIS BRANCH's NET PARENT: " + branch.net_parent.get_name())
             # Doesn't matter which parent is used to calculate node height, so just use the first one
             if type(branch) is SNPBranchNode:
-                print(adj_dict.keys())
-                print(branch.net_parent)
-                print(branch.net_parent in adj_dict.keys())
                 if branch.net_parent in adj_dict.keys():
                     adj_dict[node] = branch.get_length() + adj_dict[branch.net_parent]
             else:
@@ -73,7 +68,6 @@ def convert_to_heights(node, adj_dict):
             adj_dict.update(convert_to_heights(child, adj_dict))
 
     # Return the built-up mapping
-    print({node.name: adj_dict[node] for node in adj_dict.keys()})
     return adj_dict
 
 
@@ -105,8 +99,8 @@ class Model:
             verbose (bool, optional): Flag that, if enabled, prints out partial likelihoods for each node. Defaults to False.
 
         Raises:
-            ModelError: _description_
-            ModelError: _description_
+            ModelError: If no SNP parameters have been passed in, but the data is of SNP or Binary type
+            
             
         """
         self.network = network
@@ -158,11 +152,10 @@ class Model:
         """
         self.tree_heights.singular_update(index, value)
 
-    def build_felsenstein(self):
+    def build_felsenstein(self) -> None:
         """
-        Make a felsenstein likelihood model graph.
-
-        Complexity: O(E + V).
+        Build the model graph for computing the Felsenstein's likelihood of the network,
+        given the matrix data.
         """
 
         # Initialize branch length/height vector and save it for update usage
@@ -190,8 +183,8 @@ class Model:
             if self.network.outDegree(node) == 0:  # This is a leaf
 
                 # Create branch for this leaf and add it to the height/length vector
-                branch = BranchLengthNode(branch_index, node.length())
-                tree_heights_vec.append(node.length())
+                branch = BranchLengthNode(branch_index, list(node.length().values())[0])
+                tree_heights_vec.append(list(node.length().values())[0])
                 branch_index += 1
 
                 # Each branch has a substitution model and a link to the vector
@@ -200,7 +193,7 @@ class Model:
 
                 # Calculate the leaf likelihoods
                 sequence = self.data.get_number_seq(node.get_name())  # Get sequence from the matrix data
-                new_leaf_node = FelsensteinLeafNode(partials=vec_bin_array(sequence, 4), branch=branch,
+                new_leaf_node = FelsensteinLeafNode(partials=vec_bin_array(sequence, 4), branch=[branch],
                                                     name=node.get_name())
                 new_ext_species = ExtantSpecies(node.get_name(), sequence)
 
@@ -222,8 +215,8 @@ class Model:
             elif self.network.inDegree(node) != 0:  # An internal node that is not the root
 
                 # Create branch
-                branch = BranchLengthNode(branch_index, node.length())
-                tree_heights_vec.append(node.length())
+                branch = BranchLengthNode(branch_index, list(node.length().values())[0])
+                tree_heights_vec.append(list(node.length().values())[0])
                 branch_index += 1
 
                 # Link to the substitution model
@@ -231,7 +224,7 @@ class Model:
                 submodelnode.join(branch)
 
                 # Create internal node and link to branch
-                new_internal_node = FelsensteinInternalNode(branch=branch, name=node.get_name())
+                new_internal_node = FelsensteinInternalNode(branch=[branch], name=node.get_name())
                 branch.join(new_internal_node)
 
                 # Add to nodes list
@@ -294,10 +287,13 @@ class Model:
         tree_heights_node.update(list(tree_heights_adj))
         
 
-    def build_SNP(self, snp_params):
+    def build_SNP(self, snp_params: dict) -> None:
         """
-        Make a model graph for SNP likelihoods
+        Build the model graph for SNAPP network likelihoods.
 
+        Args:
+            snp_params (dict): A mapping of parameter types to their values, to be used in
+            making the snp transition matrix
         """
 
         # Initialize branch length/height vector and save it for update usage
@@ -320,7 +316,6 @@ class Model:
                 for branch_par, branch_len in node.length().items():
                     #Create new branch
                     branch = SNPBranchNode(branch_index, branch_len, self.snp_Q, snp_params["samples"])
-                    #tree_heights_vec.append(node.length())
                     tree_heights_vec.append(branch_len)
                     branch_index += 1
                     branches.append(branch)
@@ -418,21 +413,18 @@ class Model:
             # Add modelnode1 as the child of modelnode2
             modelnode2.join(modelnode1)
 
-        # all the branches have been added, set the vector for the TreeHeight nodes
-        # ADJUST BRANCH LENGTHS TO HEIGHTS
+        #For each branch, set the node that it points to
+        #Was not previously done, since Node objs hadn't been mapped to ModelNode objs yet!
         for node in self.nodes:
             if type(node) is SNPBranchNode:
-                if node.net_parent:
+                if node.net_parent: 
                     node.set_net_parent(self.network_node_map[node.net_parent])
-        for node in self.nodes:
-            if type(node) is SNPBranchNode:
-                print(node.net_parent)
         
+        # Now adjust the model to be ultrametric
         tree_heights_adj = np.zeros(len(tree_heights_vec))
         adj_dict = convert_to_heights(self.snp_root, {})
 
-        # Keep track of the maximum leaf height, this is used to switch the node heights from root centric to
-        # leaf centric
+        # Keep track of the maximum leaf height
         max_height = 0
 
         # Set each node height
@@ -442,32 +434,15 @@ class Model:
                 if height > max_height:
                     max_height = height
 
-        # Subtract dict height from max child height
+        # Subtract dict height from max child height to set the max height leaf to be at t=0, and the root at the largest t value
         tree_heights_adj = np.ones(len(tree_heights_adj)) * max_height - tree_heights_adj
-        
-        
-        # for node in self.netnodes_sans_root:
-        #     print("FINDING NETWORK PARENT FOR BRANCH BELONGING TO NODE: " + node.name)
-        #     for branch in node.get_branches():
-        #         for parent in node.parents:
-        #             print("CHECKING PARENT: " + parent.name)
-        #             for parent_branch in parent.get_branches():
-        #                 branch_len = tree_heights_adj[parent_branch.get_index()] - tree_heights_adj[branch.get_index()]
-        #                 print("LOOKING FOR: " + str(branch.get_length()) + " CALCULATED: " + str(branch_len))
-        #                 if math.isclose(branch.get_length(), branch_len):
-        #                     branch.set_net_parent(parent)
-            
-        # for node in self.nodes:
-        #     if type(node) is SNPBranchNode:
-        #         print(node.net_parent)
 
         # Update all the branch length nodes to be the proper calculated heights
         tree_heights_node.update(list(tree_heights_adj))
         
+        #Calculate the leaf descendant set for each node
         self.snp_root.calc_leaf_descendants()
-        for intnode in self.netnodes_sans_root:
-            if type(intnode) is SNPInternalNode:
-                print("NODE " + intnode.name + " HAS LEAF DESCENDANTS: " + str([node.name for node in intnode.leaf_descendants]))
+
         
             
 
@@ -475,11 +450,22 @@ class Model:
         """
         Calculates the likelihood of the model graph lazily, by only
         calculating parts of the model that have been updated/state changed.
+        
+        Delegates which likelihood based on the type of model. This method is the only 
+        likelihood method that should be called outside of this module!!!
 
         Inputs:
         Outputs: A numerical likelihood value, the dot product of all root vector likelihoods
         """
+        if self.data.get_type() == "DNA":
+            return self.Felsenstein_likelihood()
+        elif self.data.get_type() == "SNP" or self.data.get_type() == "BINARY":
+            return self.SNP_likelihood()
+            
 
+    
+    
+    def Felsenstein_likelihood(self) -> float:
         # calculate the root partials or get the cached values
         partials = self.felsenstein_root.get()
 
@@ -498,7 +484,7 @@ class Model:
         # tally up the logs of the dot products
         return np.sum(np.log(np.matmul(partials, base_freqs)))
 
-    def SNP_likelihood(self):
+    def SNP_likelihood(self) -> float:
         
         q_null_space = scipy.linalg.null_space(self.snp_Q.Q)
         x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
@@ -574,8 +560,10 @@ class Model:
         for node in network_nodes:
             for branch in node.get_branches():
                 branch_len = branch.get()
-
-                inv_map[node].set_length(branch_len)
+                if node.parents is not None:
+                    inv_map[node].set_length(branch_len, None)
+                else:
+                    inv_map[node].set_length(branch_len, None)
 
             # Add edges
             if node.get_children() is not None:
@@ -1095,7 +1083,7 @@ class ExtantSpecies(StateNode):
     def __init__(self, name: str, sequence: list):
         super().__init__()
         self.name = name
-        print("ADDING SEQ TO " + self.name + " : " + str(sequence))
+        #print("ADDING SEQ TO " + self.name + " : " + str(sequence))
         self.seq = sequence
 
     def update(self, new_sequence: list, new_name: str):
@@ -1133,7 +1121,7 @@ class FelsensteinLeafNode(NetworkNode, CalculationNode):
 
         Returns: interval (low, hi) that gives the parameters for a uniform selection to be made for a new node height.
         """
-        return [self.parents[0].get_branches()[0].get(), self.branches[0].get()]
+        return [0, self.parents[0].get_branches()[0].get()]
 
     def update(self, new_partials, new_name):
         self.matrix = vec_bin_array(new_partials, 4)
@@ -1186,8 +1174,8 @@ class FelsensteinInternalNode(NetworkNode, CalculationNode):
         # TODO: ADAPT FOR NETWORKS, MAX PARENT HEIGHTS
         lower_limit = self.parents[0].get_branches()[0].get()
 
-        # Upper limit is defined by the closest (in height) child to the root, which is going to be min(child heights)
-        upper_limit = max(0, min([child.get_branches()[0].get() for child in self.children]))
+        # Upper limit is defined by the closest (in height) child to the root, which is going to be max(child heights)
+        upper_limit = max(0, max([child.get_branches()[0].get() for child in self.children]))
         return [lower_limit, upper_limit]
 
     def update(self):

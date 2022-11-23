@@ -36,7 +36,8 @@ class Node:
         myStr = "Node " + str(self.label) + ": "
         if self.branch_lengths is not None:
             for branch in self.branch_lengths.values():
-                myStr += str(round(branch, 4)) + " "
+                if branch is not None:
+                    myStr += str(round(branch, 4)) + " "
         if self.parent is not None:
             myStr += " has parent(s) " + str([node.get_name() for node in self.get_parent(return_all=True)])
 
@@ -97,10 +98,7 @@ class Node:
         """
         Set the branch length of this Node to length
         """
-        if self.branch_lengths is not None:
-            self.branch_length[length] = par
-        else:
-            self.branch_lengths = {par: length}
+        self.branch_lengths = {par: length}
     
     def add_length(self, new_len:float, new_par):
         """

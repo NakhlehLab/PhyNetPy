@@ -3,6 +3,7 @@ from MSA import MSA
 from Matrix import Matrix
 
 import cProfile
+import time
 
 from Move import *
 from GTR import *
@@ -225,32 +226,35 @@ def test():
     # "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
 
     # testnet = n.getNetwork(0)
-
+    pre_msa = time.perf_counter()
     msa = MSA(
         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
-
+    post_msa = time.perf_counter()
+    
+    print("TIME TO PROCESS DATA = " + str(post_msa - pre_msa)) 
+    
+    pre_mat = time.perf_counter()
     data = Matrix(msa)  # default is to use the DNA alphabet
+    post_mat= time.perf_counter()
+    print("TIME TO PROCESS MATRIX = " + str(post_mat - pre_mat))
 
-    # goalprob = Probability(testnet, data=data).felsenstein_likelihood()
-
-    # print(goalprob)
 
     # pr.enable()
-    hill = HillClimbing(ProposalKernel(), JC(), data, 800)
+    #hill = HillClimbing(ProposalKernel(), JC(), data, 800)
     
-    MetH = MetropolisHastings(ProposalKernel(), JC(),data, 800)
+    MetH = MetropolisHastings(ProposalKernel(), JC(), data, 800)
     
-    final_state = hill.runMany(200)
-    MetH.runMany(200)
+    #final_state = hill.runMany(200)
+    final_state = MetH.run()
     # pr.disable()
     # print(final_state)
     # print(final_state.current_model)
-    # final_state.current_model.summary(
-    #     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
-    #     "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
+    final_state.current_model.summary(
+         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
+         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
     # # pr.disable()
     # pr.print_stats(sort="tottime")
     # print("----------------------")
 
 
-#test()
+test()
