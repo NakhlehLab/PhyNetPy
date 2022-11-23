@@ -44,7 +44,6 @@ class NetworkBuilder:
                 from the nodes
                 """
 
-        print(tree)
         # Build a parent dictionary from the biopython tree obj
         parents = {}
         for clade in tree.find_clades(order="level"):
@@ -56,14 +55,11 @@ class NetworkBuilder:
 
         # populate said graph with nodes and their attributes
         edges = []
-        
-        print(parents)
 
         for node, par in parents.items():
-            childNode = self.parseNode(node, net)
             parentNode = self.parseNode(par, net, called_as_parent = True)
-
-            childNode.add_parent(parentNode)
+            childNode = self.parseNode(node, net, parent = parentNode)
+    
             edges.append([parentNode, childNode])
         net.addEdges(edges)
 
@@ -108,7 +104,7 @@ class NetworkBuilder:
         except:
             raise NodeError("Invalid label format string (number error)")
 
-    def parseNode(self, node, network, called_as_parent = False):
+    def parseNode(self, node, network, called_as_parent = False, parent : Node = None):
         
         if node.name is None:
             newInternal = "Internal" + str(self.internalCount)
@@ -117,7 +113,7 @@ class NetworkBuilder:
             if node.branch_length is None:
                 newNode = Node(name=newInternal)
             else:
-                newNode = Node(branch_len=[node.branch_length], name=newInternal)
+                newNode = Node(branch_len={parent: node.branch_length}, name=newInternal)
             network.addNodes(newNode)
             return newNode
 
@@ -127,7 +123,7 @@ class NetworkBuilder:
         oldNode = network.hasNodeWithName(extendedNewickParsedLabel[-1])
         if oldNode != False:
             if oldNode.is_reticulation() and not called_as_parent:
-                oldNode.add_length(node.branch_length)
+                oldNode.add_length(node.branch_length, parent)
             return oldNode
 
         # if its a reticulation node, grab the formatting information
@@ -142,11 +138,11 @@ class NetworkBuilder:
 
         # create new node, with attributes if a reticulation node
         if retValue:
-            newNode = Node([node.branch_length], name=extendedNewickParsedLabel[1], is_reticulation=retValue)
+            newNode = Node({parent: node.branch_length}, name=extendedNewickParsedLabel[1], is_reticulation=retValue)
             newNode.add_attribute("eventType", eventType)
             newNode.add_attribute("index", num)
         else:
-            newNode = Node([node.branch_length], name=extendedNewickParsedLabel[0])
+            newNode = Node({parent: node.branch_length}, name=extendedNewickParsedLabel[0])
 
         if node.comment is not None:
             newNode.add_attribute("comment", node.comment)
@@ -164,6 +160,6 @@ class NetworkBuilder:
         return self.name_2_net[network]
 
 
-nb = NetworkBuilder("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\berk_test.nex")
-net = nb.getNetwork(1)
-net.printGraph()
+# nb = NetworkBuilder("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\berk_test.nex")
+# net = nb.getNetwork(1)
+# net.printGraph()

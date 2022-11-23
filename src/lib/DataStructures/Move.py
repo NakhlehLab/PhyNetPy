@@ -84,7 +84,6 @@ class UniformBranchMove(Move, ABC):
 
 
 class RootBranchMove(Move, ABC):
-    # NOT SYMMETRIC
     
     def __init__(self):
         super().__init__()
@@ -309,4 +308,20 @@ class TopologyMove(Move):
     def hastings_ratio(self):
         return 1
 
+
+class NetworkTopologyMove(Move):
+    
+    def execute(self, model):
+        return super().execute(model)
+    
+    def same_move(self, model):
+        return super().same_move(model)
+    
+    def undo(self, model):
+        return super().undo(model)
+    
+    def hastings_ratio(self):
+        return super().hastings_ratio()
+    
+    
 
