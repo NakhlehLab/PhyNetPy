@@ -1,0 +1,40 @@
+#NEXUS
+
+
+BEGIN TAXA;
+
+DIMENSIONS NTAX=9;
+
+TAXLABELS
+human1
+human2
+human3
+chimp1
+chimp2
+chimp3
+gorilla1
+gorilla2
+gorilla3
+;
+
+END;
+
+BEGIN CHARACTERS;
+DIMENSIONS NCHAR=4;
+FORMAT DATATYPE=SNP MISSING=? GAP=- MATCHCHAR=. ;
+MATRIX
+
+human1 0010
+human2 0010
+human3 0011
+chimp1 1111
+chimp2 1101
+chimp3 1101
+gorilla1 1000
+gorilla2 1000
+gorilla3 1001
+;
+
+END;
+
+
