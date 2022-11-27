@@ -12,6 +12,7 @@ import sys
 import numpy as np
 import math
 from Alphabet import Alphabet
+import cProfile
 
 
 def list2Str(myList):
@@ -77,7 +78,11 @@ class Matrix:
         self.aln = alignment
 
         ##turn sequence record objects into the matrix data
+        pr = cProfile.Profile()
+        pr.enable()
         self.populateData()
+        pr.disable()
+        pr.print_stats(sort="tottime")
 
     def populateData(self):
         # init the map from chars to binary
@@ -101,27 +106,28 @@ class Matrix:
 
         # translate the data into the matrix
         index = 0
+        
         for r in self.seqRecords:
             self.taxa2Rows[r.get_name()] = index
             self.rows2Taxa[index] = r.get_name()
             print("mapping " + str(r.get_name()) + " to row number " + str(index))
-            lenCount = 0
+            
             for char in r.get_seq():
                 # use the alphabet to map characters to their bit states and add to
                 # the data as a column
                 self.data = np.append(self.data, np.array([self.alphabet.map(char)]), axis=0)
-                lenCount += 1
-
+        
             index += 1
 
         # the dimensions of the uncompressed matrix
         self.numTaxa = self.aln.num_groups()  # = num taxa if each group is only made of one taxa
-        self.seqLen = lenCount
+        self.seqLen = len(self.seqRecords[0].get_seq())
 
         # compress the matrix and fill out the locations and count fields
         # TODO: ASK ABOUT SIMPLIFICATION SCHEME
         if self.type == "DNA":
             self.simplify()
+            #self.uniqueSites = self.seqLen
         else:
             self.uniqueSites = self.seqLen
 
@@ -227,7 +233,7 @@ class Matrix:
             for k in range(self.seqLen):
                 col2 = self.getColumn(k, self.data, 0)
 
-                if np.array_equiv(col, col2):
+                if list(col) == list(col2):
                     if first:
                         self.count.append(1)
                         first = False

@@ -132,7 +132,7 @@ class Yule:
             return -1
 
         # create the new internal node
-        newInternal = Node(branchLen, parent_nodes=[specNode.get_parent()], attr={"t": self.elapsedTime, "live": False},
+        newInternal = Node([branchLen], parent_nodes=[specNode.get_parent()], attr={"t": self.elapsedTime, "live": False},
                            name="internal" + str(self.internalCount))
         self.internalCount += 1
 
@@ -169,7 +169,7 @@ class Yule:
         """
 
         # Set up the tree with 2 living lineages and an "internal" root node
-        node1 = Node(0, attr={"t": 0, "label": "root", "live": False}, name="root")
+        node1 = Node([0], attr={"t": 0, "label": "root", "live": False}, name="root")
         node2 = Node(parent_nodes=[node1], attr={"live": True}, name="spec1")
         node3 = Node(parent_nodes=[node1], attr={"live": True}, name="spec2")
 
@@ -343,6 +343,8 @@ class CBDP:
         tree = DAG()
         tree.addEdges(edges)
         tree.addNodes(nodes)
+        
+        tree.generate_branch_lengths()
 
         return tree
 
@@ -408,8 +410,8 @@ class CBDP:
         newEdge = [selection, nodes[index]]
 
         # set the branch length of the current node
-        nodes[index].set_length(futureT - nodeT)
-        nodes[index].set_parent([selection])
+        nodes[index].set_length(futureT - nodeT, selection)
+        #nodes[index].set_parent([selection])
 
         return newEdge
 

@@ -13,35 +13,35 @@ class Node:
         Node class for storing data in a graph object
     """
 
-    def __init__(self, branch_len=None, parent_nodes=None, attr=None, is_reticulation=False, name=None):
-        self.branch_length = branch_len
-        self.tempLen = None
+    def __init__(self, branch_len:dict=None, parent_nodes=None, attr=None, is_reticulation=False, name=None):
+        self.branch_lengths = branch_len
         if attr is None:
             self.attributes = {}
         else:
             self.attributes = attr
-        self.is_reticulation = is_reticulation
+        self.is_retic = is_reticulation
         self.parent = parent_nodes
         self.label = name
         self.seq = None
 
-    def length(self):
+    def length(self)->dict:
         """
             The length of a node is its branch length.
 
-            Returns: The branch length, a float
+            Returns: A list of branch lengths
         """
-
-        return self.branch_length
+        return self.branch_lengths
 
     def asString(self):
         myStr = "Node " + str(self.label) + ": "
-        if self.branch_length is not None:
-            myStr += str(round(self.branch_length, 2)) + " "
+        if self.branch_lengths is not None:
+            for branch in self.branch_lengths.values():
+                if branch is not None:
+                    myStr += str(round(branch, 4)) + " "
         if self.parent is not None:
             myStr += " has parent(s) " + str([node.get_name() for node in self.get_parent(return_all=True)])
 
-        myStr += " is a reticulation node? " + str(self.is_reticulation)
+        myStr += " is a reticulation node? " + str(self.is_retic)
         myStr += " has attributes: " + str(self.attributes)
 
         return myStr
@@ -94,23 +94,36 @@ class Node:
         """
         self.parent = list(new_parents)
 
-    def set_length(self, length):
+    def set_length(self, length:float, par):
         """
         Set the branch length of this Node to length
         """
-        self.branch_length = length
+        self.branch_lengths = {par: length}
+    
+    def add_length(self, new_len:float, new_par):
+        """
+        Add a branch length value to the node. 
+        This node is a reticulation node.
+
+        Args:
+            new_len (float): a branch length value
+        """
+        if self.branch_lengths is None:
+            self.branch_lengths = {new_par: new_len}
+        else:
+            self.branch_lengths[new_par] = new_len
 
     def set_is_reticulation(self, is_retic):
         """
         Sets whether a node is a reticulation Node (or not)
         """
-        self.is_reticulation = is_retic
+        self.is_retic = is_retic
 
     def is_reticulation(self):
         """
         Retrieves whether a node is a reticulation Node (or not)
         """
-        return self.is_reticulation
+        return self.is_retic
 
     def add_attribute(self, key, value):
         """
@@ -139,56 +152,3 @@ class Node:
         return self.seq
 
 
-class UltrametricNode(Node):
-
-    def __init__(self, height=None, par=[], attributes={}, isRetNode=False, label=None):
-        self.height = height
-        super().__init__(parent_nodes=par, attr=attributes, is_reticulation=isRetNode, name=label)
-
-    def length(self, otherNode):
-        if (type(otherNode) != UltrametricNode):
-            raise NodeError(
-                "Attempting to gather a branch length between an Ultrametric Node and a non-Ultrametric Node")
-
-        return math.abs(self.height - otherNode.getHeight())
-
-    def getHeight(self):
-        return self.height
-
-    def asString(self):
-        myStr = "Node " + str(self.label) + ": "
-        if self.height != None:
-            myStr += str(self.height) + " "
-        if self.parent != None:
-            myStr += " has parent " + str(self.parent.name)
-
-        myStr += " is a reticulation node? " + str(self.is_reticulation)
-
-        return myStr
-
-    def propose(self, newValue):
-        """
-                Stores the current value in a temporary holder while the
-                newValue gets tested for viability 
-                """
-        self.tempHeight = self.height
-        self.height = newValue
-
-    def accept(self):
-        """
-                If the proposed change is good, accept it by flushing the data 
-                out of the temp container, symbolically cementing .height as the 
-                official height
-                """
-        self.tempHeight = None
-
-    def reject(self):
-        """
-                If the proposed change is bad, reset the official height to what it
-                was (the contents of the temp container).
-
-                Flush the temp container of all data.
-                """
-
-        self.height = self.tempHeight
-        self.tempHeight = None
