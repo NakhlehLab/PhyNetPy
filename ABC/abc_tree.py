@@ -68,7 +68,7 @@ def sample_leaves(tree, goal_leaves):
     return tree
 
 
-def gen_tree_sims(d = 1, r = 0.5, sub_rate = 1, birth_shape = 1, death_shape = 1, sub_shape = 1, leaf_goal = 10, is_prior = False, random_state = None):
+def gen_tree_sims(d = 1, r = 0.5, sub_rate = 1, birth_shape = 1, death_shape = 1, sub_shape = 1, leaf_goal = 10, sampling_rate = 0.01, is_prior = False, random_state = None):
     """
     Returns a simulated phylogenetic tree (using growtree.gen_tree()) with the 
     initial diversification rate = 'd', initial turnover rate = 'r', initial 
@@ -102,7 +102,7 @@ def gen_tree_sims(d = 1, r = 0.5, sub_rate = 1, birth_shape = 1, death_shape = 1
             rate_arr = calc_rates_bd(d_drawn, r_drawn) # calculate the initial birth and death rates from 'd' and 'r'
             birth = rate_arr[0] # extract initial birth rate from result array
             death = rate_arr[1] # extract initial death rate from result array
-            new_tree = growtree.gen_tree(b = birth, d = death, s = s_drawn, shape_b = birth_shape, shape_d = death_shape, shape_s = sub_shape, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal)
+            new_tree = growtree.gen_tree(b = birth, d = death, s = s_drawn, shape_b = birth_shape, shape_d = death_shape, shape_s = sub_shape, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate)
             curr_nleaf = growtree.tree_nleaf(new_tree)
             #print("nleaf: ", curr_nleaf )
         new_tree = sample_leaves(new_tree, leaf_goal)
@@ -113,7 +113,7 @@ def gen_tree_sims(d = 1, r = 0.5, sub_rate = 1, birth_shape = 1, death_shape = 1
         rate_arr = calc_rates_bd(d, r) # calculate the initial birth and death rates from 'd' and 'r'
         birth = rate_arr[0] # extract initial birth rate from result array
         death = rate_arr[1] # extract initial death rate from result array
-        new_tree = growtree.gen_tree(b = birth, d = death, s = sub_rate, shape_b = birth_shape, shape_d = death_shape, shape_s = sub_shape, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal)
+        new_tree = growtree.gen_tree(b = birth, d = death, s = sub_rate, shape_b = birth_shape, shape_d = death_shape, shape_s = sub_shape, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate)
 
     arr.append(new_tree) # simulate tree and place in 1 element array
     
@@ -242,7 +242,7 @@ def gen_param(prior_dist):
     """
     return (prior_dist.generate())[0] # draw sample and extract the value from a 1 element array
 
-def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type = "q", is_summary = False, is_plot = False, is_print = False):
+def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type = "q", is_summary = False, is_plot = False, is_print = False, sampling_rate = 0.01):
     """
     Runs sampling via ABC. Returns an array containing the inferred rates 
     (from the accepted samples) and the observed tree. 'num_accept' is the 
@@ -318,13 +318,13 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
     birth_s_true = gen_param(birth_s)
     death_s_true = gen_param(death_s)
     sub_s_true = gen_param(sub_s)
-
     if isreal_obs: # use real data for observed tree
         # Below is the phylogeny from the real cancer data (given in Newick string format)
         tree_real_data = ete3.Tree("(n6:0,((((n4:0,n7:0)8bb16f00-dfee-4f81-ac96-767b993ca6e2:0,((((((n16:0,(h1:17,((((a2:0,a7:0)e7bc4028-414f-4bff-b699-8bd16b23ee7e:18,a3:1)2b854f8d-4936-436e-96c5-910be4aba19c:64,a5:2)816d774c-97d9-43e6-8b2e-f15671af8af2:62,(((h5:3,(a8:3,h8:0)09f1a603-d099-4870-9e79-d6e5bee8e2a3:8)0a18283f-9dc0-491c-9fea-1b8779299e72:30,(((h7:8,(h4:1,h6:0)6fb58ff1-8f8f-487e-893f-a7a5074f5230:22)ee5e30a1-dc03-43f1-9ad0-5a9811fb2360:25,h2:0)50a77d83-30fc-414d-b18b-96e2e4c9866c:10,((a4:3,a6:3)d9afdef5-aa08-4dcc-aa5b-a9b8649d4889:29,a1:0)2913b995-8502-4080-801f-42d014b5d58a:183)9f319495-041d-4361-86c3-785075bb1cf3:54)a6f16d8b-261e-4f09-83ec-99a518991759:82,h3:2)66771a30-0bee-44c5-8282-af5400c18959:149)bb4ffd6c-cf65-4ffb-bce2-cc434482b915:1155)6fffd3b9-b1f8-4bcf-bc47-c92f726cabfb:1325)389c6172-5350-4199-b387-29540a785b5a:42,n13:0)bf915916-25af-4cf4-b258-25422a0360e6:15,n11:0)15a37f26-1ebd-4a43-b3a5-a8962e5e0112:10,n15:0)5c9cf572-6674-45ed-8647-a96c30b2c098:7,n10:0)debcb1ee-4c8a-4db0-be04-25a7ad8e5aad:2,(n8:0,(n5:0,(n14:0,(n3:0,(n12:0,n9:0)ec159609-da23-43d0-814a-4981b51a1b72:0)c05653ec-9a44-4ab2-a5b0-8f3b3d10a41e:0)f7f52196-a2dc-443f-8e1d-54b5e4bb6dc2:0)3fc23945-5205-4af7-aaf8-3271f35280cf:0)ffe9b6b5-e105-4b3c-91e9-9482b268ff34:0)726af8d3-3dfe-49a3-bd23-0dfd36f568ff:0)27ece196-6123-4a35-bc65-db77090f1882:0,n1:0)fb7d141a-3eb9-4dd7-9bbd-8c079d65c0d3:0,n2:0)509e48c2-b79f-4dc2-afe1-67bedf7cc929:0);", format = 1)
         obs = tree_real_data
+        print(growtree.tree_height(obs))
     else: # simulate observed tree based on artificial true values sampled from the prior distributions 
-        obs = (gen_tree_sims(d = d_true, r = r_true, sub_rate = sub_true, birth_shape = birth_s_true, death_shape = death_s_true, sub_shape = sub_s_true, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
+        obs = (gen_tree_sims(d = d_true, r = r_true, sub_rate = sub_true, birth_shape = birth_s_true, death_shape = death_s_true, sub_shape = sub_s_true, leaf_goal = 10, sampling_rate = sampling_rate, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
         while(growtree.tree_nleaf(obs) < 10): # artificial obs tree must have at least 10 leaves
             d_true = gen_param(d_dist)
             r_true = gen_param(r_dist)
@@ -335,7 +335,7 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
             birth_s_true = gen_param(birth_s)
             death_s_true = gen_param(death_s)
             sub_s_true = gen_param(sub_s)
-            obs = (gen_tree_sims(d = d_true, r = r_true, sub_rate = sub_true, birth_shape = birth_s_true, death_shape = death_s_true, sub_shape = sub_s_true, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
+            obs = (gen_tree_sims(d = d_true, r = r_true, sub_rate = sub_true, birth_shape = birth_s_true, death_shape = death_s_true, sub_shape = sub_s_true, leaf_goal = 10, sampling_rate = sampling_rate, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
         
     obs_nleaf = growtree.tree_nleaf(obs)
     
@@ -345,7 +345,7 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
     'sim' is a simulator node with the 'gen_tree_sims()' function, the prior distributions of rate 
     and shape parameters, and the observed tree ('obs') passed to it as arguments.
     """
-    sim = elfi.Simulator(elfi.tools.vectorize(gen_tree_sims), 0, 0, 0, birth_s, death_s, sub_s, obs_nleaf, True, observed = obs) 
+    sim = elfi.Simulator(elfi.tools.vectorize(gen_tree_sims), 0, 0, 0, birth_s, death_s, sub_s, obs_nleaf, sampling_rate, True, observed = obs) 
     
     """
     Below are summary nodes with each node having a unique tree summary statistic function
@@ -606,6 +606,6 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
 #pr = cProfile.Profile()   
 #pr.enable()
 #run_main(is_summary = True, is_print = True, num_accept = 10, isreal_obs=True) # uncomment to run abc directly by running this file
-
+run_main(num_accept = 10, isreal_obs=True)
 #pr.disable()
 #pr.print_stats(25)

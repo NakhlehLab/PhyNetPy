@@ -143,6 +143,25 @@ def tree_nleaf(t):
         num_leaves = tree_nleaf(t.children[0]) + tree_nleaf(t.children[1]) # add leaves of both children
     return num_leaves
 
+def tree_height(t): 
+    """
+    Returns the height (maximum depth) of the tree. 
+    """
+    if t == None:
+        return 0 
+    left_h = 0
+    right_h = 0
+    #print(t)
+    num_c = len(t.children)  
+    if(num_c == 1): # tree with 1 child
+        left_h = tree_height(t.children[0]) 
+    elif(num_c == 2): # tree with 2 children
+        left_h = tree_height(t.children[0]) 
+        right_h = tree_height(t.children[1]) 
+        print(t.dist)
+    return max(left_h, right_h) + t.dist
+
+
 def growtree_old(seq, b, d, s, shape_b, shape_d, shape_s, branch_info, goal_nleaf):
     """
     Returns a birth-death tree. Populates '__seq_dict' with 'sequence number : sequence' pairs. 
@@ -269,7 +288,7 @@ def growtree_old(seq, b, d, s, shape_b, shape_d, shape_s, branch_info, goal_nlea
                 __curr_lineages -= 1 # the number of extant lineages in the tree decreases by 1 (this one died)
     return t
         
-def growtree(seq, b, d, s, max_time, shape_b, shape_d, shape_s, branch_info):
+def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
     """
     Returns a birth-death tree. Used as a recursive helper function for 'gen_tree()' that produces
     the birth-death tree. Populates '__seq_dict' with 'sequence number : sequence' pairs. 
@@ -280,8 +299,6 @@ def growtree(seq, b, d, s, max_time, shape_b, shape_d, shape_s, branch_info):
     global __seq_dict
     global __sum_dict
     
-    max_leaves = 3000
-
     rng = random.Random()
 
     pr = cProfile.Profile()
@@ -299,7 +316,7 @@ def growtree(seq, b, d, s, max_time, shape_b, shape_d, shape_s, branch_info):
     curr_time = 0
     total_iter = 0
     
-    while(curr_time <= max_time) and __curr_lineages < max_leaves:
+    while(__curr_lineages <= max_leaves):
         total_iter += 1
         if (__curr_lineages == 0):
             return t
@@ -429,7 +446,7 @@ def growtree(seq, b, d, s, max_time, shape_b, shape_d, shape_s, branch_info):
 
 
         
-def gen_tree(b, d, s, shape_b, shape_d, shape_s, branch_info, seq_length, goal_leaves = 10):
+def gen_tree(b, d, s, shape_b, shape_d, shape_s, branch_info, seq_length, goal_leaves, sampling_rate):
     """
     Returns a birth-death tree. All rates (birth, death, and substitution) may change upon a substitution.
     'b', 'd', and 's' are the initial values of the birth, death, and substitution rates (respectively).
@@ -452,13 +469,13 @@ def gen_tree(b, d, s, shape_b, shape_d, shape_s, branch_info, seq_length, goal_l
     global __seq_dict
     seq = gen_sequence(seq_length) # generate random genetic sequence for root cell 
  
-    t = growtree(seq, b, d, s, .75, shape_b, shape_d, shape_s, branch_info) # generate the tree 
+    t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info) # generate the tree 
     # reset all global vars before constructing another tree
     __seq_dict = {} 
     __seq_counter = 0
     __lineage_dict = {} 
     __curr_lineages = 1 
-
+    print(tree_height(t))
     return t
 
 def getNewick(t):
@@ -570,22 +587,7 @@ def tree_branch_variance(t):
         return 0
     return statistics.variance(branch_arr)
 
-def tree_height(t): 
-    """
-    Returns the height (maximum depth) of the tree. 
-    """
-    if t == None:
-        return 0 
-    left_h = 0
-    right_h = 0
-    #print(t)
-    num_c = len(t.children)  
-    if(num_c == 1): # tree with 1 child
-        left_h = tree_height(t.children[0]) 
-    elif(num_c == 2): # tree with 2 children
-        left_h = tree_height(t.children[0]) 
-        right_h = tree_height(t.children[1]) 
-    return max(left_h, right_h) + t.dist
+
 
 def __tree_root_dist(node):
     """

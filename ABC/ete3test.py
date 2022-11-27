@@ -5,9 +5,10 @@ import cProfile
 # pr = cProfile.Profile()
 # pr.enable()
 for i in range(0,1):
-    t = growtree.gen_tree(20, 0.01, 0.5, 1, 1, 1, 1, 100, goal_leaves = 32)
+    t = growtree.gen_tree(20, 0.01, 0.5, 1, 1, 1, 1, 100, goal_leaves = 32, sampling_rate=0.01)
     #print(t)
     print(growtree.tree_nleaf(t))
+    print(growtree.tree_height(t))
     #print(growtree.getNewick(t))
     growtree.outputNewick(t, "NWtree")
     #growtree.print_seq()
