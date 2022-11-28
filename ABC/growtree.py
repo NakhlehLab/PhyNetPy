@@ -471,7 +471,7 @@ def gen_tree(b, d, s, shape_b, shape_d, shape_s, branch_info, seq_length, goal_l
     global __curr_lineages
     global __seq_dict
     seq = gen_sequence(seq_length) # generate random genetic sequence for root cell 
-    print(branch_info)
+    print("branch info", branch_info)
     t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info) # generate the tree 
     # reset all global vars before constructing another tree
     __seq_dict = {} 
