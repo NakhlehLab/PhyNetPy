@@ -91,9 +91,10 @@ def gen_event2(lin_dict):
     lineage = random.choice(list(lin_dict.keys()))
     rates = lin_dict[lineage]
     selection = random.random()
-    if selection < rates[0]:
+    normalized_rates = [rate / sum(rates) for rate in rates]
+    if selection < normalized_rates[0]:
         return [lineage, "birth"]
-    elif selection < rates[0] + rates[1]:
+    elif selection < normalized_rates[0] + normalized_rates[1]:
         return [lineage, "death"]
     else:
         return [lineage, "sub"]
