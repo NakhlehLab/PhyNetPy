@@ -346,7 +346,7 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
         # 'event' holds the event that just occurred as a string, 'curr_t' holds the TreeNode object (lineage) on which the event occurred
         event = event_pair[1]
         curr_t = event_lineage_key
-        print(event)
+        #print(event)
 
         # extracting the attributes associated with the lineage of interest (where the event will occur)
         curr_seq = __seq_dict[curr_t.name] # getting the current lineage's sequence
@@ -422,11 +422,11 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
             __seq_dict[event_lineage_key] = curr_seq # update the 'sequence number : sequence' pair in the '__seq_dict' dictionary
             
             # if branch length is a variable of number of substitutions, increase lineage's branch length by 1
-            print("sub")
+            #print("sub")
             if(branch_info == 1):
-                print(curr_t.dist)
+                #print(curr_t.dist)
                 curr_t.dist += 1
-                print(curr_t.dist)
+                #print(curr_t.dist)
         
         
         
@@ -472,14 +472,14 @@ def gen_tree(b, d, s, shape_b, shape_d, shape_s, branch_info, seq_length, goal_l
     global __curr_lineages
     global __seq_dict
     seq = gen_sequence(seq_length) # generate random genetic sequence for root cell 
-    print("branch info", branch_info)
+    #print("branch info", branch_info)
     t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info) # generate the tree 
     # reset all global vars before constructing another tree
     __seq_dict = {} 
     __seq_counter = 0
     __lineage_dict = {} 
     __curr_lineages = 1 
-    #print(tree_height(t))
+    print(tree_height(t))
     return t
 
 def getNewick(t):

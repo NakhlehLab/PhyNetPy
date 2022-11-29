@@ -11,9 +11,9 @@ import math
 import cProfile
 
 
-d_dist = elfi.Prior(scipy.stats.expon, 8, 12) # prior distribution for diversification
+d_dist = elfi.Prior(scipy.stats.expon, 0, 1) # prior distribution for diversification
 r_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for turnover
-sub_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for sub
+sub_dist = elfi.Prior(scipy.stats.uniform, 50, 100) # prior distribution for sub
 sampling_rate_arr = []
 
 def calc_rates_bd(d, r):
