@@ -73,7 +73,7 @@ def MCMC_BiMarkers(filenames: list, treeout: str, outfile: str, submodel=JC(), n
     
     
     
-def SNAPP_Likelihood(filename, grouping=None):
+def SNAPP_Likelihood(filename, grouping=None, auto_detect:bool = False):
     """
     Computes the SNAPP Likelihood for a nexus file that contains Bi-allelic data for a sampled set of taxa
 
@@ -82,7 +82,7 @@ def SNAPP_Likelihood(filename, grouping=None):
                own group. Format is the number of taxa in each group, ie for 6 total, [3, 2, 1] is a valid grouping
     """
 
-    aln = MSA(filename, grouping)
+    aln = MSA(filename, grouping=grouping, grouping_auto_detect=auto_detect)
     network = CBDP(1, .5, aln.num_groups()).generateTree()
     network.printGraph()
     u = 1
@@ -106,11 +106,13 @@ def SNAPP_with_tree(filename, u, v, coal, show_partials = False, path=None):
     return snp_model.SNP_likelihood()
 
 
-print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snp_samples.nex", [3, 3, 3]))
+test_grouping = {"human": ["human1", "human2", "human3"], "chimp": ["chimp1", "chimp2", "chimp3"], "gorilla":["gorilla1", "gorilla2", "gorilla3"]}
 
-print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
+print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snp_samples.nex", auto_detect=True))
 
-print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snp_network_test.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
+#print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
+
+#print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snp_network_test.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
 
 # print(ML_TREE(["C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex"], ))
 
