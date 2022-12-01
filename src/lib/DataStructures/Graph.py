@@ -1,7 +1,6 @@
 from collections import deque
 from Node import Node
 from pyvis.network import Network as N
-from IPython.display import display, HTML
 from GTR import *
 import numpy as np
 from SequenceSim import *

@@ -22,18 +22,14 @@ class ProposalKernel:
 
             Input: the state to be manipulated
         """
-        if self.taxa_move_count < 100:  # TODO: DOESN'T SCALE
-            self.taxa_move_count += 1
-            return TaxaSwapMove()
-        else:
-            random_num = random.random()
+        random_num = random.random()
 
-            if random_num < .1:
-                return RootBranchMove()
-            elif random_num < .6:
-                return UniformBranchMove()
-            else:
-                return TopologyMove()
+        if random_num < .1:
+            return RootBranchMove()
+        elif random_num < .6:
+            return UniformBranchMove()
+        else:
+            return TopologyMove()
 
     def reset(self):
         self.taxa_move_count = 0
@@ -242,16 +238,16 @@ def test():
     # pr.enable()
     #hill = HillClimbing(ProposalKernel(), JC(), data, 800)
     
-    MetH = MetropolisHastings(ProposalKernel(), JC(), data, 800)
+    MetH = MetropolisHastings(ProposalKernel(), JC(), data, 500)
     
     #final_state = hill.runMany(200)
-    final_state = MetH.run()
+    final_state = MetH.runMany(50)
     # pr.disable()
     # print(final_state)
     # print(final_state.current_model)
-    final_state.current_model.summary(
-         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
-         "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
+    # final_state.current_model.summary(
+    #      "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\finalTree.txt",
+    #      "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\lib\\DataStructures\\summary.txt")
     # # pr.disable()
     # pr.print_stats(sort="tottime")
     # print("----------------------")

@@ -3,7 +3,6 @@ from math import sqrt
 def partials_index(n):
     return int(.5 * (n - 1) * (n + 2))
 
-
 def undo_index(num):
     a = 1
     b = 1

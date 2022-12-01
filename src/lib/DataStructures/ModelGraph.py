@@ -1618,6 +1618,23 @@ class SNPBranchNode(CalculationNode):
             self.Qt = self.Q.expt(branch_len)
         
         
-        
+
+#PHASED VS UNPHASED NOTES
+# def SNP_compute_partials(matrix : Matrix, phased=False):
+#     if phased:
+#         r = [matrix.get_num_taxa() - sum(matrix.getColumnAt(i)) for i in range(matrix.uniqueSites)] #sum of the columns
+#         x = [r[i] / matrix.get_num_taxa() for i in range(matrix.uniqueSites)] #r_i / n
+#     else:
+#         r = [2 * matrix.get_num_taxa() - sum(matrix.getColumnAt(i)) for i in range(matrix.uniqueSites)]
+#         x = [r[i] / 2 * matrix.get_num_taxa() for i in range(matrix.uniqueSites)]
+
+#     partials = []
+
+#     for taxa in range(matrix.get_num_taxa()):
+#         likelihoods = np.zeros(matrix.uniqueSites)
+#         for site in range(matrix.uniqueSites):
+#             likelihoods[site] = comb(2 * matrix.get_num_taxa(), r[site]) * pow(x[site], r[site]) * pow((1 - x[site]), 2 * matrix.get_num_taxa() - r[site])
+
+#         partials.append(likelihoods)    
 
 
