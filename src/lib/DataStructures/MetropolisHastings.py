@@ -223,8 +223,7 @@ def test():
 
     # testnet = n.getNetwork(0)
     pre_msa = time.perf_counter()
-    msa = MSA(
-        "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
+    msa = MSA('src/test/MetroHastingsTests/truePhylogeny.nex')
     post_msa = time.perf_counter()
     
     print("TIME TO PROCESS DATA = " + str(post_msa - pre_msa)) 
