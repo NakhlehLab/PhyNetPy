@@ -108,11 +108,11 @@ def SNAPP_with_tree(filename, u, v, coal, show_partials = False, path=None):
 
 test_grouping = {"human": ["human1", "human2", "human3"], "chimp": ["chimp1", "chimp2", "chimp3"], "gorilla":["gorilla1", "gorilla2", "gorilla3"]}
 
-print(SNAPP_Likelihood("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snp_samples.nex", auto_detect=True))
+#print(SNAPP_Likelihood('src/test/SNPtests/snp_samples.nex', auto_detect=True))
 
-#print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snptest_ez.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
+#print(SNAPP_with_tree('src/test/SNPtests/snptest_ez.nex', 1, 1, .2,  show_partials = True, path="tree.html"))
 
-#print(SNAPP_with_tree("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\SNPtests\\snp_network_test.nex", 1, 1, .2,  show_partials = True, path="tree.html"))
+print(SNAPP_with_tree('src/test/SNPtests/snp_network_test.nex', 1, 1, .2,  show_partials = True, path="tree.html"))
 
 # print(ML_TREE(["C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex"], ))
 

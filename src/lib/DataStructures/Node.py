@@ -125,15 +125,30 @@ class Node:
         """
         return self.is_retic
 
-    def add_attribute(self, key, value):
+    def add_attribute(self, key, value, append = False):
         """
         Put a key and value pair into the node attribute dictionary.
 
         If the key is already present, it will overwrite the old value.
         """
-        self.attributes[key] = value
+        
+        if append:
+            if key in self.attributes.keys():
+                content = self.attributes[key]
+                print(content)
+                print(value)
+                
+                if type(content) is dict:
+                    content.update(value)
+                    print(content)
+                    self.attributes[key] = content
+                elif type(content) is list:
+                    content.extend(value)
+                    self.attributes[key] = content
+        else:
+            self.attributes[key] = value
 
-    def attribute_value_if_exists(self, attr):
+    def attribute_value_if_exists(self, attr:str):
         """
         If attr is a key in the attributes mapping, then
         its value will be returned.

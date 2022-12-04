@@ -7,6 +7,10 @@ from Node import Node
 import copy
 from Node import NodeError
 
+class NetworkBuilderError(Exception):
+    def __init__(self, message = "Something went wrong with building the network") -> None:
+        self.message = message
+        super().__init__(self.message)
 
 
 class NetworkBuilder:
@@ -16,14 +20,19 @@ class NetworkBuilder:
         self.networks = []
         self.internalCount = 0
         self.name_2_net = {}
+        self.inheritance_queue : set = set()
         self.build()
 
     def build(self):
         """
-                Using the reader object, iterate through each of the trees 
-                defined in the file and store them as Network objects into the 
-                networks array
-                """
+        Using the reader object, iterate through each of the trees 
+        defined in the file and store them as Network objects into the 
+        networks array
+        """
+
+    
+        if self.reader.trees is None:
+            raise NetworkBuilderError("There are no trees listed in the file")
 
         for t in self.reader.trees:
             # grab the right hand side of the tree definition for the tree, and the left for the name
@@ -62,6 +71,17 @@ class NetworkBuilder:
     
             edges.append([parentNode, childNode])
         net.addEdges(edges)
+        
+        for node_pair in self.inheritance_queue:
+            the_node = node_pair[0]
+            par_node = node_pair[1]
+            
+            gamma = the_node.attribute_value_if_exists("gamma")
+            if len(list(gamma.keys())) != 1:
+                raise NetworkBuilderError("There is an incorrect amount of entries in the gamma attribute")
+            complement = 1 - gamma[list(gamma.keys())[0]]
+            the_node.add_attribute("gamma", {par_node: complement}, append=True)
+            
 
         return net
 
@@ -119,11 +139,26 @@ class NetworkBuilder:
 
         extendedNewickParsedLabel = node.name.split("#")
 
-        # if node already exists, just add its other parent
+        # if node already exists, just add its other parent and any other info 
         oldNode = network.hasNodeWithName(extendedNewickParsedLabel[-1])
         if oldNode != False:
             if oldNode.is_reticulation() and not called_as_parent:
                 oldNode.add_length(node.branch_length, parent)
+                print(node.comment)
+                if node.comment is not None:
+                    contents = oldNode.comment.split("=")
+                    if "&gamma" == contents[0]:
+                        if oldNode.attribute_value_if_exists("gamma") is not None:
+                            oldNode.add_attribute("gamma", {parent.get_name(): float(contents[1])}, append = True)
+                else:
+                    print(oldNode.attribute_value_if_exists("gamma"))
+                    print(parent.get_name())
+                    if oldNode.attribute_value_if_exists("gamma") is not None:
+                        if len(oldNode.attribute_value_if_exists("gamma").values()) != 1:
+                            raise NetworkBuilderError("Gamma attribute malformed")
+                        complement = 1- list(oldNode.attribute_value_if_exists("gamma").values())[0]
+                        oldNode.add_attribute("gamma", {parent.get_name(): complement}, append = True)
+                        
             return oldNode
 
         # if its a reticulation node, grab the formatting information
@@ -145,7 +180,14 @@ class NetworkBuilder:
             newNode = Node({parent: node.branch_length}, name=extendedNewickParsedLabel[0])
 
         if node.comment is not None:
-            newNode.add_attribute("comment", node.comment)
+            contents = node.comment.split("=")
+            if "&gamma" == contents[0]:
+                print(parent.get_name())
+                newNode.add_attribute("gamma", {parent.get_name(): float(contents[1])})
+            else:
+                newNode.add_attribute("comment", node.comment)
+                print("adding to inheritance queue")
+                self.inheritance_queue.add([newNode, parent])
             
         network.addNodes(newNode)
         return newNode
@@ -160,6 +202,6 @@ class NetworkBuilder:
         return self.name_2_net[network]
 
 
-# nb = NetworkBuilder("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\berk_test.nex")
-# net = nb.getNetwork(1)
-# net.printGraph()
+nb = NetworkBuilder('src/test/NetworkBuilderTests/hybridization_with_gamma.nex')
+net = nb.getNetwork(0)
+net.printGraph()

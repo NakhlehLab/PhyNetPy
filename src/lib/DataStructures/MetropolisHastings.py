@@ -237,10 +237,10 @@ def test():
     # pr.enable()
     #hill = HillClimbing(ProposalKernel(), JC(), data, 800)
     
-    MetH = MetropolisHastings(ProposalKernel(), JC(), data, 500)
+    MetH = MetropolisHastings(ProposalKernel(), JC(), data, 900)
     
     #final_state = hill.runMany(200)
-    final_state = MetH.runMany(50)
+    final_state = MetH.runMany(5)
     # pr.disable()
     # print(final_state)
     # print(final_state.current_model)

@@ -10,6 +10,7 @@ from SNPTransition import SNPTransition
 from scipy.special import binom
 import scipy
 from SNPModule import *
+from Node import Node
 
 def vec_bin_array(arr, m):
     """
@@ -320,7 +321,11 @@ class Model:
                     branch_index += 1
                     branches.append(branch)
                     branch.set_net_parent(branch_par)
-                    
+                    gamma = node.attribute_value_if_exists("gamma")
+                    if gamma is not None:
+                        if branch_par.get_name() in gamma.keys():
+                            branch.set_inheritance_probability(gamma[branch_par.get_name()])
+                        
                     # Each branch has a link to the vector
                     tree_heights_node.join(branch)
                     # Add to list of nodes
@@ -365,6 +370,11 @@ class Model:
                     tree_heights_vec.append(branch_len)
                     branch_index += 1
                     branches.append(branch)
+                    
+                    gamma = node.attribute_value_if_exists("gamma")
+                    if gamma is not None:
+                        if branch_par.get_name() in gamma.keys():
+                            branch.set_inheritance_probability(gamma[branch_par.get_name()])
                     
                     # Each branch has a link to the vector
                     tree_heights_node.join(branch)
@@ -419,6 +429,8 @@ class Model:
             if type(node) is SNPBranchNode:
                 if node.net_parent: 
                     node.set_net_parent(self.network_node_map[node.net_parent])
+                    # if node.net_parent.is_reticulation():
+                    #     node.set_inheritance_probability(node_net_parent.attribute_value_if_exists("gamma")[])
         
         # Now adjust the model to be ultrametric
         tree_heights_adj = np.zeros(len(tree_heights_vec))
@@ -568,7 +580,7 @@ class Model:
             # Add edges
             if node.get_children() is not None:
                 for child in node.get_children():
-                    net.addEdges((inv_map[node], inv_map[child]))  # switch order?
+                    net.addEdges((inv_map[node], inv_map[child])) 
 
         net.printGraph()
         newick_str = net.newickString()
@@ -894,17 +906,66 @@ class NetworkNode(ABC, ModelNode):
     def get_children(self):
         return self.children
 
+    
+class BranchNode(ABC, ModelNode):
+    def __init__(self, vector_index: int, branch_length: float) -> None:
+        super().__init__()
+        self.index : int = vector_index
+        self.branch_length : float = branch_length
+        self.net_parent : NetworkNode = None
+        self.gamma : float = None
 
-class BranchLengthNode(CalculationNode):
+    def switch_index(self, new_index:int):
+        """
+        Change the lookup index of this branch in the TreeHeight node
+
+        Args:
+            new_index (int): a new index
+        """
+        self.index = new_index
+
+    def get_index(self):
+        """
+        Returns:
+            int: The index into the TreeHeight vector
+        """
+        return self.index
+
+    def set_net_parent(self, parent: NetworkNode):
+        """
+        Set the network parent 
+
+        Args:
+            parent (NetworkNode): the node that this branch points to
+        """
+        self.net_parent = parent
+        
+
+    def inheritance_probability(self)->float:
+        """
+        Return the gamma rate/ inheritance probability for a branch stemming from a hybridization node
+
+        Returns:
+            float: A number from [0,1]
+        """
+        if self.gamma is None:
+            raise ModelError("An inheritance probability is not available for this node")
+        return self.gamma
+    
+    def set_inheritance_probability(self, new_gamma : float)->None:
+        self.gamma = new_gamma
+    
+    
+
+
+class BranchLengthNode(BranchNode, CalculationNode):
     """
     A calculation node that uses the substitution model to calculate the
     transition matrix Pij
     """
 
     def __init__(self, vector_index: int, branch_length: float):
-        super().__init__()
-        self.index = vector_index
-        self.branch_length = branch_length
+        super().__init__(vector_index, branch_length)
         self.sub = None
         self.updated_sub = True
         self.as_height = True
@@ -935,11 +996,7 @@ class BranchLengthNode(CalculationNode):
         # return calculation
         return self.branch_length
 
-    def switch_index(self, new_index: int):
-        self.index = new_index
-
-    def get_index(self):
-        return self.index
+    
 
     def transition(self):
         """
@@ -1381,16 +1438,13 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         return self.name
 
 
-class SNPBranchNode(CalculationNode):
+class SNPBranchNode(BranchNode, CalculationNode):
 
     def __init__(self, vector_index: int, branch_length: float, Q: SNPTransition, total_samples:int, verbose = False):
-        super().__init__()
-        self.index = vector_index
-        self.branch_length = branch_length
+        super().__init__(vector_index, branch_length)
         self.Q = Q
         self.Qt = None
         self.verbose = verbose
-        self.net_parent = None
         self.branch_height = None
         print("total sample count: " + str(total_samples))
         self.total_samples = total_samples
@@ -1408,31 +1462,6 @@ class SNPBranchNode(CalculationNode):
 
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
-
-    def switch_index(self, new_index:int):
-        """
-        Change the lookup index of this branch in the TreeHeight node
-
-        Args:
-            new_index (int): a new index
-        """
-        self.index = new_index
-
-    def get_index(self):
-        """
-        Returns:
-            int: The index into the TreeHeight vector
-        """
-        return self.index
-    
-    def set_net_parent(self, parent:NetworkNode):
-        """
-        Set the network parent 
-
-        Args:
-            parent (NetworkNode): the node that this branch points to
-        """
-        self.net_parent = parent
 
     def get(self):
         if self.updated:
@@ -1497,20 +1526,39 @@ class SNPBranchNode(CalculationNode):
             # EQ 19
             # Get the top likelihoods of each of the child branches
             net_children = node_par.get_children()
+            
            
             if node_par.is_reticulation():
                 F_t_x = net_children[0].get_branches()[0].get()[1]
+                
+                #Get the other branch
+                sibling_branches = node_par.get_branches()
+                if sibling_branches[0] == self:
+                    sibling_branch : BranchNode = sibling_branches[1]
+                else:
+                    sibling_branch : BranchNode = sibling_branches[0]
+                
+                g_this = self.inheritance_probability()
+                g_that = sibling_branch.inheritance_probability()
+                
+                if g_this + g_that != 1:
+                    raise ModelError("Set of inheritance probabilities do not sum to 1 for node<" + node_par.name + ">")
+                
+                print("INHERITANCE TEST: " + str(g_this) + " " + str(g_that))
+                
+                # TODO: THIS PART  
                 for site in range(site_count):
                     for index in range(0, vector_len):
-                        
-                            for rz in range(0, 3):
-                                for ry in range(0, 3):
-                                    #Add in hybridization rates
-                                    F_b[index][site] = F_t_x[partials_index(nz+ny) + rz+ry][site] * math.comb(nz + ny, ny) * (.5**ny) * (.5**nz)
+                        for nz in range(0, 3):
+                            for ny in range(0, 3):
+                                for rz in range(0, 3):
+                                    for ry in range(0, 3):
+                                        #Add in hybridization rates
+                                        F_b[index][site] = F_t_x[partials_index(nz+ny) + rz+ry][site] * math.comb(nz + ny, ny) * (g_this**ny) * (g_that**nz)
             
         
             else:
-                F_t_y = net_children[0].get_branches()[0].get()[1] # TODO:INCORRECT
+                F_t_y = net_children[0].get_branches()[0].get()[1] # TODO:INCORRECT. If net child is a retic, no guarantee 0 is the correct branch
                 F_t_z = net_children[1].get_branches()[0].get()[1]
                 
                 #Find out whether lineage y and z have leaves in common 
@@ -1572,6 +1620,7 @@ class SNPBranchNode(CalculationNode):
 
         # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
         if node_par.parents is not None:
+            m_y = node_par.possible_lineages()
             # ONLY CALCULATE F_T FOR NON ROOT BRANCHES
             F_t = np.zeros((vector_len, site_count))
             
