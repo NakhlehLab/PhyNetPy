@@ -101,11 +101,11 @@ def tree_height(t):
         right_h = tree_height(t.children[1]) 
     return max(left_h, right_h) + t.dist
 
-
+"""
 def growtree_old(seq, b, d, s, shape_b, shape_d, shape_s, branch_info, goal_nleaf):
-    """
-    Returns a birth-death tree. Populates '__seq_dict' with 'sequence number : sequence' pairs. 
-    """
+    
+    #Returns a birth-death tree. Populates '__seq_dict' with 'sequence number : sequence' pairs. 
+    
     # Declaring static/global variables (described at the top of the file)
     global __seq_counter 
     global __lineage_dict
@@ -227,7 +227,8 @@ def growtree_old(seq, b, d, s, shape_b, shape_d, shape_s, branch_info, goal_nlea
                 del __lineage_dict[event_lineage_key] # remove this lineage from the extant lineage dictionary
                 __curr_lineages -= 1 # the number of extant lineages in the tree decreases by 1 (this one died)
     return t
-        
+"""
+
 def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
     """
     Returns a birth-death tree. Used as a recursive helper function for 'gen_tree()' that produces
