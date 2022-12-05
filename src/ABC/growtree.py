@@ -374,8 +374,8 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
     #pr.print_stats()
     #print(total_iter)
     #print(tree_nleaf(t))
-    if infinite_sub_checker > 500000:
-        raise SimulationError("INFINITE SUB LOOP")
+        if infinite_sub_checker > 50000:
+            raise SimulationError("INFINITE SUB LOOP")
     return t
 
 
@@ -407,14 +407,17 @@ def gen_tree(b, d, s, shape_b, shape_d, shape_s, branch_info, seq_length, goal_l
     global __lineage_dict
     global __curr_lineages
     global __seq_dict
-    seq = gen_sequence(seq_length) # generate random genetic sequence for root cell 
-    #print("branch info", branch_info)
-    t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info) # generate the tree 
-    # reset all global vars before constructing another tree
+    
     __seq_dict = {} 
     __seq_counter = 0
     __lineage_dict = {} 
     __curr_lineages = 1 
+    
+    seq = gen_sequence(seq_length) # generate random genetic sequence for root cell 
+    #print("branch info", branch_info)
+    t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info) # generate the tree 
+    # reset all global vars before constructing another tree
+    
     print(tree_height(t))
     return t
 

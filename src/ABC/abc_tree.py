@@ -13,7 +13,7 @@ import cProfile
 
 d_dist = elfi.Prior(scipy.stats.expon, 0, 1) # prior distribution for diversification
 r_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for turnover
-sub_dist = elfi.Prior(scipy.stats.uniform, 50, 100) # prior distribution for sub
+sub_dist = elfi.Prior(scipy.stats.uniform, 5, 10) # prior distribution for sub
 sampling_rate_arr = []
 
 def calc_rates_bd(d, r):
@@ -104,7 +104,7 @@ def gen_tree_sims(d = 1, r = 0.5, sub_rate = 1, birth_shape = 1, death_shape = 1
             death = rate_arr[1] # extract initial death rate from result array
             new_tree = growtree.gen_tree(b = birth, d = death, s = s_drawn, shape_b = birth_shape, shape_d = death_shape, shape_s = sub_shape, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate)
             curr_nleaf = growtree.tree_nleaf()
-            #print("nleaf: ", curr_nleaf )
+            print("nleaf: ", curr_nleaf )
         new_tree = sample_leaves(new_tree, leaf_goal)
         #print(new_tree)
         #print("satisfied nleaf condition", growtree.tree_nleaf(new_tree))
