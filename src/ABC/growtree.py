@@ -11,6 +11,13 @@ __lineage_dict = {} # A global dictionary keeping track every extant lineage (Tr
 #__goal_leaves = 0 # The number of leaves a simulated tree should reach before stopping
 __curr_lineages = 1 # A global counter of the current number of extant lineages (leaves) in a growing simulated tree
 
+
+class SimulationError(Exception):
+    def __init__(self, message = "Something went wrong with the simulation")->None:
+        self.message = message
+        super().__init__(self.message)
+        
+
 def gen_sequence(length: int, off_lim:str = None) -> numpy.ndarray:
     """
     Randomly generates a 'length' long genetic sequence of bases. 'off_lim' is by default 'None', but can be used
@@ -48,8 +55,9 @@ def gen_event2(lin_dict:dict)->list:
     rates = lin_dict[lineage]
     
     selection = random.random()
+    
     if sum(rates) == 0:
-        print(rates)
+        raise SimulationError("Sum of the rates is 0")
     
     normalized_rates = [rate / sum(rates) for rate in rates]
     
@@ -69,21 +77,22 @@ def gen_rate(mean, shape):
     return numpy.random.gamma(shape, scale = scale_calc, size = None)
 
 
-def tree_nleaf(t):
-    """
-    Returns number of leaves in a tree.
-    """
-    if(t == None): # empty tree
-        return 0
-    if(t.is_leaf()): # node is leaf so increment
-        return 1
-    num_leaves = 0
-    num_c = len(t.children)  
-    if(num_c == 1): # tree with 1 child
-        num_leaves = tree_nleaf(t.children[0]) 
-    elif(num_c == 2): # tree with 2 children
-        num_leaves = tree_nleaf(t.children[0]) + tree_nleaf(t.children[1]) # add leaves of both children
-    return num_leaves
+def tree_nleaf(t = None):
+    # """
+    # Returns number of leaves in a tree.
+    # """
+    if t is not None: # empty tree
+        if(t.is_leaf()): # node is leaf so increment
+            return 1
+        num_leaves = 0
+        num_c = len(t.children)  
+        if(num_c == 1): # tree with 1 child
+            num_leaves = tree_nleaf(t.children[0]) 
+        elif(num_c == 2): # tree with 2 children
+            num_leaves = tree_nleaf(t.children[0]) + tree_nleaf(t.children[1]) # add leaves of both children
+        return num_leaves
+    else:
+        return __curr_lineages
 
 def tree_height(t): 
     """
@@ -250,13 +259,15 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
     __lineage_dict[t] = [b, d, s] # add new TreeNode and its associated rates into the lineage dictionary
     t.dist = 0
     __sum_dict = sum(__lineage_dict[t])
+    
+    infinite_sub_checker = 0
 
     # finding the wait time to any event (b, d, or s) based on rates
     curr_time = 0
     total_iter = 0
     number_of_leaves = 1
     
-    while(number_of_leaves <= max_leaves):
+    while(__curr_lineages <= max_leaves):
 
         total_iter += 1
         if (__curr_lineages == 0):
@@ -265,7 +276,10 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
         rate_any_event = __sum_dict # sum_dict(__lineage_dict) # sum of all the rates for all extant lineages
         wait_time = rng.expovariate(rate_any_event)
         curr_time += wait_time
-        event_pair = gen_event2(__lineage_dict)
+        try:
+            event_pair = gen_event2(__lineage_dict)
+        except:
+            return t
 
         event_lineage_key = event_pair[0]
         # 'event' holds the event that just occurred as a string, 'curr_t' holds the TreeNode object (lineage) on which the event occurred
@@ -322,6 +336,7 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
             
         elif(event == "sub"): # change current rates based on sampling from a gamma distribution and continue to next event
             
+            infinite_sub_checker += 1
             # mean of gamma distribution is current rate
             curr_b = gen_rate(curr_b, shape_b) # generate new birth rate
             curr_d = gen_rate(curr_d, shape_d) # generate new death rate
@@ -359,6 +374,8 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
     #pr.print_stats()
     #print(total_iter)
     #print(tree_nleaf(t))
+    if infinite_sub_checker > 500000:
+        raise SimulationError("INFINITE SUB LOOP")
     return t
 
 

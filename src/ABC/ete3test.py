@@ -7,7 +7,7 @@ import cProfile
 for i in range(0,10):
     t = growtree.gen_tree(.1, .01, 10, 100, .001, 100, 1, 100, goal_leaves = 32, sampling_rate=0.01)
     #print(t)
-    print("num leaves", growtree.tree_nleaf(t))
+    print("num leaves", growtree.tree_nleaf())
     print("height", growtree.tree_height(t))
     #print(growtree.getNewick(t))
     growtree.outputNewick(t, "NWtree")
