@@ -1,4 +1,5 @@
 from collections import deque
+import copy
 from Node import Node
 from pyvis.network import Network as N
 from GTR import *
@@ -233,7 +234,7 @@ class DAG(Graph):
                 string for the network.
 
                 Returns: a newick string.
-                """
+        """
 
         root = self.findRoot()[0]
         children = {root: [set(), False]}
@@ -358,6 +359,31 @@ class DAG(Graph):
     
     def generate_node_heights(self):
         pass
-        
     
+    def is_acyclic(self):
+        """
+        Checks via topological sort that this graph object is acyclic
+
+        Returns:
+            bool: True, if graph is acyclic. Raises an error if there is a cycle.
+        """
         
+        graph_copy : DAG = copy.deepcopy(self)
+        
+        L = list() # Empty list where we put the sorted elements
+        Q = {graph_copy.findRoot()[0]} # Set of all nodes with no incoming edges
+        while len(Q) != 0:
+            n = Q.pop()
+            L.append(n)
+            outgoing_n_edges = {edge[1]:edge for edge in graph_copy.edges if edge[0] == n}
+            for m, e in outgoing_n_edges.items(): 
+                graph_copy.removeEdge(e)
+                if graph_copy.inDegree(m) == 0:
+                    Q.add(m)
+        if len(graph_copy.edges) != 0:
+            GraphTopologyError("Graph has cycles")
+        else:
+            return True
+    
+    
+    
