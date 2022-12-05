@@ -77,7 +77,7 @@ def gen_rate(mean, shape):
     return numpy.random.gamma(shape, scale = scale_calc, size = None)
 
 
-def tree_nleaf(t = None):
+def tree_nleaf(t):
     # """
     # Returns number of leaves in a tree.
     # """
@@ -92,7 +92,7 @@ def tree_nleaf(t = None):
             num_leaves = tree_nleaf(t.children[0]) + tree_nleaf(t.children[1]) # add leaves of both children
         return num_leaves
     else:
-        return __curr_lineages
+        return 0
 
 def tree_height(t): 
     """
@@ -369,6 +369,17 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
             __sum_dict -= sum(__lineage_dict[event_lineage_key])
             del __lineage_dict[event_lineage_key] # remove this lineage from the extant lineage dictionary
             __curr_lineages -= 1 # the number of extant lineages in the tree decreases by 1 (this one died)
+            node_to_remove = curr_t
+            curr_parent = curr_t.up
+            if(curr_parent != None):
+                while(len(curr_parent.children) < 2):
+                    node_to_remove = curr_parent
+                    curr_parent = curr_parent.up
+                    if(curr_parent == None):
+                        break
+
+            node_to_remove.detach()
+
 
     #pr.disable()
     #pr.print_stats()
@@ -418,7 +429,9 @@ def gen_tree(b, d, s, shape_b, shape_d, shape_s, branch_info, seq_length, goal_l
     t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info) # generate the tree 
     # reset all global vars before constructing another tree
     
-    print(tree_height(t))
+    #print(tree_height(t))
+    print(tree_nleaf(t))
+    print(__curr_lineages)
     return t
 
 def getNewick(t):
