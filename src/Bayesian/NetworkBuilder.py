@@ -202,6 +202,6 @@ class NetworkBuilder:
         return self.name_2_net[network]
 
 
-nb = NetworkBuilder('src/test/NetworkBuilderTests/hybridization_with_gamma.nex')
-net = nb.getNetwork(0)
-net.printGraph()
+# nb = NetworkBuilder('src/test/NetworkBuilderTests/files/hybridization_with_gamma.nex')
+# net = nb.getNetwork(0)
+# net.printGraph()

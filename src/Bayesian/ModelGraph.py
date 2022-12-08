@@ -1406,15 +1406,18 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         Returns:
             int: number of lineages
         """
-        pl = 0
-        for child in self.get_children():
-            if type(child) is SNPLeafNode:
-                #base case, = number of samples
-                pl += child.samples()
-            elif type(child) is SNPInternalNode:
-                #recurse over the internal node children
-                pl += child.possible_lineages()
-        return pl
+        # pl = 0
+        # for child in self.get_children():
+        #     if type(child) is SNPLeafNode:
+        #         #base case, = number of samples
+        #         pl += child.samples()
+        #     elif type(child) is SNPInternalNode:
+        #         #recurse over the internal node children
+        #         pl += child.possible_lineages()
+        # return pl
+        return sum([child.samples() for child in self.leaf_descendants])
+    
+    
 
     def calc(self):
         """
@@ -1529,7 +1532,10 @@ class SNPBranchNode(BranchNode, CalculationNode):
             
            
             if node_par.is_reticulation():
+                #RULE 3
                 F_t_x = net_children[0].get_branches()[0].get()[1]
+                
+                possible_lineages = node_par.possible_lineages() 
                 
                 #Get the other branch
                 sibling_branches = node_par.get_branches()
@@ -1548,14 +1554,14 @@ class SNPBranchNode(BranchNode, CalculationNode):
                 
                 # TODO: THIS PART  
                 for site in range(site_count):
-                    for index in range(0, vector_len):
-                        for nz in range(0, 3):
-                            for ny in range(0, 3):
-                                for rz in range(0, 3):
-                                    for ry in range(0, 3):
-                                        #Add in hybridization rates
-                                        F_b[index][site] = F_t_x[partials_index(nz+ny) + rz+ry][site] * math.comb(nz + ny, ny) * (g_this**ny) * (g_that**nz)
-            
+                    for ny in range(1, possible_lineages + 1):
+                        for ry in range(0, ny + 1):
+                            index = partials_index(ny) + ry
+                            for nz in range(0, possible_lineages- ny + 1):
+                                for rz in range(0, nz + 1):
+                                    #Add in hybridization rates
+                                    F_b[index][site] += F_t_x[partials_index(nz+ny) + rz+ry][site] * math.comb(nz + ny, ny) * (g_this**ny) * (g_that**nz)
+                print(F_b)
         
             else:
                 F_t_y = net_children[0].get_branches()[0].get()[1] # TODO:INCORRECT. If net child is a retic, no guarantee 0 is the correct branch
@@ -1566,31 +1572,32 @@ class SNPBranchNode(BranchNode, CalculationNode):
                 
                 if common_leaves: #If two sets are not disjoint
                     #Rule 4
-                    n_z = node_par.possible_lineages()  # Sum of possible lineages 
+                    # n_z = node_par.possible_lineages()  # Sum of possible lineages 
                     
-                    for site in range(site_count):
-                        for index in range(vector_len):
-                            actual_index = undo_index(index)
-                            n = actual_index[0]
-                            r = actual_index[1]
-                            tot = 0
+                    # for site in range(site_count):
+                    #     for index in range(vector_len):
+                    #         actual_index = undo_index(index)
+                    #         n = actual_index[0]
+                    #         r = actual_index[1]
+                    #         tot = 0
 
-                            # EQUATION 19
-                            for n_y in range(1, n):
-                                for r_y in range(0, r + 1):
-                                    if r_y <= n_y and r - r_y <= n - n_y:  # Ensure that the combinatorics makes sense
-                                        # Compute the constant term
-                                        const = math.comb(n_y, r_y) * math.comb(n - n_y, r - r_y) / math.comb(n, r)
+                    #         # EQUATION 19
+                    #         for n_y in range(1, n):
+                    #             for r_y in range(0, r + 1):
+                    #                 if r_y <= n_y and r - r_y <= n - n_y:  # Ensure that the combinatorics makes sense
+                    #                     # Compute the constant term
+                    #                     const = math.comb(n_y, r_y) * math.comb(n - n_y, r - r_y) / math.comb(n, r)
 
-                                        # Grab Ftz(n_y, r_y)
-                                        term1 = F_t_z[partials_index(n_y) + r_y][site]
+                    #                     # Grab Ftz(n_y, r_y)
+                    #                     term1 = F_t_z[partials_index(n_y) + r_y][site]
 
-                                        # Grab Fty(n - n_y, r - r_y)
-                                        term2 = F_t_y[partials_index(n - n_y) + r - r_y][site]
+                    #                     # Grab Fty(n - n_y, r - r_y)
+                    #                     term2 = F_t_y[partials_index(n - n_y) + r - r_y][site]
 
-                                        tot += term1 * term2 * const
+                    #                     tot += term1 * term2 * const
 
-                            F_b[index][site] = tot
+                    #         F_b[index][site] = tot
+                    raise ModelError("Not implemented yet")
                 else: # Then use Rule 2
                     m_y = node_par.possible_lineages()  # Sum of possible lineages 
                     

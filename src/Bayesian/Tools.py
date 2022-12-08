@@ -112,7 +112,7 @@ test_grouping = {"human": ["human1", "human2", "human3"], "chimp": ["chimp1", "c
 
 #print(SNAPP_with_tree('src/test/SNPtests/snptest_ez.nex', 1, 1, .2,  show_partials = True, path="tree.html"))
 
-print(SNAPP_with_tree('src/test/SNPtests/snp_network_test.nex', 1, 1, .2,  show_partials = True, path="tree.html"))
+print(SNAPP_with_tree('src/test/SNPtests/files/snp_network.nex', 1, 1, .2,  show_partials = True, path="tree.html"))
 
 # print(ML_TREE(["C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\felsensteinTests\\4taxaMultipleSites.nex"], ))
 

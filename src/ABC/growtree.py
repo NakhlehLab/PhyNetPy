@@ -39,7 +39,7 @@ def gen_sequence(length: int, off_lim:str = None) -> numpy.ndarray:
     seq = numpy.random.choice(["A", "C", "G", "T"] , length, weights)
     return seq
 
-def gen_event2(lin_dict:dict)->list:
+def gen_event(lin_dict:dict)->list:
     """
     Randomly selects a live lineage to perform a birth, death, or substitution event
     on, based on the weighted probabilities of each.
@@ -277,7 +277,7 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
         wait_time = rng.expovariate(rate_any_event)
         curr_time += wait_time
         try:
-            event_pair = gen_event2(__lineage_dict)
+            event_pair = gen_event(__lineage_dict)
         except:
             return t
 
