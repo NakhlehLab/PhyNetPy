@@ -1,7 +1,6 @@
 from collections import deque
 import copy
 from Node import Node
-from pyvis.network import Network as N
 from GTR import *
 import numpy as np
 from SequenceSim import *
@@ -268,43 +267,6 @@ class DAG(Graph):
         # call newickSubstring on the root of the graph to get the entire string
         return newickSubstring(children, root) + ";"
 
-    def visualize_graph(self, path):
-        
-        net = N(directed=True, layout="heirarchical", height="900px", width="100%")
-        node_id = 0
-        root = self.findRoot()[0]
-        net.add_node(node_id, label=root.get_name(), level=0)
-        node_id += 1
-        
-        ids = {root: 0}
-        dist = {root: 0}
-        
-        
-        q = deque()
-        q.appendleft(root)
-
-        while len(q) != 0:
-            cur = q.pop()
-            
-            children = self.findDirectSuccessors(cur)
-            #TODO: FIX FOR NETWORKS
-            for neighbor in children:
-
-                dist[neighbor] = dist[cur] + (neighbor.length()[0])
-                net.add_node(node_id, label=neighbor.get_name(), level=dist[neighbor])
-                ids[neighbor] = node_id
-                node_id += 1
-                
-                net.add_edge(ids[cur], ids[neighbor], value = .5, title = str(neighbor.length()[0]))
-                q.appendleft(neighbor)
-
-    
-        net.force_atlas_2based(overlap= 1)
-        net.show_buttons(filter_=["physics"])
-        if path is None:
-            net.show("TREE.html")
-        else:
-            net.show(path)
             
     def sim_seqs(self, seq_len:int , submodel=JC()) -> dict:
         
