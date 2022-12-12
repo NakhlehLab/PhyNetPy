@@ -1,9 +1,9 @@
 import copy
 
-from PhyNetPy.Simulation.BirthDeath import CBDP
+from BirthDeath import CBDP
 from ModelGraph import Model
-from PhyNetPy.Data.Matrix import Matrix
-from PhyNetPy.Data.GTR import *
+from Matrix import Matrix
+from GTR import *
 
 class State:
     """

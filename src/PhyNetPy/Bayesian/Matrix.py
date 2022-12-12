@@ -8,7 +8,6 @@ abstracted away. This class can represent a 4bit, 8bit, 32bit, or 64bit matrix.
 """
 
 from Bio import SeqIO, AlignIO
-import sys
 import numpy as np
 import math
 from Alphabet import Alphabet

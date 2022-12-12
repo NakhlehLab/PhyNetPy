@@ -1,11 +1,17 @@
-class TestMetropolisHastings():
+
+import sys
+sys.path.insert(0, "src/PhyNetPy/")
+from Inference import *
+
+
+class TestSNP():
     
-    def test_simple_complete_tree(self):
+    def test_with_tree(self):
         """
         This computes the likelihood of a complete nexus file, with no missing/gap characters
         in the data matrix. The nexus file contains a standard binary tree. Simplest possible working case.
         """
-        assert True == True
+        assert math.abs(SNAPP_Likelihood('src/PhyNetPy/test/SNPtests/files/snptest_ez.nex', 1, 1, 2) + 4.28) < .01
         
     def test_network(self):
         """

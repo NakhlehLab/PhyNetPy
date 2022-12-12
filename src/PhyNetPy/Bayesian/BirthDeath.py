@@ -1,7 +1,7 @@
 import random
 import numpy as np
-from PhyNetPy.Network.Node import Node
-from PhyNetPy.Network.Graph import DAG
+from Node import Node
+from Graph import DAG
 import math
 import copy
 

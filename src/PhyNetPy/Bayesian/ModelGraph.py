@@ -2,15 +2,15 @@ import math
 import random
 from abc import ABC, abstractmethod
 from math import comb, pow
-from PhyNetPy.Data.GTR import *
-from PhyNetPy.Network.Graph import DAG
-from PhyNetPy.Data.Matrix import Matrix
+from GTR import *
+from Graph import DAG
+from Matrix import Matrix
 from Move import Move
-from PhyNetPy.Data.SNPTransition import SNPTransition
+from SNPTransition import SNPTransition
 from scipy.special import binom
 import scipy
-from PhyNetPy.Data.SNPModule import *
-from PhyNetPy.Network.Node import Node
+from SNPModule import *
+from Node import Node
 
 def vec_bin_array(arr, m):
     """
@@ -562,7 +562,7 @@ class Model:
         net = DAG()
 
         network_nodes = []
-        if self.data.get_type() is "SNP":
+        if self.data.get_type() == "SNP":
             network_nodes.extend([self.snp_root])
         else:
             network_nodes.extend([self.felsenstein_root])

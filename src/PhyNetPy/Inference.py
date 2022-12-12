@@ -1,17 +1,16 @@
-from PhyNetPy.Data.Matrix import Matrix
-from Bio import AlignIO
-from PhyNetPy.Network.NetworkBuilder import NetworkBuilder
-from PhyNetPy.Data.GTR import *
-from PhyNetPy.Data.Alphabet import Alphabet
-from PhyNetPy.Simulation.BirthDeath import CBDP
-from PhyNetPy.Data.MSA import MSA
-from MetropolisHastings import ProposalKernel, MetropolisHastings
-from ModelGraph import Model
 
+import sys
+sys.path.insert(0, 'src/PhyNetPy/Bayesian')
 
+from Bayesian import NetworkBuilder as nb
+from Bayesian import MSA
+from Bayesian import MetropolisHastings as mh
+from Bayesian import Alphabet as a
+from Bayesian import BirthDeath as bd
+from Bayesian import Matrix as m
+from Bayesian import ModelGraph as mg
+from Bayesian import GTR 
 
-    
-    
     
     
 def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dict=None, auto_detect:bool = False, summary_path:str = None, network_path:str = None) -> float:
@@ -41,13 +40,13 @@ def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dic
 
     aln = MSA(filename, grouping=grouping, grouping_auto_detect=auto_detect)
     #Only generates tree starting conditions
-    network = CBDP(1, .5, aln.num_groups()).generateTree()
+    network = bd.CBDP(1, .5, aln.num_groups()).generateTree()
     
     snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":True}
-    m = Matrix(aln, Alphabet("SNP"))
-    snp_model = Model(network, m, snp_params=snp_params)
+    m = m.Matrix(aln, a.Alphabet("SNP"))
+    snp_model = mg.Model(network, m, snp_params=snp_params)
     
-    mh = MetropolisHastings(ProposalKernel(), JC(), m, 800, snp_model) #TODO: Submodel unnecessary for snp. make optional?
+    mh = mh.MetropolisHastings(mh.ProposalKernel(), GTR.JC(), m, 800, snp_model) #TODO: Submodel unnecessary for snp. make optional?
     result_state = mh.run()
     
     result_state.current_model.summary(network_path, summary_path)
@@ -85,16 +84,14 @@ def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dic
     aln = MSA(filename, grouping=grouping, grouping_auto_detect = auto_detect)
     
     #Read and parse the network described 
-    networks = NetworkBuilder(filename).get_all_networks()
+    networks = nb.NetworkBuilder(filename).get_all_networks()
     
     likelihoods = []
     for network in networks:
         snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":False}
         #Create model
-        snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None, snp_params=snp_params, verbose = show_partials)
+        snp_model = mg.Model(network, m.Matrix(aln, a.Alphabet("SNP")), None, snp_params=snp_params, verbose = show_partials)
         #Compute the likelihood
         likelihoods.append(snp_model.SNP_likelihood())
  
     return likelihoods
-
-

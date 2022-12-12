@@ -1,12 +1,11 @@
 from State import State
-from PhyNetPy.Data.MSA import MSA
-from PhyNetPy.Data.Matrix import Matrix
-
-import cProfile
+from MSA import MSA
+from Matrix import Matrix
+from ModelGraph import Model
 import time
 
 from Move import *
-from PhyNetPy.Data.GTR import *
+from GTR import *
 import random
 
 

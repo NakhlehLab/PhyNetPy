@@ -1,4 +1,6 @@
 from operator import index
+import sys
+print(sys.path)
 from nexus import NexusReader
 from Bio import Phylo
 from io import StringIO

@@ -1,9 +1,8 @@
 from collections import deque
 import copy
 from Node import Node
-from PhyNetPy.Data.GTR import *
 import numpy as np
-from PhyNetPy.Bayesian.SequenceSim import *
+
 
 
 
@@ -267,31 +266,6 @@ class DAG(Graph):
         # call newickSubstring on the root of the graph to get the entire string
         return newickSubstring(children, root) + ";"
 
-            
-    def sim_seqs(self, seq_len:int , submodel=JC()) -> dict:
-        
-        root = self.findRoot()[0]
-        sim = SeqSim()
-        alphabet = ['A', 'C', 'G', 'T']
-        seqs = {root.get_name() : np.random.choice(alphabet, seq_len, p=submodel.get_hyperparams()[0].reshape((4,)))}
-        
-        q = deque()
-        q.appendleft(root)
-
-        while len(q) != 0:
-            cur = q.pop()
-            
-            children = self.findDirectSuccessors(cur)
-            
-            for neighbor in children:
-                #Modify substitution model?
-                
-                sim.change_transition(neighbor.length())
-                seqs[neighbor.get_name()] = sim.modify_seq(seqs[cur.get_name()])
-                q.appendleft(neighbor)
-
-    
-        return seqs
     
     def generate_branch_lengths(self):
         """
@@ -317,10 +291,6 @@ class DAG(Graph):
                     q.append(neighbor)
                     visited.add(neighbor)
 
-    
-    
-    def generate_node_heights(self):
-        pass
     
     def is_acyclic(self):
         """
