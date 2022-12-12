@@ -70,6 +70,7 @@ class NetworkBuilder:
             childNode = self.parseNode(node, net, parent = parentNode)
     
             edges.append([parentNode, childNode])
+            
         net.addEdges(edges)
         
         for node_pair in self.inheritance_queue:

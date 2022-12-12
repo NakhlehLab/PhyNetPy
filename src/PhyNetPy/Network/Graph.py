@@ -1,9 +1,9 @@
 from collections import deque
 import copy
 from Node import Node
-from GTR import *
+from PhyNetPy.Data.GTR import *
 import numpy as np
-from SequenceSim import *
+from PhyNetPy.Bayesian.SequenceSim import *
 
 
 
