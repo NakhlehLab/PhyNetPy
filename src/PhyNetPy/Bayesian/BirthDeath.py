@@ -3,7 +3,6 @@ import numpy as np
 from Node import Node
 from Graph import DAG
 import math
-import copy
 
 
 class BirthDeathSimError(Exception):
@@ -17,51 +16,51 @@ class BirthDeathSimError(Exception):
         super().__init__(self.message)
 
 
-def numLiveSpecies(nodes):
+def numLiveSpecies(nodes) -> int:
     """
-        Returns the number of live lineages in a list of node objects
+    Returns the number of live lineages in a list of node objects
 
-        nodeList -- an array/set of Node objects
-        """
+    nodeList -- an array/set of Node objects
+    """
     return len(liveSpecies(nodes))
 
 
-def randomSpeciesSelection(nodes):
+def randomSpeciesSelection(nodes:list) -> Node:
     """
-        Returns a random live Node from an array/set. The Node returned
-        will be operated on during a birth or death event
+    Returns a random live Node from an array/set. The Node returned
+    will be operated on during a birth or death event
 
-        nodeList -- an array/set of Node objects
-        """
+    nodeList -- an array/set of Node objects
+    """
     liveNodes = liveSpecies(nodes)
     randomInt = random.randint(0, len(liveNodes) - 1)
     return liveNodes[randomInt]
 
 
-def liveSpecies(nodes):
+def liveSpecies(nodes) -> list:
     """
-        Returns a subset of Nodes that represent live lineages
+    Returns a subset of Nodes that represent live lineages
 
-        nodeList -- an array/set of Node objects
-        """
+    nodeList -- an array/set of Node objects
+    """
     return [node for node in nodes if node.attribute_value_if_exists("live") is True]
 
 
 class Yule:
     """
-        The Yule class represents a pure birth model for simulating
-        trees of a fixed (n) amount of extant taxa.
+    The Yule class represents a pure birth model for simulating
+    trees of a fixed (n) amount of extant taxa.
 
-        gamma-- the birth rate. A larger birth rate will result in shorter 
-                branch lengths and a younger tree.
-        
-        n-- number of extant taxa at the end of simulation
+    gamma-- the birth rate. A larger birth rate will result in shorter 
+            branch lengths and a younger tree.
+    
+    n-- number of extant taxa at the end of simulation
 
-        time-- if conditioning on time, the age of the tree to be simulated
-        
-        """
+    time-- if conditioning on time, the age of the tree to be simulated
+    
+    """
 
-    def __init__(self, gamma, n, time):
+    def __init__(self, gamma:float, n:int, time:float):
 
         # birth rate
         self.gamma = gamma
@@ -77,39 +76,41 @@ class Yule:
             raise BirthDeathSimError("Please generate a tree with at least 3 taxa")
 
         # current number of live lineages, always starts at 2
-        self.lin = 2
+        self.lin : int = 2
 
         # helper var for labeling internal nodes
-        self.internalCount = 1
+        self.internalCount : int = 1
 
         # amount of time elapsed during the simulation of a tree
-        self.elapsedTime = 0
+        self.elapsedTime : float = 0
 
         # a list of trees generated under this model
-        self.generatedTrees = []
+        self.generatedTrees : list= []
 
-    def drawWaitingTime(self):
+    def drawWaitingTime(self) -> float:
         """
-                Draw a waiting time until the next speciation event from 
-                a memory-less exponential distribution.
+        Draw a waiting time until the next speciation event from 
+        a memory-less exponential distribution.
 
-                Since each lineage is equally likely for each event 
-                under the Yule Model, the waiting time is given by the parameter 
-                numlineages * birthRate or .lin*.gamma
-                """
+        Since each lineage is equally likely for each event 
+        under the Yule Model, the waiting time is given by the parameter 
+        numlineages * birthRate or .lin*.gamma
+        """
         scale = 1 / (self.lin * self.gamma)
         return round(np.random.exponential(scale), 2)
 
-    def event(self, nodes, edges, condition="N"):
+    def event(self, nodes:list, edges:list, condition="N")-> list:
         """
-                A speciation event occurs. Select a living lineage.
+        A speciation event occurs. Select a living lineage.
 
-                Then add an internal "dead" node with branch length := t_parent + drawnWaitTime
-                Set the parent to the chosen node as that internal node.
+        Then add an internal "dead" node with branch length := t_parent + drawnWaitTime
+        Set the parent to the chosen node as that internal node.
 
-                nodes-- an array of nodes that represents the current state of the tree
+        nodes-- an array of nodes that represents the current state of the tree
 
-                edges-- an array of 2-tuples (as arrays) that represents the current state of the tree
+        edges-- an array of 2-tuples (as arrays) that represents the current state of the tree
+        
+        Returns: the updated edges and nodes arrays
                 
         """
 
@@ -158,14 +159,14 @@ class Yule:
 
         return nodes, edges
 
-    def generateTree(self, condition="N"):
+    def generateTree(self, condition="N") -> DAG:
         """
-                Simulate one tree under the model. Starts with a root and 2 living lineages
-                and then continuously runs speciation (in this case birth only) 
-                events until there are exactly self.N live species.
+        Simulate one tree under the model. Starts with a root and 2 living lineages
+        and then continuously runs speciation (in this case birth only) 
+        events until there are exactly self.N live species.
 
-                After the nth event, draw one more time and fill out the remaining
-                branch lengths.
+        After the nth event, draw one more time and fill out the remaining
+        branch lengths.
         """
 
         # Set up the tree with 2 living lineages and an "internal" root node
@@ -193,7 +194,7 @@ class Yule:
                     node.set_length(0)
 
             # return the simulated tree
-            tree = copy.deepcopy(DAG())
+            tree = DAG()
             tree.addEdges(edges)
             tree.addNodes(nodes)
 
@@ -230,17 +231,17 @@ class Yule:
 
     def clearGenerated(self):
         """
-                empty out the generated tree array
-                """
+        empty out the generated tree array
+        """
         self.generatedTrees = []
 
     def generate_trees(self, num_trees):
         """
-                The sequential version of generating a set number of trees.
+        The sequential version of generating a set number of trees.
 
-                numTrees-- number of trees to generate and place into the generatedTrees database
+        numTrees-- number of trees to generate and place into the generatedTrees database
 
-                Outputs: the array of generated trees, includes all that have been previously generated
+        Outputs: the array of generated trees, includes all that have been previously generated
         """
         for dummy in range(num_trees):
             self.generatedTrees.append(self.generateTree())
@@ -253,13 +254,13 @@ class CBDP:
     Constant Rate Birth Death Process tree simulation
     """
 
-    def __init__(self, gamma, mu, n, sample=1):
+    def __init__(self, gamma:float, mu:float, n:int, sample:float=1):
 
         # Eq 15 from https://www.sciencedirect.com/science/article/pii/S0022519309003300#bib24
-        self.gamma = gamma / sample
-        self.mu = mu - gamma * (1 - (1 / sample))
+        self.gamma : float = gamma / sample
+        self.mu : float = mu - gamma * (1 - (1 / sample))
 
-        self.sample = sample
+        self.sample : float = sample
 
         # probabilities of speciation or extinction event
         self.pBirth = self.gamma / (self.gamma + self.mu)
@@ -268,29 +269,29 @@ class CBDP:
 
         self.generatedTrees = []
 
-    def Qinv(self, r):
+    def Qinv(self, r:float) -> float:
         """
-                Draw a time from the Qinv distribution from
-                https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
+        Draw a time from the Qinv distribution from
+        https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
 
-                r-- r[0] from the n-1 samples from [0,1]
+        r-- r[0] from the n-1 samples from [0,1]
 
-                Returns: the time t, which is the age of a new simulated tree
+        Returns: the time t, which is the age of a new simulated tree
         """
         term1 = (1 / self.gamma - self.mu)
         term2 = 1 - ((self.mu / self.gamma) * math.pow(r, 1 / self.N))
         term3 = 1 - math.pow(r, 1 / self.N)
         return term1 * math.log(term2 / term3)
 
-    def Finv(self, r, t):
+    def Finv(self, r:float, t:float):
         """
         Draw a sample speciation time from the Finv distribution from
         https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
 
-                r-- r_i, from the sampled values from [0,1]
-                t-- the age of the tree determined by Qinv(r[0])
+        r-- r_i, from the sampled values from [0,1]
+        t-- the age of the tree determined by Qinv(r[0])
 
-                Returns: s_i from r_i
+        Returns: s_i from r_i
         """
         term1 = (1 / self.gamma - self.mu)
         term2 = self.gamma - (self.mu * math.exp(-1 * t * (self.gamma - self.mu)))
@@ -299,11 +300,11 @@ class CBDP:
 
     def generateTree(self):
         """
-                Simulate a single tree under the Constant Rate Birth Death Selection Model.
-                Follows the algorithm laid out by: https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
-                (Hartmann, Wong, Stadler)
+        Simulate a single tree under the Constant Rate Birth Death Selection Model.
+        Follows the algorithm laid out by: https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
+        (Hartmann, Wong, Stadler)
 
-                Returns: A tree with n taxa chosen from the proper distributions.
+        Returns: A tree with n taxa chosen from the proper distributions.
         """
 
         # step 1
@@ -349,24 +350,24 @@ class CBDP:
         return tree
 
     @staticmethod
-    def connect(index, nodes):
+    def connect(index:int, nodes:list) -> list:
         """
-                nodes-- a list of nodes (list[i] is the ith node along a horizontal
-                axis that alternates between species and internal s_i nodes/speciation events)
+        nodes-- a list of nodes (list[i] is the ith node along a horizontal
+        axis that alternates between species and internal s_i nodes/speciation events)
 
-                index-- the node to connect to its parent in the tree
+        index-- the node to connect to its parent in the tree
 
-                Given the nodes and a node to connect, create a new edge.
+        Given the nodes and a node to connect, create a new edge.
 
-                The parent node is defined to be the closest to nodes[index] in terms
-                of time and proximity in the list. There are two candidates, the left and right 
-                candidate. Each candidate is the nearest element in the list such that the time 
-                attribute is larger than nodes[index]. The parent is the minimum of the 
-                two candidates.
+        The parent node is defined to be the closest to nodes[index] in terms
+        of time and proximity in the list. There are two candidates, the left and right 
+        candidate. Each candidate is the nearest element in the list such that the time 
+        attribute is larger than nodes[index]. The parent is the minimum of the 
+        two candidates.
 
-                Returns: the edge from nodes[index] to its correct parent
+        Returns: the edge from nodes[index] to its correct parent
 
-                """
+        """
 
         # find right candidate
         copyIndex = index + 1
@@ -415,13 +416,13 @@ class CBDP:
 
         return newEdge
 
-    def sampleTrees(self, m):
+    def sampleTrees(self, m : int):
         """
-                Generate m trees and add them to the list of generated trees
+        Generate m trees and add them to the list of generated trees
 
-                Returns: the list of all generated trees from this run and any prior
-                         uncleared runs.
-                """
+        Returns: the list of all generated trees from this run and any prior
+                    uncleared runs.
+        """
         for dummy in range(m):
             self.generatedTrees.append(self.generateTree())
 
@@ -429,6 +430,6 @@ class CBDP:
 
     def clearGenerated(self):
         """
-                Clear out the generated trees list
-                """
+        Clear out the generated trees list
+        """
         self.generatedTrees = []

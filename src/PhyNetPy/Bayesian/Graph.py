@@ -149,11 +149,12 @@ class Graph:
 
 class DAG(Graph):
     """
-        This class represents a directed graph containing nodes of any data type, and edges.
-        An edge is a tuple (a,b) where a and b are nodes in the graph, and the direction of the edge
-        is from a to b. (a,b) is not the same as (b,a).
+    This class represents a directed graph containing nodes of any data type, and edges.
+    An edge is a tuple (a,b) where a and b are nodes in the graph, and the direction of the edge
+    is from a to b. (a,b) is not the same as (b,a).
 
-        This particular graph instance must only have one root and must be connected.
+    This particular graph instance must only have one root and must be connected. It must also be acyclic, but for efficiency, 
+    cycles are allowed to be created. A checker method is provided, however.
     """
 
     def __init__(self, edges=None, nodes=None, weights=None):
@@ -167,51 +168,55 @@ class DAG(Graph):
         
         super().__init__(edges, nodes, weights)
 
-    def inDegree(self, node):
+    def inDegree(self, node: Node):
         return len(self.inEdges(node))
 
-    def outDegree(self, node):
+    def outDegree(self, node: Node):
         return len(self.outEdges(node))
 
-    def inEdges(self, node):
+    def inEdges(self, node: Node):
         return [edge for edge in self.edges if edge[1] == node]
 
-    def outEdges(self, node):
+    def outEdges(self, node: Node):
         return [edge for edge in self.edges if edge[0] == node]
 
-    def findRoot(self):
+    def findRoot(self) -> list:
         """
-                Finds the root of this DAG. It is an error if one does not exist
-                or if there are more than one.
-                """
+        Finds the root of this DAG. It is an error if one does not exist
+        or if there are more than one.
+        
+        TODO: Fix so that I return only a node
+        """
         root = [node for node in self.nodes if self.inDegree(node) == 0]
         if len(root) != 1:
             raise GraphTopologyError("This graph does not have 1 and only 1 root node")
         return root
 
-    def findDirectPredecessors(self, node):
+    def findDirectPredecessors(self, node: Node) -> list:
         """
-                Returns a list of the children of node
+        Returns a list of the children of node
 
-                node-- A Node Object
-                """
+        node-- A Node Object
+        """
         return [edge[0] for edge in self.inEdges(node)]
 
-    def findDirectSuccessors(self, node):
+    def findDirectSuccessors(self, node: Node) -> list:
         """
-                Returns a list of the parent(s) of node. For a tree, this 
-                list should be of length 1. For a network, a child may have more
-                than one.
+        Returns a list of the parent(s) of node. For a tree, this 
+        list should be of length 1. For a network, a child may have more
+        than one.
 
-                node-- A Node Object
-                """
+        node-- A Node Object
+        """
         return [edge[1] for edge in self.outEdges(node)]
 
-    def getLeafs(self):
+    def getLeafs(self) -> list:
         """
-                returns the list of leaves in the graph
-                """
-        return [node for node in self.nodes if self.outDegree(node) == 0]
+        returns the list of leaves in the graph, aka the set of nodes where there are no incoming edges
+        
+        TODO: no calls to this
+        """
+        return [node for node in self.nodes if self.inDegree(node) == 0]
 
     def hasNodeWithName(self, name):
         for node in self.nodes:
@@ -227,11 +232,11 @@ class DAG(Graph):
 
     def newickString(self):
         """
-                Build a map of parents to children using dfs, and then use that
-                to call newickSubstring on the root. That will give the newick
-                string for the network.
+        Build a map of parents to children using dfs, and then use that
+        to call newickSubstring on the root. That will give the newick
+        string for the network.
 
-                Returns: a newick string.
+        Returns: a newick string.
         """
 
         root = self.findRoot()[0]
@@ -295,6 +300,8 @@ class DAG(Graph):
     def is_acyclic(self):
         """
         Checks via topological sort that this graph object is acyclic
+        
+        TODO: Untested
 
         Returns:
             bool: True, if graph is acyclic. Raises an error if there is a cycle.
