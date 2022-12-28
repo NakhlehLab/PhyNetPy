@@ -33,13 +33,13 @@ class SNPTransition:
         self.coal = coal
 
         rows = int(.5 * n * (n + 3))
-        self.Q = np.zeros((rows, rows))
+        self.Q : np.ndarray = np.zeros((rows, rows))
         for n_prime in range(1, n + 1):  # n ranges from 1 to individuals sampled (both inclusive)
             for r_prime in range(n_prime + 1):  # r ranges from 0 to n (both inclusive)
                 index = map_nr_to_index(n_prime, r_prime)  # get index from n,r pair
 
-                # EQ 15
-
+                #### EQ 15 ####
+                
                 # THE DIAGONAL. always calculated
                 self.Q[index][index] = -(n_prime * (n_prime - 1) / coal) - (v * (n_prime - r_prime)) - (r_prime * u)
 
@@ -55,13 +55,13 @@ class SNPTransition:
                         self.Q[index][map_nr_to_index(n_prime - 1, r_prime)] = (n_prime - 1 - r_prime) * n_prime / coal
                     self.Q[index][map_nr_to_index(n_prime, r_prime + 1)] = (r_prime + 1) * u
 
-    def expt(self, t):
+    def expt(self, t:float) -> np.ndarray:
         """
         Compute exp(Qt) efficiently
         """
         return expm(self.Q * t)
 
-    def cols(self):
+    def cols(self) -> int:
         """
         return the dimension of the Q matrix
         """

@@ -12,11 +12,11 @@ class SubstitutionModelError(Exception):
 
 class GTR:
     """
-        General superclass for substitution models. Implements 
-        Eigenvalue decomposition for computing P(t).
-        Special case subclasses attempt to improve on the time 
-        complexity of that operation
-        """
+    General superclass for substitution models. Implements 
+    Eigenvalue decomposition for computing P(t).
+    Special case subclasses attempt to improve on the time 
+    complexity of that operation
+    """
 
     def __init__(self, base_freqs, transitions, states=4):
 
@@ -35,7 +35,7 @@ class GTR:
         self.Q = self.buildQ()
         self.Qt = None
 
-    def getQ(self):
+    def getQ(self) -> np.ndarray:
         """
         Get Q matrix
 
@@ -43,13 +43,13 @@ class GTR:
         """
         return self.Q
 
-    def get_hyperparams(self):
+    def get_hyperparams(self) -> list:
         return self.freqs, self.trans
 
-    def state_count(self):
+    def state_count(self) -> int:
         return self.states
 
-    def buildQ(self):
+    def buildQ(self) -> np.ndarray:
         """
         Populate the Q matrix with the correct values.
         Based on https://en.wikipedia.org/wiki/Substitution_model
@@ -77,11 +77,11 @@ class GTR:
         self.Q = self.Q * normFactor
         return self.Q
 
-    def expt(self, t):
+    def expt(self, t:float) -> np.ndarray:
         """
-            Compute the matrix exponential Q^t and store the result.
-            If the solution has been computed already but the Q matrix has not
-            changed, simply return the value
+        Compute the matrix exponential Q^t and store the result.
+        If the solution has been computed already but the Q matrix has not
+        changed, simply return the value
         """
 
         eigenvals, eigenvecs = lg.eigh(self.Q)
@@ -99,7 +99,7 @@ class GTR:
 
 class K2P(GTR):
 
-    def __init__(self, alpha, beta):
+    def __init__(self, alpha:float, beta:float):
         if alpha + beta != 1:
             raise SubstitutionModelError("K2P Transversion + Transition params do not add to 1")
 
@@ -111,7 +111,7 @@ class K2P(GTR):
         self.alpha = alpha
         super().__init__(bases, trans, 4)
 
-    def expt(self, t):
+    def expt(self, t:float) -> np.ndarray:
 
         self.Qt = np.zeros((self.states, self.states), dtype=np.double)
 
@@ -125,11 +125,11 @@ class K2P(GTR):
 
 class F81(GTR):
 
-    def __init__(self, bases, states=4):
+    def __init__(self, bases:list, states:int=4):
         trans = np.ones((int((states * (states - 1)) / 2), 1))
         super().__init__(bases, trans, states)
 
-    def expt(self, t):
+    def expt(self, t:float) -> np.ndarray:
 
         self.Qt = np.zeros((self.states, self.states))
 
@@ -151,7 +151,7 @@ class JC(F81):
 
 class HKY(GTR):
 
-    def __init__(self, base_freqs, transitions):
+    def __init__(self, base_freqs:list, transitions:list):
         if len(base_freqs) != 4 and len(transitions) != 6:
             raise SubstitutionModelError("Incorrect parameter input length")
 
@@ -166,7 +166,7 @@ class HKY(GTR):
 
 class K3ST(GTR):
 
-    def __init__(self, transitions):
+    def __init__(self, transitions:list):
         if len(transitions) != 6:
             raise SubstitutionModelError("Incorrect parameter input length")
 
@@ -180,14 +180,14 @@ class K3ST(GTR):
 
 class SYM(GTR):
 
-    def __init__(self, transitions, states=4):
+    def __init__(self, transitions:list, states=4):
         base_freqs = np.ones((states, 1)) * (1 / states)
         super().__init__(base_freqs, transitions, states)
 
 
 class TN93(GTR):
 
-    def __init__(self, base_freqs, transitions):
+    def __init__(self, base_freqs:list, transitions:list):
 
         if len(base_freqs) != 4 and len(transitions) != 6:
             raise SubstitutionModelError("Incorrect parameter input length")

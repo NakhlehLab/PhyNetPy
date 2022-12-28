@@ -562,7 +562,11 @@ class Model:
         net = DAG()
 
         network_nodes = []
-        network_nodes.extend([self.felsenstein_root])
+        if self.data.get_type() == "SNP":
+            network_nodes.extend([self.snp_root])
+        else:
+            network_nodes.extend([self.felsenstein_root])
+            
         network_nodes.extend(self.network_leaves)
         network_nodes.extend(self.netnodes_sans_root)
 
@@ -582,18 +586,19 @@ class Model:
                 for child in node.get_children():
                     net.addEdges((inv_map[node], inv_map[child])) 
 
-        net.printGraph()
         newick_str = net.newickString()
 
         # Write newick string to output file
-        text_file = open(tree_filename, "w")
-        text_file.write(newick_str)
-        text_file.close()
+        if tree_filename is not None:
+            text_file = open(tree_filename, "w")
+            text_file.write(newick_str)
+            text_file.close()
 
         # Step 2: write iter summary to a file
-        text_file2 = open(summary_filename, "w")
-        text_file2.write(self.summary_str)
-        text_file2.close()
+        if summary_filename is not None:
+            text_file2 = open(summary_filename, "w")
+            text_file2.write(self.summary_str)
+            text_file2.close()
 
     def get_tree_heights(self):
         return self.tree_heights

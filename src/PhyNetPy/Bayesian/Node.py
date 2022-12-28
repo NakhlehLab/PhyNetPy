@@ -10,15 +10,19 @@ class NodeError(Exception):
 
 class Node:
     """
-        Node class for storing data in a graph object
+    Node class that provides support for branch lengths, parent child relationships, and network constructs like reticulation 
+    nodes and other phylogenetic attributes.
     """
 
     def __init__(self, branch_len:dict=None, parent_nodes=None, attr=None, is_reticulation=False, name=None):
+        
         self.branch_lengths = branch_len
+        
         if attr is None:
             self.attributes = {}
         else:
             self.attributes = attr
+            
         self.is_retic = is_reticulation
         self.parent = parent_nodes
         self.label = name
@@ -26,9 +30,8 @@ class Node:
 
     def length(self)->dict:
         """
-            The length of a node is its branch length.
-
-            Returns: A list of branch lengths
+        Returns:
+            dict: The mapping from parent nodes to the branch lengths associated with them
         """
         return self.branch_lengths
 
