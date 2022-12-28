@@ -6,7 +6,7 @@ import numpy
 import statistics
 import math
 from SimulatedTree import SimulatedTree
-
+import numpy as np
 
 
 
@@ -16,7 +16,86 @@ class SimulationError(Exception):
         self.message = message
         super().__init__(self.message)
         
+
+def sample_leaves(tree, goal_leaves):
+    sampling_rate_arr = [] #???
+    curr_leaves = tree_nleaf(tree)
+
+    sampling_rate = goal_leaves/curr_leaves
+    sampling_rate_arr.append(sampling_rate)
+    num_delete_goal = math.ceil(curr_leaves * (1-sampling_rate))
+    leaf_lst = tree.get_leaves()
+
+    deleted_leaf_lst = random.sample(leaf_lst,k=num_delete_goal)
+    for leaf in deleted_leaf_lst:
+        leaf.delete()
+
+    return tree
+
+def gen_tree_sims(d = 1, r = 0.5, sub_rate = 1, birth_shape = 1, death_shape = 1, sub_shape = 1, leaf_goal = 10, sampling_rate = 0.01, is_prior = False, random_state = None):
+    """
+    Returns a simulated phylogenetic tree (using growtree.gen_tree()) with the 
+    initial diversification rate = 'd', initial turnover rate = 'r', initial 
+    substitution rate = 1. Initial birth and death rates are calculated from
+    the initial values for diversification and turnover (see 'gen_rates_bd()' 
+    function above for the calculation). Initial shapes for the distributions 
+    of rates for birth, death, and substitution are 'birth_shape', 'death_shape', 
+    and 'sub_shape', respectively. The tree is returned in a one element array 
+    in order to be compatible with the ELFI package. 'random_state' is not 
+    currently used, but is included as a parameter since some ELFI functions 
+    pass a value for 'random_state' into this function. Currently the value 
+    '1' is being passed in for 'branch_info' (branch length is a variable of 
+    the number of substitutions that occurred in that lineage) since this is
+    the most descriptive for generating summary statistics that accurately 
+    infer distribution shape parameters.
+    """
+    global d_dist
+    global r_dist
+    global sub_dist
+    arr = []
+    random_state = random_state or np.random # this value is not currently used
+    if(is_prior): # using prior dist to simulate trees
+        curr_nleaf = -9999999999
+        while(curr_nleaf < leaf_goal):
+            d_drawn = gen_param(d_dist)
+            r_drawn = gen_param(r_dist)
+            while(r_drawn>=1):
+                r_drawn = gen_param(r_dist)
+            s_drawn = gen_param(sub_dist)
+            rate_arr = calc_rates_bd(d_drawn, r_drawn) # calculate the initial birth and death rates from 'd' and 'r'
+            birth = rate_arr[0] # extract initial birth rate from result array
+            death = rate_arr[1] # extract initial death rate from result array
+            #TODO: there's hardcoded info here
+            new_tree = ABCSimulator().growtree(100, sampling_rate, leaf_goal, birth, death, s_drawn, birth_shape, death_shape, sub_shape, 1).get_tree()
+            curr_nleaf = tree_nleaf(new_tree)
+            
+        new_tree = sample_leaves(new_tree, leaf_goal)
         
+    else: # use artificial true rates to simulate an observed tree
+        rate_arr = calc_rates_bd(d, r) # calculate the initial birth and death rates from 'd' and 'r'
+        birth = rate_arr[0] # extract initial birth rate from result array
+        death = rate_arr[1] # extract initial death rate from result array
+        new_tree = ABCSimulator().growtree(100, sampling_rate, leaf_goal, birth, death, sub_rate, birth_shape, death_shape, sub_shape, 1).get_tree()
+
+    arr.append(new_tree) # simulate tree and place in 1 element array
+    
+    return arr
+        
+
+def calc_rates_bd(d, r):
+    """
+    Returns a two-element array containing the birth and death rate 
+    calculated from the diversification rate, 'd', and the turnover 
+    rate, 'r'. Note that (diversification = birth - death) and 
+    (turnover = death / birth). Thus birth rate can be calculated by:
+        birth = diversification / (1 - turnover)
+    and death rate can be calculated by:
+        death = turnover * birth    
+    """
+    birth_calc = d / (1 - r) # calculate birth rate from 'd' and 'r'
+    death_calc = r * birth_calc # calculate death rate from calculated birth rate and 'r'
+    return [birth_calc, death_calc] # return birth and death rates in an array
+
 def gen_sequence(length: int, off_lim:str = None) -> numpy.ndarray:
     """
     Randomly generates a 'length' long genetic sequence of bases. 'off_lim' is by default 'None', but can be used
@@ -60,6 +139,13 @@ def gen_event(lin_dict:dict)->list:
     
     normalized_rates = [rate / sum(rates) for rate in rates]
     
+    if normalized_rates[2] == 1:
+        raise SimulationError("Sub rate blow up")
+    
+    debug = True
+    if debug:
+        print("CURRENT SUB RATE: " + str(normalized_rates[2]))
+    
     if selection < normalized_rates[0]:
         return [lineage, "birth"]
     elif selection < normalized_rates[0] + normalized_rates[1]:
@@ -74,6 +160,14 @@ def gen_rate(mean, shape):
     """
     scale_calc = mean / shape
     return numpy.random.gamma(shape, scale = scale_calc, size = None)
+
+def gen_param(prior_dist):
+    """
+    Draws a single sample from 'prior_dist' and returns it (where 
+    'prior_dist' is an object of the 'elfi.Prior' class). This 
+    function is used for generating true parameters.
+    """
+    return (prior_dist.generate())[0] # draw sample and extract the value from a 1 element array
 
 
 def tree_nleaf(t):
@@ -116,10 +210,10 @@ class ABCSimulator:
         self.simulated_trees = []
     
     
-    def growtree(self, seq_len: int, sampling_rate, goal_leaves, b, d, s, shape_b, shape_d, shape_s, branch_info) -> None:
+    def growtree(self, seq_len: int, sampling_rate, goal_leaves, b, d, s, shape_b, shape_d, shape_s, branch_info) -> SimulatedTree:
         """
         Returns a birth-death tree. Used as a recursive helper function for 'gen_tree()' that produces
-        the birth-death tree. Populates '__seq_dict' with 'sequence number : sequence' pairs. 
+        the birth-death tree. Populates 'seq_dict' with 'sequence number : sequence' pairs. 
         """
         
         seq_counter = 0
@@ -152,7 +246,9 @@ class ABCSimulator:
 
             total_iter += 1
             if (curr_lineages == 0):
-                self.simulated_trees.append(SimulatedTree(t, seq_dict, lineage_dict, sum_rates, curr_lineages))
+                st = SimulatedTree(t, seq_dict, lineage_dict, sum_rates, curr_lineages)
+                self.simulated_trees.append(st)
+                return st
             
             rate_any_event = sum_rates # sum_dict(__lineage_dict) # sum of all the rates for all extant lineages
             wait_time = rng.expovariate(rate_any_event)
@@ -160,7 +256,9 @@ class ABCSimulator:
             try:
                 event_pair = gen_event(lineage_dict)
             except:
-                self.simulated_trees.append(SimulatedTree(t, seq_dict, lineage_dict, sum_rates, curr_lineages))
+                st = SimulatedTree(t, seq_dict, lineage_dict, sum_rates, curr_lineages)
+                self.simulated_trees.append(st)
+                return st
 
             event_lineage_key = event_pair[0]
             # 'event' holds the event that just occurred as a string, 'curr_t' holds the TreeNode object (lineage) on which the event occurred
@@ -260,5 +358,7 @@ class ABCSimulator:
 
             if infinite_sub_checker > 50000:
                 raise SimulationError("INFINITE SUB LOOP")
-            
-        self.simulated_trees.append(SimulatedTree(t, seq_dict, lineage_dict, sum_rates, curr_lineages))
+        
+        st = SimulatedTree(t, seq_dict, lineage_dict, sum_rates, curr_lineages)
+        self.simulated_trees.append(st)
+        return st

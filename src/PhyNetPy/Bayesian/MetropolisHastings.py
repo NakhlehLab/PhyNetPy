@@ -1,8 +1,7 @@
 from State import State
 from MSA import MSA
 from Matrix import Matrix
-
-import cProfile
+from ModelGraph import Model
 import time
 
 from Move import *
@@ -130,9 +129,10 @@ class MetropolisHastings:
         A special case of Hill Climbing, with a special proposal kernel
     """
         
-    def __init__(self, pkernel, submodel, data, num_iter):
-        self.current_state = State()
-        self.current_state.bootstrap(data, submodel)
+    def __init__(self, pkernel: ProposalKernel, submodel: GTR, data: Matrix, num_iter:int , model: Model = None):
+        self.current_state = State(model)
+        if model is None:
+            self.current_state.bootstrap(data, submodel)
         self.data = data
         self.submodel = submodel
         self.kernel = pkernel
@@ -176,7 +176,7 @@ class MetropolisHastings:
 
         return self.current_state
     
-    def runMany(self, num_iter):
+    def runMany(self, num_iter, format_stats = True):
         """
             Runs the MH algorithm num_iter times, with different starting states.
 
@@ -205,12 +205,13 @@ class MetropolisHastings:
         max_val = all_end_states[-1]
         min_val = all_end_states[0]
 
-        print("===============================================")
-        print("MH ran " + str(num_iter) + " times...")
-        print("===============================================")
-        print("Mean score: " + str(mean) + "\nMedian score: " + str(median) + "\nMaximum score: " + str(max_val) +
-              "\nMinimum score: " + str(min_val))
-        print("===============================================")
+        if format_stats:
+            print("===============================================")
+            print("MH ran " + str(num_iter) + " times...")
+            print("===============================================")
+            print("Mean score: " + str(mean) + "\nMedian score: " + str(median) + "\nMaximum score: " + str(max_val) +
+                "\nMinimum score: " + str(min_val))
+            print("===============================================")
 
         return [mean, median, max_val, min_val]
 

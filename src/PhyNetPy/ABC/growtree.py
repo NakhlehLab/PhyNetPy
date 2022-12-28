@@ -61,6 +61,13 @@ def gen_event(lin_dict:dict)->list:
     
     normalized_rates = [rate / sum(rates) for rate in rates]
     
+    if normalized_rates[2] == 1:
+        raise SimulationError("Sub rate blow up")
+    
+    debug = True
+    if debug and normalized_rates[2] > .99:
+        print("CURRENT SUB RATE: " + str(normalized_rates[2]))
+    
     if selection < normalized_rates[0]:
         return [lineage, "birth"]
     elif selection < normalized_rates[0] + normalized_rates[1]:

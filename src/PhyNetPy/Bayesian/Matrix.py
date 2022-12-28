@@ -8,19 +8,19 @@ abstracted away. This class can represent a 4bit, 8bit, 32bit, or 64bit matrix.
 """
 
 from Bio import SeqIO, AlignIO
-import sys
 import numpy as np
 import math
 from Alphabet import Alphabet
+from MSA import MSA
 import cProfile
 
 
-def list2Str(myList):
+def list2Str(my_list: list) -> str:
     """
-        Turns a list of characters into a string
-        """
+    Turns a list of characters into a string
+    """
     sb = ""
-    for char in myList:
+    for char in my_list:
         sb += str(char)
     return sb
 
@@ -49,40 +49,37 @@ class MatrixCastError(Exception):
 
 class Matrix:
 
-    def __init__(self, alignment, alphabet=Alphabet("DNA")):
+    def __init__(self, alignment: MSA, alphabet=Alphabet("DNA")):
         """
-                Takes one single MultipleSequenceAlignment object, along with an Alphabet object,
-                represented as either DNA, RNA, PROTEIN, CODON, SNP, or BINARY (for now). The default
-                is DNA                
-                """
+        Takes one single MultipleSequenceAlignment object, along with an Alphabet object,
+        represented as either DNA, RNA, PROTEIN, CODON, SNP, or BINARY (for now). The default
+        is DNA                
+        """
 
         # ith element of the array = column i's distinct site pattern index in
         # the compressed matrix
-        self.uniqueSites = None
-        self.data = None
-        self.locations = []
+        self.uniqueSites : int = None
+        self.data : np.ndarray = None
+        self.locations : list = list()
 
         # ith element of the array = count of the number of times
         # column i appears in the original uncompressed matrix
-        self.count = []
-        self.alphabet = alphabet
-        self.type = alphabet.getType()
-        self.taxa2Rows = {}
-        self.rows2Taxa = {}
+        self.count : list = list()
+        self.alphabet : Alphabet= alphabet
+        self.type : str = alphabet.getType()
+        self.taxa2Rows = dict()
+        self.rows2Taxa = dict()
 
         # the next binary state to map a new character to
-        self.nextState = 0
+        self.nextState : int = 0
 
         ##Parse the input file into a list of sequence records
-        self.seqRecords = alignment.get_records()
-        self.aln = alignment
+        self.seqRecords : list = alignment.get_records()
+        self.aln : MSA = alignment
 
         ##turn sequence record objects into the matrix data
-        pr = cProfile.Profile()
-        pr.enable()
         self.populateData()
-        pr.disable()
-        pr.print_stats(sort="tottime")
+    
 
     def populateData(self):
         # init the map from chars to binary
@@ -134,12 +131,12 @@ class Matrix:
     def map(self, state):
         """
 
-                UNUSED FOR NOW
-                Return f(state), where f: {alphabet} -> int.
-                
-                If state is not yet defined in the map, then select its binary 
-                representation and then return it. Otherwise, simply return f(state).
-                """
+        TODO: STILL UNUSED AS OF 12/16/22
+        Return f(state), where f: {alphabet} -> int.
+        
+        If state is not yet defined in the map, then select its binary 
+        representation and then return it. Otherwise, simply return f(state).
+        """
 
         if state not in self.stateMap:
             if len(self.stateMap.keys()) > self.bits:
@@ -158,9 +155,9 @@ class Matrix:
                 and records the location and count of the unique site patterns
                 """
 
-        newData = np.empty((self.numTaxa, 0), dtype=np.int8)
+        newData : np.ndarray = np.empty((self.numTaxa, 0), dtype=np.int8)
 
-        columnData = {}
+        columnData = dict()
         uniqueSites = 0
 
         for i in range(self.seqLen):
@@ -203,8 +200,8 @@ class Matrix:
 
     def getColumn(self, i, data, sites):
         """
-                Returns ith column of data matrix
-                """
+        Returns ith column of data matrix
+        """
 
         if sites == 0:
             data = data.reshape(self.numTaxa, self.seqLen)
@@ -215,8 +212,8 @@ class Matrix:
 
     def getColumnAt(self, i):
         """
-                Returns ith column of data matrix
-                """
+        Returns ith column of data matrix
+        """
         return self.data[:, i]
 
     def siteCount(self):
@@ -276,60 +273,3 @@ class Matrix:
 
     def get_type(self):
         return self.type
-
-
-##Simply use AlignIO.read
-"""
-msa = AlignIO.read("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\io\\testfile.nex", "nexus")
-msa2 = AlignIO.read("C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\io\\testfile.nex", "nexus")
-
-aln = Matrix(msa)  # default is to use the DNA alphabet
-aln.verification()
-print(aln.charMatrix())
-
-print("========================================")
-
-aln2 = Matrix(msa2)
-aln2.verification()
-print(aln2.charMatrix())
-
-"""
-"""
-OUTPUT:
-
-
-
-[[1 8 2 4 4 8 0 8 4 1 1 4 4 8 4]
- [1 8 2 0 4 1 0 8 2 1 4 2 1 2 4]
- [1 8 2 4 4 1 0 8 8 1 4 4 4 8 4]
- [1 8 2 4 4 1 0 4 4 8 1 4 4 8 1]
- [1 8 2 4 4 1 0 4 4 4 1 4 4 8 2]
- [1 8 2 4 4 1 0 4 4 2 1 4 4 8 8]
- [1 8 2 4 4 1 0 4 4 1 1 4 4 8 1]]
-[0, 1, 0, 1, 0, 5, 6, 6, 8, 8, 10, 1, 0, 13, 13, 13, 16, 1, 0, 19, 20, 13, 13, 13, 13, 0, 26, 0, 0, 1, 30, 1, 32, 1, 8, 1, 30, 1, 8, 39, 1, 1, 1, 39, 1, 1, 1, 1, 1, 5, 0, 1, 8, 1, 8, 55]
-[9, 19, 2, 2, 6, 1, 7, 1, 1, 1, 1, 2, 1, 2, 1]
-{}
-[['A' 'T' 'C' 'G' 'G' 'T' '-' 'T' 'G' 'A' 'A' 'G' 'G' 'T' 'G']
- ['A' 'T' 'C' '-' 'G' 'A' '-' 'T' 'C' 'A' 'G' 'C' 'A' 'C' 'G']
- ['A' 'T' 'C' 'G' 'G' 'A' '-' 'T' 'T' 'A' 'G' 'G' 'G' 'T' 'G']
- ['A' 'T' 'C' 'G' 'G' 'A' '-' 'G' 'G' 'T' 'A' 'G' 'G' 'T' 'A']
- ['A' 'T' 'C' 'G' 'G' 'A' '-' 'G' 'G' 'G' 'A' 'G' 'G' 'T' 'C']
- ['A' 'T' 'C' 'G' 'G' 'A' '-' 'G' 'G' 'C' 'A' 'G' 'G' 'T' 'T']
- ['A' 'T' 'C' 'G' 'G' 'A' '-' 'G' 'G' 'A' 'A' 'G' 'G' 'T' 'A']]
-========================================
-[[1 2 1]
- [1 2 2]
- [1 2 2]
- [1 2 2]]
-[0, 1, 2, 1]
-[1, 2, 1]
-{}
-[['A' 'C' 'A']
- ['A' 'C' 'C']
- ['A' 'C' 'C']
- ['A' 'C' 'C']]
-
-
-
-
-"""

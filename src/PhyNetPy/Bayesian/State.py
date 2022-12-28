@@ -2,20 +2,29 @@ import copy
 
 from BirthDeath import CBDP
 from ModelGraph import Model
-
+from Matrix import Matrix
+from GTR import *
 
 class State:
+    """
+    Class that implements accept/reject functionality for the Metropolis-Hastings algorithm.
+    There are 2 model objects, one of which is the current state, and the other is the model used to test changes and moves
+    to the current accepted version.
+    
+    Rejection is implemented by reverting the change on the proposed model (like git revert)
+    Acceptance is implemented by duplicating the move on the current model (like git merge)
+    """
 
     def __init__(self, model=None):
-        self.current_model = model
-        self.proposed_model = None
-        self.temp = None
+        if model is not None:
+            self.current_model = model
+            self.proposed_model = copy.deepcopy(model)
+        
 
     def likelihood(self) -> float:
         """
         Returns: a float that is the model likelihood for the current accepted state
         """
-        #TODO: Delegate to correct model likelihood, set at felsenstein's
         return self.current_model.likelihood()
 
     def generate_next(self, move):
@@ -42,11 +51,21 @@ class State:
         """
         return self.proposed_model
 
-    def bootstrap(self, data, submodel):
+    def bootstrap(self, data: Matrix, submodel: GTR):
         """
-        Generate an initial state by simulating a network and building a model based on that network and some input data.
+        Generate an initial state by 
+        1) simulating a network
+        2) building a model based on that network and some input data.
+        
+        Currently only in use for the simplest case, a DNA/Felsenstein model.
+        
+        Inputs:
+        data (Matrix): the nexus file data that has been preprocessed by the Matrix class
+        submodel (GTR): Any substitution model (can be subtype of GTR)
 
         """
+        #TODO: Remove hard coded birth death constants
+        
         network = CBDP(1, .5, data.get_num_taxa()).generateTree()  # base number of leaves to be the number of groups/taxa
         self.current_model = Model(network, data, submodel, verbose=False)
         self.proposed_model = copy.deepcopy(self.current_model)
