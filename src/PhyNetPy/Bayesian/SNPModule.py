@@ -129,8 +129,3 @@ def Rule3(F_t_x : dict, g_this : float, g_that : float, site_count : int):
 def Rule4():
     pass
         
-
-
-
-def SNAPPNET_TEST():
-    

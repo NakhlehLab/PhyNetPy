@@ -88,7 +88,7 @@ def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dic
     """
     
     #Generate a multiple sequence alignment from the nexus file data
-    aln = MSA(filename, grouping=grouping, grouping_auto_detect = auto_detect)
+    aln = MSA.MSA(filename, grouping=grouping, grouping_auto_detect = auto_detect)
     
     #Read and parse the network described 
     networks = nb.NetworkBuilder(filename).get_all_networks()
@@ -97,7 +97,7 @@ def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dic
     for network in networks:
         snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":False}
         #Create model
-        snp_model = mg.Model(network, m.Matrix(aln, a.Alphabet("SNP")), None, snp_params=snp_params, verbose = show_partials)
+        snp_model = mg.Model(network, m.Matrix(aln, a.Alphabet("SNP")), None, snp_params=snp_params, verbose = True)
         #Compute the likelihood
         likelihoods.append(snp_model.SNP_likelihood())
  

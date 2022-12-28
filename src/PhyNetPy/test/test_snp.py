@@ -3,7 +3,6 @@ import sys
 sys.path.insert(0, "src/PhyNetPy/")
 from Inference import *
 
-
 class TestSNP():
     
     def test_with_tree(self):
@@ -11,7 +10,7 @@ class TestSNP():
         This computes the likelihood of a complete nexus file, with no missing/gap characters
         in the data matrix. The nexus file contains a standard binary tree. Simplest possible working case.
         """
-        assert math.abs(SNAPP_Likelihood('src/PhyNetPy/test/SNPtests/files/snptest_ez.nex', 1, 1, 2) + 4.28) < .01
+        assert -4.28 < SNAPP_Likelihood('src/PhyNetPy/test/files/snptest_ez.nex', 1, 1, 2)[0] < -4.29
         
     def test_network(self):
         """
