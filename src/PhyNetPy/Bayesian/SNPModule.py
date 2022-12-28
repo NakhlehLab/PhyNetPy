@@ -51,23 +51,49 @@ def map_nr_to_index(n:int, r:int) -> int:
     starts = int(.5 * (n - 1) * (n + 2))
     return starts + r
 
-
-# class PartialSnappLikelihood:
+def map_to_array(F_b_map : dict, site_count:int, sample_count):
     
-#     def __init__(self) -> None:
-#         self.top = 
-#         self.bottom = 
+    F_b = np.zeros((partials_index(sample_count + 1) , site_count))
+    
+    for index, prob in F_b_map.items():
+        F_b[partials_index(index[0]) + index[1]][index[2]] = prob
+    
+    return F_b
 
-def Rule1(F_b : dict, site_count : int, vector_len : int, m_y : int, Qt : np.ndarray):
-    F_t = {}
-            
+def Rule0(node_par, site_count, vector_len):
+    
+    #F_b = {}
+    F_b_alt = np.zeros((vector_len, site_count))
+    # Compute leaf partials via EQ 12
+    reds = node_par.red_count()
+
+    for site in range(site_count):
+        for index in range(vector_len):
+            actual_index = undo_index(index)
+            n = actual_index[0]
+            r = actual_index[1]
+
+            # EQUATION 12
+            if reds[site] == r and n == node_par.samples():
+                #F_b[(n, r, site)] = 1 
+                F_b_alt[index][site] = 1
+            else:
+                pass
+                #F_b[(n, r, site)] = 0
+                
+    return F_b_alt
+
+def Rule1(F_b : np.ndarray, site_count : int, vector_len : int, m_y : int, Qt : np.ndarray) -> np.ndarray:
+    
+    # ONLY CALCULATE F_T FOR NON ROOT BRANCHES
+    F_t = np.zeros((vector_len, site_count))
+    
     # Do this for each marker
     for site in range(site_count):
         for ft_index in range(0, vector_len):
             tot = 0
             actual_index = undo_index(ft_index)
             n_t = actual_index[0]
-            r_t = actual_index[1]
 
             for n_b in range(n_t, m_y + 1):  # n_b always at least 1
                 for r_b in range(0, n_b + 1):
@@ -76,13 +102,15 @@ def Rule1(F_b : dict, site_count : int, vector_len : int, m_y : int, Qt : np.nda
 
                     tot += exp_val * F_b[index][site]
 
-            F_t[(n_t, r_t, site)] = tot
+            F_t[ft_index][site] = tot
+    
+    return F_t
             
             
-def Rule2(F_t_y : dict, F_t_z : dict, site_count : int, vector_len : int) -> dict:
+def Rule2(F_t_y : np.ndarray, F_t_z : np.ndarray, site_count : int, vector_len : int) -> np.ndarray:
     
-    F_b = {}
-    
+   #F_b = {}
+    F_b_alt = np.zeros((vector_len, site_count))
     for site in range(site_count):
         for index in range(vector_len):
             actual_index = undo_index(index)
@@ -98,34 +126,23 @@ def Rule2(F_t_y : dict, F_t_z : dict, site_count : int, vector_len : int) -> dic
                         const = comb(n_y, r_y) * comb(n - n_y, r - r_y) / comb(n, r)
 
                         # Grab Ftz(n_y, r_y)
-                        term1 = F_t_z[(n_y, r_y, site)]
+                        term1 = F_t_z[map_nr_to_index(n_y, r_y)][site]
 
                         # Grab Fty(n - n_y, r - r_y)
-                        term2 = F_t_y[(n - n_y, r - r_y, site)]
+                        term2 = F_t_y[map_nr_to_index(n - n_y, r - r_y)][site]
 
                         tot += term1 * term2 * const
 
-            F_b[(n, r, site)] = tot
-    return F_b
+            #F_b[(n, r, site)] = tot
+            F_b_alt[index][site] = tot
+    return F_b_alt
 
 def Rule3(F_t_x : dict, g_this : float, g_that : float, site_count : int):
-
-    #Get the other branch
-    # sibling_branches = node_par.get_branches()
-    # if sibling_branches[0] == self:
-    #     sibling_branch : BranchNode = sibling_branches[1]
-    # else:
-    #     sibling_branch : BranchNode = sibling_branches[0]
-
-    # g_this = self.inheritance_probability()
-    # g_that = sibling_branch.inheritance_probability()
-
-    # if g_this + g_that != 1:
-    #     raise ModelError("Set of inheritance probabilities do not sum to 1 for node<" + node_par.name + ">")
-
-    for site in range(site_count):
-        pass
+    print("Hello from rule 3")
         
 def Rule4():
-    pass
+    print("Hello from rule 4")
         
+
+
+

@@ -1513,29 +1513,13 @@ class SNPBranchNode(BranchNode, CalculationNode):
 
         # BOTTOM: Case 1, the branch is an external branch, so bottom likelihood is just the red counts
         if type(node_par) is SNPLeafNode:
-
-            m_y = node_par.samples()
-
-            # Compute leaf partials via EQ 12
-            reds = node_par.red_count()
-
-            for site in range(site_count):
-                for index in range(vector_len):
-                    actual_index = undo_index(index)
-                    n = actual_index[0]
-                    r = actual_index[1]
-
-                    # EQUATION 12
-                    if reds[site] == r and n == node_par.samples():
-                        F_b[index][site] = 1
-                       
+            F_b = Rule0(node_par, site_count, vector_len)         
         # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
         else:
             # EQ 19
             # Get the top likelihoods of each of the child branches
             net_children = node_par.get_children()
             
-           
             if node_par.is_reticulation():
                 #RULE 3
                 F_t_x = net_children[0].get_branches()[0].get()[1]
@@ -1556,18 +1540,7 @@ class SNPBranchNode(BranchNode, CalculationNode):
                     raise ModelError("Set of inheritance probabilities do not sum to 1 for node<" + node_par.name + ">")
                 
                 print("INHERITANCE TEST: " + str(g_this) + " " + str(g_that))
-                
-                # TODO: THIS PART  
-                for site in range(site_count):
-                    for ny in range(1, possible_lineages + 1):
-                        for ry in range(0, ny + 1):
-                            index = partials_index(ny) + ry
-                            for nz in range(0, possible_lineages- ny + 1):
-                                for rz in range(0, nz + 1):
-                                    #Add in hybridization rates
-                                    F_b[index][site] += F_t_x[partials_index(nz+ny) + rz+ry][site] * math.comb(nz + ny, ny) * (g_this**ny) * (g_that**nz)
-                print(F_b)
-        
+                Rule3()
             else:
                 F_t_y = net_children[0].get_branches()[0].get()[1] # TODO:INCORRECT. If net child is a retic, no guarantee 0 is the correct branch
                 F_t_z = net_children[1].get_branches()[0].get()[1]
@@ -1576,82 +1549,13 @@ class SNPBranchNode(BranchNode, CalculationNode):
                 common_leaves : set = net_children[1].leaf_descendants.difference(net_children[0].leaf_descendants)
                 
                 if common_leaves: #If two sets are not disjoint
-                    #Rule 4
-                    # n_z = node_par.possible_lineages()  # Sum of possible lineages 
-                    
-                    # for site in range(site_count):
-                    #     for index in range(vector_len):
-                    #         actual_index = undo_index(index)
-                    #         n = actual_index[0]
-                    #         r = actual_index[1]
-                    #         tot = 0
-
-                    #         # EQUATION 19
-                    #         for n_y in range(1, n):
-                    #             for r_y in range(0, r + 1):
-                    #                 if r_y <= n_y and r - r_y <= n - n_y:  # Ensure that the combinatorics makes sense
-                    #                     # Compute the constant term
-                    #                     const = math.comb(n_y, r_y) * math.comb(n - n_y, r - r_y) / math.comb(n, r)
-
-                    #                     # Grab Ftz(n_y, r_y)
-                    #                     term1 = F_t_z[partials_index(n_y) + r_y][site]
-
-                    #                     # Grab Fty(n - n_y, r - r_y)
-                    #                     term2 = F_t_y[partials_index(n - n_y) + r - r_y][site]
-
-                    #                     tot += term1 * term2 * const
-
-                    #         F_b[index][site] = tot
+                    Rule4()
                     raise ModelError("Not implemented yet")
                 else: # Then use Rule 2
-                    m_y = node_par.possible_lineages()  # Sum of possible lineages 
-                    
-                    for site in range(site_count):
-                        for index in range(vector_len):
-                            actual_index = undo_index(index)
-                            n = actual_index[0]
-                            r = actual_index[1]
-                            tot = 0
-
-                            # EQUATION 19
-                            for n_y in range(1, n):
-                                for r_y in range(0, r + 1):
-                                    if r_y <= n_y and r - r_y <= n - n_y:  # Ensure that the combinatorics makes sense
-                                        # Compute the constant term
-                                        const = math.comb(n_y, r_y) * math.comb(n - n_y, r - r_y) / math.comb(n, r)
-
-                                        # Grab Ftz(n_y, r_y)
-                                        term1 = F_t_z[partials_index(n_y) + r_y][site]
-
-                                        # Grab Fty(n - n_y, r - r_y)
-                                        term2 = F_t_y[partials_index(n - n_y) + r - r_y][site]
-
-                                        tot += term1 * term2 * const
-
-                            F_b[index][site] = tot
-
+                    F_b = Rule2(F_t_y, F_t_z, site_count, vector_len)
         # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
         if node_par.parents is not None:
-            m_y = node_par.possible_lineages()
-            # ONLY CALCULATE F_T FOR NON ROOT BRANCHES
-            F_t = np.zeros((vector_len, site_count))
-            
-            # Do this for each marker
-            for site in range(site_count):
-                for ft_index in range(0, vector_len):
-                    tot = 0
-                    actual_index = undo_index(ft_index)
-                    n_t = actual_index[0]
-        
-                    for n_b in range(n_t, m_y + 1):  # n_b always at least 1
-                        for r_b in range(0, n_b + 1):
-                            index = map_nr_to_index(n_b, r_b)
-                            exp_val = self.Qt[index][ft_index]  # Q(n,r);(n_t, r_t)
-
-                            tot += exp_val * F_b[index][site]
-
-                    F_t[ft_index][site] = tot
-
+            F_t = Rule1(F_b, site_count, vector_len, node_par.possible_lineages(), self.Qt)
             self.cached = [F_b, F_t]
             self.updated = False
             return [F_b, F_t]
