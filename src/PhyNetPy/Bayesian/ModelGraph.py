@@ -118,7 +118,7 @@ class Model:
         self.submodel_node = None # type SubstitutionModel
        
         self.network_node_map = {}
-        
+        self.snp_params = snp_params
         
         #Build the model graph
         
@@ -131,6 +131,8 @@ class Model:
             else:
                 self.snp_root = None
                 self.snp_Q = None
+                # Need a data structure to keep track of VPI likelihoods
+                self.vpis = PartialLikelihoods()
                 self.build_SNP(snp_params)
         elif self.data.get_type() == "BINARY":
             if snp_params is None:
@@ -296,6 +298,8 @@ class Model:
             snp_params (dict): A mapping of parameter types to their values, to be used in
             making the snp transition matrix
         """
+        
+        
 
         # Initialize branch length/height vector and save it for update usage
         tree_heights_node = TreeHeights()
@@ -316,7 +320,7 @@ class Model:
                 branches = []
                 for branch_par, branch_len in node.length().items():
                     #Create new branch
-                    branch = SNPBranchNode(branch_index, branch_len, self.snp_Q, snp_params["samples"])
+                    branch = SNPBranchNode(branch_index, branch_len, self.snp_Q, snp_params["samples"], self.vpis)
                     tree_heights_vec.append(branch_len)
                     branch_index += 1
                     branches.append(branch)
@@ -330,6 +334,7 @@ class Model:
                     tree_heights_node.join(branch)
                     # Add to list of nodes
                     self.nodes.append(branch)
+                    print("NODE " + node.get_name() + " HAS BRANCH INDEX" + str(branch_index - 1))
 
                 # Add sequences for each group to a new SNP leaf node
                 if snp_params["grouping"]:
@@ -364,7 +369,7 @@ class Model:
                 branches = []
                 for branch_par, branch_len in node.length().items():
                     #Create new branch
-                    branch = SNPBranchNode(branch_index, branch_len, self.snp_Q, snp_params["samples"])
+                    branch = SNPBranchNode(branch_index, branch_len, self.snp_Q, snp_params["samples"], self.vpis)
                     branch.set_net_parent(branch_par)
                     #tree_heights_vec.append(node.length())
                     tree_heights_vec.append(branch_len)
@@ -380,6 +385,7 @@ class Model:
                     tree_heights_node.join(branch)
                     # Add to list of nodes
                     self.nodes.append(branch)
+                    print("NODE " + node.get_name() + " HAS BRANCH INDEX" + str(branch_index - 1))
                     
                
                 # Create internal node and link to branch
@@ -396,10 +402,11 @@ class Model:
                 self.network_node_map[node] = new_internal_node
             else:  # The root.
             
-                branch_height = SNPBranchNode(branch_index, 0, self.snp_Q, snp_params["samples"])
+                branch_height = SNPBranchNode(branch_index, 0, self.snp_Q, snp_params["samples"], self.vpis)
                 branch_index += 1
                 tree_heights_vec.append(0)
                 tree_heights_node.join(branch_height)
+                print("NODE " + node.get_name() + " HAS BRANCH INDEX" + str(branch_index - 1))
                 
                 # Create root
                 new_internal_node = SNPInternalNode(self.data.siteCount(), name=node.get_name(), branch=[branch_height])
@@ -454,6 +461,10 @@ class Model:
         
         #Calculate the leaf descendant set for each node
         self.snp_root.calc_leaf_descendants()
+        for node in self.netnodes_sans_root:
+            print("Node " + node.name + " HAS DESCENDANTS: ")
+            for descendant in node.leaf_descendants:
+                print(descendant.name)
 
         
             
@@ -501,7 +512,10 @@ class Model:
         q_null_space = scipy.linalg.null_space(self.snp_Q.Q)
         x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
 
-        F_b = self.snp_root.get()[0]       
+        F_b_map = self.vpis.vpis[self.snp_root.get()[0]]
+        F_b = to_array(F_b_map, partials_index(self.snp_params["samples"] + 1), self.data.siteCount()) 
+        print(F_b) 
+        
         L = np.zeros(self.data.siteCount())
        
         # EQ 20, Root probabilities
@@ -1353,7 +1367,7 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         self.partials = None
         self.name = name
         self.site_count = site_count
-        self.leaf_descendants:set = set()
+        self.leaf_descendants : set = set()
 
     def node_move_bounds(self):
         if self.parents is None:
@@ -1369,7 +1383,8 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         for child in self.children:
             for branch in child.get_branches():
                 child_branches.append(branch) 
-                    
+             
+        #TODO: this is wrong       
         upper_limit = min([branch.get() for branch in par_branches])
         lower_limit = max(0, max([branch.get() for branch in child_branches]))
         return [lower_limit, upper_limit]
@@ -1394,7 +1409,7 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         return self.leaf_descendants
         
         
-    def get(self):
+    def get(self)->tuple:
         if self.updated:
             return self.calc()
         else:
@@ -1423,6 +1438,12 @@ class SNPInternalNode(NetworkNode, CalculationNode):
         return sum([child.samples() for child in self.leaf_descendants])
     
     
+    def get_branch_from_child(self, child):
+        for branch in child.get_branches():
+            if branch.net_parent == self:
+                return branch
+        raise ModelError("No branch found between input child and this node")
+    
 
     def calc(self):
         """
@@ -1448,7 +1469,8 @@ class SNPInternalNode(NetworkNode, CalculationNode):
 
 class SNPBranchNode(BranchNode, CalculationNode):
 
-    def __init__(self, vector_index: int, branch_length: float, Q: SNPTransition, total_samples:int, verbose = False):
+    def __init__(self, vector_index: int, branch_length: float, Q: SNPTransition, total_samples:int, vpi_tracker: PartialLikelihoods, verbose = False):
+        #Note: the vector index also acts as a unique branch identifier
         super().__init__(vector_index, branch_length)
         self.Q = Q
         self.Qt = None
@@ -1456,6 +1478,7 @@ class SNPBranchNode(BranchNode, CalculationNode):
         self.branch_height = None
         print("total sample count: " + str(total_samples))
         self.total_samples = total_samples
+        self.vpi_tracker = vpi_tracker
     
 
     def update(self, new_bl: float)->None:
@@ -1471,16 +1494,17 @@ class SNPBranchNode(BranchNode, CalculationNode):
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
 
-    def get(self):
-        if self.updated:
+    def get(self)->tuple:
+        vpi_key = self.vpi_tracker.get_key_with(self.index)
+        if vpi_key is None:
             return self.calc()
         else:
-            return self.cached
+            return vpi_key
 
     def get_length(self):
         return self.branch_length
 
-    def calc(self):
+    def calc(self) -> tuple:
         """
         Calculates both the top and bottom partial likelihoods, based on Eq 14 and 19.
 
@@ -1509,11 +1533,11 @@ class SNPBranchNode(BranchNode, CalculationNode):
             raise ModelError("site count error")
 
         vector_len = partials_index(self.total_samples + 1)  
-        F_b = np.zeros((vector_len, site_count))  # Set the size of F_b
 
         # BOTTOM: Case 1, the branch is an external branch, so bottom likelihood is just the red counts
         if type(node_par) is SNPLeafNode:
-            F_b = Rule0(node_par, site_count, vector_len)         
+            F_key = self.vpi_tracker.Rule0(node_par, site_count, vector_len, self.index)  
+            
         # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
         else:
             # EQ 19
@@ -1522,7 +1546,8 @@ class SNPBranchNode(BranchNode, CalculationNode):
             
             if node_par.is_reticulation():
                 #RULE 3
-                F_t_x = net_children[0].get_branches()[0].get()[1]
+                x_branch = node_par.get_branch_from_child(net_children[0])
+                F_t_x_key = x_branch.get()
                 
                 possible_lineages = node_par.possible_lineages() 
                 
@@ -1539,30 +1564,62 @@ class SNPBranchNode(BranchNode, CalculationNode):
                 if g_this + g_that != 1:
                     raise ModelError("Set of inheritance probabilities do not sum to 1 for node<" + node_par.name + ">")
                 
-                print("INHERITANCE TEST: " + str(g_this) + " " + str(g_that))
-                Rule3()
+                F_b_key = self.vpi_tracker.Rule3(F_t_x_key, g_this, g_that, site_count, possible_lineages, x_branch.index, self.index, sibling_branch.index)
+                
+                #Do the calculations for the sibling branch
+                
+                sibling_branch.transition()
+                F_t_key_sibling = self.vpi_tracker.Rule1(F_b_key, site_count, vector_len, node_par.possible_lineages(), sibling_branch.Qt, sibling_branch.index)
+                
+                sibling_branch.updated = False
+                
+                print("--------------------------")
+                print("PROCESSED BRANCH " + str(sibling_branch.index))
+                print("--------------------------")
+            
+                F_key = F_t_key_sibling
             else:
-                F_t_y = net_children[0].get_branches()[0].get()[1] # TODO:INCORRECT. If net child is a retic, no guarantee 0 is the correct branch
-                F_t_z = net_children[1].get_branches()[0].get()[1]
+                y_branch : SNPBranchNode = node_par.get_branch_from_child(net_children[0])
+                z_branch : SNPBranchNode = node_par.get_branch_from_child(net_children[1])
+                print("WTFFFFFFFFFFFFFF")
+                print("CURRENT VPIS: " + str(self.vpi_tracker.vpis.keys()))
+                F_t_y_key = y_branch.get()
+                F_t_z_key = z_branch.get()
+            
+                
+                print(F_t_y_key)
+                print(F_t_z_key)
+                
+                y_branch_index = y_branch.index
+                z_branch_index = z_branch.index
                 
                 #Find out whether lineage y and z have leaves in common 
-                common_leaves : set = net_children[1].leaf_descendants.difference(net_children[0].leaf_descendants)
-                
-                if common_leaves: #If two sets are not disjoint
-                    Rule4()
-                    raise ModelError("Not implemented yet")
+                print(net_children[1].name)
+                print(net_children[0].name)
+    
+                if not net_children[1].leaf_descendants.isdisjoint(net_children[0].leaf_descendants): #If two sets are not disjoint
+                    F_b_key = self.vpi_tracker.Rule4(F_t_z_key, site_count, vector_len, y_branch_index, z_branch_index, self.index)
                 else: # Then use Rule 2
-                    F_b = Rule2(F_t_y, F_t_z, site_count, vector_len)
+                    F_b_key = self.vpi_tracker.Rule2(F_t_y_key, F_t_z_key, site_count, vector_len, net_children[0].possible_lineages(), net_children[1].possible_lineages(), y_branch_index, z_branch_index, self.index)
+                
+                F_key = F_b_key
+                    
         # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
         if node_par.parents is not None:
-            F_t = Rule1(F_b, site_count, vector_len, node_par.possible_lineages(), self.Qt)
-            self.cached = [F_b, F_t]
+            F_key = self.vpi_tracker.Rule1(F_key, site_count, vector_len, node_par.possible_lineages(), self.Qt, self.index)
             self.updated = False
-            return [F_b, F_t]
+            print("------------------------------------")
+            print("PROCESSED BRANCH: " + str(self.index))
+            print(self.vpi_tracker.vpis.keys())
+            print("------------------------------------")
+            return F_key
         else:
             self.updated = False
-            self.cached = F_b
-            return F_b
+            print("------------------------------------")
+            print("PROCESSED BRANCH: " + str(self.index))
+            print(self.vpi_tracker.vpis.keys())
+            print("------------------------------------")
+            return F_key
 
     def transition(self):
         """

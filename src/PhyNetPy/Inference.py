@@ -97,7 +97,7 @@ def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dic
     for network in networks:
         snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":False}
         #Create model
-        snp_model = mg.Model(network, m.Matrix(aln, a.Alphabet("SNP")), None, snp_params=snp_params, verbose = True)
+        snp_model = mg.Model(network, m.Matrix(aln, a.Alphabet("SNP")), None, snp_params=snp_params, verbose = False)
         #Compute the likelihood
         likelihoods.append(snp_model.SNP_likelihood())
  
@@ -464,3 +464,8 @@ def ABC(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type = "q"
     # reset global var
     sampling_rate_arr = []
     return res
+
+
+
+
+print(SNAPP_Likelihood('src/PhyNetPY/test/files/snptest_papernetwork.nex', 1, 1, .2)[0])

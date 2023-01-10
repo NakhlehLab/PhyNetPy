@@ -15,9 +15,10 @@ class TestSNP():
     def test_network(self):
         """
         This is the case in which there is a network passed in through the nexus file.
-        This is an error, since Felsenstein's algorithm does not support networks. Handle accordingly
         """ 
-        assert True == True
+        likelihood = SNAPP_Likelihood('src/PhyNetPY/test/files/snptest_papernetwork.nex', 1, 1, .2)[0]
+        print(likelihood)
+        assert 0 > likelihood
     
     def test_gap_chars(self):
         """
