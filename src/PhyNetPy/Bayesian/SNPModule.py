@@ -180,7 +180,39 @@ def rn_to_rn_minus_one(set_of_rns : dict):
             rn_minus_one[new_key] = init_value
 
     return rn_minus_one
+
+
+def rn_to_rn_minus_two(set_of_rns : dict):
+    """
+    This is a function defined as
     
+    f: Rn;Rn -> Rn-2;Rn-2.
+    
+    set_of_rns should be a mapping in the form of {(nx , rx) -> probability in R} where nx and rx are both vectors in Rn
+    
+    This function takes set_of_rns and turns it into a mapping {(nx[:-2] , rx[:-2]) : set((nx[-2:] , rx[-2:], probability))} where the keys
+    are vectors in Rn-2, and their popped last 2 elements and the probability is stored as values.
+
+    Args:
+        set_of_rns (dict): a mapping in the form of {(nx , rx) -> probability in R} where nx and rx are both vectors in Rn
+    """
+    
+    rn_minus_two = {}
+    
+    for vectors, prob in set_of_rns.items():
+        nx = vectors[0]
+        rx = vectors[1]
+        #The vectors must be long enough
+        new_value = (nx[-2:], rx[-2:], prob)
+        new_key = (nx[:-2], rx[:-2])
+        if new_key in rn_minus_two.keys():
+            rn_minus_two[new_key].add(new_value)
+        else:
+            init_value = set()
+            init_value.add(new_value)
+            rn_minus_two[new_key] = init_value
+
+    return rn_minus_two
 
 
 
@@ -234,17 +266,23 @@ def eval_Rule3(F_t: dict, nx:list, rx: list, n_ybot:int, n_zbot:int, r_ybot:int,
 
 def eval_Rule4(F_t: dict, nz: list, rz:list, n_zbot:int, r_zbot: int)-> dict:
     evaluation = 0
-    for n_xtop in range(1, n_zbot):
+    for n_xtop in range(0, n_zbot + 1):
         for r_xtop in range(0, r_zbot + 1):
             if r_xtop <= n_xtop and r_zbot - r_xtop <= n_zbot - n_xtop:
                 
                 #RULE 4 EQUATION
                 const = comb(n_xtop, r_xtop) * comb(n_zbot - n_xtop, r_zbot - r_xtop) / comb(n_zbot, r_zbot)
+                print(tuple(np.append(np.append(nz, n_xtop), n_zbot - n_xtop)))
+                print(tuple(np.append(np.append(rz, r_xtop), r_zbot - r_xtop)))
                 try:
                     term1= F_t[(tuple(np.append(np.append(nz, n_xtop), n_zbot - n_xtop)), tuple(np.append(np.append(rz, r_xtop), r_zbot - r_xtop)))]
                     evaluation += term1 * const
+                    if evaluation != 0:
+                        print("COMPUTING SOME NUMBERS")
+                    
                 except KeyError:
                     evaluation += 0
+                    print("OOPSIES")
     
     return [(tuple(np.append(nz, n_zbot)), tuple(np.append(rz, r_zbot))), evaluation] 
 
@@ -327,7 +365,7 @@ class PartialLikelihoods:
                 nx = list(vectors[0])
                 rx = list(vectors[1])
                 #Iterate over the possible values for n_xtop and r_xtop
-                for ft_index in range(vector_len):
+                for ft_index in range(partials_index(m_x + 1)):
                     actual_index = undo_index(ft_index)
                     n_top = actual_index[0]
                     r_top = actual_index[1]
@@ -478,8 +516,17 @@ class PartialLikelihoods:
         F_t : dict = self.vpis[vpi_key]
        
         
+        print("VPI: " + str(vpi_key) + " LAST ENTRY SHOULD BE " + str(branch_index_x))
+        
+        if "branch_" + str(branch_index_x) + ": top" != vpi_key[-1]:
+            
+            vpi_key_temp = self.reorder_vpi_rule2(vpi_key, site_count, branch_index_x)
+            del self.vpis[vpi_key]
+            vpi_key = vpi_key_temp
+        
+        
         for site in range(site_count):
-            nx_rx_map = rn_to_rn_minus_one(F_t[site])
+            nx_rx_map = rn_to_rn_minus_two(F_t[site])
             
             F_b[site] = {}
             

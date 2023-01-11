@@ -543,7 +543,6 @@ class Model:
             print("-------------------------------")
             print("       ")
             
-
         return np.sum(np.log(L))
 
     def execute_move(self, move: Move):
@@ -1578,6 +1577,7 @@ class SNPBranchNode(BranchNode, CalculationNode):
                 print("--------------------------")
             
                 F_key = F_t_key_sibling
+                
             else:
                 y_branch : SNPBranchNode = node_par.get_branch_from_child(net_children[0])
                 z_branch : SNPBranchNode = node_par.get_branch_from_child(net_children[1])
@@ -1607,19 +1607,26 @@ class SNPBranchNode(BranchNode, CalculationNode):
         # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
         if node_par.parents is not None:
             F_key = self.vpi_tracker.Rule1(F_key, site_count, vector_len, node_par.possible_lineages(), self.Qt, self.index)
+           
+            
             self.updated = False
             print("------------------------------------")
             print("PROCESSED BRANCH: " + str(self.index))
             print(self.vpi_tracker.vpis.keys())
             print("------------------------------------")
-            return F_key
+            
         else:
             self.updated = False
             print("------------------------------------")
             print("PROCESSED BRANCH: " + str(self.index))
             print(self.vpi_tracker.vpis.keys())
             print("------------------------------------")
-            return F_key
+    
+        print("F_T (at site 0)")
+        print(F_key)
+        print(self.vpi_tracker.vpis[F_key][0])
+        
+        return F_key
 
     def transition(self):
         """
