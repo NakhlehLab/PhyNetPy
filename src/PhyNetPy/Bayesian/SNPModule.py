@@ -52,94 +52,25 @@ def map_nr_to_index(n:int, r:int) -> int:
     return starts + r
 
 
-def Rule0(node_par, site_count, vector_len):
-
-    F_b = np.zeros((vector_len, site_count))
+def to_array(Fb_map :dict, vector_len:int, site_count:int) -> np.ndarray:
+    """
+    Takes a vpi/partial likelihood mapping, and translates it into a matrix
+    such that the columns denote the site, and the row indeces correspond to (n,r) pairs.
     
-    # Compute leaf partials via EQ 12
-    reds = node_par.red_count()
+    This function serves the purpose of formatting the likelihoods at the root for easy computation
 
-    for site in range(site_count):
-        for index in range(vector_len):
-            actual_index = undo_index(index)
-            n = actual_index[0]
-            r = actual_index[1]
+    Args:
+        Fb_map (dict): vpi/partial likelihood mapping of a single dimension 
+                        (ie, may not be downstream of a reticulation node, without it having been resolved)
+        vector_len (int): rows of resulting matrix
+        site_count (int): columns of resulting matrix
 
-            # EQUATION 12
-            if reds[site] == r and n == node_par.samples():
-                F_b[index][site] = 1
-                
-    return F_b
-
-def Rule1(F_b : np.ndarray, site_count : int, vector_len : int, m_y : int, Qt : np.ndarray) -> np.ndarray:
-    
-    # ONLY CALCULATE F_T FOR NON ROOT BRANCHES
-    F_t = np.zeros((vector_len, site_count))
-    
-    # Do this for each marker
-    for site in range(site_count):
-        for ft_index in range(0, vector_len):
-            tot = 0
-            actual_index = undo_index(ft_index)
-            n_t = actual_index[0]
-
-            for n_b in range(n_t, m_y + 1):  # n_b always at least 1
-                for r_b in range(0, n_b + 1):
-                    index = map_nr_to_index(n_b, r_b)
-                    exp_val = Qt[index][ft_index]  # Q(n,r);(n_t, r_t)
-
-                    tot += exp_val * F_b[index][site]
-
-            F_t[ft_index][site] = tot
-    
-    return F_t
-            
-            
-def Rule2(F_t_y : np.ndarray, F_t_z : np.ndarray, site_count : int, vector_len : int) -> np.ndarray:
-    
-    F_b = np.zeros((vector_len, site_count))
-    for site in range(site_count):
-        for index in range(vector_len):
-            actual_index = undo_index(index)
-            n = actual_index[0]
-            r = actual_index[1]
-            tot = 0
-
-            # EQUATION 19
-            for n_y in range(1, n):
-                for r_y in range(0, r + 1):
-                    if r_y <= n_y and r - r_y <= n - n_y:  # Ensure that the combinatorics makes sense
-                        # Compute the constant term
-                        const = comb(n_y, r_y) * comb(n - n_y, r - r_y) / comb(n, r)
-
-                        # Grab Ftz(n_y, r_y)
-                        term1 = F_t_z[map_nr_to_index(n_y, r_y)][site]
-
-                        # Grab Fty(n - n_y, r - r_y)
-                        term2 = F_t_y[map_nr_to_index(n - n_y, r - r_y)][site]
-
-                        tot += term1 * term2 * const
-
-            F_b[index][site] = tot
-            
-    return F_b
-
-def Rule3(F_t_x : dict, g_this : float, g_that : float, site_count : int):
-    print("Hello from rule 3")
-        
-def Rule4():
-    print("Hello from rule 4")
-        
-
-
-
-    
-
-
-
-def to_array(Fb_map :dict, vector_len, site_count):
+    Returns:
+        np.ndarray: Matrix of dimension vector_len by site_count, containing floats
+    """
     
     F_b = np.zeros((vector_len, site_count))  
+    
     for site in range(site_count):
         for nr_pair, prob in Fb_map[site].items():
             #nr_pair should be of the form ((n),(r))
@@ -149,81 +80,72 @@ def to_array(Fb_map :dict, vector_len, site_count):
 
 
 
-def rn_to_rn_minus_one(set_of_rns : dict):
+def rn_to_rn_minus_dim(set_of_rns : dict, dim : int):
     """
     This is a function defined as
     
-    f: Rn;Rn -> Rn-1;Rn-1.
+    f: Rn;Rn -> Rn-dim;Rn-dim.
     
     set_of_rns should be a mapping in the form of {(nx , rx) -> probability in R} where nx and rx are both vectors in Rn
     
-    This function takes set_of_rns and turns it into a mapping {(nx[:-1] , rx[:-1]) : set((nx[-1] , rx[-1], probability))} where the keys
-    are vectors in Rn-1, and their popped last elements and the probability is stored as values.
+    This function takes set_of_rns and turns it into a mapping {(nx[:-dim] , rx[:-dim]) : set((nx[-dim:] , rx[-dim:], probability))} where the keys
+    are vectors in Rn-dim, and their popped last elements and the probability is stored as values.
 
     Args:
         set_of_rns (dict): a mapping in the form of {(nx , rx) -> probability in R} where nx and rx are both vectors in Rn
+        dim (int): the number of dimensions to reduce from Rn.
     """
     
-    rn_minus_one = {}
+    rn_minus_dim = {}
     
     for vectors, prob in set_of_rns.items():
         nx = vectors[0]
         rx = vectors[1]
         
-        new_value = (nx[-1], rx[-1], prob)
-        new_key = (nx[:-1], rx[:-1])
-        if new_key in rn_minus_one.keys():
-            rn_minus_one[new_key].add(new_value)
+        #keep track of the remaining elements and the probability
+        new_value = (nx[-dim:], rx[-dim:], prob)
+        
+        #Reduce vectors dimension by grabbing the first n-dim elements
+        new_key = (nx[:-dim], rx[:-dim])
+        
+        #Take care of duplicates
+        if new_key in rn_minus_dim.keys():
+            rn_minus_dim[new_key].add(new_value)
         else:
             init_value = set()
             init_value.add(new_value)
-            rn_minus_one[new_key] = init_value
+            rn_minus_dim[new_key] = init_value
 
-    return rn_minus_one
-
-
-def rn_to_rn_minus_two(set_of_rns : dict):
-    """
-    This is a function defined as
-    
-    f: Rn;Rn -> Rn-2;Rn-2.
-    
-    set_of_rns should be a mapping in the form of {(nx , rx) -> probability in R} where nx and rx are both vectors in Rn
-    
-    This function takes set_of_rns and turns it into a mapping {(nx[:-2] , rx[:-2]) : set((nx[-2:] , rx[-2:], probability))} where the keys
-    are vectors in Rn-2, and their popped last 2 elements and the probability is stored as values.
-
-    Args:
-        set_of_rns (dict): a mapping in the form of {(nx , rx) -> probability in R} where nx and rx are both vectors in Rn
-    """
-    
-    rn_minus_two = {}
-    
-    for vectors, prob in set_of_rns.items():
-        nx = vectors[0]
-        rx = vectors[1]
-        #The vectors must be long enough
-        new_value = (nx[-2:], rx[-2:], prob)
-        new_key = (nx[:-2], rx[:-2])
-        if new_key in rn_minus_two.keys():
-            rn_minus_two[new_key].add(new_value)
-        else:
-            init_value = set()
-            init_value.add(new_value)
-            rn_minus_two[new_key] = init_value
-
-    return rn_minus_two
+    return rn_minus_dim
 
 
 
 def eval_Rule1(F_b : dict, nx : list, n_xtop : int, rx: list, r_xtop: int, Qt: np.ndarray, mx : int) -> dict:
+    """
+    Given all the information on the left side of the Rule 1 equation, compute the right side probability
+
+    Args:
+        F_b (dict): F x, x_bottom vpi map
+        nx (list): a vector containing a 1-1 correspondence of n values to population interfaces
+        n_xtop (int): number of lineages at x_top
+        rx (list): a vector containing a 1-1 correspondence of r values to population interfaces
+        r_xtop (int): number of lineages at x_top that are "red"
+        Qt (np.ndarray): EXP(Q*t) where Q is the transition matrix, and t is the branch length
+        mx (int): number of possible lineages at the node
+
+    Returns:
+        dict: A 1 element mapping of left side vectors to their right side probability
+    """
     evaluation = 0
+    
     for n_b in range(n_xtop, mx + 1):  # n_b always at least 1
         for r_b in range(0, n_b + 1):
+            
             index = map_nr_to_index(n_b, r_b)
             exp_val = Qt[index][map_nr_to_index(n_xtop, r_xtop)]  # Q(n,r);(n_t, r_t)
             n_vec = tuple(np.append(nx, n_b))
             r_vec = tuple(np.append(rx, r_b))
+            
             try:
                 evaluation += F_b[(n_vec, r_vec)] * exp_val
             except KeyError:
@@ -231,14 +153,30 @@ def eval_Rule1(F_b : dict, nx : list, n_xtop : int, rx: list, r_xtop: int, Qt: n
     
     return [(tuple(np.append(nx, n_xtop)), tuple(np.append(rx, r_xtop))), evaluation]
 
-def eval_Rule2(F_t_x : dict, F_t_y : dict, nx : list, ny : list, n_zbot : int, rx: list, ry : list, r_zbot: int, mx : int, my: int) -> dict:
+def eval_Rule2(F_t_x : dict, F_t_y : dict, nx : list, ny : list, n_zbot : int, rx: list, ry : list, r_zbot: int) -> dict:
+    """
+    Given the left side information for the Rule 2 equation, calculate the right side probability
+
+    Args:
+        F_t_x (dict): F x, x_top (vpi map)
+        F_t_y (dict): F y, y_top (vpi map)
+        nx (list): a vector containing a 1-1 correspondence of n values to population interfaces in the x vector
+        ny (list): a vector containing a 1-1 correspondence of n values to population interfaces in the y vector
+        n_zbot (int): number of lineages at branch z's bottom
+        rx (list): a vector containing a 1-1 correspondence of r values to population interfaces in the x vector
+        ry (list): a vector containing a 1-1 correspondence of r values to population interfaces in the y vector
+        r_zbot (int): number of lineages from n_zbot that are "red"
+
+    Returns:
+        dict: 1 element mapping from the left side vectors to the right side probability
+    """
     evaluation = 0
+    
+    #iterate through valid range of n_xtop and r_xtop values
     for n_xtop in range(1, n_zbot):
         for r_xtop in range(0, r_zbot + 1):
             if r_xtop <= n_xtop and r_zbot - r_xtop <= n_zbot - n_xtop:
-                # for n_xtop in range(max(0, n_zbot - my), min(mx, n_zbot) + 1): #inclusive
-                #     for r_xtop in range(max(0, n_xtop + r_zbot - n_zbot), min(n_xtop, r_zbot) + 1): #also inclusive
-           
+    
                 #RULE 2 EQUATION
                 const = comb(n_xtop, r_xtop) * comb(n_zbot - n_xtop, r_zbot - r_xtop) / comb(n_zbot, r_zbot)
                 try:
@@ -255,6 +193,23 @@ def eval_Rule2(F_t_x : dict, F_t_y : dict, nx : list, ny : list, n_zbot : int, r
 
 
 def eval_Rule3(F_t: dict, nx:list, rx: list, n_ybot:int, n_zbot:int, r_ybot:int, r_zbot:int, gamma_y:float, gamma_z:float) -> dict:
+    """
+    Given left side information for the Rule 3 equation, calculate the right side probability
+
+    Args:
+        F_t (dict): F x, x_top
+        nx (list): a vector containing a 1-1 correspondence of n values to population interfaces
+        rx (list): a vector containing a 1-1 correspondence of r values to population interfaces
+        n_ybot (int): number of lineages that are inherited from the y branch
+        n_zbot (int): number of lineages that are inherited from the z branch
+        r_ybot (int): number of the y lineages that are "red"
+        r_zbot (int): number of the z lineages that are "red"
+        gamma_y (float): inheritance probability for branch y
+        gamma_z (float): inheritance probability for branch z
+
+    Returns:
+        dict: 1 element map from the left side vectors to the right side probability
+    """
     #Rule 3 Equation
     try:
         evaluation = F_t[(tuple(np.append(nx, n_ybot + n_zbot)), tuple(np.append(rx, r_ybot + r_zbot)))] * comb(n_ybot + n_zbot, n_ybot) * pow(gamma_y, n_ybot) * pow(gamma_z, n_zbot)
@@ -265,24 +220,35 @@ def eval_Rule3(F_t: dict, nx:list, rx: list, n_ybot:int, n_zbot:int, r_ybot:int,
     
 
 def eval_Rule4(F_t: dict, nz: list, rz:list, n_zbot:int, r_zbot: int)-> dict:
+    """
+    Given all the information on the left side of the Rule 4 equation, calculate the right side probability.
+
+    Args:
+        F_t (dict): F_z_xtop,ytop, a vpi mapping.
+        nz (list): a vector containing a 1-1 correspondence of n values to population interfaces
+        rz (list): a vector containing a 1-1 correspondence of r values to population interfaces
+        n_zbot (int): number of lineages at z
+        r_zbot (int): number of the n_zbot lineages that are "red"
+    Returns:
+        dict: A new entry into the Fz_bot vpi map
+    """
+    
     evaluation = 0
+    
+    #Iterate through all possible values of n_xtop and r_xtop
     for n_xtop in range(0, n_zbot + 1):
         for r_xtop in range(0, r_zbot + 1):
-            if r_xtop <= n_xtop and r_zbot - r_xtop <= n_zbot - n_xtop:
+            if r_xtop <= n_xtop and r_zbot - r_xtop <= n_zbot - n_xtop:  # Ensure the combinatorics is well defined
                 
                 #RULE 4 EQUATION
                 const = comb(n_xtop, r_xtop) * comb(n_zbot - n_xtop, r_zbot - r_xtop) / comb(n_zbot, r_zbot)
-                print(tuple(np.append(np.append(nz, n_xtop), n_zbot - n_xtop)))
-                print(tuple(np.append(np.append(rz, r_xtop), r_zbot - r_xtop)))
+    
                 try:
                     term1= F_t[(tuple(np.append(np.append(nz, n_xtop), n_zbot - n_xtop)), tuple(np.append(np.append(rz, r_xtop), r_zbot - r_xtop)))]
                     evaluation += term1 * const
-                    if evaluation != 0:
-                        print("COMPUTING SOME NUMBERS")
-                    
                 except KeyError:
                     evaluation += 0
-                    print("OOPSIES")
+                   
     
     return [(tuple(np.append(nz, n_zbot)), tuple(np.append(rz, r_zbot))), evaluation] 
 
@@ -297,12 +263,21 @@ class PartialLikelihoods:
         # defined by rules 0-4.
         self.vpis : dict = {}
         
-    def Rule0(self, node_par, site_count, vector_len, branch_index : int)->tuple:
+    def Rule0(self, reds: np.ndarray, samples: int, site_count : int, vector_len : int, branch_index : int) -> tuple:
+        """
+        Given leaf data, compute the initial partial likelihood values for the interface F x_bot
 
+        Args:
+            reds (np.ndarray): _description_
+            samples (int): _description_
+            site_count (int): _description_
+            vector_len (int): _description_
+            branch_index (int): _description_
+
+        Returns:
+            tuple: The vector of population interfaces, for this rule it is simply a 1 element tuple containing x_bot.
+        """
         F_b = {}
-        
-        # Compute leaf partials via EQ 12
-        reds = node_par.red_count()
 
         for site in range(site_count):
             F_b[site] = {}
@@ -311,8 +286,8 @@ class PartialLikelihoods:
                 n = actual_index[0]
                 r = actual_index[1]
 
-                # EQUATION 12
-                if reds[site] == r and n == node_par.samples():
+                # Rule 0 formula
+                if reds[site] == r and n == samples:
                     F_b[site][(tuple([n]),tuple([r]))] = 1
                 else:
                     F_b[site][(tuple([n]),tuple([r]))] = 0
@@ -349,14 +324,13 @@ class PartialLikelihoods:
         print("BRANCH THAT WERE CALCULATING THE TOP FOR:" + str(branch_index))
         
         if "branch_" + str(branch_index) + ": bottom" != vpi_key[-1]:
-            
-            vpi_key_temp = self.reorder_vpi_rule1(vpi_key, site_count, branch_index)
+            vpi_key_temp = self.reorder_vpi(vpi_key, site_count, branch_index, False)
             del self.vpis[vpi_key]
             vpi_key = vpi_key_temp
         
         for site in range(site_count):
             #Gather all combinations of nx, rx values 
-            nx_rx_map = rn_to_rn_minus_one(F_b[site])
+            nx_rx_map = rn_to_rn_minus_dim(F_b[site], 1)
             
             #initialize the site mapping
             F_t[site] = {}
@@ -374,6 +348,7 @@ class PartialLikelihoods:
                     entry = eval_Rule1(F_b[site], nx, n_top, rx, r_top, Qt, m_x)
                     F_t[site][entry[0]] = entry[1]
         
+        #Replace the instance of x_bot with x_top
         new_vpi_key = list(vpi_key)
         new_vpi_key[vpi_key.index("branch_" + str(branch_index) + ": bottom")] = "branch_" + str(branch_index) + ": top"
         new_vpi_key = tuple(new_vpi_key)
@@ -384,7 +359,7 @@ class PartialLikelihoods:
         return new_vpi_key
                 
                 
-    def Rule2(self, vpi_key_x : tuple, vpi_key_y :tuple, site_count : int, vector_len : int, mx: int, my: int, branch_index_x:int, branch_index_y:int, branch_index_z:int) -> tuple:
+    def Rule2(self, vpi_key_x : tuple, vpi_key_y :tuple, site_count : int, vector_len : int, branch_index_x:int, branch_index_y:int, branch_index_z:int) -> tuple:
         """
         Given branches x and y that have no leaf descendents in common and a parent branch z, and partial likelihood mappings for the population 
         interfaces that include x_top and y_top, we would like to calculate the partial likelihood mapping for the population interface
@@ -393,16 +368,17 @@ class PartialLikelihoods:
         This uses Rule 2 from https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005932, Rabier et. al.
 
         Args:
-            F_t_x (dict): A mapping containing mappings from vectors (nx, n_xtop; rx, r_xtop) to probability values for each site
-            F_t_y (dict): A mapping containing mappings from vectors (nx, n_ytop; rx, r_ytop) to probability values for each site
+            vpi_key_x (tuple): The vpi that contains x_top
+            vpi_key_y (tuple): The vpi that contains y_top
             site_count (int): number of total sites in the multiple sequence alignment
             vector_len (int): number of possible lineages at the root
-            mx (int): possible lineages at x
-            my (int): possible lineages at y
+            branch_index_x (int): the index of branch x
+            branch_index_y (int): the index of branch y
+            branch_index_z (int): the index of branch z
+        
 
         Returns:
-            dict: A mapping F_b, in the same format as F_t_x and F_t_y, that represents the partial likelihoods for the population interface
-                x, y, z_bottom.
+            tuple: the vpi that is the result of applying rule 2 to vpi_x and vpi_y. Should include z_bot
         """
         
         F_b = {}
@@ -412,21 +388,24 @@ class PartialLikelihoods:
         print("VPI Y: " + str(vpi_key_y) + " LAST ENTRY SHOULD BE " + str(branch_index_y))
         print("VPI X: " + str(vpi_key_x) + " LAST ENTRY SHOULD BE " + str(branch_index_x))
         
+        
+        #Reorder the vpis if necessary
         if "branch_" + str(branch_index_x) + ": top" != vpi_key_x[-1]:
             
-            vpi_key_xtemp = self.reorder_vpi_rule2(vpi_key_x, site_count, branch_index_x)
+            vpi_key_xtemp = self.reorder_vpi(vpi_key_x, site_count, branch_index_x, True)
             del self.vpis[vpi_key_x]
             vpi_key_x = vpi_key_xtemp
         
         if "branch_" + str(branch_index_y) + ": top" != vpi_key_y[-1]:
             
-            vpi_key_ytemp = self.reorder_vpi_rule2(vpi_key_y, site_count, branch_index_y)
+            vpi_key_ytemp = self.reorder_vpi(vpi_key_y, site_count, branch_index_y, True)
             del self.vpis[vpi_key_y]
             vpi_key_y = vpi_key_ytemp
         
+        #Compute F x,y,z_bot
         for site in range(site_count):
-            nx_rx_map_y = rn_to_rn_minus_one(F_t_y[site])
-            nx_rx_map_x = rn_to_rn_minus_one(F_t_x[site])
+            nx_rx_map_y = rn_to_rn_minus_dim(F_t_y[site], 1)
+            nx_rx_map_x = rn_to_rn_minus_dim(F_t_x[site], 1)
             F_b[site] = {}
             
             #Compute all combinations of (nx;rx) and (ny;ry)
@@ -443,9 +422,10 @@ class PartialLikelihoods:
                         n_bot = actual_index[0]
                         r_bot = actual_index[1]
                         #Evaluate the formula given in rule 2, and insert as an entry in F_b
-                        entry = eval_Rule2(F_t_x[site], F_t_y[site], nx, ny, n_bot, rx, ry, r_bot, mx, my)
+                        entry = eval_Rule2(F_t_x[site], F_t_y[site], nx, ny, n_bot, rx, ry, r_bot)
                         F_b[site][entry[0]] = entry[1]
         
+        #Combine the vpis
         new_vpi_key_x= list(vpi_key_x)
         new_vpi_key_x.remove("branch_" + str(branch_index_x) + ": top")
         
@@ -468,21 +448,23 @@ class PartialLikelihoods:
         This uses Rule 3 from https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005932, Rabier et. al.
         
         Args:
-            F_t_x (dict): A mapping containing mappings from vectors (nx, n_xtop; rx, r_xtop) to probability values for each site
+            vpi_key (tuple): the vpi containing x_top
             g_this (float): gamma inheritance probability for branch y
             g_that (float): gamma inheritance probability for branch z
             site_count (int): number of sites
             m (int): number of possible lineages at x.
+            branch_index_x (int): the index of branch x
+            branch_index_y (int): the index of branch y
+            branch_index_z (int): the index of branch z
 
         Returns:
-            dict: A mapping in the same format as F_t_x, that represents the partial likelihoods at the 
-            population interface x, y_bottom, z_bottom
+            tuple: the vpi that now corresponds to F x, y_bot, z_bot
         """
         F_b = {}
         F_t_x : dict = self.vpis[vpi_key]
         
         for site in range(site_count):
-            nx_rx_map = rn_to_rn_minus_one(F_t_x[site])
+            nx_rx_map = rn_to_rn_minus_dim(F_t_x[site], 1)
             F_b[site] = {}
             #Iterate over the possible (nx;rx) values
             for vector in nx_rx_map.keys():
@@ -497,7 +479,8 @@ class PartialLikelihoods:
                                     #Evaluate the formula in rule 3 and add the result to F_b
                                     entry = eval_Rule3(F_t_x[site], nx, rx, n_y, n_z, r_y, r_z, g_this, g_that)
                                     F_b[site][entry[0]] = entry[1]
-                                
+         
+        #Create new vpi                       
         new_vpi_key= list(vpi_key)
         new_vpi_key.remove("branch_" + str(branch_index_x) + ": top")
         new_vpi_key.append("branch_" + str(branch_index_y) + ": bottom")
@@ -510,8 +493,22 @@ class PartialLikelihoods:
                 
         return new_vpi_key               
             
-    def Rule4(self, vpi_key : tuple, site_count : int, vector_len : int, branch_index_x : int, branch_index_y : int, branch_index_z : int):
-        
+    def Rule4(self, vpi_key : tuple, site_count : int, vector_len : int, branch_index_x : int, branch_index_y : int, branch_index_z : int)->tuple:
+        """
+        Given a branches x and y that share common leaf descendants and that have parent branch z, compute F z, z_bot via 
+        Rule 4 described by https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005932, Rabier et. al.
+
+        Args:
+            vpi_key (tuple): vpi containing x_top and y_top, F z, x_top, y_top.
+            site_count (int): number of sites
+            vector_len (int): maximum amount of (n,r) pairs
+            branch_index_x (int): the index of branch x
+            branch_index_y (int): the index of branch y
+            branch_index_z (int): the index of branch z
+
+        Returns:
+            tuple: vpi for F z,z_bot
+        """
         F_b = {}
         F_t : dict = self.vpis[vpi_key]
        
@@ -519,14 +516,13 @@ class PartialLikelihoods:
         print("VPI: " + str(vpi_key) + " LAST ENTRY SHOULD BE " + str(branch_index_x))
         
         if "branch_" + str(branch_index_x) + ": top" != vpi_key[-1]:
-            
-            vpi_key_temp = self.reorder_vpi_rule2(vpi_key, site_count, branch_index_x)
+            vpi_key_temp = self.reorder_vpi(vpi_key, site_count, branch_index_x, True)
             del self.vpis[vpi_key]
             vpi_key = vpi_key_temp
         
         
         for site in range(site_count):
-            nx_rx_map = rn_to_rn_minus_two(F_t[site])
+            nx_rx_map = rn_to_rn_minus_dim(F_t[site], 2)
             
             F_b[site] = {}
             
@@ -545,6 +541,7 @@ class PartialLikelihoods:
                     entry = eval_Rule4(F_t[site], nx, rx, n_bot, r_bot)
                     F_b[site][entry[0]] = entry[1]
         
+        #Create new vpi
         new_vpi_key = list(vpi_key)
         new_vpi_key.remove("branch_" + str(branch_index_x) + ": top")
         new_vpi_key.remove("branch_" + str(branch_index_y) + ": top")
@@ -557,14 +554,36 @@ class PartialLikelihoods:
                             
         return new_vpi_key
     
-    def reorder_vpi_rule1(self, vpi_key, site_count, branch_index):
+    def reorder_vpi(self, vpi_key: tuple, site_count:int, branch_index:int, for_top : bool) -> tuple:
+        """
+        For use when a rule requires a certain ordering of a vpi, and the current vpi does not satisfy it.
         
-        former_index = list(vpi_key).index("branch_" + str(branch_index) + ": bottom")
+        I.E, For Rule1, have vpi (branch_1_bottom, branch_2_bottom) but need to calculate for branch 1 top. 
+        
+        The vpi needs to be reordered to (branch_2_bottom, branch_1_bottom), and the vectors in the partial likelihood 
+        mappings need to be reordered to match.
+
+        Args:
+            vpi_key (tuple): a vpi tuple
+            site_count (int): number of sites
+            branch_index (int): branch index of the branch that needs to be in the front
+            for_top (bool): bool indicating whether we are looking for branch_index_top or branch_index_bottom in the vpi key
+
+        Returns:
+            tuple: the new, reordered vpi.
+        """
+        
+        if for_top:
+            former_index = list(vpi_key).index("branch_" + str(branch_index) + ": top")
+        else:
+            former_index = list(vpi_key).index("branch_" + str(branch_index) + ": bottom")
+            
         new_vpi_key = list(vpi_key)
         new_vpi_key.append(new_vpi_key.pop(former_index))
         F = self.vpis[vpi_key]
         new_F = {}
         
+        #Reorder all the vectors based on the location of the interface within the vpi
         for site in range(site_count):
             new_F[site] = {}
             for vectors, prob in F[site].items():
@@ -573,6 +592,7 @@ class PartialLikelihoods:
                 new_nx = list(nx)
                 new_rx = list(rx)
                 
+                #pop the element from the list and move to the front
                 new_nx.append(new_nx.pop(former_index))
                 new_rx.append(new_rx.pop(former_index))
                 
@@ -582,38 +602,27 @@ class PartialLikelihoods:
         self.vpis[tuple(new_vpi_key)] = new_F
         return tuple(new_vpi_key)
     
-    def reorder_vpi_rule2(self, vpi_key, site_count, branch_index):
-        
-        former_index = list(vpi_key).index("branch_" + str(branch_index) + ": top")
-        new_vpi_key = list(vpi_key)
-        new_vpi_key.append(new_vpi_key.pop(former_index))
-        F = self.vpis[vpi_key]
-        new_F = {}
-        
-        for site in range(site_count):
-            new_F[site] = {}
-            for vectors, prob in F[site].items():
-                nx = list(vectors[0])
-                rx = list(vectors[1])
-                new_nx = list(nx)
-                new_rx = list(rx)
-                
-                new_nx.append(new_nx.pop(former_index))
-                new_rx.append(new_rx.pop(former_index))
-                
-                new_F[site][(tuple(new_nx), tuple(new_rx))] = prob
-        
+    def get_key_with(self, branch_index:int)->tuple:
+        """
+        From the set of vpis, grab the one (should only be one) that contains the branch 
+        identified by branch_index
+
+        Args:
+            branch_index (int): unique branch identifier
+
+        Returns:
+            tuple: the vpi corresponding to branch_index, or None if no such vpi currently exists
+        """
     
-        self.vpis[tuple(new_vpi_key)] = new_F
-        return tuple(new_vpi_key)
-    
-    def get_key_with(self, branch_index):
         for vpi_key in self.vpis:
             top = "branch_" + str(branch_index) + ": top"
             bottom = "branch_" + str(branch_index) + ": bottom"
             
+            #Return vpi if there's a match
             if top in vpi_key or bottom in vpi_key:
                 return vpi_key
+        
+        #No vpis were found containing branch_index
         return None
             
                 

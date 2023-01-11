@@ -1535,7 +1535,7 @@ class SNPBranchNode(BranchNode, CalculationNode):
 
         # BOTTOM: Case 1, the branch is an external branch, so bottom likelihood is just the red counts
         if type(node_par) is SNPLeafNode:
-            F_key = self.vpi_tracker.Rule0(node_par, site_count, vector_len, self.index)  
+            F_key = self.vpi_tracker.Rule0(node_par.red_count(), node_par.samples(), site_count, vector_len, self.index)  
             
         # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
         else:
@@ -1600,7 +1600,7 @@ class SNPBranchNode(BranchNode, CalculationNode):
                 if not net_children[1].leaf_descendants.isdisjoint(net_children[0].leaf_descendants): #If two sets are not disjoint
                     F_b_key = self.vpi_tracker.Rule4(F_t_z_key, site_count, vector_len, y_branch_index, z_branch_index, self.index)
                 else: # Then use Rule 2
-                    F_b_key = self.vpi_tracker.Rule2(F_t_y_key, F_t_z_key, site_count, vector_len, net_children[0].possible_lineages(), net_children[1].possible_lineages(), y_branch_index, z_branch_index, self.index)
+                    F_b_key = self.vpi_tracker.Rule2(F_t_y_key, F_t_z_key, site_count, vector_len, y_branch_index, z_branch_index, self.index)
                 
                 F_key = F_b_key
                     
