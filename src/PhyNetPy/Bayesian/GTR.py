@@ -129,18 +129,18 @@ class F81(GTR):
         trans = np.ones((int((states * (states - 1)) / 2), 1))
         super().__init__(bases, trans, states)
 
-    def expt(self, t:float) -> np.ndarray:
+    # def expt(self, t:float) -> np.ndarray:
 
-        self.Qt = np.zeros((self.states, self.states))
+    #     self.Qt = np.zeros((self.states, self.states))
 
-        for i in range(self.states):
-            for j in range(self.states):
-                if i == j:
-                    self.Qt[i][j] = .25 + (.75 * math.exp(-1.333333333 * t))
-                else:
-                    self.Qt[i][j] = .25 - (.25 * math.exp(-1.333333333 * t))
+    #     for i in range(self.states):
+    #         for j in range(self.states):
+    #             if i == j:
+    #                 self.Qt[i][j] = .25 + (.75 * math.exp(-1.333333333 * t))
+    #             else:
+    #                 self.Qt[i][j] = .25 - (.25 * math.exp(-1.333333333 * t))
 
-        return self.Qt
+    #     return self.Qt
 
 
 class JC(F81):
