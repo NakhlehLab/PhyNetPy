@@ -13,7 +13,7 @@ import cProfile
 
 d_dist = elfi.Prior(scipy.stats.expon, 0, 1) # prior distribution for diversification
 r_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for turnover
-sub_dist = elfi.Prior(scipy.stats.uniform, 5, 10) # prior distribution for sub
+sub_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for sub
 sampling_rate_arr = []
 
 def calc_rates_bd(d, r):
@@ -293,7 +293,8 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
     r_true = gen_param(r_dist)
     while(r_true>=1):
         r_true = gen_param(r_dist)
-    sub_true = gen_param(sub_dist)
+    #sub_true = gen_param(sub_dist)
+    sub_true = 5 # fixed initial sub rate
 
     """
     Below are the true parameters for birth and death rates. 
@@ -598,14 +599,14 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
         res.append(sub_s_true)
 
     #print(sampling_rate_arr)
-    print(sum(sampling_rate_arr)/len(sampling_rate_arr))
+    print("sampling rate: ", sum(sampling_rate_arr)/len(sampling_rate_arr))
     # reset global var
     sampling_rate_arr = []
     return res
 
 #pr = cProfile.Profile()   
 #pr.enable()
-#run_main(is_summary = True, is_print = True, num_accept = 10, isreal_obs=True) # uncomment to run abc directly by running this file
-run_main(num_accept = 10, isreal_obs=True)
+run_main(is_summary = True, is_print = True, num_accept = 100, isreal_obs=True) # uncomment to run abc directly by running this file
+#run_main(num_accept = 10, isreal_obs=True)
 #pr.disable()
 #pr.print_stats(25)

@@ -3,7 +3,7 @@ import elfi
 import scipy
 
 
-d_dist = elfi.Prior(scipy.stats.expon, 0, 1) # prior distribution for diversification
+d_dist = elfi.Prior(scipy.stats.expon, 0, 10) # prior distribution for diversification
 r_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for turnover
 sub_dist = elfi.Prior(scipy.stats.uniform, 5, 10) # prior distribution for sub
 birth_s = elfi.Prior(scipy.stats.expon, 0, 25) # prior distribution for birth distribution shape
