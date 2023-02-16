@@ -1,7 +1,4 @@
 {
-    "python.analysis.extraPaths": [
-        "./src/lib/DataStructures"
-    ],
     "python.testing.unittestArgs": [
         "-v",
         "-s",
