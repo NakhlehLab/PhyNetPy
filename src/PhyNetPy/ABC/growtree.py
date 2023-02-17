@@ -12,8 +12,8 @@ __lineage_dict = {} # A global dictionary keeping track every extant lineage (Tr
 #__goal_leaves = 0 # The number of leaves a simulated tree should reach before stopping
 __curr_lineages = 1 # A global counter of the current number of extant lineages (leaves) in a growing simulated tree
 __sub_silent_rate = .85
-__sub_nonsilent_rate = .14
-__sub_lethal_rate = .01
+__sub_nonsilent_rate = .12
+__sub_lethal_rate = .03
 __sub_multiple_rate = .1
 
 class SimulationError(Exception):
@@ -68,7 +68,7 @@ def gen_event(lin_dict:dict)->list:
     if normalized_rates[2] == 1:
         raise SimulationError("Sub rate blow up")
     
-    debug = True
+    debug = False
     if debug and normalized_rates[2] > .99:
         print("CURRENT SUB RATE: " + str(normalized_rates[2]))
     
@@ -87,7 +87,7 @@ def gen_rate(mean, shape, rate_type):
     if(shape <= 0):
         scale_calc = 0
     else:
-        print(rate_type, mean)
+        #print(rate_type, mean)
         scale_calc = mean / shape
     #print(scale_calc)
     if rate_type == "b":
@@ -437,9 +437,13 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info, s
                     #print(curr_t.dist)
                     curr_t.dist += number_subs
                     #print(curr_t.dist)
+            else:
+                #print("LETHAL")
+                event = "death"
+            
            
         if(event == "death"): # event is death so return None (lineage goes extinct)
-
+            #print("death triggred")
             # update sum of rates
             __sum_dict -= sum(__lineage_dict[event_lineage_key])
             del __lineage_dict[event_lineage_key] # remove this lineage from the extant lineage dictionary
@@ -511,7 +515,7 @@ def gen_tree(b, d, s, shape_b, shape_d, shape_s, branch_info, seq_length, goal_l
     t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info, sub_array) # generate the tree 
     # reset all global vars before constructing another tree
     
-    #print(tree_height(t))
+    print(tree_height(t))
     #print(tree_nleaf(t))
     #print(__curr_lineages)
     return t
