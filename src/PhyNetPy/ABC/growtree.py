@@ -4,13 +4,17 @@ import random
 import numpy
 import statistics
 import math
+import scipy
 
 __seq_dict = {} # A global dictionary with 'sequence number : sequence' pairs. Populated by 'growtree()'.
 __seq_counter = 0 # A global counter for sequence number. Each cell has a unique number. Incremented by 'growtree()'.
 __lineage_dict = {} # A global dictionary keeping track every extant lineage (TreeNode objects) and their associated rates
 #__goal_leaves = 0 # The number of leaves a simulated tree should reach before stopping
 __curr_lineages = 1 # A global counter of the current number of extant lineages (leaves) in a growing simulated tree
-
+__sub_silent_rate = .85
+__sub_nonsilent_rate = .12
+__sub_lethal_rate = .03
+__sub_multiple_rate = .1
 
 class SimulationError(Exception):
     def __init__(self, message = "Something went wrong with the simulation")->None:
@@ -64,7 +68,7 @@ def gen_event(lin_dict:dict)->list:
     if normalized_rates[2] == 1:
         raise SimulationError("Sub rate blow up")
     
-    debug = True
+    debug = False
     if debug and normalized_rates[2] > .99:
         print("CURRENT SUB RATE: " + str(normalized_rates[2]))
     
@@ -76,13 +80,62 @@ def gen_event(lin_dict:dict)->list:
         return [lineage, "sub"]
     
     
-def gen_rate(mean, shape):
+def gen_rate(mean, shape, rate_type):
     """
     Samples a new rate based on a gamma distribution given the mean rate and the shape of the distribution. 
     """
-    scale_calc = mean / shape
-    return numpy.random.gamma(shape, scale = scale_calc, size = None)
+    if(shape <= 0):
+        scale_calc = 0
+    else:
+        #print(rate_type, mean)
+        scale_calc = mean / shape
+    #print(scale_calc)
+    if rate_type == "b":
+        new_rate = scipy.stats.skewnorm.rvs(-4, loc = mean, scale = scale_calc)
+        while new_rate < 0:
+            new_rate = scipy.stats.skewnorm.rvs(-4, loc = mean, scale = scale_calc)
+    elif rate_type == "d":
+        new_rate = scipy.stats.skewnorm.rvs(4, loc = mean, scale = scale_calc)
+        while new_rate < 0:
+            new_rate = scipy.stats.skewnorm.rvs(4, loc = mean, scale = scale_calc)
+    else: # sub
+        new_rate = scipy.stats.skewnorm.rvs(2, loc = mean, scale = scale_calc)
+        while new_rate < 0:
+            new_rate = scipy.stats.skewnorm.rvs(2, loc = mean, scale = scale_calc)
 
+    #return numpy.random.gamma(shape, scale = scale_calc, size = None)
+    return new_rate
+
+def gen_sub_type(sub_arr):
+    """
+    silent_rate = sub_arr[0]
+    non_silent_rate = sub_arr[1]
+    lethal_rate = sub_arr[2]
+    """
+    
+    rates = sub_arr[:3]
+    multiple_sub_rate = sub_arr[3]
+    seq_length = sub_arr[4]
+
+    selection = random.random()
+    
+    if sum(rates) == 0:
+        raise SimulationError("Sum of the rates is 0")
+    
+    normalized_rates = [rate / sum(rates) for rate in rates]
+
+    if selection < normalized_rates[0]: # silent sub
+        number_subs = 1
+        if(multiple_sub_rate*100 >= random.choice(range(1, 101))):
+            number_subs = random.choice(range(2, round(seq_length*.1)))
+        return ["silent", number_subs]
+    elif selection < normalized_rates[0] + normalized_rates[1]: # non-silent sub
+        number_subs = 1
+        if(multiple_sub_rate*100 >= random.choice(range(1, 101))):
+            number_subs = random.choice(range(2, round(seq_length*.1)))
+        return ["nonsilent", number_subs]
+    else: # lethal sub
+        return ["lethal", 1]
 
 def tree_nleaf(t):
     # """
@@ -245,7 +298,7 @@ def growtree_old(seq, b, d, s, shape_b, shape_d, shape_s, branch_info, goal_nlea
     return t
 """
 
-def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
+def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info, sub_array):
     """
     Returns a birth-death tree. Used as a recursive helper function for 'gen_tree()' that produces
     the birth-death tree. Populates '__seq_dict' with 'sequence number : sequence' pairs. 
@@ -342,36 +395,55 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
             
             
         elif(event == "sub"): # change current rates based on sampling from a gamma distribution and continue to next event
+            #infinite_sub_checker += 1
+            sub_event = gen_sub_type(sub_array)
+            sub_event_type = sub_event[0]
+            number_subs = sub_event[1]
+            #print(sub_event_type)
+            if(sub_event_type != "lethal"):
+                
+                if(sub_event_type == "nonsilent"):            
+                    # mean of gamma distribution is current rate
+                    curr_b = gen_rate(curr_b, shape_b, "b") # generate new birth rate
+                    curr_d = gen_rate(curr_d, shape_d, "d") # generate new death rate
+                    curr_s = gen_rate(curr_s, shape_s, "s") # generate new sub rate
+                    
+                    # update sum of rates
+                    __sum_dict += sum([curr_b, curr_s, curr_d])
+                    __sum_dict -= sum(__lineage_dict[event_lineage_key])
+                    
+                    __lineage_dict[event_lineage_key] = [curr_b, curr_d, curr_s]
+                
+                if(number_subs == 1):
+                    sub_site = random.randint(0, len(curr_seq) - 1) # randomly pick a site to sub a base in the sequence
+                    old_letter = curr_seq[sub_site : sub_site + 1] # find old base at this site so that the sub does not change the site to the same base
+                    sub_letter = gen_sequence(1, off_lim = old_letter) # generate a new base for this site that is not the old base (not 'old_letter')
+                    # generate the new sequence using the old sequence with one base changed from 'old_letter' to 'new_letter'
+                    # at index 'sub_site' in the sequence
+                    curr_seq[sub_site] = sub_letter[0]
+                else:
+                    sub_site = random.randint(0, len(curr_seq) - number_subs) # randomly pick a site to sub a base in the sequence
+                    #old_letters = curr_seq[sub_site : sub_site + number_subs] # find old base at this site so that the sub does not change the site to the same base
+                    sub_letters = gen_sequence(number_subs) # generate a new base for this site that is not the old base (not 'old_letter')
+                    # generate the new sequence using the old sequence with one base changed from 'old_letter' to 'new_letter'
+                    # at index 'sub_site' in the sequence
+                    curr_seq[sub_site : sub_site + number_subs] = sub_letters
+                
+                #__seq_dict[event_lineage_key] = curr_seq # update the 'sequence number : sequence' pair in the '__seq_dict' dictionary
+                
+                # if branch length is a variable of number of substitutions, increase lineage's branch length by 1
+                #print("sub")
+                if(branch_info == 1):
+                    #print(curr_t.dist)
+                    curr_t.dist += number_subs
+                    #print(curr_t.dist)
+            else:
+                #print("LETHAL")
+                event = "death"
             
-            infinite_sub_checker += 1
-            # mean of gamma distribution is current rate
-            curr_b = gen_rate(curr_b, shape_b) # generate new birth rate
-            curr_d = gen_rate(curr_d, shape_d) # generate new death rate
-            curr_s = gen_rate(curr_s, shape_s) # generate new sub rate
-            
-            # update sum of rates
-            __sum_dict += sum([curr_b, curr_s, curr_d])
-            __sum_dict -= sum(__lineage_dict[event_lineage_key])
-            
-            __lineage_dict[event_lineage_key] = [curr_b, curr_d, curr_s]
-            
-            sub_site = random.randint(0, len(curr_seq) - 1) # randomly pick a site to sub a base in the sequence
-            old_letter = curr_seq[sub_site] # find old base at this site so that the sub does not change the site to the same base
-            sub_letter = gen_sequence(1, off_lim = old_letter) # generate a new base for this site that is not the old base (not 'old_letter')
-            # generate the new sequence using the old sequence with one base changed from 'old_letter' to 'new_letter'
-            # at index 'sub_site' in the sequence
-            curr_seq[sub_site] = sub_letter[0]
-            
-            #__seq_dict[event_lineage_key] = curr_seq # update the 'sequence number : sequence' pair in the '__seq_dict' dictionary
-            
-            # if branch length is a variable of number of substitutions, increase lineage's branch length by 1
-            #print("sub")
-            if(branch_info == 1):
-                #print(curr_t.dist)
-                curr_t.dist += 1
-                #print(curr_t.dist)
-        
-        else: # event is death so return None (lineage goes extinct)
+           
+        if(event == "death"): # event is death so return None (lineage goes extinct)
+            #print("death triggred")
             # update sum of rates
             __sum_dict -= sum(__lineage_dict[event_lineage_key])
             del __lineage_dict[event_lineage_key] # remove this lineage from the extant lineage dictionary
@@ -392,8 +464,8 @@ def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info):
     #pr.print_stats()
     #print(total_iter)
     #print(tree_nleaf(t))
-        if infinite_sub_checker > 50000:
-            raise SimulationError("INFINITE SUB LOOP")
+        #if infinite_sub_checker > 50000:
+            #raise SimulationError("INFINITE SUB LOOP")
     return t
 
 
@@ -425,20 +497,27 @@ def gen_tree(b, d, s, shape_b, shape_d, shape_s, branch_info, seq_length, goal_l
     global __lineage_dict
     global __curr_lineages
     global __seq_dict
+    global __sub_silent_rate
+    global __sub_nonsilent_rate
+    global __sub_lethal_rate
+    global __sub_multiple_rate
     
     __seq_dict = {} 
     __seq_counter = 0
     __lineage_dict = {} 
     __curr_lineages = 1 
+
+    
+    sub_array = [__sub_silent_rate, __sub_nonsilent_rate, __sub_lethal_rate, __sub_multiple_rate, seq_length]
     
     seq = gen_sequence(seq_length) # generate random genetic sequence for root cell 
     #print("branch info", branch_info)
-    t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info) # generate the tree 
+    t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info, sub_array) # generate the tree 
     # reset all global vars before constructing another tree
     
-    #print(tree_height(t))
-    print(tree_nleaf(t))
-    print(__curr_lineages)
+    print(tree_height(t))
+    #print(tree_nleaf(t))
+    #print(__curr_lineages)
     return t
 
 def getNewick(t):

@@ -13,7 +13,7 @@ import cProfile
 
 d_dist = elfi.Prior(scipy.stats.expon, 0, 1) # prior distribution for diversification
 r_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for turnover
-sub_dist = elfi.Prior(scipy.stats.uniform, 5, 10) # prior distribution for sub
+sub_dist = elfi.Prior(scipy.stats.uniform, 0, 2000) # prior distribution for sub
 sampling_rate_arr = []
 
 def calc_rates_bd(d, r):
@@ -98,7 +98,8 @@ def gen_tree_sims(d = 1, r = 0.5, sub_rate = 1, birth_shape = 1, death_shape = 1
             r_drawn = gen_param(r_dist)
             while(r_drawn>=1):
                 r_drawn = gen_param(r_dist)
-            s_drawn = gen_param(sub_dist)
+            #s_drawn = gen_param(sub_dist)
+            s_drawn = 5000
             rate_arr = calc_rates_bd(d_drawn, r_drawn) # calculate the initial birth and death rates from 'd' and 'r'
             birth = rate_arr[0] # extract initial birth rate from result array
             death = rate_arr[1] # extract initial death rate from result array
@@ -277,7 +278,7 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
     
     birth_s = elfi.Prior(scipy.stats.expon, 0, 25) # prior distribution for birth distribution shape
     death_s = elfi.Prior(scipy.stats.expon, 0, 25) # prior distribution for death distribution shape
-    sub_s = elfi.Prior(scipy.stats.expon, 0, 25) # prior distribution for substitution distribution shape
+    sub_s = elfi.Prior(scipy.stats.expon, 0, 2000) # prior distribution for substitution distribution shape
 
     """
     Below are the true parameters for diversification (d) 
@@ -293,7 +294,8 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
     r_true = gen_param(r_dist)
     while(r_true>=1):
         r_true = gen_param(r_dist)
-    sub_true = gen_param(sub_dist)
+    #sub_true = gen_param(sub_dist)
+    sub_true = 100 # fixed initial sub rate
 
     """
     Below are the true parameters for birth and death rates. 
@@ -322,7 +324,7 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
         # Below is the phylogeny from the real cancer data (given in Newick string format)
         tree_real_data = ete3.Tree("(n6:0,((((n4:0,n7:0)8bb16f00-dfee-4f81-ac96-767b993ca6e2:0,((((((n16:0,(h1:17,((((a2:0,a7:0)e7bc4028-414f-4bff-b699-8bd16b23ee7e:18,a3:1)2b854f8d-4936-436e-96c5-910be4aba19c:64,a5:2)816d774c-97d9-43e6-8b2e-f15671af8af2:62,(((h5:3,(a8:3,h8:0)09f1a603-d099-4870-9e79-d6e5bee8e2a3:8)0a18283f-9dc0-491c-9fea-1b8779299e72:30,(((h7:8,(h4:1,h6:0)6fb58ff1-8f8f-487e-893f-a7a5074f5230:22)ee5e30a1-dc03-43f1-9ad0-5a9811fb2360:25,h2:0)50a77d83-30fc-414d-b18b-96e2e4c9866c:10,((a4:3,a6:3)d9afdef5-aa08-4dcc-aa5b-a9b8649d4889:29,a1:0)2913b995-8502-4080-801f-42d014b5d58a:183)9f319495-041d-4361-86c3-785075bb1cf3:54)a6f16d8b-261e-4f09-83ec-99a518991759:82,h3:2)66771a30-0bee-44c5-8282-af5400c18959:149)bb4ffd6c-cf65-4ffb-bce2-cc434482b915:1155)6fffd3b9-b1f8-4bcf-bc47-c92f726cabfb:1325)389c6172-5350-4199-b387-29540a785b5a:42,n13:0)bf915916-25af-4cf4-b258-25422a0360e6:15,n11:0)15a37f26-1ebd-4a43-b3a5-a8962e5e0112:10,n15:0)5c9cf572-6674-45ed-8647-a96c30b2c098:7,n10:0)debcb1ee-4c8a-4db0-be04-25a7ad8e5aad:2,(n8:0,(n5:0,(n14:0,(n3:0,(n12:0,n9:0)ec159609-da23-43d0-814a-4981b51a1b72:0)c05653ec-9a44-4ab2-a5b0-8f3b3d10a41e:0)f7f52196-a2dc-443f-8e1d-54b5e4bb6dc2:0)3fc23945-5205-4af7-aaf8-3271f35280cf:0)ffe9b6b5-e105-4b3c-91e9-9482b268ff34:0)726af8d3-3dfe-49a3-bd23-0dfd36f568ff:0)27ece196-6123-4a35-bc65-db77090f1882:0,n1:0)fb7d141a-3eb9-4dd7-9bbd-8c079d65c0d3:0,n2:0)509e48c2-b79f-4dc2-afe1-67bedf7cc929:0);", format = 1)
         obs = tree_real_data
-        #print("obs height", growtree.tree_height(obs))
+        print("obs height", growtree.tree_height(obs))
         obs_nleaf = growtree.tree_nleaf(obs)
     else: # simulate observed tree based on artificial true values sampled from the prior distributions 
         obs = (gen_tree_sims(d = d_true, r = r_true, sub_rate = sub_true, birth_shape = birth_s_true, death_shape = death_s_true, sub_shape = sub_s_true, leaf_goal = 10, sampling_rate = sampling_rate, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
@@ -598,14 +600,14 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
         res.append(sub_s_true)
 
     #print(sampling_rate_arr)
-    print(sum(sampling_rate_arr)/len(sampling_rate_arr))
+    print("sampling rate: ", sum(sampling_rate_arr)/len(sampling_rate_arr))
     # reset global var
     sampling_rate_arr = []
     return res
 
 #pr = cProfile.Profile()   
 #pr.enable()
-#run_main(is_summary = True, is_print = True, num_accept = 10, isreal_obs=True) # uncomment to run abc directly by running this file
-run_main(num_accept = 10, isreal_obs=True)
+run_main(is_summary = True, is_print = True, num_accept = 100, isreal_obs=True) # uncomment to run abc directly by running this file
+#run_main(num_accept = 10, isreal_obs=True)
 #pr.disable()
 #pr.print_stats(25)
