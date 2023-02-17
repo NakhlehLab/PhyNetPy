@@ -12,9 +12,9 @@ __lineage_dict = {} # A global dictionary keeping track every extant lineage (Tr
 #__goal_leaves = 0 # The number of leaves a simulated tree should reach before stopping
 __curr_lineages = 1 # A global counter of the current number of extant lineages (leaves) in a growing simulated tree
 __sub_silent_rate = .85
-__sub_nonsilent_rate = .12
-__sub_lethal_rate = .03
-__sub_multiple_rate = .1
+__sub_nonsilent_rate = .145
+__sub_lethal_rate = .005
+__sub_multiple_rate = .8
 
 class SimulationError(Exception):
     def __init__(self, message = "Something went wrong with the simulation")->None:
@@ -127,7 +127,7 @@ def gen_sub_type(sub_arr):
     if selection < normalized_rates[0]: # silent sub
         number_subs = 1
         if(multiple_sub_rate*100 >= random.choice(range(1, 101))):
-            number_subs = random.choice(range(2, round(seq_length*.1)))
+            number_subs = random.choice(range(2, round(seq_length*.25)))
         return ["silent", number_subs]
     elif selection < normalized_rates[0] + normalized_rates[1]: # non-silent sub
         number_subs = 1
