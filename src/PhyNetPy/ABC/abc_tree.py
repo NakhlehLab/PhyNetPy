@@ -13,7 +13,7 @@ import cProfile
 
 d_dist = elfi.Prior(scipy.stats.expon, 0, 1) # prior distribution for diversification
 r_dist = elfi.Prior(scipy.stats.uniform, 0, 1) # prior distribution for turnover
-sub_dist = elfi.Prior(scipy.stats.uniform, 0, 2000) # prior distribution for sub
+sub_dist = elfi.Prior(scipy.stats.uniform, 0, 10) # prior distribution for sub
 sampling_rate_arr = []
 
 def calc_rates_bd(d, r):
@@ -295,7 +295,7 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
     while(r_true>=1):
         r_true = gen_param(r_dist)
     #sub_true = gen_param(sub_dist)
-    sub_true = 100 # fixed initial sub rate
+    sub_true = 5 # fixed initial sub rate
 
     """
     Below are the true parameters for birth and death rates. 
