@@ -84,10 +84,11 @@ def gen_rate(mean, sd):
     """
     Samples a new rate based on a gamma distribution given the mean rate and the shape of the distribution. 
     """
-
     mean = math.log2(mean)
-    new_rate = numpy.random.lognormal(mean=mean, sigma=sd)
-    new_rate = 2**new_rate  
+    print(mean)
+    new_rate_log = numpy.random.lognormal(mean=mean, sigma=sd)
+    print(new_rate_log)
+    new_rate = 2**new_rate_log  
    
     return new_rate
 
@@ -364,8 +365,8 @@ def gen_tree(b, d, s, branch_info, seq_length, goal_leaves, sampling_rate):
     __lineage_dict = {} 
     __curr_lineages = 1 
 
-    b_sd = .1
-    d_sd = .1
+    b_sd = .001
+    d_sd = .001
 
 
     sub_array = [__sub_silent_rate, __sub_nonsilent_rate, __sub_lethal_rate, __sub_multiple_rate, seq_length]

@@ -54,7 +54,7 @@ def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate = 0.01, is_prior = 
         while(curr_nleaf < leaf_goal):
             birth = gen_param(b_dist)
             death = gen_param(de_dist)
-            s_drawn = 5000
+            s_drawn = 5
             new_tree = growtree.gen_tree(b = birth, d = death, s = s_drawn, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate)
             curr_nleaf = growtree.tree_nleaf(new_tree)
             #print("nleaf: ", curr_nleaf )
@@ -64,7 +64,7 @@ def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate = 0.01, is_prior = 
     else: # use artificial true rates to simulate an observed tree
         birth = b
         death = de
-        sub_rate = 5000
+        sub_rate = 5
         new_tree = growtree.gen_tree(b = birth, d = death, s = sub_rate, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate)
 
     arr.append(new_tree) # simulate tree and place in 1 element array
