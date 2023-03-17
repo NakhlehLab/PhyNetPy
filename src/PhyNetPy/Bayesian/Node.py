@@ -2,6 +2,21 @@ import copy
 import math
 
 
+    
+def dict_merge(a : dict, b: dict):
+    merged = {}
+    for key in set(a.keys()).union(set(b.keys())):
+        if key in a.keys() and key in b.keys():
+            result = [a[key]]
+            result.extend([b[key]])
+            merged[key] = result
+        elif key in a.keys():
+            merged[key] = [a[key]]
+        else:
+            merged[key] = [b[key]]
+    
+    return merged
+
 class NodeError(Exception):
 
     def __init__(self, message="Unknown Error in Node Class"):
@@ -38,9 +53,11 @@ class Node:
     def asString(self):
         myStr = "Node " + str(self.label) + ": "
         if self.branch_lengths is not None:
-            for branch in self.branch_lengths.values():
-                if branch is not None:
-                    myStr += str(round(branch, 4)) + " "
+            for branches in self.branch_lengths.values():
+                if branches is not None:
+                    for branch in branches:
+                        if branch is not None:
+                            myStr += str(round(branch, 4)) + " "
         if self.parent is not None:
             myStr += " has parent(s) " + str([node.get_name() for node in self.get_parent(return_all=True)])
 
@@ -101,7 +118,7 @@ class Node:
         """
         Set the branch length of this Node to length
         """
-        self.branch_lengths = {par: length}
+        self.branch_lengths = {par: [length]}
     
     def add_length(self, new_len:float, new_par):
         """
@@ -112,9 +129,12 @@ class Node:
             new_len (float): a branch length value
         """
         if self.branch_lengths is None:
-            self.branch_lengths = {new_par: new_len}
+            self.branch_lengths = {new_par: [new_len]}
         else:
-            self.branch_lengths[new_par] = new_len
+            if new_par in self.branch_lengths:
+                self.branch_lengths[new_par].append(new_len)
+            else:
+                self.branch_lengths[new_par] = [new_len]
 
     def set_is_reticulation(self, is_retic):
         """
@@ -128,7 +148,7 @@ class Node:
         """
         return self.is_retic
 
-    def add_attribute(self, key, value, append = False):
+    def add_attribute(self, key, value, append = False, add = False):
         """
         Put a key and value pair into the node attribute dictionary.
 
@@ -138,12 +158,14 @@ class Node:
         if append:
             if key in self.attributes.keys():
                 content = self.attributes[key]
-                print(content)
-                print(value)
+                # print(content)
+                # print(value)
                 
                 if type(content) is dict:
-                    content.update(value)
-                    print(content)
+                    if add:
+                        content = dict_merge(content, value)
+                    else:
+                        content.update(value)
                     self.attributes[key] = content
                 elif type(content) is list:
                     content.extend(value)
@@ -168,5 +190,20 @@ class Node:
     
     def get_seq(self)->str:
         return self.seq
+    
+    
+    def make_copy(self, parent, primed:int):
+        
+        copied = Node()
+        copied.set_parent(parent)
+        copied.is_reticulation = False
+        copied.set_name = self.get_name() + str(primed)
+        copied.attributes = copy.deepcopy(self.attributes)
+        copied.seq = self.seq
+        copied.branch_lengths = copy.deepcopy(self.branch_lengths)
+        
+        return copied
+        
 
 
+    

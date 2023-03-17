@@ -1,0 +1,23 @@
+#NEXUS
+
+BEGIN TAXA;
+
+DIMENSIONS NTAX=6;
+
+TAXLABELS
+A
+B
+C
+D
+E
+F;
+
+END;
+
+BEGIN TREES;
+
+tree g1 = ((A, (B, C)), ((D, E ) , F ) ) ;
+tree g2 = ((A , (B , C ) ) , (D , (E , F ) ) ) ;
+tree g3 = (((A , B ) , C ) , ((D , F ) , E ) ) ;
+
+End;

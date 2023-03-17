@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, 'src/PhyNetPy/Bayesian')
 sys.path.insert(1, 'src/PhyNetPy/ABC')
 
-from Bayesian import NetworkBuilder as nb
+from Bayesian import NetworkBuilder2 as nb
 from Bayesian import MSA
 from Bayesian import MetropolisHastings as mh
 from Bayesian import Alphabet as a
@@ -11,16 +11,17 @@ from Bayesian import BirthDeath as bd
 from Bayesian import Matrix as m
 from Bayesian import ModelGraph as mg
 from Bayesian import GTR 
+from Bayesian import SNPModule as snpm
 import elfi
 import scipy
 from ABC.SimulatedTree import SimulatedTree
 from ABC.Simulator import *
 from ABC.TreeStatistics import *
 from matplotlib import pyplot as plt
-
+import cProfile as p
     
     
-def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dict=None, auto_detect:bool = False, summary_path:str = None, network_path:str = None) -> float:
+def SNAPP_Likelihood1(filename: str, u :float , v:float, coal:float, grouping:dict=None, auto_detect:bool = False, summary_path:str = None, network_path:str = None) -> float:
     """
     Given a filename that represents a path to a nexus file that defines and data, compute the maximum likelihood 
     network (trees for now, simulator/moves do not support inferring networks yet) and return its likelihood, P(network | data). 
@@ -61,7 +62,7 @@ def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dic
     return result_state.likelihood()
 
 
-def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dict=None, auto_detect:bool = False, show_partials:bool = False) -> list:
+def SNAPP_Likelihood(data_filename: str, u :float , v:float, coal:float, ploidy : list = None, grouping:dict=None, auto_detect:bool = False, show_partials:bool = False) -> list:
     """
     Given a filename that represents a path to a nexus file that defines a network and data, compute the log-likelihood for the
     network given the data. 
@@ -86,20 +87,33 @@ def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dic
     Returns:
         list of floats: P(network | data) for each network passed in, in the order in which they appear in the nexus file.
     """
-    
+    print("1")
     #Generate a multiple sequence alignment from the nexus file data
-    aln = MSA.MSA(filename, grouping=grouping, grouping_auto_detect = auto_detect)
+    aln = MSA.MSA(data_filename, sec_2_ploidy=ploidy, grouping=grouping, grouping_auto_detect = auto_detect, dtype = "SNP")
     
     #Read and parse the network described 
-    networks = nb.NetworkBuilder(filename).get_all_networks()
+    networks = nb.NetworkBuilder2(data_filename).get_all_networks()
     
     likelihoods = []
+    
+    
+    snp_params={"samples": aln.total_samples(), "u": u, "v": v, "coal" : coal, "grouping": grouping is not None}
+    data_matrix = m.Matrix(aln, a.Alphabet("SNP", snp_ploidy=snp_params["samples"]))
+    # profiler = p.Profile()
+    # profiler.enable()
     for network in networks:
-        snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":False}
+
         #Create model
-        snp_model = mg.Model(network, m.Matrix(aln, a.Alphabet("SNP")), None, snp_params=snp_params, verbose = False)
+        snp_model = mg.Model(network, data_matrix, None, snp_params=snp_params, verbose = False)
         #Compute the likelihood
-        likelihoods.append(snp_model.SNP_likelihood())
+        
+        likelihood = snp_model.SNP_likelihood()
+        likelihoods.append(likelihood)
+        
+        
+        
+    # profiler.disable()
+    # profiler.print_stats()
  
     return likelihoods
 
@@ -466,6 +480,10 @@ def ABC(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type = "q"
     return res
 
 
+cp = p.Profile()
+cp.enable()
 
-
-print(SNAPP_Likelihood('src/PhyNetPY/test/files/snptest_papernetwork.nex', 1, 1, .2)[0])
+print(SNAPP_Likelihood('src/PhyNetPy/test/files/lvl2_network.nex', 1, 1, .005, ploidy = [3,3,3,3]))
+cp.disable()
+cp.print_stats(sort="tottime")
+#print(SNAPP_Likelihood('src/PhyNetPy/test/files/snptest_ez.nex', 1, 1, .2, ploidy = [1,1,1]))
