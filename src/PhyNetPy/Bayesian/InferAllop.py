@@ -1,3 +1,5 @@
+import copy
+import math
 from PhyNetPy.Bayesian import Node
 from PhyNetPy.Bayesian.Graph import DAG
 from collections import deque
@@ -6,6 +8,11 @@ import numpy as np
 
 from NetworkBuilder2 import NetworkBuilder2 
 from Node import Node
+
+########################
+### Helper Functions ###
+########################
+
 
 def process_clusters(clusters):
     """
@@ -19,7 +26,6 @@ def cluster_as_nameset(cluster):
     """
     return frozenset([node.get_name() for node in cluster])
     
-
 def clusters_contains(cluster, set_of_clusters)->bool:
     """
     Check if a cluster is in a set of clusters by checking names
@@ -39,7 +45,6 @@ def clusters_contains(cluster, set_of_clusters)->bool:
         if names == names_item:
             return True
     return False
-
 
 def cluster_partition(cluster:frozenset, processed:dict)->frozenset:
     """
@@ -73,10 +78,7 @@ def cluster_partition(cluster:frozenset, processed:dict)->frozenset:
         new_cluster.add(item)
     
     return frozenset(new_cluster)
-        
-            
-    
-    
+          
 def generate_tree_from_clusters(tree_clusters:set)->DAG:
     """
     Given a set of clusters (given by the taxa labels, ie {('A','B','C'), ('B','C'), ('D','E','F'), ('D','E')}), 
@@ -150,7 +152,11 @@ def generate_tree_from_clusters(tree_clusters:set)->DAG:
     net.addNodes(nodes)
         
     return net
-    
+
+#######################
+### MDC START TREE  ###
+#######################
+
 class MDC_Tree:
     
     def __init__(self, dag_list: list) -> None:
@@ -269,11 +275,11 @@ class MDC_Tree:
             leaf_names = [l.get_name() for l in leaves]
             for name in leaf_names:
                 assert(name in taxa_names)
-        
-    
-            
-    
-    
+         
+################
+### MUL TREE ###
+################
+
 class MUL(DAG):
     
     def __init__(self):
@@ -334,14 +340,67 @@ class MUL(DAG):
         pass        
             
             
-        
-        
-        
-gene_trees = NetworkBuilder2("src/PhyNetPy/Bayesian/mdc_tester.nex").get_all_networks()
+def XL(T:MUL, g:DAG, F: set):
+    xls = []
+    
+    for allele_map in F:
+        xls.append(XL_Allele(T, g, allele_map))
+    
+    return min(xls)
 
-mdc_test = MDC_Tree(gene_trees)
+def XL_Allele(T:MUL, g:DAG, f:list)->int:
+    pass
 
-mdc_test.get().printGraph()
+
+
+class InferMPAllop:
+    
+    def __init__(self, filename:str) -> None:
+        #"src/PhyNetPy/Bayesian/mdc_tester.nex"
+        self.gene_trees = NetworkBuilder2(filename).get_all_networks()
+        self.cur_net : DAG = MDC_Tree(self.gene_trees).get()
+        self.test_net : DAG = copy.deepcopy(self.cur_net)
+        
+        self.revert_info = None
+        self.apply_info = None
+        
+    def modify(net : DAG) -> DAG:
+        pass
+    
+    def revert(self) -> DAG:
+        pass
+    
+    def apply(self, net : DAG) -> DAG:
+        pass
+    
+    def infer(self, max_iter = 1000):
+        
+        i = 0
+        cur_min = math.inf
+
+        
+        while i < max_iter:
+            #Calculate XL score 
+            score = XL(MUL().toMulTree(self.test_net))
+            
+            #If this network gives a lower score, save changes
+            if score < cur_min:
+                cur_min = score
+                self.cur_net = self.apply(self.cur_net)
+            
+            #Try new changes
+            self.test_net = self.modify(self.test_net)
+                 
+            i+=1
+        
+        
+        return self.cur_net
+    
+    
+    
+        
+        
+
     
     
     

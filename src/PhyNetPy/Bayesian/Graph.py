@@ -1,5 +1,6 @@
 from collections import deque
 import copy
+import random
 from Node import Node
 import numpy as np
 
@@ -211,11 +212,7 @@ class DAG(Graph):
     def getLeafs(self) -> list:
         """
         returns the list of leaves in the graph, aka the set of nodes where there are no incoming edges
-        
-        TODO: no calls to this
         """
-        
-        #
         return [node for node in self.nodes if self.outDegree(node) == 0]
 
     def hasNodeWithName(self, name):
@@ -271,7 +268,6 @@ class DAG(Graph):
         # call newickSubstring on the root of the graph to get the entire string
         return newickSubstring(children, root) + ";"
 
-    
     def generate_branch_lengths(self):
         """
         Assumes that each node in the graph does not yet have a branch length associated with it,
@@ -296,8 +292,6 @@ class DAG(Graph):
                 
                     q.append(neighbor)
                     visited.add(neighbor)
-
-
 
     def LCA(self, set_of_nodes: set)-> Node:
         """
@@ -350,8 +344,7 @@ class DAG(Graph):
             additive_level[node] = lvl
         
         return min(additive_level, key=additive_level.get)
-                    
-          
+                      
     def leaf_descendants(self, node)->tuple:
         root = node
 
@@ -370,8 +363,6 @@ class DAG(Graph):
         
         return leaves    
         
-        
-    
     def get_all_clusters(self, node)-> set:
         cluster_set = set()
         graph_leaves = self.getLeafs()
@@ -387,7 +378,6 @@ class DAG(Graph):
         
         return cluster_set
                 
-    
     def is_acyclic(self):
         """
         Checks via topological sort that this graph object is acyclic
@@ -414,8 +404,52 @@ class DAG(Graph):
             GraphTopologyError("Graph has cycles")
         else:
             return True
+
+
+
+class DAG_Modifiers:
+    
+    def __init__(self, network : DAG) -> None:
+        self.net = network
+        
+        
+    def add_retic(self)->dict:
+        pass
+    
+    def remove_retic(self)->dict:
+        pass
+    
+    def edge_tail_relocation(self)->dict:
+        pass
+    
+    def edge_head_relocation(self)->dict:
+        pass
+    
+    def retic_relocation(self)->dict:
+        pass
+    
+    def retic_direction_flip(self)->dict:
+        pass
     
     
-  
+    def random_mod(self):
+        random_selection = random.randint(1,6)
+        if random_selection == 1:
+            self.add_retic()
+        elif random_selection == 2:
+            self.remove_retic()
+        elif random_selection == 3:
+            self.edge_tail_relocation()
+        elif random_selection == 4:
+            self.edge_head_relocation()
+        elif random_selection == 5:
+            self.retic_relocation()
+        else:
+            self.retic_direction_flip()
+        
+    def get(self):
+        return self.net
+    
+
   
   
