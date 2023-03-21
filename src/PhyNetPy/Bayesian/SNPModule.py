@@ -1,5 +1,10 @@
 from math import sqrt, comb, pow
 import numpy as np
+from PhyNetPy.Bayesian.MSA import MSA
+
+########################
+### HELPER FUNCTIONS ###
+########################
 
 def partials_index(n:int) -> int:
     """
@@ -48,9 +53,9 @@ def map_nr_to_index(n:int, r:int) -> int:
     (2,0) -> 2
     ...
     """
+    
     starts = int(.5 * (n - 1) * (n + 2))
     return starts + r
-
 
 def to_array(Fb_map :dict, vector_len:int, site_count:int) -> np.ndarray:
     """
@@ -77,8 +82,6 @@ def to_array(Fb_map :dict, vector_len:int, site_count:int) -> np.ndarray:
             F_b[int(map_nr_to_index(nr_pair[0][0], nr_pair[1][0]))][site] = prob
     
     return F_b
-
-
 
 def rn_to_rn_minus_dim(set_of_rns : dict, dim : int):
     """
@@ -118,7 +121,9 @@ def rn_to_rn_minus_dim(set_of_rns : dict, dim : int):
 
     return rn_minus_dim
 
-
+########################
+### RULE EVALUATIONS ###
+########################
 
 def eval_Rule1(F_b : dict, nx : list, n_xtop : int, rx: list, r_xtop: int, Qt: np.ndarray, mx : int) -> dict:
     """
@@ -173,7 +178,7 @@ def eval_Rule2(F_t_x : dict, F_t_y : dict, nx : list, ny : list, n_zbot : int, r
     evaluation = 0
     
     #iterate through valid range of n_xtop and r_xtop values
-    for n_xtop in range(1, n_zbot):
+    for n_xtop in range(0, n_zbot + 1):
         for r_xtop in range(0, r_zbot + 1):
             if r_xtop <= n_xtop and r_zbot - r_xtop <= n_zbot - n_xtop:
     
@@ -185,12 +190,10 @@ def eval_Rule2(F_t_x : dict, F_t_y : dict, nx : list, ny : list, n_zbot : int, r
                     term2 = F_t_y[(tuple(np.append(ny, n_zbot - n_xtop)), tuple(np.append(ry, r_zbot - r_xtop)))]
 
                     evaluation += term1 * term2 * const
-                except KeyError:
+                except KeyError: 
                     evaluation += 0
-    
-    
-    return [(tuple(np.append(np.append(nx, ny), n_zbot)), tuple(np.append(np.append(rx, ry), r_zbot))), evaluation]
 
+    return [(tuple(np.append(np.append(nx, ny), n_zbot)), tuple(np.append(np.append(rx, ry), r_zbot))), evaluation]
 
 def eval_Rule3(F_t: dict, nx:list, rx: list, n_ybot:int, n_zbot:int, r_ybot:int, r_zbot:int, gamma_y:float, gamma_z:float) -> dict:
     """
@@ -218,7 +221,6 @@ def eval_Rule3(F_t: dict, nx:list, rx: list, n_ybot:int, n_zbot:int, r_ybot:int,
         
     return [(tuple(np.append(np.append(nx, n_ybot), n_zbot)), tuple(np.append(np.append(rx, r_ybot), r_zbot))), evaluation]
     
-
 def eval_Rule4(F_t: dict, nz: list, rz:list, n_zbot:int, r_zbot: int)-> dict:
     """
     Given all the information on the left side of the Rule 4 equation, calculate the right side probability.
@@ -234,9 +236,9 @@ def eval_Rule4(F_t: dict, nz: list, rz:list, n_zbot:int, r_zbot: int)-> dict:
     """
     
     evaluation = 0
-    
+    #print(F_t)
     #Iterate through all possible values of n_xtop and r_xtop
-    for n_xtop in range(0, n_zbot + 1):
+    for n_xtop in range(1, n_zbot + 1):
         for r_xtop in range(0, r_zbot + 1):
             if r_xtop <= n_xtop and r_zbot - r_xtop <= n_zbot - n_xtop:  # Ensure the combinatorics is well defined
                 
@@ -253,7 +255,9 @@ def eval_Rule4(F_t: dict, nz: list, rz:list, n_zbot:int, r_zbot: int)-> dict:
     return [(tuple(np.append(nz, n_zbot)), tuple(np.append(rz, r_zbot))), evaluation] 
 
 
-
+###########################
+### PARTIAL LIKELIHOODS ###
+###########################
 
 class PartialLikelihoods:
     
@@ -262,6 +266,10 @@ class PartialLikelihoods:
         # A map from a vector of population interfaces (vpi)-- represented as a tuple of strings-- to probability maps
         # defined by rules 0-4.
         self.vpis : dict = {}
+        self.ploidy : int = None
+        
+    def set_ploidy(self, ploidyness : int) -> None:
+        self.ploidy = ploidyness
         
     def Rule0(self, reds: np.ndarray, samples: int, site_count : int, vector_len : int, branch_index : int) -> tuple:
         """
@@ -291,6 +299,7 @@ class PartialLikelihoods:
                     F_b[site][(tuple([n]),tuple([r]))] = 1
                 else:
                     F_b[site][(tuple([n]),tuple([r]))] = 0
+                    
         
         vpi_key = tuple(["branch_" + str(branch_index) + ": bottom"])       
         self.vpis[vpi_key] = F_b
@@ -318,15 +327,14 @@ class PartialLikelihoods:
         """
         
         F_t = {}
-        F_b : dict = self.vpis[vpi_key]
-        
-        print("CALCULATING WITH RULE 1 FOR VPI:" + str(vpi_key))
-        print("BRANCH THAT WERE CALCULATING THE TOP FOR:" + str(branch_index))
         
         if "branch_" + str(branch_index) + ": bottom" != vpi_key[-1]:
             vpi_key_temp = self.reorder_vpi(vpi_key, site_count, branch_index, False)
             del self.vpis[vpi_key]
             vpi_key = vpi_key_temp
+            
+            
+        F_b : dict = self.vpis[vpi_key]
         
         for site in range(site_count):
             #Gather all combinations of nx, rx values 
@@ -347,6 +355,15 @@ class PartialLikelihoods:
                     #Evaluate the function using Rule1, and insert that value into F_t
                     entry = eval_Rule1(F_b[site], nx, n_top, rx, r_top, Qt, m_x)
                     F_t[site][entry[0]] = entry[1]
+
+                
+            #Handle the (0,0) case. merely copy the probabilities
+            for vecs in F_b[site].keys():
+                nx = list(vecs[0])
+                rx = list(vecs[1])
+                if nx[-1] == 0 and rx[-1]==0:
+                    F_t[site][vecs] = F_b[site][vecs]
+                
         
         #Replace the instance of x_bot with x_top
         new_vpi_key = list(vpi_key)
@@ -382,12 +399,6 @@ class PartialLikelihoods:
         """
         
         F_b = {}
-        F_t_x : dict = self.vpis[vpi_key_x]
-        F_t_y : dict = self.vpis[vpi_key_y]
-        
-        print("VPI Y: " + str(vpi_key_y) + " LAST ENTRY SHOULD BE " + str(branch_index_y))
-        print("VPI X: " + str(vpi_key_x) + " LAST ENTRY SHOULD BE " + str(branch_index_x))
-        
         
         #Reorder the vpis if necessary
         if "branch_" + str(branch_index_x) + ": top" != vpi_key_x[-1]:
@@ -401,6 +412,9 @@ class PartialLikelihoods:
             vpi_key_ytemp = self.reorder_vpi(vpi_key_y, site_count, branch_index_y, True)
             del self.vpis[vpi_key_y]
             vpi_key_y = vpi_key_ytemp
+            
+        F_t_x : dict = self.vpis[vpi_key_x]
+        F_t_y : dict = self.vpis[vpi_key_y]
         
         #Compute F x,y,z_bot
         for site in range(site_count):
@@ -424,6 +438,8 @@ class PartialLikelihoods:
                         #Evaluate the formula given in rule 2, and insert as an entry in F_b
                         entry = eval_Rule2(F_t_x[site], F_t_y[site], nx, ny, n_bot, rx, ry, r_bot)
                         F_b[site][entry[0]] = entry[1]
+                    
+                    
         
         #Combine the vpis
         new_vpi_key_x= list(vpi_key_x)
@@ -437,7 +453,7 @@ class PartialLikelihoods:
         self.vpis[new_vpi_key] = F_b
         del self.vpis[vpi_key_x]
         del self.vpis[vpi_key_y]
-                            
+                           
         return new_vpi_key
 
     def Rule3(self, vpi_key : tuple, g_this : float, g_that : float, site_count : int, m: int, branch_index_x:int, branch_index_y:int, branch_index_z:int)->tuple:
@@ -460,6 +476,7 @@ class PartialLikelihoods:
         Returns:
             tuple: the vpi that now corresponds to F x, y_bot, z_bot
         """
+        
         F_b = {}
         F_t_x : dict = self.vpis[vpi_key]
         
@@ -490,7 +507,7 @@ class PartialLikelihoods:
         
         self.vpis[new_vpi_key] = F_b
         del self.vpis[vpi_key]
-                
+          
         return new_vpi_key               
             
     def Rule4(self, vpi_key : tuple, site_count : int, vector_len : int, branch_index_x : int, branch_index_y : int, branch_index_z : int)->tuple:
@@ -509,17 +526,15 @@ class PartialLikelihoods:
         Returns:
             tuple: vpi for F z,z_bot
         """
+        
         F_b = {}
-        F_t : dict = self.vpis[vpi_key]
-       
         
-        print("VPI: " + str(vpi_key) + " LAST ENTRY SHOULD BE " + str(branch_index_x))
-        
-        if "branch_" + str(branch_index_x) + ": top" != vpi_key[-1]:
-            vpi_key_temp = self.reorder_vpi(vpi_key, site_count, branch_index_x, True)
+        if "branch_" + str(branch_index_y) + ": top" != vpi_key[-1]:
+            vpi_key_temp = self.reorder_vpi(vpi_key, site_count, branch_index_y, True)
             del self.vpis[vpi_key]
             vpi_key = vpi_key_temp
         
+        F_t : dict = self.vpis[vpi_key]
         
         for site in range(site_count):
             nx_rx_map = rn_to_rn_minus_dim(F_t[site], 2)
@@ -540,9 +555,11 @@ class PartialLikelihoods:
                     #Evaluate the formula given in rule 2, and insert as an entry in F_b
                     entry = eval_Rule4(F_t[site], nx, rx, n_bot, r_bot)
                     F_b[site][entry[0]] = entry[1]
+                
         
         #Create new vpi
         new_vpi_key = list(vpi_key)
+        
         new_vpi_key.remove("branch_" + str(branch_index_x) + ": top")
         new_vpi_key.remove("branch_" + str(branch_index_y) + ": top")
         new_vpi_key.append("branch_" + str(branch_index_z) + ": bottom")
@@ -551,7 +568,7 @@ class PartialLikelihoods:
         
         self.vpis[new_vpi_key] = F_b
         del self.vpis[vpi_key]
-                            
+       
         return new_vpi_key
     
     def reorder_vpi(self, vpi_key: tuple, site_count:int, branch_index:int, for_top : bool) -> tuple:
@@ -580,12 +597,14 @@ class PartialLikelihoods:
             
         new_vpi_key = list(vpi_key)
         new_vpi_key.append(new_vpi_key.pop(former_index))
+        
         F = self.vpis[vpi_key]
         new_F = {}
         
         #Reorder all the vectors based on the location of the interface within the vpi
         for site in range(site_count):
             new_F[site] = {}
+        
             for vectors, prob in F[site].items():
                 nx = list(vectors[0])
                 rx = list(vectors[1])
@@ -595,10 +614,9 @@ class PartialLikelihoods:
                 #pop the element from the list and move to the front
                 new_nx.append(new_nx.pop(former_index))
                 new_rx.append(new_rx.pop(former_index))
-                
+        
                 new_F[site][(tuple(new_nx), tuple(new_rx))] = prob
         
-    
         self.vpis[tuple(new_vpi_key)] = new_F
         return tuple(new_vpi_key)
     
@@ -625,7 +643,35 @@ class PartialLikelihoods:
         #No vpis were found containing branch_index
         return None
             
-                
+    def case_of_the_disappearing_probabilities(self, vpi, site_count):
+        """
+        Only for debugging usage
+        """
+        F = self.vpis[vpi]
+        max_prob = [0]
+        max_vecs = {0:None}
+        for site in range(site_count):
+            for vectors, prob in F[site].items():
+                if prob > min(max_prob):
+                    if len(max_prob) >= 3:
+                        del max_vecs[min(max_prob)]
+                        max_prob.remove(min(max_prob))
+                        
+                        max_prob.append(prob)
+                        max_vecs[prob] = vectors
+                    else:
+                        max_prob.append(prob)
+                        max_vecs[prob] = vectors
+                        
+        
+        print(vpi)
+        if min(max_prob) < 1e-7:
+            print("ZOINKS SCOOB, LIKE, I THINK WE NEED TO GET OUT OF HERE MAN. THE BUGS ARE AFTER US")
+        else:
+            print(f"MAXIMUM PROB: {max_prob}, VECTORS: {max_vecs}")
+            
+        
+              
                 
                 
             

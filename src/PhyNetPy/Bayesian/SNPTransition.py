@@ -27,14 +27,14 @@ class SNPTransition:
     def __init__(self, n: int, u: float, v: float, coal: float):
 
         # Build Q matrix
-        self.n = n
+        self.n = n 
         self.u = u
         self.v = v
         self.coal = coal
 
-        rows = int(.5 * n * (n + 3))
+        rows = int(.5 * self.n * (self.n + 3))
         self.Q : np.ndarray = np.zeros((rows, rows))
-        for n_prime in range(1, n + 1):  # n ranges from 1 to individuals sampled (both inclusive)
+        for n_prime in range(1, self.n + 1):  # n ranges from 1 to individuals sampled (both inclusive)
             for r_prime in range(n_prime + 1):  # r ranges from 0 to n (both inclusive)
                 index = map_nr_to_index(n_prime, r_prime)  # get index from n,r pair
 

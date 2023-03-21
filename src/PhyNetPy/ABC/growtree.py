@@ -12,9 +12,9 @@ __lineage_dict = {} # A global dictionary keeping track every extant lineage (Tr
 #__goal_leaves = 0 # The number of leaves a simulated tree should reach before stopping
 __curr_lineages = 1 # A global counter of the current number of extant lineages (leaves) in a growing simulated tree
 __sub_silent_rate = .85
-__sub_nonsilent_rate = .145
-__sub_lethal_rate = .005
-__sub_multiple_rate = .8
+__sub_nonsilent_rate = .12
+__sub_lethal_rate = .03
+__sub_multiple_rate = .1
 
 class SimulationError(Exception):
     def __init__(self, message = "Something went wrong with the simulation")->None:
@@ -80,7 +80,7 @@ def gen_event(lin_dict:dict)->list:
         return [lineage, "sub"]
     
     
-def gen_rate(mean, sd):
+def gen_rate(mean, shape, rate_type):
     """
     Samples a new rate based on a gamma distribution given the mean rate and the shape of the distribution. 
     """
@@ -112,7 +112,7 @@ def gen_sub_type(sub_arr):
     if selection < normalized_rates[0]: # silent sub
         number_subs = 1
         if(multiple_sub_rate*100 >= random.choice(range(1, 101))):
-            number_subs = random.choice(range(2, round(seq_length*.25)))
+            number_subs = random.choice(range(2, round(seq_length*.1)))
         return ["silent", number_subs]
     elif selection < normalized_rates[0] + normalized_rates[1]: # non-silent sub
         number_subs = 1
@@ -155,7 +155,135 @@ def tree_height(t):
         right_h = tree_height(t.children[1]) 
     return max(left_h, right_h) + t.dist
 
-def growtree(seq, b, d, s, b_sd, d_sd, max_leaves, branch_info, sub_array):
+"""
+def growtree_old(seq, b, d, s, shape_b, shape_d, shape_s, branch_info, goal_nleaf):
+    
+    #Returns a birth-death tree. Populates '__seq_dict' with 'sequence number : sequence' pairs. 
+    
+    # Declaring static/global variables (described at the top of the file)
+    global __seq_counter 
+    global __lineage_dict
+    global __curr_lineages
+    global __seq_dict
+
+    rng = random.Random()
+
+    # initializing the tree and branch length
+    t = Tree()
+    key = "SEQUENCE_" + str(__seq_counter) # create sequence number key using the global counter
+    t.name = key # TreeNode's name is the sequence number ID
+    __seq_dict[key] = seq # set the 'sequence number : sequence' pair in the '__seq_dict' dictionary
+    __lineage_dict[t] = [b, d, s] # add new TreeNode and its associated rates into the lineage dictionary
+    t.dist = 0
+
+    # The while loop below is the bulk of the 'growtree()' function. It runs while all of the lineages are not extinct 
+    # and 'goal_leaves' has not yet been attained by the simulated tree (or it has just been attained and the tree will
+    # stop growing up to, but not including, the next event).
+    while(__curr_lineages != 0 and __curr_lineages <= goal_nleaf): 
+        # finding the wait time to any event (b, d, or s) based on rates
+        curr_time = 0
+        #print(rate_any_event)
+        rate_any_event = sum_dict(__lineage_dict) # sum of all the rates for all extant lineages
+        #print("rate", rate_any_event)
+        wait_time = rng.expovariate(rate_any_event)
+        curr_time += wait_time
+
+        # calculating weighted rates
+        weighted_rate_lst = calc_weighted_rates(__lineage_dict, rate_any_event)
+        event_pair = gen_event(weighted_rate_lst) # generate event based on weighted rates
+
+        # Below is extracting the lineage (TreeNode) on which the event occurred on        
+        k = 0
+        event_lineage_key = t # 'event_lineage_key' will hold the TreeNode object on which the event occurred
+        for new_key in __lineage_dict: # finding the TreeNode object that matches the one specified in 'event_pair[0]'
+            if(k == event_pair[0]): 
+                event_lineage_key = new_key
+                break
+            k += 1
+        
+        # 'event' holds the event that just occurred as a string, 'curr_t' holds the TreeNode object (lineage) on which the event occurred
+        event = event_pair[1]
+        curr_t = event_lineage_key
+
+        # extracting the attributes associated with the lineage of interest (where the event will occur)
+        curr_seq = __seq_dict[curr_t.name] # getting the current lineage's sequence
+        curr_rates_lst = __lineage_dict[curr_t] # getting the rates associated with the current lineage
+        curr_b = curr_rates_lst[0]
+        curr_d = curr_rates_lst[1]
+        curr_s = curr_rates_lst[2]
+
+        # if branch length is a variable of time, add 'wait_time' onto this lineage's branch length
+        if(branch_info == 0): 
+            curr_t.dist += wait_time
+        # if branch length is a variable of expected number of substitutions, add this expected number onto this lineage's branch length
+        if(branch_info == 2): 
+            curr_t.dist += curr_s * wait_time
+
+        if(event == "birth"): # the current lineage undergoes a birth event
+            if(__curr_lineages >= goal_nleaf): # if 'goal_leaves' has already been reached, do not include the event on the tree
+                return t
+            
+            __curr_lineages += 1 # increase the number of extant lineages by 1 (1 extant linage turns into 2)
+           
+            # Below is creating the child tree 'c1' and setting its attributes
+            __seq_counter += 1 # increment global counter so that each child has a unique sequence number
+            c1 = Tree() # create a child tree
+            key = "SEQUENCE_" + str(__seq_counter) # create sequence number key using the global counter
+            c1.name = key
+            __seq_dict[key] = curr_seq # set the 'sequence number : sequence' pair in the '__seq_dict' dictionary
+            __lineage_dict[c1] = [b, d, s] # set the child tree's associated rates (same as parent)
+            c1.dist = 0
+
+            # Below is creating the child tree 'c2' and setting its attributes
+            __seq_counter += 1 # increment global counter so that each child has a unique sequence number
+            c2 = Tree() # create a child tree
+            key = "SEQUENCE_" + str(__seq_counter) # create sequence number key using the global counter
+            c2.name = key
+            __seq_dict[key] = curr_seq # set the 'sequence number : sequence' pair in the '__seq_dict' dictionary
+            __lineage_dict[c2] = [b, d, s] # set the child tree's associated rates (same as parent)
+            c2.dist = 0
+
+            # Add children onto tree and delete parent lineage from the extant lineages dictionary (no longer a valid lineage)
+            curr_t.add_child(c1)
+            curr_t.add_child(c2)
+            del __lineage_dict[curr_t]
+    
+        elif(event == "sub"): # substitution so change current rates based on sampling from a gamma distribution and continue to next event
+            if(__curr_lineages >= goal_nleaf): # if 'goal_leaves' has already been reached, do not include the event on the tree 
+                return t
+            else:
+                # mean of gamma distribution is current rate
+                curr_b = gen_rate(curr_b, shape_b) # generate new birth rate
+                curr_d = gen_rate(curr_d, shape_d) # generate new death rate
+                curr_s = gen_rate(curr_s, shape_s) # generate new sub rate
+                sub_site = random.randint(0, len(curr_seq) - 1) # randomly pick a site to sub a base in the sequence
+                old_letter = curr_seq[sub_site] # find old base at this site so that the sub does not change the site to the same base
+                sub_letter = gen_sequence(1, off_lim = old_letter) # generate a new base for this site that is not the old base (not 'old_letter')
+                # generate the new sequence using the old sequence with one base changed from 'old_letter' to 'new_letter'
+                # at index 'sub_site' in the sequence
+                new_seq = ""
+                for i in range(0, sub_site, 1):
+                    new_seq += curr_seq[i : i + 1]
+                new_seq += sub_letter
+                for j in range(sub_site + 1, len(curr_seq), 1):
+                    new_seq += curr_seq[j : j + 1]
+                curr_seq = new_seq # update sequence to newly mutated sequence
+                __seq_dict[event_lineage_key] = curr_seq # update the 'sequence number : sequence' pair in the '__seq_dict' dictionary
+                
+                # if branch length is a variable of number of substitutions, increase lineage's branch length by 1
+                if(branch_info == 1):
+                    curr_t.dist += 1
+
+        else: # event is death (lineage goes extinct)
+            if(__curr_lineages >= goal_nleaf): # if 'goal_leaves' has already been reached, do not include the event on the tree 
+                return t
+            else:
+                del __lineage_dict[event_lineage_key] # remove this lineage from the extant lineage dictionary
+                __curr_lineages -= 1 # the number of extant lineages in the tree decreases by 1 (this one died)
+    return t
+"""
+
+def growtree(seq, b, d, s, max_leaves, shape_b, shape_d, shape_s, branch_info, sub_array):
     """
     Returns a birth-death tree. Used as a recursive helper function for 'gen_tree()' that produces
     the birth-death tree. Populates '__seq_dict' with 'sequence number : sequence' pairs. 
@@ -261,9 +389,9 @@ def growtree(seq, b, d, s, b_sd, d_sd, max_leaves, branch_info, sub_array):
                 
                 if(sub_event_type == "nonsilent"):            
                     # mean of gamma distribution is current rate
-                    curr_b = gen_rate(curr_b, b_sd) # generate new birth rate
-                    curr_d = gen_rate(curr_d, d_sd) # generate new death rate
-                    
+                    curr_b = gen_rate(curr_b, shape_b, "b") # generate new birth rate
+                    curr_d = gen_rate(curr_d, shape_d, "d") # generate new death rate
+                    curr_s = gen_rate(curr_s, shape_s, "s") # generate new sub rate
                     
                     # update sum of rates
                     __sum_dict += sum([curr_b, curr_s, curr_d])
@@ -372,7 +500,7 @@ def gen_tree(b, d, s, sd_b, sd_d, branch_info, seq_length, goal_leaves, sampling
     
     seq = gen_sequence(seq_length) # generate random genetic sequence for root cell 
     #print("branch info", branch_info)
-    t = growtree(seq, b, d, s, b_sd, d_sd, goal_leaves/sampling_rate, branch_info, sub_array) # generate the tree 
+    t = growtree(seq, b, d, s, goal_leaves/sampling_rate, shape_b, shape_d, shape_s, branch_info, sub_array) # generate the tree 
     # reset all global vars before constructing another tree
     
     print(tree_height(t))

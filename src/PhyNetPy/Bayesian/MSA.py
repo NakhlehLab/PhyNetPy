@@ -47,6 +47,7 @@ class SeqRecord:
         self.seq = sequence
         self.name = name
         self.gid = gid
+        self.ploidyness = None
 
     def get_name(self):
         return self.name
@@ -55,11 +56,21 @@ class SeqRecord:
         return self.seq
 
     def get_numerical_seq(self):
-        # TODO: TEMPORARY METHOD
-        return [int(char) for char in self.seq]
+        hex_digits = set(["A", "B", "C", "D", "E", "F"])
+        return [int(char, 16) for char in self.seq if char.isdigit() or char in hex_digits]
 
     def get_gid(self):
         return self.gid
+    
+    def set_ploidy(self, ploidyness):
+        self.ploidyness = ploidyness
+    
+    def ploidy(self) -> int:
+        return self.ploidyness
+    
+    def display(self):
+        print("TAXA NAME: " + self.name + " SEQUENCE: " + str(self.seq))
+            
 
 
 class MSA:
@@ -68,9 +79,10 @@ class MSA:
     Provides taxa name and sequence get services.
     """
 
-    def __init__(self, file:str, grouping:dict=None, grouping_auto_detect : bool = False):
+    def __init__(self, file:str, sec_2_ploidy:list=None, grouping:dict=None, grouping_auto_detect : bool = False, dtype = "SNP"):
         self.filename : str = file
         self.grouping  = grouping
+        print(self.grouping)
         self.hash : dict = {}  # map GIDs to a list of SeqRecords
         self.name2gid = {}
         
@@ -78,7 +90,22 @@ class MSA:
             self.grouping = self.group_auto_detect()
 
         self.records : list = self.parse()
-
+        for rec in self.records:
+            rec.display()
+        
+        if dtype == "SNP":
+            if sec_2_ploidy is None:
+                for record in self.records:
+                    record.set_ploidy(max(record.get_numerical_seq()))
+            else:
+                
+                #assert(len(self.records) == len(sec_2_ploidy))
+                for i in range(len(self.records)):
+                    self.records[i].set_ploidy(sec_2_ploidy[i])
+                    #self.records[i].set_ploidy(1)
+                    
+                
+    
         if self.grouping is None:  # Either the number of records (1 taxa per group) or the number of groups
             self.groups : int  = len(self.records)
         else:
@@ -124,23 +151,27 @@ class MSA:
                     index += 1
 
         except NexusError:
-
             # do same as above, just using the NexusReader as a work-around.
+
             reader = NexusReader.from_file(self.filename)
+        
             recs = []
             index = 0
-            for taxa, chars in reader.data:
+            for taxa_data_pair in reader.data:
+                print(taxa_data_pair)
+                #Where taxa is index 0, sequence is index 1
                 if self.grouping is None:
-                    new_record = SeqRecord(chars, taxa, gid=index)
+                    new_record = SeqRecord(taxa_data_pair[1], taxa_data_pair[0], gid=index)
                     recs.append(new_record)
                     self.hash[index] = [new_record]
                     index += 1
                 else:
-                    new_record = SeqRecord(chars, taxa, gid = self.get_category(taxa))
+                    new_record = SeqRecord(taxa_data_pair[1], taxa_data_pair[0], gid = self.get_category(taxa_data_pair[0]))
                     recs.append(new_record)
                     self.hash[new_record.get_gid()].append(new_record)
                     index += 1
-              
+                    
+                    
         finally:  
             return recs
 
@@ -182,6 +213,19 @@ class MSA:
         for record in self.records:
             if record.get_name() == name:
                 return [record]
+    
+    def total_samples(self) -> int:
+        """
+        For each record, accumulate the ploidyness to gather the total number of samples of alleles
+        
+        Returns:
+            int: the total number of samples 
+        """
+        
+        return sum([rec.ploidy() for rec in self.get_records()])
+    
+    def samples_given_group(self, gid) -> int:
+        return sum([rec.ploidy() for rec in self.group_given_id(gid)])
                 
 
 

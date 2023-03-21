@@ -4,6 +4,17 @@ class AlphabetError(Exception):
         super().__init__(self.message)
 
 
+def n_ploidy(ploidy : int)->dict:
+    alphabet = {}
+    for num in range(ploidy+1):
+        alphabet[str(num)] = num
+    
+    alphabet["?"] = ploidy + 1
+    alphabet["N"] = ploidy + 1
+    alphabet["-"] = ploidy + 1
+    
+    return alphabet
+
 class Alphabet:
     """
     Class that deals with the mapping from characters to state values that have partial likelihood values associated with them
@@ -54,10 +65,9 @@ class Alphabet:
 
     SNP = {"-": 3, "N": 3, "?": 3, "0": 0, "1": 1, "2": 2}
 
-    BINARY = {"-": 0, "0": 1, "1": 2}
   
 
-    def __init__(self, type, myAlphabet={}):
+    def __init__(self, type, myAlphabet={}, snp_ploidy:int = None):
 
         self.type = type
 
@@ -69,9 +79,9 @@ class Alphabet:
             elif type == "PROTEIN":
                 self.alphabet = self.PROTEIN
             elif type == "SNP":
-                self.alphabet = self.SNP
-            elif type == "BINARY":
-                self.alphabet = self.BINARY
+                if snp_ploidy is None:
+                    raise AlphabetError("Need ploidyness value as input when SNP is the alphabet")
+                self.alphabet = n_ploidy(snp_ploidy)
             else:
                 # Other matrix type?
                 pass
@@ -91,3 +101,5 @@ class Alphabet:
         for key in self.alphabet.keys():
             if self.alphabet[key] == state:
                 return key
+
+    

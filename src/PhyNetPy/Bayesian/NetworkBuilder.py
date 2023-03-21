@@ -34,6 +34,8 @@ class NetworkBuilder:
         if self.reader.trees is None:
             raise NetworkBuilderError("There are no trees listed in the file")
 
+
+        num_trees = 0
         for t in self.reader.trees:
             # grab the right hand side of the tree definition for the tree, and the left for the name
             name = str(t).split("=")[0].split(" ")[1]
@@ -45,17 +47,21 @@ class NetworkBuilder:
             # build the graph of the network
             self.networks.append(newNetwork)
             self.name_2_net[newNetwork] = name
+            num_trees += 1
+            if num_trees == 5:
+                break
 
     def buildFromTreeObj(self, tree):
         """
-                Given a biopython Tree object (with nested clade objects)
-                walk through the tree and build a network/ultrametric network
-                from the nodes
-                """
-
+        Given a biopython Tree object (with nested clade objects)
+        walk through the tree and build a network/ultrametric network
+        from the nodes
+        """
+        # print(tree)
         # Build a parent dictionary from the biopython tree obj
         parents = {}
         for clade in tree.find_clades(order="level"):
+            #if clade.name is not None:
             for child in clade:
                 parents[child] = clade
 
@@ -68,22 +74,31 @@ class NetworkBuilder:
         for node, par in parents.items():
             parentNode = self.parseNode(par, net, called_as_parent = True)
             childNode = self.parseNode(node, net, parent = parentNode)
+            
+            # print("child NAME: " + childNode.get_name())
+            # print("par NAME: " + parentNode.get_name())
     
             edges.append([parentNode, childNode])
-            
-        net.addEdges(edges)
         
+        # print("_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-")
+        net.addEdges(edges)
+        print("QUEUE: " + str(self.inheritance_queue))
         for node_pair in self.inheritance_queue:
+            print("PROCESSING NODE: " + node_pair[0].get_name())
+            print("PARENT: " + node_pair[1].get_name())
             the_node = node_pair[0]
             par_node = node_pair[1]
+            other_parent = [edge[0] for edge in edges if edge[1]==the_node and edge[0]!= par_node][0]
             
             gamma = the_node.attribute_value_if_exists("gamma")
-            if len(list(gamma.keys())) != 1:
-                raise NetworkBuilderError("There is an incorrect amount of entries in the gamma attribute")
-            complement = 1 - gamma[list(gamma.keys())[0]]
-            the_node.add_attribute("gamma", {par_node: complement}, append=True)
+            print(gamma)
+            # if len(list(gamma.keys())) != 1:
+            #     raise NetworkBuilderError("There is an incorrect amount of entries in the gamma attribute")
+            complement = 1 - gamma[other_parent.get_name()][0]
+            the_node.add_attribute("gamma", {par_node.get_name(): [complement, the_node.length()[par_node][0]]}, append=True, add=True)
             
-
+        print("_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-")
+        print("_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-")
         return net
 
     def parseAttributes(self, attrStr):
@@ -126,7 +141,7 @@ class NetworkBuilder:
             raise NodeError("Invalid label format string (number error)")
 
     def parseNode(self, node, network, called_as_parent = False, parent : Node = None):
-        
+    
         if node.name is None:
             newInternal = "Internal" + str(self.internalCount)
             self.internalCount += 1
@@ -134,7 +149,7 @@ class NetworkBuilder:
             if node.branch_length is None:
                 newNode = Node(name=newInternal)
             else:
-                newNode = Node(branch_len={parent: node.branch_length}, name=newInternal)
+                newNode = Node(branch_len={parent: [node.branch_length]}, name=newInternal)
             network.addNodes(newNode)
             return newNode
 
@@ -144,21 +159,25 @@ class NetworkBuilder:
         oldNode = network.hasNodeWithName(extendedNewickParsedLabel[-1])
         if oldNode != False:
             if oldNode.is_reticulation() and not called_as_parent:
+                
                 oldNode.add_length(node.branch_length, parent)
-                print(node.comment)
+                #print(node.comment)
                 if node.comment is not None:
-                    contents = oldNode.comment.split("=")
+                    contents = node.comment.split("=")
                     if "&gamma" == contents[0]:
                         if oldNode.attribute_value_if_exists("gamma") is not None:
-                            oldNode.add_attribute("gamma", {parent.get_name(): float(contents[1])}, append = True)
+                            oldNode.add_attribute("gamma", {parent.get_name(): [float(contents[1]), node.branch_length]}, append = True, add=True)
+                        else:
+                            oldNode.add_attribute("gamma", {parent.get_name(): [float(contents[1]), node.branch_length]})           
                 else:
-                    print(oldNode.attribute_value_if_exists("gamma"))
-                    print(parent.get_name())
+                    #print(oldNode.attribute_value_if_exists("gamma"))
+                    #print(parent.get_name())
                     if oldNode.attribute_value_if_exists("gamma") is not None:
                         if len(oldNode.attribute_value_if_exists("gamma").values()) != 1:
                             raise NetworkBuilderError("Gamma attribute malformed")
-                        complement = 1- list(oldNode.attribute_value_if_exists("gamma").values())[0]
-                        oldNode.add_attribute("gamma", {parent.get_name(): complement}, append = True)
+                        complement = 1- list(oldNode.attribute_value_if_exists("gamma").values())[0][0]
+                        print("COMPLEMENT:" + str(complement))
+                        oldNode.add_attribute("gamma", {parent.get_name(): [complement, node.branch_length]}, append = True, add=True)
                         
             return oldNode
 
@@ -174,21 +193,22 @@ class NetworkBuilder:
 
         # create new node, with attributes if a reticulation node
         if retValue:
-            newNode = Node({parent: node.branch_length}, name=extendedNewickParsedLabel[1], is_reticulation=retValue)
+            newNode = Node({parent: [node.branch_length]}, name=extendedNewickParsedLabel[1], is_reticulation=retValue)
             newNode.add_attribute("eventType", eventType)
             newNode.add_attribute("index", num)
         else:
-            newNode = Node({parent: node.branch_length}, name=extendedNewickParsedLabel[0])
+            newNode = Node({parent: [node.branch_length]}, name=extendedNewickParsedLabel[0])
 
         if node.comment is not None:
             contents = node.comment.split("=")
             if "&gamma" == contents[0]:
-                print(parent.get_name())
-                newNode.add_attribute("gamma", {parent.get_name(): float(contents[1])})
+                #print(parent.get_name())
+                newNode.add_attribute("gamma", {parent.get_name(): [float(contents[1]), node.branch_length]})
             else:
                 newNode.add_attribute("comment", node.comment)
-                print("adding to inheritance queue")
-                self.inheritance_queue.add([newNode, parent])
+        else:
+            if retValue:
+                self.inheritance_queue.add(tuple([newNode, parent]))
             
         network.addNodes(newNode)
         return newNode

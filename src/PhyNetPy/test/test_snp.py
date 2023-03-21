@@ -12,13 +12,13 @@ class TestSNP():
         """
         assert -4.28 > SNAPP_Likelihood('src/PhyNetPy/test/files/snptest_ez.nex', 1, 1, .2)[0] > -4.29
         
-    def test_network(self):
+    def test_networks(self):
         """
         This is the case in which there is a network passed in through the nexus file.
         """ 
-        likelihood = SNAPP_Likelihood('src/PhyNetPY/test/files/snptest_papernetwork.nex', 1, 1, .2)[0]
-        print(likelihood)
-        assert 0 > likelihood
+        likelihoods = SNAPP_Likelihood('src/PhyNetPY/test/files/sim_networks.nex', 1, 1, .2, ploidy = [2,2,2])
+        print(likelihoods)
+        assert len(likelihoods) == 100
     
     def test_gap_chars(self):
         """
