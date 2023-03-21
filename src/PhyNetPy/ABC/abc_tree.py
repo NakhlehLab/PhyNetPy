@@ -12,7 +12,9 @@ import cProfile
 
 
 b_dist = elfi.Prior(scipy.stats.uniform, 0, 1)
-de_dist = elfi.Prior(scipy.stats.uniform, 0, 1)
+de_dist = elfi.Prior(scipy.stats.uniform, 0, 1) 
+b_sd_dist = elfi.Prior(scipy.stats.expon, 0, 1)
+de_sd_dist = elfi.Prior(scipy.stats.expon, 0, 1)
 sampling_rate_arr = []
 
 def sample_leaves(tree, goal_leaves):
@@ -28,7 +30,7 @@ def sample_leaves(tree, goal_leaves):
     return tree
 
 
-def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate = 0.01, is_prior = False, random_state = None):
+def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate_p = 0.01, is_prior = False, random_state = None):
     """
     Returns a simulated phylogenetic tree (using growtree.gen_tree()) with the 
     initial diversification rate = 'd', initial turnover rate = 'r', initial 
@@ -49,13 +51,16 @@ def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate = 0.01, is_prior = 
     global de_dist
     arr = []
     random_state = random_state or np.random # this value is not currently used
+    sd_b = gen_param(b_sd_dist)
+    sd_d = gen_param(de_sd_dist)
     if(is_prior): # using prior dist to simulate trees
         curr_nleaf = -9999999999
         while(curr_nleaf < leaf_goal):
             birth = gen_param(b_dist)
             death = gen_param(de_dist)
             s_drawn = 5
-            new_tree = growtree.gen_tree(b = birth, d = death, s = s_drawn, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate)
+
+            new_tree = growtree.gen_tree(b = birth, d = death, s = s_drawn, sd_b = sd_b, sd_d = sd_d, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate_p)
             curr_nleaf = growtree.tree_nleaf(new_tree)
             #print("nleaf: ", curr_nleaf )
         new_tree = sample_leaves(new_tree, leaf_goal)
@@ -65,7 +70,7 @@ def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate = 0.01, is_prior = 
         birth = b
         death = de
         sub_rate = 5
-        new_tree = growtree.gen_tree(b = birth, d = death, s = sub_rate, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate)
+        new_tree = growtree.gen_tree(b = birth, d = death, s = sub_rate, sd_b = sd_b, sd_d = sd_d, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate_p)
 
     arr.append(new_tree) # simulate tree and place in 1 element array
     
