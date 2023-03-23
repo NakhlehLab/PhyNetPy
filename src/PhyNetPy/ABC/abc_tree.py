@@ -58,7 +58,7 @@ def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate_p = 0.01, is_prior 
         while(curr_nleaf < leaf_goal):
             birth = gen_param(b_dist)
             death = gen_param(de_dist)
-            s_drawn = 5
+            s_drawn = 75
             new_tree = growtree.gen_tree(b = birth, d = death, s = s_drawn, sd_b = sd_b, sd_d = sd_d, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate_p)
             curr_nleaf = growtree.tree_nleaf(new_tree)
             #print("nleaf: ", curr_nleaf )
@@ -68,7 +68,7 @@ def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate_p = 0.01, is_prior 
     else: # use artificial true rates to simulate an observed tree
         birth = b
         death = de
-        sub_rate = 5
+        sub_rate = 10
         new_tree = growtree.gen_tree(b = birth, d = death, s = sub_rate, sd_b = sd_b, sd_d = sd_d, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate_p)
     arr.append(new_tree) # simulate tree and place in 1 element array
     
@@ -471,21 +471,24 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
     # Finding the mean and median inferred rates and shapes below
     b_infer = result_type.samples['b_dist']
     de_infer = result_type.samples['de_dist']
-    
+    b_sd_infer = result_type.samples['b_sd_dist']
+    de_sd_infer = result_type.samples['de_sd_dist']
 
     if is_print: # printing detailed summary of inferred rates and shapes
 
 
         # Displaying the true rates and shapes below to compare to the inferred rates and shapes
-
-        print("true sub rate: " + str(sub_true))
-        print("true birth rate: " + str(birth_true))
-        print("true death rate: " + str(death_true))
+        if(not(isreal_obs)):
+            print("true sub rate: " + str(sub_true))
+            print("true birth rate: " + str(birth_true))
+            print("true death rate: " + str(death_true))
        
 
     res = [] # result array that will hold the inferred rates and the observed tree
     res.append(b_infer)
     res.append(de_infer)
+    res.append(b_sd_infer)
+    res.append(de_sd_infer)
 
     res.append(obs)
 
@@ -502,7 +505,7 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
 
 #pr = cProfile.Profile()   
 #pr.enable()
-run_main(is_summary = True, is_print = True, num_accept = 100, isreal_obs=True) # uncomment to run abc directly by running this file
+run_main(is_summary = True, is_plot = True, num_accept = 100, isreal_obs=True) # uncomment to run abc directly by running this file
 #run_main(num_accept = 10, isreal_obs=True)
 #pr.disable()
 #pr.print_stats(25)

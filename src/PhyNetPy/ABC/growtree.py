@@ -11,10 +11,10 @@ __seq_counter = 0 # A global counter for sequence number. Each cell has a unique
 __lineage_dict = {} # A global dictionary keeping track every extant lineage (TreeNode objects) and their associated rates
 #__goal_leaves = 0 # The number of leaves a simulated tree should reach before stopping
 __curr_lineages = 1 # A global counter of the current number of extant lineages (leaves) in a growing simulated tree
-__sub_silent_rate = .85
-__sub_nonsilent_rate = .145
+__sub_silent_rate = .9
+__sub_nonsilent_rate = .095
 __sub_lethal_rate = .005
-__sub_multiple_rate = .8
+__sub_multiple_rate = .9
 
 class SimulationError(Exception):
     def __init__(self, message = "Something went wrong with the simulation")->None:
@@ -85,9 +85,9 @@ def gen_rate(mean, sd):
     Samples a new rate based on a gamma distribution given the mean rate and the shape of the distribution. 
     """
     log_mean = math.log(mean)
-    print(log_mean)
+    #print(log_mean)
     new_rate = numpy.random.lognormal(mean=log_mean, sigma=sd)
-    print(new_rate)
+    #print(new_rate)
    
     return new_rate
 
