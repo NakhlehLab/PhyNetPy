@@ -84,11 +84,10 @@ def gen_rate(mean, sd):
     """
     Samples a new rate based on a gamma distribution given the mean rate and the shape of the distribution. 
     """
-    mean = math.log2(mean)
-    print(mean)
-    new_rate_log = numpy.random.lognormal(mean=mean, sigma=sd)
-    print(new_rate_log)
-    new_rate = 2**new_rate_log  
+    log_mean = math.log(mean)
+    print(log_mean)
+    new_rate = numpy.random.lognormal(mean=log_mean, sigma=sd)
+    print(new_rate)
    
     return new_rate
 
@@ -334,7 +333,7 @@ def growtree(seq, b, d, s, b_sd, d_sd, max_leaves, branch_info, sub_array):
 
 
         
-def gen_tree(b, d, s, branch_info, seq_length, goal_leaves, sampling_rate):
+def gen_tree(b, d, s, sd_b, sd_d, branch_info, seq_length, goal_leaves, sampling_rate):
     """
     Returns a birth-death tree. All rates (birth, death, and substitution) may change upon a substitution.
     'b', 'd', and 's' are the initial values of the birth, death, and substitution rates (respectively).
@@ -365,9 +364,8 @@ def gen_tree(b, d, s, branch_info, seq_length, goal_leaves, sampling_rate):
     __lineage_dict = {} 
     __curr_lineages = 1 
 
-    b_sd = .001
-    d_sd = .001
-
+    b_sd = sd_b
+    d_sd = sd_d
 
     sub_array = [__sub_silent_rate, __sub_nonsilent_rate, __sub_lethal_rate, __sub_multiple_rate, seq_length]
     
