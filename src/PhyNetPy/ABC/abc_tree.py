@@ -241,7 +241,6 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
     """
     birth_true = gen_param(b_dist)
     death_true = gen_param(de_dist)
-    sub_true = 5 # fixed initial sub rate
 
 
 
@@ -264,13 +263,12 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
         print("obs height", growtree.tree_height(obs))
         obs_nleaf = growtree.tree_nleaf(obs)
     else: # simulate observed tree based on artificial true values sampled from the prior distributions 
-        obs = (gen_tree_sims(b = birth_true, de = death_true, sub_rate = sub_true, leaf_goal = 10, sampling_rate = sampling_rate, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
-        while(growtree.tree_nleaf() < 10): # artificial obs tree must have at least 10 leaves
+        obs = (gen_tree_sims(b = birth_true, de = death_true, leaf_goal = 10, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
+        while(growtree.tree_nleaf(obs) < 10): # artificial obs tree must have at least 10 leaves
             birth_true = gen_param(b_dist)
-            death_true = gen_param(de_dist)
-            sub_true = 5           
+            death_true = gen_param(de_dist)        
 
-            obs = (gen_tree_sims(b = birth_true, de = death_true, sub_rate = sub_true, leaf_goal = 10, sampling_rate = sampling_rate, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
+            obs = (gen_tree_sims(b = birth_true, de = death_true, leaf_goal = 10, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
         obs_nleaf = growtree.tree_nleaf(obs)
     
     #print("obs leaves: ", obs_nleaf)
@@ -479,7 +477,6 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
 
         # Displaying the true rates and shapes below to compare to the inferred rates and shapes
         if(not(isreal_obs)):
-            print("true sub rate: " + str(sub_true))
             print("true birth rate: " + str(birth_true))
             print("true death rate: " + str(death_true))
        
@@ -495,7 +492,6 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
     if(not(isreal_obs)): # include the artificial true rates in the result array 
         res.append(birth_true)
         res.append(death_true)
-        res.append(sub_true)
 
     #print(sampling_rate_arr)
     print("sampling rate: ", sum(sampling_rate_arr)/len(sampling_rate_arr))
@@ -505,7 +501,8 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
 
 #pr = cProfile.Profile()   
 #pr.enable()
-run_main(is_summary = True, is_plot = True, num_accept = 100, isreal_obs=True) # uncomment to run abc directly by running this file
+#run_main(is_summary = True, is_plot = True, num_accept = 100, isreal_obs=True) # uncomment to run abc directly by running this file
+run_main(is_summary = True, is_plot = True, num_accept = 100, isreal_obs=False)
 #run_main(num_accept = 10, isreal_obs=True)
 #pr.disable()
 #pr.print_stats(25)
