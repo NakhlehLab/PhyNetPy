@@ -12,8 +12,9 @@ __lineage_dict = {} # A global dictionary keeping track every extant lineage (Tr
 #__goal_leaves = 0 # The number of leaves a simulated tree should reach before stopping
 __curr_lineages = 1 # A global counter of the current number of extant lineages (leaves) in a growing simulated tree
 __sub_silent_rate = .9
-__sub_nonsilent_rate = .095
-__sub_lethal_rate = .005
+__sub_nonsilent_rate = .14
+__sub_lethal_rate = .01
+
 __sub_multiple_rate = .9
 
 class SimulationError(Exception):
@@ -252,7 +253,7 @@ def growtree(seq, b, d, s, b_sd, d_sd, max_leaves, branch_info, sub_array):
             
             
         elif(event == "sub"): # change current rates based on sampling from a gamma distribution and continue to next event
-            #infinite_sub_checker += 1
+            infinite_sub_checker += 1
             sub_event = gen_sub_type(sub_array)
             sub_event_type = sub_event[0]
             number_subs = sub_event[1]
