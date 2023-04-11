@@ -1,11 +1,12 @@
 from operator import index
+import traceback
 from nexus import NexusReader
 from Bio import Phylo
 from io import StringIO
-from Graph import DAG
-from Node import Node
+from Bayesian.Graph import DAG
+from Bayesian.Node import Node
 import copy
-from Node import NodeError
+from Bayesian.Node import NodeError
 
 class NetworkBuilder2Error(Exception):
     def __init__(self, message = "Something went wrong with building the network") -> None:
@@ -77,7 +78,12 @@ def merge_attributes(attr1 : dict, attr2 : dict) -> dict:
 class NetworkBuilder2:
 
     def __init__(self, filename):
-        self.reader = NexusReader.from_file(filename)
+        try:
+            self.reader = NexusReader.from_file(filename)
+        except Exception as err:
+            traceback.print_exc()
+            raise NetworkBuilder2Error()
+        
         self.networks = []
         self.internalCount = 0
         self.name_2_net = {}

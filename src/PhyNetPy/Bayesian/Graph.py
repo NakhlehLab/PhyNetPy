@@ -1,7 +1,7 @@
 from collections import deque
 import copy
 import random
-from Node import Node
+from Bayesian.Node import Node
 import numpy as np
 
 
@@ -157,8 +157,13 @@ class DAG(Graph):
     """
 
     def __init__(self, edges=None, nodes=None, weights=None):
+        
+        self.reticulations = {}
+        
         if edges is None:
             edges = []
+        else:
+            self.refresh_edge_data()
         if nodes is None:
             nodes = []
         if weights is None:
@@ -178,7 +183,26 @@ class DAG(Graph):
 
     def outEdges(self, node: Node):
         return [edge for edge in self.edges if edge[0] == node]
-
+    
+    def refresh_edge_data(self):
+        new_retics = {}
+        
+        for edge in self.edges:
+            if edge[0] in new_retics.keys():
+                new_retics[edge[0]].add(edge)
+            else:
+                new_retics[edge[0]] = set(edge)
+        
+        #Gather only nodes with more than one out edge
+        pruned = {node : new_retics[node] for node in new_retics.keys() if len(new_retics[node]) > 1}
+        self.reticulations = pruned
+    
+    def get_reticulations(self):
+        return self.reticulations
+    
+    def set_reticulations(self, retics):
+        self.reticulations = retics
+        
     def findRoot(self) -> list:
         """
         Finds the root of this DAG. It is an error if one does not exist
@@ -411,24 +435,203 @@ class DAG_Modifiers:
     
     def __init__(self, network : DAG) -> None:
         self.net = network
+        self.UID = 0
         
         
-    def add_retic(self)->dict:
-        pass
+    def add_retic(self):
+        """        
+        """
+        
+        E_set = [item for item in self.net.edges].append((self.net.findRoot()[0], None)) # add (root, null) to edge set
+        # Select 2 perhaps non-distinct edges to connect with a reticulation edge-- we allow bubbles
+        random_edges = [random.choice(E_set), random.choice(E_set)]
+        
     
-    def remove_retic(self)->dict:
-        pass
+        
+        
+        a : Node = random_edges[0][1]
+        b : Node = random_edges[0][0]
+        x : Node = random_edges[1][0]
+        y : Node = random_edges[1][1]
+        
+        z : Node = Node(name="retic" + str(self.UID)) #, parent_nodes=[b], branch_len={b:[top_bl_1]})
+        self.UID += 1
+        c : Node = Node(name="retic" + str(self.UID), is_reticulation=True) #, parent_nodes=[retic_bot_parent, z], branch_len={retic_bot_parent:[top_bl_2], retic_top:[]})
+        self.UID += 1
+        
+        
+        
+        # if x.branch_lengths is not None:
+        #     retic_bot_bl = x.branch_lengths[y][0]
+        #     t = (random.random() * (retic_bot_bl- .00001)) + .00001 #make it impossible to be 0 or 1
+        #     top_bl_2 = retic_bot_bl - t
+        #     bottom_bl_2 = t
+        
+        if a==x and b==y:
+            # Draw random new branch lengths if necessary
+            if a.branch_lengths is not None:
+                retic_top_bl = a.branch_lengths[b][0]
+                delta = 1e-8
+                t1 = random.uniform(0 + delta, 1 - delta) * retic_top_bl
+                t2 = (random.uniform(0 + delta, 1 - delta) * (retic_top_bl - t1)) + t1
+                bottom = t1
+                middle = t2 - t1
+                top = retic_top_bl - t2
+                
+                a.branch_lengths[c] = [bottom]
+                del a.branch_lengths[b]
+                c.branch_lengths = {z:[middle, middle]}
+                z.branch_lengths = {b: [top]}
+                
+            #handle parent connections
+            c.add_parent(z)
+            a.remove_parent(b)
+            a.add_parent(c)
+            z.add_parent(b)
+            
+            
+            
+        
+        else:
+            
+            # Draw random new branch lengths if necessary
+            if a.branch_lengths is not None and x.branch_lengths is not None:
+                retic_top_bl_a = a.branch_lengths[b][0]
+                retic_top_bl_x = x.branch_lengths[b][0]
+                delta = 1e-8
+                ta = random.uniform(0 + delta, 1 - delta) * retic_top_bl_a
+                tx =  random.uniform(0 + delta, 1 - delta) * retic_top_bl_a - minimum_height
+            
+                bottom = t1
+                top = retic_top_bl - t1
+                
+                a.branch_lengths[c] = [bottom]
+                del a.branch_lengths[b]
+                c.branch_lengths = {b:[top]}
+                z.branch_lengths = {b: [top]}
+                
+            #handle parent connections
+            a.remove_parent(b)
+            a.add_parent(c)
+            c.add_parent(b)
+            c.add_parent(z)
+            x.remove_parent(y)
+            x.add_parent(z)
+            z.add_parent(y)
+            
+           
+            
+        
+        
+        
+        
+        
+        
+        
+        retic_edge = (c, z)
+        
+        #Ensure that the graph is still acyclic
+        if not self.net.is_acyclic():
+            #undo all the crap we just did
+            pass
+        return 
+        
+        
+        
+        
+        
+    
+    
+    def remove_retic(self):
+       
+        c : Node = random.choice(list(self.net.reticulations.keys())) # retic node. Has edges c->z and c->b
+        shuffled = random.sample(list(self.net.reticulations[c]), 2)
+        z : Node = shuffled[0][1] # parent of c
+        b : Node = shuffled[1][1] # parent of c
+        self.remove_reticulation_helper((c,z))
+        
+    
+    
+    def remove_reticulation_helper(self, edge : tuple):
+        c : Node = edge[0]
+        z : Node = edge[1] #parent of c 
+        b : Node = [node for node in self.net.reticulations[c] if node != z] #other parent of c
+        
+        c_children = self.net.findDirectPredecessors(c) #c's children
+    
+        x : Node = [child for child in self.net.findDirectPredecessors(z) if child != c][0] # other child of z
+        
+        c.is_retic = False # c is no longer going to be a reticulation node
+        self.net.removeEdge((c,z)) # remove the edge from the graph
+        
+        #Z needs to be deleted if it is not a reticulation as well
+        if not z.is_retic:
+            self.net.removeNode(z)
+            x.remove_parent(z)
+            x.add_parent(z.parent[0])
+        
+        #C needs to be deleted if it doesn't have 2 children
+        if len(c_children) < 2:
+            c_children[0].set_parent([b])
+            self.net.removeNode(c)
+        
+        
+        
     
     def edge_tail_relocation(self)->dict:
+        """
+        
+        """
+        
+        c : Node = random.choice(list(self.net.reticulations.keys())) # retic node. Has edges c->z and c->b
+        shuffled = random.sample(list(self.net.reticulations[c]), 2)
+        z : Node = shuffled[0][1] # parent of c
+        b : Node = shuffled[1][1] # parent of c
+        
+        c_children = self.net.findDirectPredecessors(c) #c's children
+    
+        x : Node = [child for child in self.net.findDirectPredecessors(z) if child != c][0] # other child of z
+        
+        c.is_retic = False # c is no longer going to be a reticulation node
+        self.net.removeEdge((c,z)) # remove the edge from the graph
+        
+        #Z needs to be deleted if it is not a reticulation as well
+        if not z.is_retic:
+            self.net.removeNode(z)
+            x.remove_parent(z)
+            x.add_parent(z.parent[0])
+        
+        #C needs to be deleted if it doesn't have 2 children
+        if len(c_children) < 2:
+            c_children[0].set_parent([b])
+            self.net.removeNode(c)
         pass
     
     def edge_head_relocation(self)->dict:
+        """
+        
+        """
         pass
     
     def retic_relocation(self)->dict:
-        pass
+        """
+        
+        """
+        c : Node = random.choice(list(self.net.reticulations.keys())) # retic node. Has edges c->z and c->b
+        shuffled = random.sample(list(self.net.reticulations[c]), 2)
+        z : Node = shuffled[0][1] # parent of c
+        
+        self.remove_reticulation_helper((c,z))
+        
+        
+        
+        
+        
     
     def retic_direction_flip(self)->dict:
+        """
+        
+        """
         pass
     
     

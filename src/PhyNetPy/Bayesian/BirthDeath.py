@@ -1,7 +1,7 @@
 import random
 import numpy as np
-from Node import Node
-from Graph import DAG
+from Bayesian.Node import Node
+from Bayesian.Graph import DAG
 import math
 
 

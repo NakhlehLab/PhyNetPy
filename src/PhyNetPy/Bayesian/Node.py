@@ -131,7 +131,7 @@ class Node:
         if self.branch_lengths is None:
             self.branch_lengths = {new_par: [new_len]}
         else:
-            if new_par in self.branch_lengths:
+            if new_par in self.branch_lengths: # A BUBBLE
                 self.branch_lengths[new_par].append(new_len)
             else:
                 self.branch_lengths[new_par] = [new_len]

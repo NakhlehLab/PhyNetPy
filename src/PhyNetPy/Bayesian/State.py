@@ -1,9 +1,9 @@
 import copy
 
-from BirthDeath import CBDP
-from ModelGraph import Model
-from Matrix import Matrix
-from GTR import *
+from Bayesian.BirthDeath import CBDP
+from Bayesian.ModelGraph import Model
+from Bayesian.Matrix import Matrix
+from Bayesian.GTR import *
 
 class State:
     """

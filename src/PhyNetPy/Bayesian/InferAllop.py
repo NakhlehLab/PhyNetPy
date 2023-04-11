@@ -1,13 +1,13 @@
 import copy
 import math
-from PhyNetPy.Bayesian import Node
-from PhyNetPy.Bayesian.Graph import DAG
+from Bayesian.Node import Node
+from Bayesian.Graph import DAG
 from collections import deque
 import pulp as p
 import numpy as np
 
 from NetworkBuilder2 import NetworkBuilder2 
-from Node import Node
+
 
 ########################
 ### Helper Functions ###
@@ -339,11 +339,15 @@ class MUL(DAG):
     def mul_tree_score(self)->int:
         pass        
             
-            
-def XL(T:MUL, g:DAG, F: set):
+
+def gene_tree_2_allele_map_set(g:DAG) ->set:
+    pass
+        
+def XL(T:MUL, g:DAG):
     xls = []
+    f : set = gene_tree_2_allele_map_set(g)
     
-    for allele_map in F:
+    for allele_map in f:
         xls.append(XL_Allele(T, g, allele_map))
     
     return min(xls)

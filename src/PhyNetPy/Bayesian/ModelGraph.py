@@ -2,15 +2,15 @@ import math
 import random
 from abc import ABC, abstractmethod
 from math import comb, pow
-from GTR import *
-from Graph import DAG
-from Matrix import Matrix
-from Move import Move
-from SNPTransition import SNPTransition
+from Bayesian.GTR import *
+from Bayesian.Graph import DAG
+from Bayesian.Matrix import Matrix
+from Bayesian.Move import Move
+from Bayesian.SNPTransition import SNPTransition
 from scipy.special import binom
 import scipy
-from SNPModule import *
-from Node import Node
+from Bayesian.SNPModule import *
+from Bayesian.Node import Node
 
 def vec_bin_array(arr, m):
     """
@@ -1600,7 +1600,7 @@ class SNPBranchNode(BranchNode, CalculationNode):
                 if g_this + g_that != 1:
                     raise ModelError("Set of inheritance probabilities do not sum to 1 for node<" + node_par.name + ">")
                 
-                F_b_key = self.vpi_tracker.Rule3(F_t_x_key, g_this, g_that, site_count, possible_lineages, x_branch.index, self.index, sibling_branch.index)
+                F_b_key = self.vpi_tracker.Rule3(F_t_x_key, vector_len, g_this, g_that, site_count, possible_lineages, x_branch.index, self.index, sibling_branch.index)
                 
                 #Do the calculations for the sibling branch
                 
@@ -1627,7 +1627,7 @@ class SNPBranchNode(BranchNode, CalculationNode):
                     F_b_key = self.vpi_tracker.Rule4(F_t_z_key, site_count, vector_len, y_branch_index, z_branch_index, self.index)
                 else: # Then use Rule 2
                     F_b_key = self.vpi_tracker.Rule2(F_t_y_key, F_t_z_key, site_count, vector_len, y_branch_index, z_branch_index, self.index)
-                
+                    #raise ModelError("temp catch")
                 F_key = F_b_key
             else:
                 #A node should only have one child if it is the root node. simply pass along the vpi
