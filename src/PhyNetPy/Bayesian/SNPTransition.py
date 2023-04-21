@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.linalg import expm
-from SNPModule import map_nr_to_index
+from Bayesian.SNPModule import map_nr_to_index
+
 
 
 class SNPTransition:
@@ -66,6 +67,9 @@ class SNPTransition:
         return the dimension of the Q matrix
         """
         return self.Q.shape[1]
+    
+ 
+        
 
     
 

@@ -1,11 +1,11 @@
-from State import State
-from MSA import MSA
-from Matrix import Matrix
-from ModelGraph import Model
+from Bayesian.State import State
+from Bayesian.MSA import MSA
+from Bayesian.Matrix import Matrix
+from Bayesian.ModelGraph import Model
 import time
 
-from Move import *
-from GTR import *
+from Bayesian.Move import *
+from Bayesian.GTR import *
 import random
 
 

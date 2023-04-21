@@ -10,8 +10,8 @@ abstracted away. This class can represent a 4bit, 8bit, 32bit, or 64bit matrix.
 from Bio import SeqIO, AlignIO
 import numpy as np
 import math
-from Alphabet import Alphabet
-from MSA import MSA
+from Bayesian.Alphabet import Alphabet
+from Bayesian.MSA import MSA
 import cProfile
 
 
