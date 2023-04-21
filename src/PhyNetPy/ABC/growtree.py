@@ -375,7 +375,7 @@ def gen_tree(b, d, s, sd_b, sd_d, branch_info, seq_length, goal_leaves, sampling
     t = growtree(seq, b, d, s, b_sd, d_sd, goal_leaves/sampling_rate, branch_info, sub_array) # generate the tree 
     # reset all global vars before constructing another tree
     
-    print(tree_height(t))
+    #print(tree_height(t))
     #print(tree_nleaf(t))
     #print(__curr_lineages)
     return t
