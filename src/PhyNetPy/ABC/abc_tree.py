@@ -75,6 +75,8 @@ def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate_p = 0.01, is_prior 
             curr_nleaf = growtree.tree_nleaf(new_tree)
             #print("nleaf: ", curr_nleaf )
         new_tree = sample_leaves(new_tree, leaf_goal)
+        print(sd_b)
+        print(sd_d)
 
     arr.append(new_tree) # simulate tree and place in 1 element array
     
@@ -275,8 +277,8 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
             death_true = gen_param(de_dist)        
 
             obs = (gen_tree_sims(b = birth_true, de = death_true, leaf_goal = 10, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
-        print(birth_true)
-        print(death_true)
+        #print(birth_true)
+        #print(death_true)
         obs_nleaf = growtree.tree_nleaf(obs)
     
     print("obs leaves: ", obs_nleaf)
