@@ -11,8 +11,8 @@ import math
 import cProfile
 
 
-b_dist = elfi.Prior(scipy.stats.uniform, 0, 1)
-de_dist = elfi.Prior(scipy.stats.uniform, 0, 1) 
+b_dist = elfi.Prior(scipy.stats.uniform, 0, 2)
+de_dist = elfi.Prior(scipy.stats.uniform, 0, .5) 
 b_sd_dist = elfi.Prior(scipy.stats.expon, 0, 1)
 de_sd_dist = elfi.Prior(scipy.stats.expon, 0, 1)
 sampling_rate_arr = []
@@ -73,7 +73,15 @@ def gen_tree_sims(b=1, de=.01, leaf_goal = 10, sampling_rate_p = 0.01, is_prior 
         birth = b
         death = de
         sub_rate = 10
-        new_tree = growtree.gen_tree(b = birth, d = death, s = sub_rate, sd_b = sd_b, sd_d = sd_d, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate_p)
+        curr_nleaf = -9999999999
+        while(curr_nleaf < leaf_goal):
+            new_tree = growtree.gen_tree(b = birth, d = death, s = sub_rate, sd_b = sd_b, sd_d = sd_d, branch_info = 1, seq_length = 100, goal_leaves=leaf_goal, sampling_rate=sampling_rate_p)
+            curr_nleaf = growtree.tree_nleaf(new_tree)
+            #print("nleaf: ", curr_nleaf )
+        new_tree = sample_leaves(new_tree, leaf_goal)
+        print(sd_b)
+        print(sd_d)
+
     arr.append(new_tree) # simulate tree and place in 1 element array
     
     return arr
@@ -273,9 +281,11 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
             death_true = gen_param(de_dist)        
             print("in while loop")
             obs = (gen_tree_sims(b = birth_true, de = death_true, leaf_goal = 10, is_prior = False))[0] # observed tree (tree simulated with true rate and distribution shape parameters)
+        #print(birth_true)
+        #print(death_true)
         obs_nleaf = growtree.tree_nleaf(obs)
     
-    #print("obs leaves: ", obs_nleaf)
+    print("obs leaves: ", obs_nleaf)
 
     """
     'sim' is a simulator node with the 'gen_tree_sims()' function, the prior distributions of rate 
@@ -405,12 +415,14 @@ def run_main(num_accept = 100, isreal_obs = True, is_rej = False, sampling_type 
         summ_colless_mean, summ_root_colless)
     
     #dist = dist_scatterplots2 # choosing which distance node to use 
-
-    dist = elfi.Distance('minkowski', summ_branch_sum, summ_height, summ_depth_mean, summ_colless_sum, summ_colless_variance, p=1)
+    
+    dist1 = elfi.Distance('minkowski', summ_branch_sum, summ_height, summ_depth_mean, summ_colless_sum, summ_colless_variance, p=1)
     dist_all = elfi.Distance('minkowski', summ_branch_sum, summ_branch_mean, summ_branch_median, 
         summ_branch_variance, summ_height, summ_depth_mean, summ_depth_median, summ_depth_variance, 
         summ_balance, summ_nleaves, summ_root_colless, summ_colless_sum, summ_colless_mean, 
         summ_colless_median, summ_colless_variance, p=1)
+    
+    dist = dist_all
     batch_size = 20
     N = num_accept # number of accepted samples needed in 'result' in the sampling below
     result_type = None # will specify which type of sampling is used (threshold or quantile for rejection or smc for SMC ABC)
