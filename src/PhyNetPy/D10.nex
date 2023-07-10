@@ -1,0 +1,45 @@
+#NEXUS
+
+BEGIN TAXA;
+
+DIMENSIONS NTAX=8;
+
+TAXLABELS
+01bA
+01yB
+01zB
+01xB
+01aA
+01xA
+01yA
+01zA
+;
+
+END;
+
+BEGIN TREES;
+
+Tree g0 = ((01bA,((01yB,01zB),01xB)),(01aA,(01xA,(01yA,01zA))));
+
+Tree g1 = ((((01zB,01yB),01xB),01bA),(((01yA,01zA),01xA),01aA));
+
+Tree g2 = (((01xB,(01zB,01yB)),01bA),(01aA,((01yA,01zA),01xA)));
+
+Tree g3 = ((01bA,((01yB,01zB),01xB)),(01aA,((01zA,01yA),01xA)));
+
+Tree g4 = ((((01xA,(01zA,01yA)),01aA),(01xB,(01zB,01yB))),01bA);
+
+Tree g5 = ((01bA,(01xB,(01zB,01yB))),((01xA, 01aA),(01zA ,01yA)));
+
+Tree g6 = (((01bA,(01xB,(01yB,01zB))),(01xA,(01zA ,01yA))),01aA );
+
+Tree g7 = (((01xA ,(01yA ,01zA ) ) ,01aA ) ,((01xB ,(01yB ,01zB ) ) ,01bA ) );
+
+Tree g8 = ((01bA ,(01xB ,(01yB ,01zB ) ) ) ,(((01yA ,01zA ) ,01xA ) ,01aA ) );
+
+Tree g9 = ((((01yB ,01zB ) ,01xB ) ,01bA ) ,((01xA ,(01zA ,01yA ) ) ,01aA ) );
+
+END;
+
+
+

@@ -1,0 +1,16 @@
+#NEXUS
+
+BEGIN TAXA;
+DIMENSIONS NTAX=4;
+TAXALABELS
+.05b
+.4c
+bacd
+a
+;
+END;
+BEGIN TREES;
+Tree g0 = (a:.05, b:.4)c;
+
+Tree g1 = (b, a(c, d));
+END;

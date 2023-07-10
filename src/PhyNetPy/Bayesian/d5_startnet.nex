@@ -1,0 +1,21 @@
+#NEXUS
+
+BEGIN TAXA;
+
+DIMENSIONS NTAX=5;
+
+TAXLABELS
+A
+B
+X
+Y
+Z
+;
+
+END;
+
+BEGIN TREES;
+
+Tree starter = ((A, ((X, (Y, Z)I4)I3)#H2[&gamma=.5])I1, (B, #H2)I2)I0;
+
+END;

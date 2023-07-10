@@ -1,0 +1,26 @@
+#NEXUS
+
+BEGIN TAXA;
+
+DIMENSIONS NTAX=10;
+
+TAXLABELS
+A
+B
+C
+D
+X1
+X2
+Y1
+Y2
+Z1
+Z2
+;
+
+END;
+
+Begin trees;
+
+Tree geneTree1 = ((A,(B,((X1,Y1),Z1))),(D,(C,((X2,Y2),Z2))));
+
+End;
