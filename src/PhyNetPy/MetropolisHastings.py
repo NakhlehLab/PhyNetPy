@@ -103,8 +103,10 @@ class HillClimbing:
                 delta : float = cur_state_likelihood - proposed_state_likelihood
                 accepted : bool = True 
                 print(cur_state_likelihood)
-                if cur_state_likelihood > -39:
-                    raise Exception("UGH")
+                # if cur_state_likelihood > -39:
+                #     print(f"MODEL SEED: {self.current_state.proposed().seed}")
+                    
+                #     raise Exception("UGH")
                 if delta <= 0:
                     self.current_state.commit(next_move)  
                 else:

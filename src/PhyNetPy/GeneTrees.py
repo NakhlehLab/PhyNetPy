@@ -47,11 +47,11 @@ class GeneTrees:
     
             
             
-nets = nb("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_nex_n1.nex").get_all_networks()
-gt = GeneTrees()
-for gene_tree in nets:
-    gt.add(gene_tree)
+# nets = nb("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_nex_n1.nex").get_all_networks()
+# gt = GeneTrees()
+# for gene_tree in nets:
+#     gt.add(gene_tree)
 
-print(gt.mp_allop_map())     
+# print(gt.mp_allop_map())     
 
 

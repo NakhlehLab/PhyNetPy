@@ -1005,6 +1005,8 @@ class SwitchParentage(Move):
         print("-----BEFORE MOVE-----")
         net.pretty_print_edges()
         net.print_graph()
+        net.print_adjacency()
+        print("-----BEGINNING MOVE-----")
         #print(net.newick())
 
         
@@ -1032,6 +1034,16 @@ class SwitchParentage(Move):
         edge_2_remove : list[Node] = self.random_object([edge for edge in net.edges if edge[1] == node_2_change], model.rng)
         ## print(edge_2_remove)
         self.delete_edge(net, edge_2_remove)
+        
+        
+        
+        print("CHECKING DELETE ROUTINE...")
+        
+        net.print_adjacency()
+        
+        
+        
+        print("DONE CHECKING THE DELETE ROUTINE.")
         
         is_first_iter = True
         
@@ -1062,7 +1074,13 @@ class SwitchParentage(Move):
                 downstream_node = node_2_change
                 
             # 4.1 : Select an edge with a key of <= cur_ct and that wont create a cycle (ensured by edges_2_subgct)
-            bfs_starts = [node for node in net.nodes if net.in_degree(node) == 0 and node != node_2_change]
+            bfs_starts = [node for node in net.nodes if net.in_degree(node) == 0 and net.out_degree(node) != 0]
+            print(f"bfs_starts: {[bfs_start.get_name() for bfs_start in bfs_starts]}")
+            if len(bfs_starts)>1:
+                if node_2_change in bfs_starts:
+                    bfs_starts.remove(node_2_change)
+                else:
+                    raise Exception("hmmm idk man")
             if len(bfs_starts) == 0:
                 print(f"SOMETHING FUNKY : {node_2_change.get_name()}")
                 net.print_graph()
@@ -1070,15 +1088,15 @@ class SwitchParentage(Move):
                 return model
             else:
                 bfs_start = bfs_starts[0]
+                
             edges_to_ct : dict[int, set] = net.edges_to_subgenome_count(downstream_node, target - cur_ct, bfs_start)
             
+            # print(edges_to_ct)
         
             random_key = self.random_object([key for key in edges_to_ct.keys()], model.rng)
-            ## print(random_key)
             
             try:
                 new_edge : list[Node] = self.random_object(list(edges_to_ct[random_key]), model.rng)
-                ## print(new_edge)
             except:
                 raise MoveError("No edges with a sufficiently low/exact amount")
             
@@ -1091,26 +1109,28 @@ class SwitchParentage(Move):
             self.valid_attachment_edges.append(new_edge_list[2])
             net.removeEdge(new_edge)
             
-            
-            # 4.3 : Recalculate
-            # if not net.is_acyclic():
-            #     net.print_graph()
-            #     net.pretty_print_edges()
-            #     raise MoveError("WTFFFFFFF")
-            
+            # print("NET AFTER ITERATION")
+            # net.print_adjacency()
+            # print("ROOTS:")
+            # print([node.get_name() for node in net.findRoot()])
+            if len(net.findRoot()) > 1:
+                raise Exception("OOPS, more than one root")
             cur_ct = net.subgenome_count(node_2_change)
-            ## print(f"NEW CT: {cur_ct}")
+        
             is_first_iter = False
             
         #STEP 5: Remove excess nodes created by initial edge removal if they exist
-        #net.prune_excess_nodes()
+        net.remove_excess_branch()
+        net.remove_floaters()
+        net.prune_excess_nodes()
         
     
         print("-----AFTER MOVE-----")
         net.pretty_print_edges()
         net.print_graph()
-        # print(net.newick())
+        net.print_adjacency()
         model.update_network()
+        print("----DONE WITH MOVE----")
         self.same_move_info = copy.deepcopy(net)
         
         return model
@@ -1137,37 +1157,76 @@ class SwitchParentage(Move):
     def hastings_ratio(self) -> float:
         return 1.0
     
-    def delete_edge(self, net : DAG, edge : list[Node]):
-        # self.removed_edges.add(edge)
-        net.removeEdge(edge)
+    # def delete_edge(self, net : DAG, edge : list[Node]) -> Node:
+    #     print(f"Deleting edge: <{[edge[0].get_name(), edge[1].get_name()]}")
         
-        #if not edge[0].is_reticulation():
-        if len(net.findDirectPredecessors(edge[0])) < 2:
-            a : Node = [node for node in net.findDirectSuccessors(edge[0]) if node != edge[1]][0]
-            if net.in_degree(edge[0]) == 0:
-                net.removeEdge([edge[0], a])
-            
-                # self.removed_nodes.add(edge[0])
-                net.removeNode(edge[0])
-            else:
-                b : Node = net.findDirectPredecessors(edge[0])[0] #tree node will only have 1
+    #     if len(net.findDirectPredecessors(edge[0])) < 2:
+    #         #print(f"Children of edge[0] : {[node.get_name() for node in net.findDirectSuccessors(edge[0])]}")
+    #         a : Node = [node for node in net.findDirectSuccessors(edge[0]) if node != edge[1]][0]
+    #         if net.in_degree(edge[0]) == 0:
+    #             net.removeEdge([edge[0], a])
+    #             # net.removeNode(edge[0])
+    #         else:
+    #             b : Node = net.findDirectPredecessors(edge[0])[0] #tree node will only have 1
                 
-                redundant_tree_edge1 = [b, edge[0]]
-                redundant_tree_edge2 = [edge[0], a]
+    #             redundant_tree_edge1 = [b, edge[0]]
+    #             redundant_tree_edge2 = [edge[0], a]
 
-                net.removeEdge(redundant_tree_edge1)
-                net.removeEdge(redundant_tree_edge2)
+    #             net.removeEdge(redundant_tree_edge1)
+    #             net.removeEdge(redundant_tree_edge2)
 
-                net.addEdges([b, a])
+    #             net.addEdges([b, a])
                 
-                net.removeNode(edge[0])
-        else:
-            net.removeNode(edge[0])
-            for parent in net.findDirectPredecessors(edge[0]):
-                self.delete_edge(net , [parent, edge[0]])
-           
+    #             # net.removeNode(edge[0])
+    #     else:
+    #         print([node.get_name() for node in net.findDirectPredecessors(edge[0])])
+    #         for parent in net.findDirectPredecessors(edge[0]):
+    #             print(f"Processing edge: <{[edge[0].get_name(), edge[1].get_name()]}")
+    #             self.delete_edge(net , [parent, edge[0]])
+                
+    #         # net.removeNode(edge[0])
+        
+    #     net.removeEdge(edge) 
             
+    def delete_edge(self, net:DAG, edge:list[Node]):
+        root = edge[1]
+
+        
+        q = deque()
+        q.appendleft(root)
+
+        while len(q) != 0:
+            # pop at end for bfs
+            cur = q.pop()
+            print(f"Processing node: {cur.get_name()}")
+            #print(f"NEIGHBORS: {[node.get_name() for node in net.findDirectPredecessors(cur)]}")
             
+            neighbors = copy.copy(net.findDirectPredecessors(cur))
+            for neighbor in neighbors: #Backwards up toward root
+                print(f"Processing Neighbor: {neighbor.get_name()}")
+                net.removeEdge([neighbor, cur])
+                
+                
+                if net.in_degrees[neighbor] == 2:
+                    q.append(neighbor)
+                else:
+                    a : Node = [node for node in net.findDirectSuccessors(neighbor) if node != cur][0]
+                    # if net.in_degree(neighbor) == 0:
+                    #     net.removeEdge([neighbor, a])
+                    #     # net.removeNode(edge[0])
+                    # else:
+                    if net.in_degree(neighbor) != 0:
+                        b : Node = net.findDirectPredecessors(neighbor)[0] #tree node will only have 1
+                        
+                        redundant_tree_edge1 = [b, neighbor]
+                        redundant_tree_edge2 = [neighbor, a]
+
+                        net.removeEdge(redundant_tree_edge1)
+                        net.removeEdge(redundant_tree_edge2)
+
+                        net.addEdges([b, a])
+                    
+    
             
         
     
