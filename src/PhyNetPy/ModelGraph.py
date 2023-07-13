@@ -116,7 +116,8 @@ class Model:
         self.nodetypes = {"leaf":[], "internal": [], "root":[]}
         
         #384
-        rand_seed = random.randint(0, 1000) #97 #
+        rand_seed = random.randint(0, 1000) #97 #508 #650 254 #
+        self.seed = rand_seed
         print(f"MODEL SEED: {rand_seed}")
         self.rng = np.random.default_rng(rand_seed)
         

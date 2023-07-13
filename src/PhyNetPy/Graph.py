@@ -1,5 +1,6 @@
-from collections import deque
+from collections import defaultdict, deque
 import copy
+import math
 import random
 from Node import Node
 import numpy as np
@@ -57,26 +58,89 @@ class GraphTopologyError(Exception):
         super().__init__(self.message)
 
 
-class Graph:
+
+class DAG():
     """
-        An "interface" level graph implementation. implements all common functionality
-        between digraphs and undirected graphs
+    This class represents a directed graph containing nodes of any data type, and edges.
+    An edge is a tuple (a,b) where a and b are nodes in the graph, and the direction of the edge
+    is from a to b. (a,b) is not the same as (b,a).
+
+    This particular graph instance must only have one root and must be connected. It must also be acyclic, but for efficiency, 
+    cycles are allowed to be created. A checker method is provided, however.
     """
-    edges = []
-    nodes = []
-    edgeWeights = {}
+    
 
-    def __init__(self, edges, nodes, weights):
-        self.edges = edges
-        self.nodes = nodes
-        self.edgeWeights = weights
+    def __init__(self, edges=None, nodes=None, weights=None):
+        """
+        Initialize a Directed Acyclic Graph (DAG) object.
+        You may initialize with any combination of edges/nodes/weights, or provide none at all.
 
+        Args:
+            edges (list, optional): A list of Node 2-tuples. Defaults to None.
+            nodes (list, optional): A list of Node objs. Defaults to None.
+            weights (list, optional): _description_. Defaults to None.
+        """
+        
+        self.out_degrees : dict[Node, int] = defaultdict(int)
+        self.in_degrees : dict[Node, int] = defaultdict(int)
+        self.roots : list[Node] = []
+        self.leaves : list[Node] = []
+        self.items : dict[str, object] = {}
+        
+        #Map of nodes to their parents
+        self.parent_map : dict[Node, list[Node]] = defaultdict(list) 
+        #Map of nodes to their children
+        self.child_map : dict[Node, list[Node]] = defaultdict(list)
+        
+        if edges is None:
+            self.edges = []
+        else:
+            self.edges = edges
+        
+        if nodes is None:
+            self.nodes = []
+        else:
+            self.nodes = nodes
+            
+        if weights is None:
+            self.weights = []
+        else:
+            self.weights = weights
 
+        self.UID = 0
+        
+        if nodes is not None and edges is not None:
+            
+            #Free floater nodes/edges are *technically* allowed
+            for edge in self.edges:
+                self.in_degrees[edge[1]] += 1
+                self.out_degrees[edge[0]] += 1
+                self.parent_map[edge[1]].append(edge[0])
+                self.child_map[edge[0]].append(edge[1])
+            
+            self.leaves = [node for node in self.nodes if self.out_degrees[node] == 0]
+            self.roots = [node for node in self.nodes if self.in_degrees[node] == 0]
+            
+            
+    
+    
+    def print_adjacency(self):
+        print("CHILD MAP:")
+        print({par.get_name(): [child.get_name() for child in value] for (par, value) in self.child_map.items()})
+        print("PARENT MAP:")
+        print({child.get_name(): [par.get_name() for par in value] for (child, value) in self.parent_map.items()})
+        
+    def print_degrees(self):
+        print("OUT")
+        print({node.get_name() : value for (node, value) in self.out_degrees.items()})
+        print("IN")
+        print({node.get_name() : value for (node, value) in self.in_degrees.items()})
+        
     def addNodes(self, nodes):
         """
-                if nodes is a list of data (doesn't matter what the data is), then add each data point to the list
-                if nodes is simply a piece of data, then just add the data to the nodes list.
-                """
+        if nodes is a list of data (doesn't matter what the data is), then add each data point to the list
+        if nodes is simply a piece of data, then just add the data to the nodes list.
+        """
         if type(nodes) == list:
             for node in nodes:
                 if node not in self.nodes:
@@ -93,42 +157,101 @@ class Graph:
         """
         if as_list:
             for edge in edges:
-                self.edges.append(edge)  
-                edge[1].add_parent(edge[0])      
+                self.edges.append(edge) 
+                self.out_degrees[edge[0]] += 1
+                self.in_degrees[edge[1]] += 1
+                self.child_map[edge[0]].append(edge[1])
+                self.parent_map[edge[1]].append(edge[0])
+                edge[1].add_parent(edge[0])  
+                self.reclassify_node(edge[0], True, True)
+                self.reclassify_node(edge[1], False, True)    
         else:
             self.edges.append(edges)
             edges[1].add_parent(edges[0])
+            self.out_degrees[edges[0]] += 1
+            self.in_degrees[edges[1]] += 1
+            self.child_map[edges[0]].append(edges[1])
+            self.parent_map[edges[1]].append(edges[0])
+            self.reclassify_node(edges[0], True, True)
+            self.reclassify_node(edges[1], False, True)   
         return
 
-    def removeNode(self, node, remove_edges : bool = False):
+    def removeNode(self, node : Node):
         """
-                Removes node from the list of nodes. If removeEdges is true/enabled,
-                also prunes all edges from the graph that are connected to the node
-                """
+        Removes node from the list of nodes.
+        Also prunes all edges from the graph that are connected to the node
+        """
         
         if node in self.nodes:
-            self.nodes.remove(node)
-            if remove_edges:
-                for edge in self.edges:
-                    if node in edge:
-                        self.edges.remove(edge)
+            for edge in self.edges:
+                if node in edge:
+                    self.removeEdge(edge)
                         
-        
-
+            self.nodes.remove(node)
+            del self.in_degrees[node]
+            del self.out_degrees[node]
+            del self.child_map[node]
+            del self.parent_map[node]       
+    
     def removeEdge(self, edge : list[Node]):
         """
-                Removes edge from the list of edges. Does not delete nodes with no edges
-                """
-        #print(f"Requesting removal of : {edge[0].get_name(), edge[1].get_name()}")
-            
+        Removes edge from the list of edges. Does not delete nodes with no edges
+        """
+        
         if edge in self.edges:
-            #print("REMOVING EDGE")
             self.edges.remove(edge)
             edge[1].remove_parent(edge[0])
+            self.out_degrees[edge[0]] -= 1
+            self.in_degrees[edge[1]] -= 1
+            
+            try:
+                self.parent_map[edge[1]].remove(edge[0])
+            except:
+                pass
+        
+            try:
+                self.child_map[edge[0]].remove(edge[1])
+            except:
+                pass
+            
+            self.reclassify_node(edge[0], True, False)
+            self.reclassify_node(edge[1], False, False)
+        
+    def reclassify_node(self, node : Node, is_par : bool, is_addition : bool):
+        if is_addition:
+            if is_par:
+                # If out degree now = 1, then the node was previously a leaf and is not anymore
+                if self.out_degrees[node] == 1:
+                    try:
+                        self.leaves.remove(node)
+                    except:
+                        pass
+                if self.in_degrees[node] == 0:
+                    if node not in self.roots:
+                        self.roots.append(node)
+            else:
+                # If in_degree now = 1, then the node was previously a root and is not anymore
+                if self.in_degrees[node] == 1:
+                    try:
+                        self.roots.remove(node)
+                    except:
+                        pass
+                if self.out_degrees[node] == 0:
+                    if node not in self.leaves:
+                        self.leaves.append(node)
         else:
-            raise GraphTopologyError("Edge should be deleted, was not")
-        return
-
+            if is_par:
+                # if out degree is now = 0, then the node is now a leaf
+                if self.out_degrees[node] == 0:
+                    self.leaves.append(node)
+            else:
+                # if in degree is now = 0, the node is now a root
+                if self.in_degrees[node] == 0:
+                    self.roots.append(node)
+        
+        
+ 
+        
     def getNumberOfNodes(self):
         """
                 returns the number of nodes in the graph
@@ -141,61 +264,11 @@ class Graph:
                 """
         return len(self.edges)
 
-    def setEdgeWeights(self, edge_dict):
-        for key, value in edge_dict.items():
-            if key in self.edges:
-                self.edgeWeights[key] = value
-        return
-
-    def getTotalWeight(self):
-        tot = 0
-        for edge in self.edges:
-            tot += self.edgeWeights[edge]
-        return tot
-
     def get_nodes(self):
         return self.nodes
 
     def get_edges(self):
         return self.edges
-
-
-class DAG(Graph):
-    """
-    This class represents a directed graph containing nodes of any data type, and edges.
-    An edge is a tuple (a,b) where a and b are nodes in the graph, and the direction of the edge
-    is from a to b. (a,b) is not the same as (b,a).
-
-    This particular graph instance must only have one root and must be connected. It must also be acyclic, but for efficiency, 
-    cycles are allowed to be created. A checker method is provided, however.
-    """
-
-    def __init__(self, edges=None, nodes=None, weights=None):
-        """
-        Initialize a Directed Acyclic Graph (DAG) object.
-        You may initialize with any combination of edges/nodes/weights, or provide none at all.
-
-        Args:
-            edges (list, optional): A list of Node 2-tuples. Defaults to None.
-            nodes (list, optional): A list of Node objs. Defaults to None.
-            weights (list, optional): _description_. Defaults to None.
-        """
-        
-        self.reticulations = {}
-        self.items : dict[str, object] = {}
-        
-        if edges is None:
-            edges = []
-        else:
-            self.refresh_edge_data()
-        if nodes is None:
-            nodes = []
-        if weights is None:
-            weights = []
-
-        self.UID = 0
-        super().__init__(edges, nodes, weights)
-
         
     def get_item(self, key : str):
         return self.items[key]
@@ -217,71 +290,59 @@ class DAG(Graph):
             self.UID += 1
     
     def in_degree(self, node: Node):
-        return len(self.inEdges(node))
+        return self.in_degrees[node]
 
     def out_degree(self, node: Node):
-        return len(self.outEdges(node))
+        return self.out_degrees[node]
 
     def inEdges(self, node: Node):
-        return [edge for edge in self.edges if edge[1] == node]
+        return [[par, node] for par in self.parent_map[node]]
 
     def outEdges(self, node: Node):
-        return [edge for edge in self.edges if edge[0] == node]
+        return [[node, child] for child in self.child_map[node]]
     
-    def refresh_edge_data(self):
-        new_retics = {}
-        
-        for edge in self.edges:
-            if edge[0] in new_retics.keys():
-                new_retics[edge[0]].add(edge)
-            else:
-                new_retics[edge[0]] = set(edge)
-        
-        #Gather only nodes with more than one out edge
-        pruned = {node : new_retics[node] for node in new_retics.keys() if len(new_retics[node]) > 1}
-        self.reticulations = pruned
-    
-    def get_reticulations(self):
-        return self.reticulations
-    
-    def set_reticulations(self, retics):
-        self.reticulations = retics
-        
     def findRoot(self) -> list[Node]:
         """
         Finds the root of this DAG. It is an error if one does not exist
         or if there are more than one.
+    
+        """
+        #root = [node for node in self.nodes if self.in_degree(node) == 0 and self.out_degree(node) != 0]
+        # if len(self.roots) != 1:
+        #     raise GraphTopologyError("This graph does not have 1 and only 1 root node")
+        # for root in self.roots:
+        #     if self.out_degrees[root] == 0:
+        #         print("FLOATER ROOT")
+        return [root for root in self.roots if self.out_degrees[root] != 0]
+
+    def findDirectPredecessors(self, node: Node) -> list[Node]:
+        """
+        Returns a list of the parents of node
+
+        node-- A Node Object
+        """
+        return self.parent_map[node]
         
-        TODO: Fix so that I return only a node
-        """
-        root = [node for node in self.nodes if self.in_degree(node) == 0 and self.out_degree(node) != 0]
-        if len(root) != 1:
-            raise GraphTopologyError("This graph does not have 1 and only 1 root node")
-        return root
 
-    def findDirectPredecessors(self, node: Node) -> list:
+    def findDirectSuccessors(self, node: Node) -> list[Node]:
         """
-        Returns a list of the children of node
+        Returns a list of the children of a node. For a tree, this 
+        list should be of length 2. For a network, this number may only be one
 
         node-- A Node Object
         """
-        return [edge[0] for edge in self.inEdges(node)]
+        return self.child_map[node]
 
-    def findDirectSuccessors(self, node: Node) -> list:
-        """
-        Returns a list of the parent(s) of node. For a tree, this 
-        list should be of length 1. For a network, a child may have more
-        than one.
-
-        node-- A Node Object
-        """
-        return [edge[1] for edge in self.outEdges(node)]
-
-    def get_leaves(self) -> list:
+    def get_leaves(self) -> list[Node]:
         """
         returns the list of leaves in the graph, aka the set of nodes where there are no incoming edges
         """
-        return [node for node in self.nodes if self.out_degree(node) == 0]
+        # print("LEAF NAMES:")
+        # print([node.get_name() for node in self.leaves])
+        # self.print_adjacency()
+        # self.print_degrees()
+        #Don't return floater leaves
+        return [leaf for leaf in self.leaves if self.in_degrees[leaf] != 0]
 
     def has_node_named(self, name : str) -> Node:
         """
@@ -294,10 +355,11 @@ class DAG(Graph):
         Returns:
             Node: the node with the given name
         """
+        
         for node in self.nodes:
             if node.get_name() == name:
                 return node
-
+            
         return False
 
     def print_graph(self):
@@ -353,6 +415,27 @@ class DAG(Graph):
             print(edge)
             print("------")
         
+    def remove_floaters(self) -> None:
+        """
+        Remove all nodes with in degree == out degree == 0
+        """
+        
+        floaters = [node for node in self.nodes if self.in_degrees[node] == 0 and self.out_degrees[node] == 0]
+        for floater in floaters:
+            self.nodes.remove(floater)
+            if floater in self.in_degrees.keys():
+                del self.in_degrees[floater]
+            if floater in self.out_degrees.keys():
+                del self.out_degrees[floater]
+            if floater in self.child_map.keys():
+                del self.child_map[floater]
+            if floater in self.parent_map.keys():
+                del self.parent_map[floater]
+       
+    def remove_excess_branch(self):
+        root = self.findRoot()[0]
+        if self.out_degrees[root] == 1:
+            self.removeEdge([root, self.findDirectSuccessors(root)[0]])
         
         
     def prune_excess_nodes(self) -> None:
@@ -362,7 +445,6 @@ class DAG(Graph):
         q = deque()
         q.appendleft(root)
         
-
         while len(q) != 0:
             cur = q.pop() #pop right for bfs
 
@@ -377,7 +459,7 @@ class DAG(Graph):
                     
                     previous_node = current_node
                     temp = self.findDirectSuccessors(current_node)[0]
-                    self.removeNode(current_node, remove_edges=True)
+                    self.removeNode(current_node)
                     current_node = temp
                     node_removed = True
                 
@@ -513,8 +595,12 @@ class DAG(Graph):
         while len(q) != 0:
             cur = q.popleft()
             
-            if len(self.findDirectSuccessors(cur)) == 0: #cur is a leaf if out_degree = 0
+            # if len(self.findDirectSuccessors(cur)) == 0: #cur is a leaf if out_degree = 0
+            #     leaves.add(cur)
+            #print([node.get_name() for node in self.findDirectSuccessors(cur)])
+            if self.out_degrees[cur] == 0:
                 leaves.add(cur)
+                
             
             for neighbor in self.findDirectSuccessors(cur): #Continue path to a leaf
                 q.append(neighbor)
@@ -624,22 +710,21 @@ class DAG(Graph):
                 q.append(neighbor)
         
         return edges
-        
-    def edges_to_subgenome_count(self, downstream_node : Node, delta : int, start_node):
-        
-        # print("----------")
-        # print(f"FINDING VALID CONNECTIONS FOR {downstream_node.get_name()}")
-        # print(f"STARTING BFS AT {start_node.get_name()}")
+    
+    def edges_to_subgenome_count2(self):
         
         
+        start_nodes = self.findRoot()
+        if len(self.findRoot()) != 1:
+            raise Exception("Please specify a start node for this network, there is more than one root (or none)")
+        start_node = start_nodes[0]
+            
         q = deque()
         q.appendleft(start_node)
         
         edges_2_sub = {tuple(edge) : 0 for edge in self.edges}
         
         
-        
-
         while len(q) != 0:
             cur = q.pop() #pop right for bfs
 
@@ -650,6 +735,36 @@ class DAG(Graph):
                 #Resume search from the end of the chain if one existed, or this is neighbor if nothing was done
                 q.append(neighbor)
         
+        return edges_2_sub
+    
+    def edges_to_subgenome_count(self, downstream_node : Node = None, delta : float = math.inf, start_node = None):
+        
+        # print("----------")
+        # print(f"FINDING VALID CONNECTIONS FOR {downstream_node.get_name()}")
+        # print(f"STARTING BFS AT {start_node.get_name()}")
+        if start_node is None:
+            start_nodes = self.findRoot()
+            if len(self.findRoot()) != 1:
+                raise Exception("Please specify a start node for this network, there is more than one root (or none)")
+            start_node = start_nodes[0]
+            
+        q = deque()
+        q.appendleft(start_node)
+        
+        edges_2_sub = {tuple(edge) : 0 for edge in self.edges}
+        
+        
+        while len(q) != 0:
+            cur = q.pop() #pop right for bfs
+
+            for neighbor in self.findDirectSuccessors(cur):
+                
+                edges_2_sub[(cur, neighbor)] += 1
+                
+                #Resume search from the end of the chain if one existed, or this is neighbor if nothing was done
+                q.append(neighbor)
+    
+        
         partition : dict[int, list[list[Node]]] = {}
         for edge, value in edges_2_sub.items():
             if value not in partition.keys():
@@ -658,25 +773,24 @@ class DAG(Graph):
                 partition[value].append(list(edge))
         
         #Filter out invalid keys
+        
         filter1 = {key : value for (key, value) in partition.items() if key <= delta}
         
         #Filter out edges that would create a cycle from param edge
-        filter2 = {}
-        for subct, edges in filter1.items():
-            for target in edges:
-                downstream_edges = self.edges_downstream_of_node(downstream_node)
-                #print(f"DO NOT CONNECT TO THESE : {[(edge[0].get_name(), edge[1].get_name()) for edge in downstream_edges]}")
-                if target not in downstream_edges:
-                    if subct not in filter2.keys():
-                        filter2[subct] = [target]
-                    else:
-                        filter2[subct].append(target)
-       
-        valid_connections = {subct : [[edge[0].get_name(), edge[1].get_name()] for edge in values] for (subct, values) in filter2.items()}
-        # print(f"valid connections: {valid_connections}")
-        # print("-------------")
-        
-        return filter2
+        if downstream_node is not None:
+            filter2 = {}
+            for subct, edges in filter1.items():
+                for target in edges:
+                    downstream_edges = self.edges_downstream_of_node(downstream_node)
+                    #print(f"DO NOT CONNECT TO THESE : {[(edge[0].get_name(), edge[1].get_name()) for edge in downstream_edges]}")
+                    if target not in downstream_edges:
+                        if subct not in filter2.keys():
+                            filter2[subct] = [target]
+                        else:
+                            filter2[subct].append(target)
+            return filter2
+        else:
+            return filter1
 
 
 

@@ -219,10 +219,10 @@ class Yule:
         edges = [[node1, node2], [node1, node3]]
         
         if self.N == 2:
-            tree = DAG()
-            tree.addEdges(edges, as_list=True)
-            tree.addNodes(nodes)
-            return tree
+            # tree = DAG()
+            # tree.addEdges(edges, as_list=True)
+            # tree.addNodes(nodes)
+            return DAG(nodes=nodes, edges=edges)
             
 
         # until the tree contains N extant taxa, keep having speciation events
@@ -242,9 +242,9 @@ class Yule:
                 #     node.set_length(0, )
 
             # return the simulated tree
-            tree = DAG()
-            tree.addEdges(edges, as_list=True)
-            tree.addNodes(nodes)
+            tree = DAG(nodes = nodes, edges = edges)
+            # tree.addEdges(edges, as_list=True)
+            # tree.addNodes(nodes)
 
             # reset the elapsed time to 0, and the number of live branches to 2
             # for correctness generating future trees
@@ -264,9 +264,9 @@ class Yule:
                 else:
                     node.set_length(0)
 
-            tree = DAG()
-            tree.addEdges(edges, as_list=True)
-            tree.addNodes(nodes)
+            tree = DAG(nodes = nodes, edges = edges)
+            # tree.addEdges(edges, as_list=True)
+            # tree.addNodes(nodes)
 
             # reset the elapsed time to 0, and the number of live branches to 2
             # for correctness generating future trees
@@ -406,9 +406,10 @@ class CBDP:
                 edges.append(new_edge)
 
         # add edges and nodes to a tree
-        tree = DAG()
-        tree.addEdges(edges, as_list=True)
-        tree.addNodes(nodes)
+        tree = DAG(nodes = nodes, edges = edges)
+        
+        # tree.addEdges(edges, as_list=True)
+        # tree.addNodes(nodes)
         
         tree.generate_branch_lengths()
 

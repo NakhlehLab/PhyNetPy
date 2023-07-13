@@ -14,7 +14,7 @@ import io
 import math
 from Node import Node
 from Graph import DAG
-from collections import deque
+from collections import defaultdict, deque
 import pulp as p
 import numpy as np
 import NetworkParser
@@ -230,12 +230,15 @@ def partition_gene_trees(gene_map : dict[str, list[str]], num_retic : int = 1, r
     
     ploidy_leaves = [leaf for leaf in gene_map.keys() if len(gene_map[leaf]) != 1]
     simple_network : DAG = Yule(.1, len(std_leaves), rng = rng).generate_tree()
+
+
     
     #Change the names of the leaves to match 
     for leaf_pair in zip(simple_network.get_leaves(), std_leaves):
         net_leaf : Node = leaf_pair[0]
         net_leaf.set_name(leaf_pair[1])
-        
+    
+
     #Partition the ploidy samples
     partitions : list[set[str]] = []
     for dummy in range(num_retic):
@@ -255,9 +258,9 @@ def partition_gene_trees(gene_map : dict[str, list[str]], num_retic : int = 1, r
             for node in clade.nodes:
                 node.set_name(node.get_name() + "_c" + str(retic_ct))
             
-            print("-------")
-            clade.print_graph()
-            print("-------")
+            #print("-------")
+            #clade.print_graph()
+            #print("-------")
             
             for leaf_pair in zip(clade.get_leaves(), partition):
                 net_leaf : Node = leaf_pair[0]
@@ -292,9 +295,12 @@ def partition_gene_trees(gene_map : dict[str, list[str]], num_retic : int = 1, r
             
             #remove and add back edges
             simple_network.removeEdge([b, a])
+       
             simple_network.removeEdge([d, c])
+           
             simple_network.addEdges([[new_node2, a], [b, new_node2], [new_node3, c], [d, new_node3]], as_list=True)
             
+   
             #handle the parent bindings
             a.remove_parent(b)
             a.add_parent(new_node2)
@@ -304,9 +310,12 @@ def partition_gene_trees(gene_map : dict[str, list[str]], num_retic : int = 1, r
             new_node3.add_parent(d)
 
             retic_ct += 1
-        
-    #simple_network.print_graph()
+
     return simple_network 
+
+
+
+
 
 # def get_other_copies2(gene_tree_leaf : Node, gene_map : dict)->list:
 #     for copy_names in gene_map.values():
@@ -605,13 +614,14 @@ class AlleleMap:
 
 class MUL(DAG):
     
-    def __init__(self, gene_map : dict):
+    def __init__(self, gene_map : dict, rng):
         self.net = None
         self.mul = None
         self.gene_map = gene_map
+        self.rng = rng
         
         
-    def to_mul(self, network:DAG)->DAG:
+    def to_mul2(self, network:DAG)->DAG:
         """
         From a Phylogenetic Network, create a Multilabeled Species Tree (MUL). In the paper, this function is U(phi).
         This is accomplished with Depth First Search.
@@ -630,11 +640,15 @@ class MUL(DAG):
             raise InferAllopError(f"Input network has incorrect amount of leaves. Given : {len(network.get_leaves())} Expected : { len(self.gene_map.keys())}")
        
         temp_gene_map = copy.deepcopy(self.gene_map) #TODO: probably completely unnecessary?
-        
+        used = {}
         visited : dict = dict()  # Map from nodes to the number of times they've been visited
         new_pars : dict[Node, list[Node]] = dict() # Map from input network nodes to the new nodes
         mul_tree = DAG()
-        root : Node = network.findRoot()[0]
+        roots : Node = network.findRoot()
+        if len(roots) > 1:
+            raise InferAllopError("There should not be more than one root right now")
+        
+        root = roots[0]
        
         
         # stack for dfs. appendleft / popleft for LIFO 
@@ -642,7 +656,7 @@ class MUL(DAG):
         
         q.appendleft(root)
         root_copy = Node(name=root.get_name())
-        new_pars[root] = [root_copy]
+        new_pars[root] = [[root_copy, 0]]
         mul_tree.addNodes(root_copy)
     
         
@@ -676,15 +690,25 @@ class MUL(DAG):
                 
                 cur_copy = Node(name=new_name)
                 if neighbor not in new_pars.keys():
-                    new_pars[neighbor] = [cur_copy]
+                    new_pars[neighbor] = [[cur_copy, 0]]
                 else:
-                    new_pars[neighbor].append(cur_copy)
+                    new_pars[neighbor].append([cur_copy, 0])
                 
                 mul_tree.addNodes(cur_copy)
-                if len(new_pars[cur]) > 1:  
-                    mul_tree.addEdges([new_pars[cur].pop(), cur_copy])
-                else:
-                    mul_tree.addEdges([new_pars[cur][0], cur_copy])
+                
+                
+                for index in range(len(new_pars[cur])):
+                    if new_pars[cur][index][1] < 2:
+                        mul_tree.addEdges([new_pars[cur][index][0], cur_copy])
+                        new_pars[cur][index][1] += 1
+                        break
+                    
+                    
+                    
+                # if len(new_pars[cur]) > 1:  
+                #     mul_tree.addEdges([new_pars[cur][1], cur_copy]) #.pop()
+                # else:
+                #     mul_tree.addEdges([new_pars[cur][0], cur_copy])
                 
                 q.appendleft(neighbor)
         
@@ -695,22 +719,193 @@ class MUL(DAG):
         
         
         # Prune tree of all nodes with in_degree & out_degree == 1. This happens downstream from reticulation nodes.
+    
         mul_tree.prune_excess_nodes()
-        
         self.mul = mul_tree
         mul_tree_leaf_ct = len(self.mul.get_leaves())
-        #print([node.get_name() for node in mul_tree.get_leaves()])
         gene_tree_leaf_ct = sum([len(value) for value in self.gene_map.values()])
+        
+        print("::: MUL TREE :::")
+        self.mul.pretty_print_edges()
+        self.mul.print_adjacency()
+        self.mul.print_graph()
+        print("::: END MUL TREE :::")
+        
         if mul_tree_leaf_ct != gene_tree_leaf_ct:
-            self.mul.print_graph()
+            
             print("AHHHHHH OH NO")
             print("AHHHH THIS IS NOT GOOD")
             print("YOU'vE GOTTA BE KIDDING ME")
+            print([node.get_name() for node in mul_tree.get_leaves()])
             self.mul.pretty_print_edges()
+            self.mul.print_adjacency()
+            self.mul.print_graph()
             raise InferAllopError(f"MUL tree does not have the correct amount of leaves. Expected {gene_tree_leaf_ct} but got {mul_tree_leaf_ct}")
         
         return mul_tree
     
+    # def to_mul(self, net : DAG) -> DAG:
+        
+    #     if len(net.get_leaves()) != len(self.gene_map.keys()):
+    #         raise InferAllopError(f"Input network has incorrect amount of leaves. Given : {len(net.get_leaves())} Expected : { len(self.gene_map.keys())}")
+       
+    #     mul_tree = DAG()
+    #     subg_ct = {node : net.subgenome_count(node) for node in net.nodes}
+    #     edge_ct = net.edges_to_subgenome_count2()
+    #     net_2_mul = defaultdict(list)
+    #     mul_2_net = {}
+        
+    #     for node in net.nodes:
+    #         for index in range(subg_ct[node]):
+    #             if node in net.get_leaves():
+    #                 new_mul_node = Node(name = self.gene_map[node.get_name()][index])
+    #             else:
+    #                 new_mul_node = Node(name = node.get_name() + "_" + str(index))
+                
+    #             net_2_mul[node].append(new_mul_node)
+    #             mul_2_net[new_mul_node] = node
+        
+    #     mul_tree.addNodes(list(mul_2_net.keys()))   
+    #     net_2_mul_names = {node.get_name() : [value.get_name() for value in values] for (node, values) in net_2_mul.items()}
+    #     print(f"net 2 mul : {net_2_mul_names}")
+    #     connected_to_root = defaultdict(int)
+        
+    #     for net_leaf in net.get_leaves():
+    #         for mul_leaf in net_2_mul[net_leaf]:
+                
+    #             cur_mul = mul_leaf
+                
+    #             while mul_2_net[cur_mul] != net.findRoot()[0]:
+    #                 legal_pars = []
+    #                 for netparent in net.findDirectPredecessors(mul_2_net[cur_mul]) :
+    #                     if edge_ct[(netparent, mul_2_net[cur_mul])] != 0:
+    #                         legal_pars.append(netparent)
+                        
+    #                 rand_netparent = random_object(legal_pars, self.rng)
+                    
+    #                 # if len(net_2_mul[rand_netparent]) > 1:
+    #                 #     mul_par = net_2_mul[rand_netparent].pop()
+    #                 # else:
+    #                 #     mul_par = net_2_mul[rand_netparent][0]
+                        
+    #                 # if net.in_degree(rand_netparent) == 2:
+    #                 #     #Select any reticulation duplication that hasn't been used yet
+    #                 #     mul_par = random_object([mul_node for mul_node in net_2_mul[rand_netparent] if mul_node not in connected_to_root.keys()], self.rng)
+    #                 # else:
+    #                 #     #select any tree node that hasn't been fully connected yet
+    #                 #     mul_par = random_object([mul_node for mul_node in net_2_mul[rand_netparent] if connected_to_root[mul_node] != 2], self.rng)
+                    
+    #                 mul_par = random_object([mul_node for mul_node in net_2_mul[rand_netparent] if net.out_degree(mul_node) != 2], self.rng)
+    #                 print(mul_par.get_name())
+    #                 print(cur_mul.get_name())    
+    #                 mul_tree.addEdges([mul_par, cur_mul])
+    #                 edge_ct[(mul_2_net[mul_par], mul_2_net[cur_mul])] -= 1
+    #                 connected_to_root[cur_mul] += 1
+                    
+    #                 if connected_to_root[mul_par] == 2:
+    #                     break
+                    
+    #                 cur_mul = mul_par
+                    
+   
+    #     mul_tree.prune_excess_nodes()
+    #     self.mul = mul_tree  
+        
+    #     print("============PRINTING MUL============")
+    #     self.mul.pretty_print_edges()
+    #     self.mul.print_adjacency()
+    #     self.mul.print_graph() 
+    #     print("==========DONE PRINTING MUL==========")     
+    #     return mul_tree         
+    def subtree_copy(self, net : DAG, retic_node : Node):
+    
+        q = deque()
+        q.appendleft(retic_node)
+        nodes = []
+        edges = []
+        
+        new_node = Node(name = retic_node.get_name() + "_copy")
+        nodes.append(new_node)
+        net_2_mul = {retic_node : new_node}
+        
+
+        while len(q) != 0:
+            cur = q.pop() #pop right for bfs
+
+            for neighbor in net.findDirectSuccessors(cur):
+                new_node = Node(name = neighbor.get_name() + "_copy")
+                nodes.append(new_node)
+                net_2_mul[neighbor] = new_node
+                edges.append([net_2_mul[cur], new_node])
+                
+                
+                #Resume search from the end of the chain if one existed, or this is neighbor if nothing was done
+                q.append(neighbor)
+        
+        return DAG(edges = edges, nodes=nodes)                
+    
+    
+    def to_mul(self, net : DAG) -> DAG:
+        
+        if len(net.get_leaves()) != len(self.gene_map.keys()):
+            raise InferAllopError(f"Input network has incorrect amount of leaves. Given : {len(net.get_leaves())} Expected : { len(self.gene_map.keys())}")
+       
+        copy_gene_map = copy.deepcopy(self.gene_map)
+        mul_tree = DAG()
+        network_2_mul : dict[Node, Node] = {node : Node(name = node.get_name()) for node in net.nodes}
+        
+        mul_tree.addNodes(list(network_2_mul.values()))
+        for edge in net.edges:
+            mul_tree.addEdges([network_2_mul[edge[0]], network_2_mul[edge[1]]])
+        
+        # print("MID MUL CHECK")
+        # mul_tree.print_adjacency()
+        # print("=--=-=-=-=-=-=-=-=-=-===-=-=---=-===")
+        #start at leaves, push onto queue when all children have been moved to the processed set
+        processed : set[Node] = set()
+        traversal_queue = deque(mul_tree.get_leaves())
+        #print([node.get_name() for node in traversal_queue])
+        while len(traversal_queue) != 0:
+            cur = traversal_queue.pop()
+            #print(f"Processing: {cur.get_name()}")
+            original_pars = [node for node in mul_tree.findDirectPredecessors(cur)]
+            
+            if mul_tree.in_degree(cur) == 2:
+                #reticulation node. make a copy of subgraph
+                subtree = self.subtree_copy(mul_tree, cur)
+                retic_pars = mul_tree.findDirectPredecessors(cur)
+                a = retic_pars[0]
+                b = retic_pars[1]
+                mul_tree.removeEdge([b, cur])
+                mul_tree.addEdges([b, subtree.findRoot()[0]])
+                mul_tree.addNodes(subtree.nodes)
+                mul_tree.addEdges(subtree.edges, as_list=True)
+                processed.add(subtree.findRoot()[0])
+            
+            
+            processed.add(cur)
+            
+            for par in original_pars:
+                cop = set(mul_tree.findDirectSuccessors(par))
+                if cop.issubset(processed):
+                    traversal_queue.append(par)
+        
+        mul_tree.prune_excess_nodes()
+        
+        for leaf in mul_tree.get_leaves():
+            new_name = copy_gene_map[leaf.get_name().split("_")[0]].pop()
+            leaf.set_name(new_name)
+
+        self.mul = mul_tree  
+        
+        # print("============PRINTING MUL============")
+        # self.mul.pretty_print_edges()
+        # self.mul.print_adjacency()
+        # self.mul.print_graph() 
+        # print("==========DONE PRINTING MUL==========")     
+        return mul_tree             
+        
+        
     def extra_lineages(self, coal_event_map : dict, f:dict)-> int:
         """
         Computes the number of extra lineages in a mapping from a gene tree T, into a MUL tree, T'.
@@ -903,6 +1098,7 @@ def XL(T:MUL, g:DAG) -> int:
     
     #compute all possible allele maps
     f : list = T.allele_map_set(g)
+    
     #f : list = allele_map_set(g, gene_map)
     
     #compute the xl value given g, t, and the allele map 
@@ -910,6 +1106,7 @@ def XL(T:MUL, g:DAG) -> int:
         xls.append(XL_Allele(T, g, allele_map.map))
     
 
+    
     #return the minimum
     return min(xls)
 
@@ -944,6 +1141,7 @@ def score(T:MUL, gt_list:list[DAG])->int:
     """
     # Sum the XL values over all gene trees
     gt_scores = [XL(T, gt) for gt in gt_list]
+    print(f"gt_scores: {gt_scores}")
     return sum(gt_scores)
 
 
@@ -961,10 +1159,10 @@ def score(T:MUL, gt_list:list[DAG])->int:
 
 class InferMPAllop:
     
-    def __init__(self, network : DAG, gene_map : dict[str, str], gene_trees : list[DAG]) -> None:
+    def __init__(self, network : DAG, gene_map : dict[str, str], gene_trees : list[DAG], rng) -> None:
         # for gene_tree in gene_trees:
         #     gene_tree.put_item("allele maps", allele_map_set2(gene_tree, gene_map))
-        self.mp_allop_model : Model = ModelFactory(MPAllopComponent(network, gene_map, gene_trees)).build()
+        self.mp_allop_model : Model = ModelFactory(MPAllopComponent(network, gene_map, gene_trees, rng)).build()
     
     def run(self) -> float:
         """
@@ -974,7 +1172,7 @@ class InferMPAllop:
         Returns:
             DAG: max likelihood parsimony network
         """
-        end_state : State = HillClimbing(MPAllopProposalKernel(), None, None, 50, self.mp_allop_model).run()
+        end_state : State = HillClimbing(MPAllopProposalKernel(), None, None, 500, self.mp_allop_model).run()
         end_state.current_model.network.print_graph()
         return end_state.likelihood()
     
@@ -984,16 +1182,17 @@ class InferMPAllop:
     
 class MPAllopComponent(ModelComponent):
     
-    def __init__(self, network : DAG, gene_map : dict[str, str], gene_trees : list[DAG]) -> None:
+    def __init__(self, network : DAG, gene_map : dict[str, str], gene_trees : list[DAG], rng) -> None:
         super().__init__(set())
         self.network = network
         self.gene_map = gene_map
         self.gene_trees = gene_trees
+        self.rng = rng
         
     
     def build(self, model : Model):
         
-        mul_node : MULNode = MULNode(self.gene_map)
+        mul_node : MULNode = MULNode(self.gene_map, self.rng)
         net_node : NetworkContainer = NetworkContainer(self.network)
         gene_trees_node : GeneTrees = GeneTrees(self.gene_trees)
         score_root_node : ParsimonyScore = ParsimonyScore()
@@ -1011,22 +1210,17 @@ class MPAllopComponent(ModelComponent):
         
 class MULNode(CalculationNode):
     
-    def __init__(self, gene_map : dict):
+    def __init__(self, gene_map : dict, rng):
         super().__init__()
-        self.multree : MUL = MUL(gene_map)
+        self.multree : MUL = MUL(gene_map, rng)
+        
     
     def calc(self):
         
         model_children = self.get_predecessors()
         if len(model_children) == 1:
             if type(model_children[0]) is NetworkContainer:
-                try:
-                    self.multree.to_mul(model_children[0].get())
-                except:
-                    
-                    self.cached = MUL(None)
-                    self.updated = False
-                    return self.cached
+                self.multree.to_mul(model_children[0].get())
             else:
                 raise InferAllopError("Malformed MP Allop Model Graph. Expected MUL Node to have Network Container Child")
         
@@ -1081,6 +1275,7 @@ class ParsimonyScore(CalculationNode):
             
             if mul.gene_map is None:
                 ##Invalid Network, return score of -inf so that this model is rejected
+                raise Exception("WHAT THE FUDDGEGEEE")
                 self.cached = -math.inf
             else:  
                 self.cached = -score(mul, g_trees)
@@ -1125,22 +1320,53 @@ def MP_ALLOP(gene_tree_file : str, subgenome_assign : dict[str, str], seed = Non
     start_net.print_graph()
     gene_tree_list : list = NetworkParser.NetworkBuilder2(gene_tree_file).get_all_networks()
     leaf_map = subgenome_assign
-    mp_model = InferMPAllop(start_net, leaf_map, gene_tree_list)
+    mp_model = InferMPAllop(start_net, leaf_map, gene_tree_list, rng = rng)
     return mp_model.run()
 
+def test2():
+    mul = MUL({"B": ["B"], "A": ["A"], "C": ["C"], "D":["D"], "X": ["X1", "X2"], "Y": ["Y1", "Y2"], "Z": ["Z1", "Z2"]}, np.random.default_rng(913))
+    start_net = NetworkParser.NetworkBuilder2("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/Bayesian/mp_allop_start_net.nex").get_all_networks()[0]
+    mul.to_mul(start_net)
+    gt_list = NetworkParser.NetworkBuilder2("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/Bayesian/mp_allop_tester.nex").get_all_networks()
+    print(score(mul, gt_list))
+        
 
+def test3():
+    mul = MUL({"B": ["01bA"], "A": ["01aA"], "X": ["01xA", "01xB"], "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]}, np.random.default_rng(913))
+    start_net = NetworkParser.NetworkBuilder2("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/scenarioD_ideal.nex").get_all_networks()[0]
+    mul.to_mul(start_net)
+    gt_list = NetworkParser.NetworkBuilder2("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/D10.nex").get_all_networks()
+    print(score(mul, gt_list))      
+           
 def test():
     
-    test_seed = random.randint(0,1000) #698
-    print(f"TESTER SEED : {test_seed}")
-    for dummy in range(50):
-        print(
-            MP_ALLOP(
-                '/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/D10.nex', 
-                {"B": ["01bA"], "A": ["01aA"], "X": ["01xA", "01xB"], "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]},
-                seed = test_seed
-                )
+    # test_seed = random.randint(0,1000) #698
+    # print(f"TESTER SEED : {test_seed}")
+    scores = []
+    for dummy in range(1):
+        test_seed = random.randint(0,1000) #698 # 464 #32 913 #
+        
+        print(f"TESTER SEED : {test_seed}")
+        try:
+            scores.append(
+                MP_ALLOP('/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_nex_n1.nex',
+                    {'F': ['01fA'], 'T': ['01tA', '01tB'], 'W': ['01wA', '01wB'], 'B': ['01bA'], 'V': ['01vA', '01vB'], 'A': ['01aA'], 'U': ['01uA', '01uB'], 'C': ['01cA'], 'E': ['01eA'], 'X': ['01xA', '01xB'], 'Y': ['01yA', '01yB'], 'O': ['01oA'], 'Z': ['01zB', '01zA'], 'D': ['01dA']},
+                    seed= test_seed)
             )
+            # MP_ALLOP(
+            #         '/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/D10.nex', 
+            #         {"B": ["01bA"], "A": ["01aA"], "X": ["01xA", "01xB"], "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]},
+            #         seed = test_seed
+            #         )
+            # MP_ALLOP('/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_nex_n1.nex',
+            #         {'F': ['01fA'], 'T': ['01tA', '01tB'], 'W': ['01wA', '01wB'], 'B': ['01bA'], 'V': ['01vA', '01vB'], 'A': ['01aA'], 'U': ['01uA', '01uB'], 'C': ['01cA'], 'E': ['01eA'], 'X': ['01xA', '01xB'], 'Y': ['01yA', '01yB'], 'O': ['01oA'], 'Z': ['01zB', '01zA'], 'D': ['01dA']},
+            #         seed= random.randint(0, 1000))
+        except:
+            print(test_seed)
+            raise Exception("HALT")
+
+    print(scores)
+        
     
     # print(
     #     MP_ALLOP(
