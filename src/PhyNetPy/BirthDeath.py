@@ -1,3 +1,11 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+
+"""
+
+
 import random
 import numpy as np
 import scipy
@@ -47,13 +55,14 @@ class Yule:
     The Yule class represents a pure birth model for simulating
     trees of a fixed (n) amount of extant taxa.
 
-    gamma-- the birth rate. A larger birth rate will result in shorter 
+    gamma -- the birth rate. A larger birth rate will result in shorter 
             branch lengths and a younger tree.
     
-    n-- number of extant taxa at the end of simulation
+    n -- number of extant taxa at the end of simulation
 
-    time-- if conditioning on time, the age of the tree to be simulated
+    time -- if conditioning on time, the age of the tree to be simulated
     
+    rng -- numpy random number generator for drawing speciation times
     """
 
     def __init__(self, gamma:float, n:int = None, time:float = None, rng = None) -> None:
@@ -277,7 +286,7 @@ class Yule:
 
         return tree
 
-    def clearGenerated(self):
+    def clear_generated(self):
         """
         empty out the generated tree array
         """

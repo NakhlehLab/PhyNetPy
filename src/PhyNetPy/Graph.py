@@ -1,3 +1,10 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+
+"""
+
 from collections import defaultdict, deque
 import copy
 import math
@@ -62,15 +69,19 @@ class GraphTopologyError(Exception):
 class DAG():
     """
     This class represents a directed graph containing nodes of any data type, and edges.
-    An edge is a tuple (a,b) where a and b are nodes in the graph, and the direction of the edge
-    is from a to b. (a,b) is not the same as (b,a).
+    An edge is a list [a,b] where a and b are nodes in the graph, and the direction of the edge
+    is from a to b. [a,b] is NOT the same as [b,a], as this is a DIRECTED graph.
 
-    This particular graph instance must only have one root and must be connected. It must also be acyclic, but for efficiency, 
-    cycles are allowed to be created. A checker method is provided, however.
+    Allowances:
+    1) You may create cycles-- BUT we have provided a method to check if this graph object is acyclic
+    2) You may have multiple roots. Be mindful of whether this graph is connected and what root you wish to operate on
+    3) You may end up with floater nodes/edges, ie this may be an unconnected graph with multiple connected components. 
+       We will provide in the next release a method to check for whether your graph object is one single connected component.
+    
     """
     
 
-    def __init__(self, edges=None, nodes=None, weights=None):
+    def __init__(self, edges=None, nodes=None, weights=None) -> None:
         """
         Initialize a Directed Acyclic Graph (DAG) object.
         You may initialize with any combination of edges/nodes/weights, or provide none at all.
@@ -81,16 +92,29 @@ class DAG():
             weights (list, optional): _description_. Defaults to None.
         """
         
+        # Map nodes to the number of children they have
         self.out_degrees : dict[Node, int] = defaultdict(int)
+        
+        # Map nodes to the number of parents they have
         self.in_degrees : dict[Node, int] = defaultdict(int)
+        
+        # List of nodes in the graph with in degree of 0. Note that there could be floater nodes w/ out degree 0
         self.roots : list[Node] = []
+        
+        # List of nodes in the graph with out degree of 0. Note that there could be floater nodes w/ in degree 0
         self.leaves : list[Node] = []
+        
+        # Blob storage for anything that you want to associate with this network. Just give it a string key!
         self.items : dict[str, object] = {}
         
-        #Map of nodes to their parents
+        # Map of nodes to their parents
         self.parent_map : dict[Node, list[Node]] = defaultdict(list) 
-        #Map of nodes to their children
+        
+        # Map of nodes to their children
         self.child_map : dict[Node, list[Node]] = defaultdict(list)
+        
+        #Map of names of nodes to nodes
+        self.node_names : dict[str, Node] = {}
         
         if edges is None:
             self.edges = []
@@ -101,14 +125,18 @@ class DAG():
             self.nodes = []
         else:
             self.nodes = nodes
+            for node in self.nodes:
+                self.node_names[node.get_name()] = node
             
         if weights is None:
             self.weights = []
         else:
             self.weights = weights
 
+        # Initialize the unique id count
         self.UID = 0
         
+        # If edges and nodes provided, then start bookkeeping!
         if nodes is not None and edges is not None:
             
             #Free floater nodes/edges are *technically* allowed
@@ -122,8 +150,6 @@ class DAG():
             self.roots = [node for node in self.nodes if self.in_degrees[node] == 0]
             
             
-    
-    
     def print_adjacency(self):
         print("CHILD MAP:")
         print({par.get_name(): [child.get_name() for child in value] for (par, value) in self.child_map.items()})
@@ -145,11 +171,19 @@ class DAG():
             for node in nodes:
                 if node not in self.nodes:
                     self.nodes.append(node)
+                    self.node_names[node.get_name()] = node
         else:
             if nodes not in self.nodes:
                 self.nodes.append(nodes)
+                self.node_names[nodes.get_name()] = nodes
         return
 
+    def update_node_name(self, node, name):
+        if node.get_name() is not None:
+            del self.node_names[node.get_name()]
+        node.set_name(name)
+        self.node_names[name] = node
+        
     def addEdges(self, edges, as_list = False):
         """
                 if edges is a list of tuples, then add each tuple to the list of tuples
@@ -191,7 +225,8 @@ class DAG():
             del self.in_degrees[node]
             del self.out_degrees[node]
             del self.child_map[node]
-            del self.parent_map[node]       
+            del self.parent_map[node]  
+            del self.node_names[node.get_name()]     
     
     def removeEdge(self, edge : list[Node]):
         """
@@ -249,9 +284,6 @@ class DAG():
                 if self.in_degrees[node] == 0:
                     self.roots.append(node)
         
-        
- 
-        
     def getNumberOfNodes(self):
         """
                 returns the number of nodes in the graph
@@ -286,7 +318,8 @@ class DAG():
         """
         if node not in self.nodes:
             self.nodes.append(node)
-            node.set_name("UID_" + str(self.UID))
+            self.update_node_name(node, "UID_" + str(self.UID))
+            #node.set_name("UID_" + str(self.UID))
             self.UID += 1
     
     def in_degree(self, node: Node):
@@ -301,21 +334,15 @@ class DAG():
     def outEdges(self, node: Node):
         return [[node, child] for child in self.child_map[node]]
     
-    def findRoot(self) -> list[Node]:
+    def root(self) -> list[Node]:
         """
         Finds the root of this DAG. It is an error if one does not exist
         or if there are more than one.
     
         """
-        #root = [node for node in self.nodes if self.in_degree(node) == 0 and self.out_degree(node) != 0]
-        # if len(self.roots) != 1:
-        #     raise GraphTopologyError("This graph does not have 1 and only 1 root node")
-        # for root in self.roots:
-        #     if self.out_degrees[root] == 0:
-        #         print("FLOATER ROOT")
         return [root for root in self.roots if self.out_degrees[root] != 0]
 
-    def findDirectPredecessors(self, node: Node) -> list[Node]:
+    def get_parents(self, node: Node) -> list[Node]:
         """
         Returns a list of the parents of node
 
@@ -324,7 +351,7 @@ class DAG():
         return self.parent_map[node]
         
 
-    def findDirectSuccessors(self, node: Node) -> list[Node]:
+    def get_children(self, node: Node) -> list[Node]:
         """
         Returns a list of the children of a node. For a tree, this 
         list should be of length 2. For a network, this number may only be one
@@ -355,12 +382,10 @@ class DAG():
         Returns:
             Node: the node with the given name
         """
-        
-        for node in self.nodes:
-            if node.get_name() == name:
-                return node
-            
-        return False
+        try:
+            return self.node_names[name]
+        except:
+            return False
 
     def print_graph(self):
         for node in self.nodes:
@@ -376,7 +401,7 @@ class DAG():
         Returns: a newick string.
         """
 
-        root = self.findRoot()[0]
+        root = self.root()[0]
         children = {root: [set(), False]}
         visitedRetic = []
 
@@ -387,7 +412,7 @@ class DAG():
         while len(q) != 0:
             cur = q.pop()
 
-            for neighbor in self.findDirectSuccessors(cur):
+            for neighbor in self.get_children(cur):
 
                 # properly handle children mapping for parent "cur"
                 if cur in children.keys():
@@ -398,9 +423,9 @@ class DAG():
                 # tabulate whether node should be reprinted in any call
                 # to newickSubstring. The subtree of a reticulation node
                 # need only be printed once
-                if neighbor.is_reticulation and neighbor in visitedRetic:
+                if self.in_degrees[neighbor] == 2 and neighbor in visitedRetic:
                     children[cur][1] = True
-                elif neighbor.is_reticulation:
+                elif self.in_degrees[neighbor] == 2:
                     visitedRetic.append(neighbor)
 
                 q.append(neighbor)
@@ -433,14 +458,14 @@ class DAG():
                 del self.parent_map[floater]
        
     def remove_excess_branch(self):
-        root = self.findRoot()[0]
+        root = self.root()[0]
         if self.out_degrees[root] == 1:
-            self.removeEdge([root, self.findDirectSuccessors(root)[0]])
+            self.removeEdge([root, self.get_children(root)[0]])
         
         
     def prune_excess_nodes(self) -> None:
         
-        root = self.findRoot()[0]
+        root = self.root()[0]
         
         q = deque()
         q.appendleft(root)
@@ -448,7 +473,7 @@ class DAG():
         while len(q) != 0:
             cur = q.pop() #pop right for bfs
 
-            for neighbor in self.findDirectSuccessors(cur):
+            for neighbor in self.get_children(cur):
                 current_node : Node = neighbor
                 previous_node : Node = cur
                 node_removed = False
@@ -458,7 +483,7 @@ class DAG():
                     self.removeEdge([previous_node, current_node])
                     
                     previous_node = current_node
-                    temp = self.findDirectSuccessors(current_node)[0]
+                    temp = self.get_children(current_node)[0]
                     self.removeNode(current_node)
                     current_node = temp
                     node_removed = True
@@ -478,7 +503,7 @@ class DAG():
         but has a defined "t" attribute.
         
         """
-        root = self.findRoot()[0]
+        root = self.root()[0]
         root.add_length(0, None)
         
         # stack for dfs
@@ -489,7 +514,7 @@ class DAG():
         while len(q) != 0:
             cur = q.pop()
 
-            for neighbor in self.findDirectSuccessors(cur):
+            for neighbor in self.get_children(cur):
                 if neighbor not in visited:
                     t_par = cur.attribute_value_if_exists("t")
                     t_nei = neighbor.attribute_value_if_exists("t")
@@ -502,7 +527,7 @@ class DAG():
                     q.append(neighbor)
                     visited.add(neighbor)
 
-    def lca(self, set_of_nodes: set)-> Node:
+    def mrca(self, set_of_nodes: set)-> Node:
         """
         Computes the Least Common Ancestor of a set of graph nodes
 
@@ -544,7 +569,7 @@ class DAG():
                 cur = q.popleft()
 
                 #Seach cur's parents
-                for neighbor in self.findDirectPredecessors(cur):
+                for neighbor in self.get_parents(cur):
                     if neighbor not in visited:
                         node_2_lvl[neighbor] = node_2_lvl[cur] + 1
                         q.append(neighbor)
@@ -594,15 +619,11 @@ class DAG():
 
         while len(q) != 0:
             cur = q.popleft()
-            
-            # if len(self.findDirectSuccessors(cur)) == 0: #cur is a leaf if out_degree = 0
-            #     leaves.add(cur)
-            #print([node.get_name() for node in self.findDirectSuccessors(cur)])
+        
             if self.out_degrees[cur] == 0:
                 leaves.add(cur)
                 
-            
-            for neighbor in self.findDirectSuccessors(cur): #Continue path to a leaf
+            for neighbor in self.get_children(cur): #Continue path to a leaf
                 q.append(neighbor)
         
         return leaves    
@@ -621,7 +642,7 @@ class DAG():
         
         cluster_set = set()
         graph_leaves = self.get_leaves()
-        children = self.findDirectSuccessors(node)
+        children = self.get_children(node)
         
         #Each leaf_descendant set of a child is a cluster, so long as it is not trivial
         for child in children:
@@ -651,7 +672,7 @@ class DAG():
         
         L = list() # Empty list where we put the sorted elements
         try:
-            Q = {graph_copy.findRoot()[0]} # Set of all nodes with no incoming edges
+            Q = {graph_copy.root()[0]} # Set of all nodes with no incoming edges
         except GraphTopologyError:
             return False
         while len(Q) != 0:
@@ -684,12 +705,12 @@ class DAG():
     
     def subgenome_count(self, n : Node)->int:
 
-        if self.findRoot()[0] == n:
+        if self.root()[0] == n:
             return 1
         else:
-            parents = self.findDirectPredecessors(n)
+            parents = self.get_parents(n)
             if len(parents) > 0:
-                return sum([self.subgenome_count(parent) for parent in self.findDirectPredecessors(n)])
+                return sum([self.subgenome_count(parent) for parent in self.get_parents(n)])
             else:
                 return 0
     
@@ -702,7 +723,7 @@ class DAG():
         while len(q) != 0:
             cur = q.pop() #pop right for bfs
 
-            for neighbor in self.findDirectSuccessors(cur):
+            for neighbor in self.get_children(cur):
                 
                 edges.append([cur, neighbor])
                 
@@ -714,8 +735,8 @@ class DAG():
     def edges_to_subgenome_count2(self):
         
         
-        start_nodes = self.findRoot()
-        if len(self.findRoot()) != 1:
+        start_nodes = self.root()
+        if len(self.root()) != 1:
             raise Exception("Please specify a start node for this network, there is more than one root (or none)")
         start_node = start_nodes[0]
             
@@ -728,7 +749,7 @@ class DAG():
         while len(q) != 0:
             cur = q.pop() #pop right for bfs
 
-            for neighbor in self.findDirectSuccessors(cur):
+            for neighbor in self.get_children(cur):
                 
                 edges_2_sub[(cur, neighbor)] += 1
                 
@@ -743,8 +764,8 @@ class DAG():
         # print(f"FINDING VALID CONNECTIONS FOR {downstream_node.get_name()}")
         # print(f"STARTING BFS AT {start_node.get_name()}")
         if start_node is None:
-            start_nodes = self.findRoot()
-            if len(self.findRoot()) != 1:
+            start_nodes = self.root()
+            if len(self.root()) != 1:
                 raise Exception("Please specify a start node for this network, there is more than one root (or none)")
             start_node = start_nodes[0]
             
@@ -757,7 +778,7 @@ class DAG():
         while len(q) != 0:
             cur = q.pop() #pop right for bfs
 
-            for neighbor in self.findDirectSuccessors(cur):
+            for neighbor in self.get_children(cur):
                 
                 edges_2_sub[(cur, neighbor)] += 1
                 
@@ -792,6 +813,59 @@ class DAG():
         else:
             return filter1
 
+    def leaf_descendants_all(self):
+        desc_map : dict[Node, set[Node]] = {}
+        leaves = self.get_leaves()
+        
+        self.leaf_desc_help(self.root()[0], leaves, desc_map)
+        return desc_map
+        
+    
+    def leaf_desc_help(self, node : Node, leaves : list[Node], desc_map : dict[Node, set[Node]]):
+        
+        if node not in desc_map.keys():
+            if node in leaves:
+                desc_map[node] = {node}
+            else:
+                desc_map[node] = set()
+                for child in self.get_children(node):
+                    desc_map[node] = desc_map[node].union(self.leaf_desc_help(child, leaves, desc_map))
+                       
+        return desc_map[node]
 
+    def to_newick(self):
+        processed_retics = set()
+        return self.newick_help(self.root()[0], processed_retics) + ";"
+    
+    def newick_help(self, node : Node, processed_retics : set[Node]):
+        
+        if node in self.leaves:
+            return node.get_name()
+        else:
+            if self.in_degrees[node] == 2 and node in processed_retics:
+                if node.get_name()[0] != "#":
+                    return "#" + node.get_name()
+                return node.get_name()
+            else:
+                if self.in_degrees[node] == 2:
+                    processed_retics.add(node)
+                    if node.get_name()[0] != "#":
+                        node_name = "#" + node.get_name()
+                    else:
+                        node_name = node.get_name()
+                else:
+                    node_name = node.get_name()    
+                    
+                substr = "("
+                for child in self.get_children(node):
+                    substr += self.newick_help(child, processed_retics)
+                    substr += ","
+                substr = substr[0:-1]
+                substr += ")"
+                substr += node_name
+                
+                return substr
+            
+        
 
   

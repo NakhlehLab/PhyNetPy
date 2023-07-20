@@ -1,3 +1,11 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+
+"""
+
+
 from Bio.Nexus.Nexus import NexusError
 from Bio import AlignIO
 from nexus import NexusReader

@@ -1,10 +1,16 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+
+"""
+
 from abc import ABC, abstractmethod
-from collections import deque
 from queue import PriorityQueue
 
 from ModelGraph import *
 from Graph import DAG
-from NetworkParser import NetworkBuilder2 as nb
+from NetworkParser import NetworkParser as np
 from typing import Callable
 
 
@@ -234,7 +240,7 @@ def leaf_likelihood_func()->int:
 def factory_tester():
     
     likelihood : LikelihoodFunctionComponent = LikelihoodFunctionComponent(set([NetworkComponent]), sample_likelihood_func, sample_likelihood_func, leaf_likelihood_func)
-    network : NetworkComponent = NetworkComponent(set(), nb('/Users/mak17/Documents/PhyloGenPy/PhyloGenPy/src/PhyNetPy/Bayesian/mp_allop_start_net.nex').get_all_networks()[0])
+    network : NetworkComponent = NetworkComponent(set(), np('/Users/mak17/Documents/PhyloGenPy/PhyloGenPy/src/PhyNetPy/Bayesian/mp_allop_start_net.nex').get_all_networks()[0])
     
     my_model : Model = ModelFactory(likelihood, network).build()
     return my_model.likelihood()

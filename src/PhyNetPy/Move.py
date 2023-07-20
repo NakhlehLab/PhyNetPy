@@ -416,7 +416,7 @@ ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THI
 #         net : DAG = model.network
 #         print("-----BEFORE MOVE-----")
 #         net.pretty_print_edges()
-#         E_set = [item for item in net.edges] #.append((net.findRoot()[0], None)) # add (root, null) to edge set #TODO: ERROR
+#         E_set = [item for item in net.edges] #.append((net.root()[0], None)) # add (root, null) to edge set #TODO: ERROR
 #         # Select 2 perhaps non-distinct edges to connect with a reticulation edge-- we allow bubbles
 #         random_edges = [random.choice(E_set), random.choice(E_set)]
         
@@ -529,9 +529,9 @@ ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THI
         
         
 #         #In all 4 cases, c/z both have exactly one parent and one child after removal of the retic edge
-#         a : Node = net.findDirectSuccessors(c)[0] 
+#         a : Node = net.get_children(c)[0] 
 #         b : Node = [node for node in c.get_parent(return_all=True) if node != z][0]
-#         x : Node = net.findDirectSuccessors(z)[0] 
+#         x : Node = net.get_children(z)[0] 
 #         y : Node = z.get_parent()
         
 #         if a!=x or b!=y: #Not a bubble
@@ -608,7 +608,7 @@ ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THI
     
 #         c : Node = retic_edge[1]
 #         z : Node = retic_edge[0]
-#         x : Node = [node for node in net.findDirectSuccessors(z) if node != c][0]
+#         x : Node = [node for node in net.get_children(z) if node != c][0]
 #         y : Node = z.get_parent()
        
 #         #Remove edge destination
@@ -702,7 +702,7 @@ ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THI
 #         z : Node = retic_edge[0]
         
 #         #In all 4 cases, c/z both have exactly one parent and one child after removal of the retic edge
-#         a : Node = net.findDirectSuccessors(c)[0]
+#         a : Node = net.get_children(c)[0]
 #         b : Node = [node for node in c.get_parent(return_all=True) if node != z][0]
        
         
@@ -740,7 +740,7 @@ ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THI
 #             y : Node = self.undo_info[5]
         
 #             # y : Node = [node for node in c.get_parent(return_all=True) if node.get_name() != z.get_name()][0]
-#             # x : Node = net.findDirectSuccessors(c)[0]
+#             # x : Node = net.get_children(c)[0]
             
 #             #restore current edge
 #             net.removeNode(c, True)
@@ -799,9 +799,9 @@ ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THI
         
 #         c : Node = retic_edge[1]
 #         z : Node = retic_edge[0]
-#         a : Node = net.findDirectSuccessors(c)[0] 
+#         a : Node = net.get_children(c)[0] 
 #         b : Node = [node for node in c.get_parent(return_all=True) if node != z][0]
-#         x : Node = [node for node in net.findDirectSuccessors(z) if node != c][0]
+#         x : Node = [node for node in net.get_children(z) if node != c][0]
 #         y : Node = z.get_parent()
 
        
@@ -815,7 +815,7 @@ ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THI
 #             connect_nodes(a, b, net)
 #             connect_nodes(x, y, net)
             
-#             E_set = [item for item in net.edges if item != [z, c] and item != [b, c]] #.append((net.findRoot()[0], None)) # add (root, null) to edge set
+#             E_set = [item for item in net.edges if item != [z, c] and item != [b, c]] #.append((net.root()[0], None)) # add (root, null) to edge set
 #             # Select 2 perhaps non-distinct edges to connect with a reticulation edge-- we allow bubbles
 #             random_edges = [random.choice(E_set), random.choice(E_set)]
             
@@ -1002,30 +1002,30 @@ class SwitchParentage(Move):
         net : DAG = model.network
         self.undo_info = copy.deepcopy(net)
         
-        print("-----BEFORE MOVE-----")
-        net.pretty_print_edges()
-        net.print_graph()
-        net.print_adjacency()
-        print("-----BEGINNING MOVE-----")
+        # print("-----BEFORE MOVE-----")
+        # net.pretty_print_edges()
+        # net.print_graph()
+        # net.print_adjacency()
+        # print("-----BEGINNING MOVE-----")
         #print(net.newick())
 
         
         #STEP 1: Select random non-root node
-        #node_2_change : Node = random.choice([node for node in net.nodes if node != net.findRoot()[0]])
-        node_2_change : Node =self.random_object([node for node in net.nodes if node != net.findRoot()[0]], model.rng)
+        #node_2_change : Node = random.choice([node for node in net.nodes if node != net.root()[0]])
+        node_2_change : Node =self.random_object([node for node in net.nodes if node != net.root()[0]], model.rng)
     
         # STEP 1b: Disallow pointless changes (ie changing parentage)
-        node_pars = net.findDirectPredecessors(node_2_change)
+        node_pars = net.get_parents(node_2_change)
         
         if len(node_pars) == 1:
-            root_node = net.findRoot()[0]
+            root_node = net.root()[0]
             if node_pars[0] == root_node:
-                root_kids = net.findDirectSuccessors(root_node)
+                root_kids = net.get_children(root_node)
                 other_kid = [node for node in root_kids if node != node_2_change][0]
                 if net.out_degree(other_kid) == 0:
                     return model
                 
-        print(f"CHANGING PARENTS OF :{node_2_change.get_name()}")
+        # print(f"CHANGING PARENTS OF :{node_2_change.get_name()}")
         
         #STEP 2: Get target subgenome count
         target : int = net.subgenome_count(node_2_change)
@@ -1037,13 +1037,13 @@ class SwitchParentage(Move):
         
         
         
-        print("CHECKING DELETE ROUTINE...")
+        # print("CHECKING DELETE ROUTINE...")
         
-        net.print_adjacency()
+        # net.print_adjacency()
         
         
         
-        print("DONE CHECKING THE DELETE ROUTINE.")
+        # print("DONE CHECKING THE DELETE ROUTINE.")
         
         is_first_iter = True
         
@@ -1075,7 +1075,7 @@ class SwitchParentage(Move):
                 
             # 4.1 : Select an edge with a key of <= cur_ct and that wont create a cycle (ensured by edges_2_subgct)
             bfs_starts = [node for node in net.nodes if net.in_degree(node) == 0 and net.out_degree(node) != 0]
-            print(f"bfs_starts: {[bfs_start.get_name() for bfs_start in bfs_starts]}")
+            # print(f"bfs_starts: {[bfs_start.get_name() for bfs_start in bfs_starts]}")
             if len(bfs_starts)>1:
                 if node_2_change in bfs_starts:
                     bfs_starts.remove(node_2_change)
@@ -1112,8 +1112,8 @@ class SwitchParentage(Move):
             # print("NET AFTER ITERATION")
             # net.print_adjacency()
             # print("ROOTS:")
-            # print([node.get_name() for node in net.findRoot()])
-            if len(net.findRoot()) > 1:
+            # print([node.get_name() for node in net.root()])
+            if len(net.root()) > 1:
                 raise Exception("OOPS, more than one root")
             cur_ct = net.subgenome_count(node_2_change)
         
@@ -1125,12 +1125,12 @@ class SwitchParentage(Move):
         net.prune_excess_nodes()
         
     
-        print("-----AFTER MOVE-----")
-        net.pretty_print_edges()
-        net.print_graph()
-        net.print_adjacency()
+        # print("-----AFTER MOVE-----")
+        # net.pretty_print_edges()
+        # net.print_graph()
+        # net.print_adjacency()
         model.update_network()
-        print("----DONE WITH MOVE----")
+        # print("----DONE WITH MOVE----")
         self.same_move_info = copy.deepcopy(net)
         
         return model
@@ -1160,14 +1160,14 @@ class SwitchParentage(Move):
     # def delete_edge(self, net : DAG, edge : list[Node]) -> Node:
     #     print(f"Deleting edge: <{[edge[0].get_name(), edge[1].get_name()]}")
         
-    #     if len(net.findDirectPredecessors(edge[0])) < 2:
-    #         #print(f"Children of edge[0] : {[node.get_name() for node in net.findDirectSuccessors(edge[0])]}")
-    #         a : Node = [node for node in net.findDirectSuccessors(edge[0]) if node != edge[1]][0]
+    #     if len(net.get_parents(edge[0])) < 2:
+    #         #print(f"Children of edge[0] : {[node.get_name() for node in net.get_children(edge[0])]}")
+    #         a : Node = [node for node in net.get_children(edge[0]) if node != edge[1]][0]
     #         if net.in_degree(edge[0]) == 0:
     #             net.removeEdge([edge[0], a])
     #             # net.removeNode(edge[0])
     #         else:
-    #             b : Node = net.findDirectPredecessors(edge[0])[0] #tree node will only have 1
+    #             b : Node = net.get_parents(edge[0])[0] #tree node will only have 1
                 
     #             redundant_tree_edge1 = [b, edge[0]]
     #             redundant_tree_edge2 = [edge[0], a]
@@ -1179,8 +1179,8 @@ class SwitchParentage(Move):
                 
     #             # net.removeNode(edge[0])
     #     else:
-    #         print([node.get_name() for node in net.findDirectPredecessors(edge[0])])
-    #         for parent in net.findDirectPredecessors(edge[0]):
+    #         print([node.get_name() for node in net.get_parents(edge[0])])
+    #         for parent in net.get_parents(edge[0]):
     #             print(f"Processing edge: <{[edge[0].get_name(), edge[1].get_name()]}")
     #             self.delete_edge(net , [parent, edge[0]])
                 
@@ -1198,25 +1198,22 @@ class SwitchParentage(Move):
         while len(q) != 0:
             # pop at end for bfs
             cur = q.pop()
-            print(f"Processing node: {cur.get_name()}")
-            #print(f"NEIGHBORS: {[node.get_name() for node in net.findDirectPredecessors(cur)]}")
+            # print(f"Processing node: {cur.get_name()}")
+            #print(f"NEIGHBORS: {[node.get_name() for node in net.get_parents(cur)]}")
             
-            neighbors = copy.copy(net.findDirectPredecessors(cur))
+            neighbors = copy.copy(net.get_parents(cur))
             for neighbor in neighbors: #Backwards up toward root
-                print(f"Processing Neighbor: {neighbor.get_name()}")
+                # print(f"Processing Neighbor: {neighbor.get_name()}")
                 net.removeEdge([neighbor, cur])
                 
                 
                 if net.in_degrees[neighbor] == 2:
                     q.append(neighbor)
                 else:
-                    a : Node = [node for node in net.findDirectSuccessors(neighbor) if node != cur][0]
-                    # if net.in_degree(neighbor) == 0:
-                    #     net.removeEdge([neighbor, a])
-                    #     # net.removeNode(edge[0])
-                    # else:
+                    a : Node = [node for node in net.get_children(neighbor) if node != cur][0]
+                    
                     if net.in_degree(neighbor) != 0:
-                        b : Node = net.findDirectPredecessors(neighbor)[0] #tree node will only have 1
+                        b : Node = net.get_parents(neighbor)[0] #tree node will only have 1
                         
                         redundant_tree_edge1 = [b, neighbor]
                         redundant_tree_edge2 = [neighbor, a]
@@ -1248,7 +1245,7 @@ class NNI(Move):
         for n in [node for node in net.nodes if net.in_degree(node) != 0 and net.out_degree(node) != 0 and node.is_reticulation() == False]:
             
             par = n.get_parent()
-            children = net.findDirectSuccessors(par)
+            children = net.get_children(par)
             if len(children) <= 1:
                 continue #must have more than one kid to work
             
@@ -1257,7 +1254,7 @@ class NNI(Move):
             else:
                 s = children[1]
 
-            chosen_child = net.findDirectSuccessors(n)[random.randint(0, 1)] #assumed >1 kid since n is a tree node
+            chosen_child = net.get_children(n)[random.randint(0, 1)] #assumed >1 kid since n is a tree node
             valid_focals[n] = [s, par, chosen_child]
 
         if len(list(valid_focals.keys())) != 0:
@@ -1286,7 +1283,7 @@ class NNI(Move):
         valid_focals2 = {}
         for n in [node for node in net.nodes if net.in_degree(node) !=0 and net.out_degree(node) != 0 and node.is_reticulation() == False]:
             par = n.get_parent()
-            children = net.findDirectSuccessors(par)
+            children = net.get_children(par)
             if len(children) <= 1:
                 continue
             
@@ -1295,7 +1292,7 @@ class NNI(Move):
             else:
                 s = children[1]
 
-            chosen_child = net.findDirectSuccessors(n)[random.randint(0, 1)]
+            chosen_child = net.get_children(n)[random.randint(0, 1)]
             valid_focals2[n] = [s, par, chosen_child]
 
         self.legal_backwards_moves = len(list(valid_focals2.keys()))

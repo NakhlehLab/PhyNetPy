@@ -1,7 +1,11 @@
-import os
-from Graph import DAG
-from Node import Node
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
 
+"""
+
+import os
 from pathlib import Path
 
 
@@ -108,7 +112,7 @@ class NexusTemplate:
                 fp.write(end)
         
         
-        
+#NewickParser("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_pruned_v2.newick").parse_networks("J_pruned_v2.nex")        
 
-NewickParser('/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_trees_n1.newick').parse_networks("J_nex_n1.nex")   
+ 
         

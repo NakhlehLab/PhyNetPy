@@ -1,3 +1,10 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+
+"""
+
 import math
 import random
 from abc import ABC, abstractmethod
@@ -118,7 +125,7 @@ class Model:
         #384
         rand_seed = random.randint(0, 1000) #97 #508 #650 254 #
         self.seed = rand_seed
-        print(f"MODEL SEED: {rand_seed}")
+        # print(f"MODEL SEED: {rand_seed}")
         self.rng = np.random.default_rng(rand_seed)
         
         ##-------------------------------------------##

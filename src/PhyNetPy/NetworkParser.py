@@ -1,14 +1,19 @@
-from operator import index
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+
+"""
+
 import traceback
 from nexus import NexusReader
 from Bio import Phylo
 from io import StringIO
 from Graph import DAG
 from Node import Node
-import copy
 from Node import NodeError
 
-class NetworkBuilder2Error(Exception):
+class NetworkParserError(Exception):
     def __init__(self, message = "Something went wrong with building the network") -> None:
         self.message = message
         super().__init__(self.message)
@@ -75,14 +80,14 @@ def merge_attributes(attr1 : dict, attr2 : dict) -> dict:
         
     
 
-class NetworkBuilder2:
+class NetworkParser:
 
     def __init__(self, filename):
         try:
             self.reader = NexusReader.from_file(filename)
         except Exception as err:
             traceback.print_exc()
-            raise NetworkBuilder2Error()
+            raise NetworkParserError()
         
         self.networks = []
         self.internalCount = 0
@@ -99,7 +104,7 @@ class NetworkBuilder2:
 
     
         if self.reader.trees is None:
-            raise NetworkBuilder2Error("There are no trees listed in the file")
+            raise NetworkParserError("There are no trees listed in the file")
 
         for t in self.reader.trees:
             # grab the right hand side of the tree definition for the tree, and the left for the name
@@ -261,6 +266,3 @@ class NetworkBuilder2:
     def name_of_network(self, network):
         return self.name_2_net[network]
 
-# nb = NetworkBuilder2('src/PhyNetPy/test/files/paper_networks.nex')
-# net:DAG = nb.getNetwork(0)
-# net.printGraph()

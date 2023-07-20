@@ -1,8 +1,14 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
 
+"""
 
 from typing import Callable
 from Graph import DAG
-from NetworkParser import NetworkBuilder2 as nb
+import NetworkParser
+
 
 def phynetpy_naming(taxa_name : str) -> str:
     if taxa_name[0:2].isnumeric():
@@ -23,10 +29,22 @@ class GeneTreeError(Exception):
 
 class GeneTrees:
     
-    def __init__(self, naming_rule : Callable = phynetpy_naming) -> None:
-        self.trees = set()
-        self.taxa_names = set()
-        self.naming_rule = naming_rule
+    def __init__(self, gene_tree_list : list[DAG] = None, naming_rule : Callable = phynetpy_naming) -> None:
+        """
+        Wrapper class for a set of DAGs that represent gene trees
+
+        Args:
+            gene_tree_list (list[DAG], optional): A list of DAGs, should be trees (NOT networks). Defaults to None.
+            naming_rule (Callable, optional): a function f : str -> str. Defaults to phynetpy_naming.
+        """
+        
+        self.trees : set[DAG] = set()
+        self.taxa_names : set[str]= set()
+        self.naming_rule : Callable = naming_rule
+        
+        if gene_tree_list is not None:
+            for tree in gene_tree_list:
+                self.add(tree)
         
     def add(self, tree : DAG):
         self.trees.add(tree)
@@ -34,6 +52,12 @@ class GeneTrees:
             self.taxa_names.add(leaf.get_name())
         
     def mp_allop_map(self) -> dict[str, list[str]]:
+        """
+        Create a subgenome mapping from the stored set of gene trees
+
+        Returns:
+            dict[str, list[str]]: subgenome mapping
+        """
         subgenome_map = {}
         if self.naming_rule is not None and len(self.taxa_names) != 0:
             for taxa_name in self.taxa_names:
@@ -44,14 +68,4 @@ class GeneTrees:
                     subgenome_map[key] = [taxa_name]
         return subgenome_map
     
-    
-            
-            
-# nets = nb("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_nex_n1.nex").get_all_networks()
-# gt = GeneTrees()
-# for gene_tree in nets:
-#     gt.add(gene_tree)
-
-# print(gt.mp_allop_map())     
-
-
+#print(GeneTrees(NetworkParser.NetworkParser("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_pruned.nex").get_all_networks()).mp_allop_map())

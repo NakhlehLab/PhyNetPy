@@ -1,5 +1,10 @@
-import copy
-import math
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+
+"""
+
 
 
     
@@ -48,6 +53,7 @@ class Node:
         self.label = name
         self.seq = None
         self.t = None
+        self.is_dirty = False
 
     def length(self)->dict:
         """
@@ -83,6 +89,7 @@ class Node:
         Sets the name of the node to new_name.
         """
         self.label = new_name
+        self.is_dirty = True
 
     def add_parent(self, par):
         """
@@ -93,12 +100,6 @@ class Node:
         if type(par) is not Node:
             raise NodeError("Attempted to add a non node entity as a parent")
 
-        # if self.parent is not None:
-        #     new_parent = copy.deepcopy(self.parent)
-        #     new_parent.append(par)
-        #     self.parent = new_parent
-        # else:
-        #     self.parent = [par]
         if not par in self.parent:
             self.parent.append(par)
     
@@ -205,18 +206,7 @@ class Node:
     def get_seq(self)->str:
         return self.seq
     
-    
-    def make_copy(self, parent, primed:int):
-        
-        copied = Node()
-        copied.set_parent([parent])
-        copied.is_reticulation = False
-        copied.set_name = self.get_name() + str(primed)
-        copied.attributes = copy.deepcopy(self.attributes)
-        copied.seq = self.seq
-        copied.branch_lengths = copy.deepcopy(self.branch_lengths)
-        
-        return copied
+
         
 
 
