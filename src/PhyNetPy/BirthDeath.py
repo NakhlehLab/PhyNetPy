@@ -1,8 +1,8 @@
 """ 
 Author : Mark Kessler
-Last Stable Edit : 7/16/23
+Last Stable Edit : 11/9/23
 First Included in Version : 0.1.0
-
+Approved to Release Date : N/A
 """
 
 
@@ -16,36 +16,35 @@ import math
 
 class BirthDeathSimError(Exception):
     """
-        This exception is thrown whenever something irrecoverably wrong happens
-        during the process of generating trees
+    This exception is thrown whenever something irrecoverably wrong happens
+    during the process of generating a network
     """
 
-    def __init__(self, message="Something went wrong simulating a tree"):
+    def __init__(self, message = "Something went wrong simulating a network"):
         self.message = message
         super().__init__(self.message)
 
 
-def random_species_selection(nodes:list, rng) -> Node:
+def random_species_selection(nodes : list[Node], rng) -> Node:
     """
     Returns a random live Node from an array/set. The Node returned
     will be operated on during a birth or death event
 
-    nodeList -- an array/set of Node objects
+    nodes -- an array of Node objects
     """
     liveNodes = live_species(nodes)
     
-    #randomInt = random.randint(0, len(liveNodes) - 1)
-
+    #use the rng object to select an index
     randomInt = rng.integers(0, len(liveNodes))
     
     return liveNodes[randomInt]
 
 
-def live_species(nodes) -> list:
+def live_species(nodes : list[Node]) -> list:
     """
     Returns a subset of Nodes that represent live lineages
 
-    nodeList -- an array/set of Node objects
+    nodes (list[Node]) -- an array of Node objects
     """
     return [node for node in nodes if node.attribute_value_if_exists("live") is True]
 
@@ -53,10 +52,10 @@ def live_species(nodes) -> list:
 class Yule:
     """
     The Yule class represents a pure birth model for simulating
-    trees of a fixed (n) amount of extant taxa.
+    networks of a fixed (n) amount of extant taxa.
 
     gamma -- the birth rate. A larger birth rate will result in shorter 
-            branch lengths and a younger tree.
+            branch lengths and a younger network. value should be a non negative real number.
     
     n -- number of extant taxa at the end of simulation
 
@@ -65,7 +64,7 @@ class Yule:
     rng -- numpy random number generator for drawing speciation times
     """
 
-    def __init__(self, gamma:float, n:int = None, time:float = None, rng = None) -> None:
+    def __init__(self, gamma : float, n : int = None, time : float = None, rng = None) -> None:
 
         # birth rate
         self.gamma = gamma
@@ -76,31 +75,30 @@ class Yule:
             self.condition = "N"
         else:
             if time is None:
-                raise BirthDeathSimError("If you do not provide a value for the number of taxa, please provide a time constraint for tree simulation")
+                raise BirthDeathSimError("If you do not provide a value for the number of taxa, please provide a time constraint for network simulation")
             # goal time
             self.time = time
 
         if self.N < 2:
-            # choosing <3 because a tree with 2 taxa is always the same (branch lengths aside)
-            raise BirthDeathSimError("Please generate a tree with at least 2 taxa")
+            raise BirthDeathSimError("Please generate a network with at least 2 taxa")
 
         # current number of live lineages, always starts at 2
         self.lin : int = 2
 
         # helper var for labeling internal nodes
-        self.internalCount : int = 1
+        self.internal_count : int = 1
 
         # amount of time elapsed during the simulation of a tree
-        self.elapsedTime : float = 0
+        self.elapsed_time : float = 0
 
         # a list of trees generated under this model
-        self.generatedTrees : list= []
+        self.generated_trees : list[DAG] = []
         
         self.rng = rng
 
     def set_time(self, value : float)->None:
         """
-        Set simulated tree age
+        Set simulated network age
 
         Args:
             value (float): The age of any future simulated trees
@@ -113,10 +111,10 @@ class Yule:
         Set simulated tree taxa count
 
         Args:
-            value (int): an integer >= 3
+            value (int): an integer >= 2
 
         Raises:
-            BirthDeathSimError: if value < 3
+            BirthDeathSimError: if value < 2
         """
         self.condition = "N"
         self.N = value
@@ -133,13 +131,13 @@ class Yule:
 
         Since each lineage is equally likely for each event 
         under the Yule Model, the waiting time is given by the parameter 
-        numlineages * birthRate or .lin*.gamma
+        numlineages * birthRate or .lin * .gamma
         """
         scale = 1 / (self.lin * self.gamma)
         random_float_01 = self.rng.random()
-        return scipy.stats.expon.ppf(random_float_01, scale = scale) #np.random.exponential(scale)
+        return scipy.stats.expon.ppf(random_float_01, scale = scale) 
 
-    def event(self, nodes:list, edges:list)-> list:
+    def event(self, nodes : list[Node], edges : list[tuple[Node]])-> list:
         """
         A speciation event occurs. Select a living lineage.
 
@@ -155,47 +153,47 @@ class Yule:
         """
 
         # select random live lineage to branch from
-        specNode = random_species_selection(nodes, self.rng)
+        spec_node = random_species_selection(nodes, self.rng)
 
         # keep track of the old parent, we need to disconnect edges
-        oldParent = specNode.get_parent()
+        old_parent = spec_node.get_parent()
 
         # calculate the branch length to the internal node
-        nextTime = self.draw_waiting_time()
-        branchLen = 0
+        next_time = self.draw_waiting_time()
+        branch_len = 0
         if self.condition == "N":
-            branchLen = self.elapsedTime + nextTime - specNode.get_parent().attribute_value_if_exists("t")
-            self.elapsedTime += nextTime
-        elif self.condition == "T" and self.elapsedTime + nextTime <= self.time:
-            branchLen = self.elapsedTime + nextTime - specNode.get_parent().attribute_value_if_exists("t")
-            self.elapsedTime += nextTime
-        elif self.condition == "T" and self.elapsedTime + nextTime > self.time:
+            branch_len = self.elapsed_time + next_time - spec_node.get_parent().attribute_value_if_exists("t")
+            self.elapsed_time += next_time
+        elif self.condition == "T" and self.elapsed_time + next_time <= self.time:
+            branch_len = self.elapsed_time + next_time - spec_node.get_parent().attribute_value_if_exists("t")
+            self.elapsed_time += next_time
+        elif self.condition == "T" and self.elapsed_time + next_time > self.time:
             return -1
 
         # create the new internal node
-        newInternal = Node({specNode.get_parent() : [branchLen]}, parent_nodes=[specNode.get_parent()], attr={"t": self.elapsedTime, "live": False},
-                           name="internal" + str(self.internalCount))
-        self.internalCount += 1
+        new_internal = Node({spec_node.get_parent() : [branch_len]}, parent_nodes=[spec_node.get_parent()], attr={"t": self.elapsed_time, "live": False},
+                           name="internal" + str(self.internal_count))
+        self.internal_count += 1
 
         # set the extent species parent to be its direct ancestor
-        specNode.set_parent([newInternal])
+        spec_node.set_parent([new_internal])
 
         # there's a new live lineage
         self.lin += 1
-        newLabel = "spec" + str(self.lin)
+        new_label = "spec" + str(self.lin)
 
         # create the node for the new extent species
-        newSpecNode = Node(parent_nodes=[newInternal], attr={"live": True}, name=newLabel)
+        new_spec_node = Node(parent_nodes=[new_internal], attr={"live": True}, name=new_label)
 
         # add the newly created nodes
-        nodes.append(newSpecNode)
-        nodes.append(newInternal)
+        nodes.append(new_spec_node)
+        nodes.append(new_internal)
 
         # add the newly created branches, and remove the old connection (oldParent)->(specNode)
-        edges.append([newInternal, newSpecNode])
-        edges.append([newInternal, specNode])
-        edges.append([oldParent, newInternal])
-        edges.remove([oldParent, specNode])
+        edges.append([new_internal, new_spec_node])
+        edges.append([new_internal, spec_node])
+        edges.append([old_parent, new_internal])
+        edges.remove([old_parent, spec_node])
 
         return nodes, edges
 
@@ -228,9 +226,6 @@ class Yule:
         edges = [[node1, node2], [node1, node3]]
         
         if self.N == 2:
-            # tree = DAG()
-            # tree.addEdges(edges, as_list=True)
-            # tree.addNodes(nodes)
             return DAG(nodes=nodes, edges=edges)
             
 
@@ -241,27 +236,24 @@ class Yule:
 
             # populate remaining branches with branch lengths according to
             # Eq 5.1? Just taking sigma_n for now
-            nextTime = self.draw_waiting_time()
+            next_time = self.draw_waiting_time()
 
             for node in live_species(nodes):
-                node.add_attribute("t", self.elapsedTime + nextTime)
+                node.add_attribute("t", self.elapsed_time + next_time)
                 if len(node.get_parent(True)) != 0:
-                    node.set_length(self.elapsedTime + nextTime - node.get_parent().attribute_value_if_exists("t"), node.get_parent())
-                # else:
-                #     node.set_length(0, )
+                    node.set_length(self.elapsed_time + next_time - node.get_parent().attribute_value_if_exists("t"), node.get_parent())
 
             # return the simulated tree
             tree = DAG(nodes = nodes, edges = edges)
-            # tree.addEdges(edges, as_list=True)
-            # tree.addNodes(nodes)
+
 
             # reset the elapsed time to 0, and the number of live branches to 2
             # for correctness generating future trees
-            self.elapsedTime = 0
+            self.elapsed_time = 0
             self.lin = 2
 
         elif self.condition == "T":
-            while self.elapsedTime < self.time:
+            while self.elapsed_time < self.time:
                 status = self.event(nodes, edges, "T")
                 if status == -1:
                     break
@@ -274,12 +266,10 @@ class Yule:
                     node.set_length(0)
 
             tree = DAG(nodes = nodes, edges = edges)
-            # tree.addEdges(edges, as_list=True)
-            # tree.addNodes(nodes)
 
             # reset the elapsed time to 0, and the number of live branches to 2
             # for correctness generating future trees
-            self.elapsedTime = 0
+            self.elapsed_time = 0
             self.lin = 2
         else:
             raise BirthDeathSimError("Condition parameter was not time ('T') or number of taxa ('N')")
@@ -290,7 +280,7 @@ class Yule:
         """
         empty out the generated tree array
         """
-        self.generatedTrees = []
+        self.generated_trees = []
 
     def generate_trees(self, num_trees):
         """
@@ -301,17 +291,17 @@ class Yule:
         Outputs: the array of generated trees, includes all that have been previously generated
         """
         for dummy in range(num_trees):
-            self.generatedTrees.append(self.generate_tree())
+            self.generated_trees.append(self.generate_tree())
 
-        return self.generatedTrees
+        return self.generated_trees
 
 
 class CBDP:
     """
-    Constant Rate Birth Death Process tree simulation
+    Constant Rate Birth Death Process Network simulation
     """
 
-    def __init__(self, gamma:float, mu:float, n:int, sample:float=1) -> None:
+    def __init__(self, gamma : float, mu : float, n : int, sample : float = 1) -> None:
         """
         Create a new Constant Rate Birth Death Simulator.
         
@@ -341,7 +331,7 @@ class CBDP:
         self.pDeath = self.mu / (self.gamma + self.mu)
         self.N = n
 
-        self.generatedTrees = []
+        self.generated_trees = []
 
     def qinv(self, r:float) -> float:
         """
@@ -416,10 +406,6 @@ class CBDP:
 
         # add edges and nodes to a tree
         tree = DAG(nodes = nodes, edges = edges)
-        
-        # tree.addEdges(edges, as_list=True)
-        # tree.addNodes(nodes)
-        
         tree.generate_branch_lengths()
 
         return tree
@@ -445,51 +431,50 @@ class CBDP:
         """
 
         # find right candidate
-        copyIndex = index + 1
-        rightCandidate = None
+        copy_index = index + 1
+        right_candidate = None
 
-        while copyIndex < len(nodes):
+        while copy_index < len(nodes):
             # search in the list to the right (ie increase the index)
-            if nodes[copyIndex].attribute_value_if_exists("t") > nodes[index].attribute_value_if_exists("t"):
-                rightCandidate = nodes[copyIndex]
+            if nodes[copy_index].attribute_value_if_exists("t") > nodes[index].attribute_value_if_exists("t"):
+                right_candidate = nodes[copy_index]
                 break
-            copyIndex += 1
+            copy_index += 1
 
         # find left candidate
-        copyIndex = index - 1
-        leftCandidate = None
-        while copyIndex >= 0:
+        copy_index = index - 1
+        left_candidate = None
+        while copy_index >= 0:
             # search in the left part of the list
-            if nodes[copyIndex].attribute_value_if_exists("t") > nodes[index].attribute_value_if_exists("t"):
-                leftCandidate = nodes[copyIndex]
+            if nodes[copy_index].attribute_value_if_exists("t") > nodes[index].attribute_value_if_exists("t"):
+                left_candidate = nodes[copy_index]
                 break
-            copyIndex -= 1
+            copy_index -= 1
 
         # take the minimum time (leaves being at time 0, root being at max time)
-        if leftCandidate is None and rightCandidate is None:
+        if left_candidate is None and right_candidate is None:
             # We're running this on the root
             return
-        elif leftCandidate is None:
-            selection = rightCandidate
-        elif rightCandidate is None:
-            selection = leftCandidate
+        elif left_candidate is None:
+            selection = right_candidate
+        elif right_candidate is None:
+            selection = left_candidate
         else:
-            comp = rightCandidate.attribute_value_if_exists("t") - leftCandidate.attribute_value_if_exists("t")
+            comp = right_candidate.attribute_value_if_exists("t") - left_candidate.attribute_value_if_exists("t")
             if comp >= 0:
-                selection = leftCandidate
+                selection = left_candidate
             else:
-                selection = rightCandidate
+                selection = right_candidate
 
         # create new edge
         nodeT = nodes[index].attribute_value_if_exists("t")
         futureT = selection.attribute_value_if_exists("t")
-        newEdge = [selection, nodes[index]]
+        new_edge = [selection, nodes[index]]
 
         # set the branch length of the current node
         nodes[index].set_length(futureT - nodeT, selection)
-        #nodes[index].set_parent([selection])
 
-        return newEdge
+        return new_edge
 
     def sample_trees(self, m : int) -> list:
         """
@@ -499,8 +484,8 @@ class CBDP:
                     uncleared runs.
         """
         for dummy in range(m):
-            self.generatedTrees.append(self.generate_tree())
+            self.generated_trees.append(self.generate_tree())
 
-        return self.generatedTrees
+        return self.generated_trees
 
    

@@ -2,7 +2,7 @@
 Author : Mark Kessler
 Last Stable Edit : 7/16/23
 First Included in Version : 0.1.0
-
+Approved to Release Date : N/A
 """
 
 import os
@@ -112,7 +112,7 @@ class NexusTemplate:
                 fp.write(end)
         
         
-#NewickParser("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_pruned_v2.newick").parse_networks("J_pruned_v2.nex")        
+NewickParser("/Users/mak17/Documents/PhyNetPy/src/J_pruned_v3.newick").parse_networks("J_pruned_v3.nex")        
 
  
         

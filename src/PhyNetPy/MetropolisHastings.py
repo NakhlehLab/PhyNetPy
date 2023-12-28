@@ -2,7 +2,7 @@
 Author : Mark Kessler
 Last Stable Edit : 7/16/23
 First Included in Version : 0.1.0
-
+Approved to Release Date : N/A
 """
 
 from State import State
@@ -109,8 +109,8 @@ class HillClimbing:
                 
                 delta : float = cur_state_likelihood - proposed_state_likelihood
                 accepted : bool = True 
-                # print(f"Current State Likelihood: {cur_state_likelihood}")
-                # print(f"Proposed State Likelihood: {proposed_state_likelihood}")
+                
+                    
                 if delta <= 0:
                     self.current_state.commit(next_move)  
                 else:
@@ -138,7 +138,10 @@ class HillClimbing:
                 
                 self.current_state.write_line_to_summary(
                     "ITER #" + str(iter_no) + " LIKELIHOOD = " + str(self.current_state.likelihood()))
+            else:
+                print("Invalid Network")
             iter_no += 1
+            
         
         self.nets_2_scores = valid_networks_2_likelihoods
         

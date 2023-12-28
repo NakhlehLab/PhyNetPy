@@ -2,12 +2,12 @@
 Author : Mark Kessler
 Last Stable Edit : 7/16/23
 First Included in Version : 0.1.0
-
+Approved to Release Date : N/A
 """
 
 from typing import Callable
 from Graph import DAG
-import NetworkParser
+
 
 
 def phynetpy_naming(taxa_name : str) -> str:
@@ -28,6 +28,7 @@ class GeneTreeError(Exception):
         self.message = message
 
 class GeneTrees:
+    #TODO: Alter to use the GeneTree wrapper class
     
     def __init__(self, gene_tree_list : list[DAG] = None, naming_rule : Callable = phynetpy_naming) -> None:
         """
@@ -47,11 +48,20 @@ class GeneTrees:
                 self.add(tree)
         
     def add(self, tree : DAG):
+        """
+        Add a gene tree to the collection. Any new gene labels that are apart of this tree will 
+        also be added to the collection of all gene tree leaf labels
+
+        Args:
+            tree (DAG): A DAG that is a tree, must not be a network.
+        """
+        
         self.trees.add(tree)
+        
         for leaf in tree.get_leaves():
             self.taxa_names.add(leaf.get_name())
         
-    def mp_allop_map(self) -> dict[str, list[str]]:
+    def mp_sugar_map(self) -> dict[str, list[str]]:
         """
         Create a subgenome mapping from the stored set of gene trees
 
@@ -68,4 +78,18 @@ class GeneTrees:
                     subgenome_map[key] = [taxa_name]
         return subgenome_map
     
-#print(GeneTrees(NetworkParser.NetworkParser("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_pruned.nex").get_all_networks()).mp_allop_map())
+
+
+
+class GeneTree(DAG):
+    """
+    Wrapper class for a DAG that verifies tree status and contains operators that are specifically designed for gene trees.
+    """
+    
+    def __init__(self, edges=None, nodes=None, weights=None) -> None:
+        super().__init__(edges, nodes, weights)
+        #TODO: verify tree status somehow
+    
+    def map_to_species_network(self):
+        pass
+    

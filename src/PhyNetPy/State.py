@@ -1,3 +1,10 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
+
 import copy
 
 from BirthDeath import CBDP
@@ -5,7 +12,7 @@ from ModelGraph import Model
 from Matrix import Matrix
 from GTR import *
 from Move import Move
-from Graph import DAG
+
 
 
 class State:
@@ -84,10 +91,11 @@ class State:
 
     def validate_proposed_network(self, prev_move : Move) -> bool:
         
-        if not self.proposed_model.network.is_acyclic():
-            self.revert(prev_move)
-            return False
         return True
+        # if not self.proposed_model.network.is_acyclic():
+        #     self.revert(prev_move)
+        #     return False
+        # return True
 
 
    

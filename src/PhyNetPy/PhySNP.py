@@ -2,11 +2,12 @@
 Author : Mark Kessler
 Last Stable Edit : 7/16/23
 First Included in Version : 0.1.0
-
+Approved to Release Date : N/A
 """
 
 from math import sqrt, comb, pow
 import numpy as np
+import scipy
 from scipy.linalg import expm
 from MSA import MSA
 import clr
@@ -16,15 +17,22 @@ from System.Collections.Generic import *
 from System.Collections.Generic import List
 from System import String
 
+from BirthDeath import CBDP
+from NetworkParser import NetworkParser
+from Alphabet import Alphabet
+from Matrix import Matrix
+from ModelGraph import Model
+from ModelFactory import *
+from Graph import DAG
 global cs
 
-#cs = False
-cs = True
+cs = False
+#cs = True
 
 ### SETUP ###
 
 #TODO : fix absolute path
-clr.AddReference('/Users/mak17/Documents/PhyloGenPy/PhyloGenPy/src/PhyNetPy/Bayesian/Computations/PhyNetPy_DLLS.dll')
+clr.AddReference('/Users/mak17/Documents/mark-phynetpy/phynetpy_dev/src/DLLS/PhyNetPy_DLLS.dll')
 
 from PhyNetPy_DLLS import SNPEvals
 
@@ -83,7 +91,7 @@ def map_nr_to_index(n:int, r:int) -> int:
     starts = int(.5 * (n - 1) * (n + 2))
     return starts + r
  
-def to_array(Fb_map :dict, vector_len:int, site_count:int) -> np.ndarray:
+def to_array(Fb_map : dict, vector_len : int, site_count : int) -> np.ndarray:
     """
     Takes a vpi/partial likelihood mapping, and translates it into a matrix
     such that the columns denote the site, and the row indeces correspond to (n,r) pairs.
@@ -815,11 +823,95 @@ class PartialLikelihoods:
         return None
             
 
-#####################
-### Method Caller ###
-#####################
+######################
+### Model Building ###
+######################
             
+# def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dict=None, auto_detect:bool = False, summary_path:str = None, network_path:str = None) -> float:
+#     """
+#     Given a filename that represents a path to a nexus file that defines and data, compute the maximum likelihood 
+#     """
 
+#     aln = MSA(filename, grouping=grouping, grouping_auto_detect=auto_detect)
+#     #Only generates tree starting conditions
+#     network = CBDP(1, .5, aln.num_groups()).generateTree()
+    
+
+#     snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":True}
+#     m = Matrix(aln, Alphabet("SNP"))
+#     snp_model = Model(network, m, snp_params=snp_params)
+#     m = m.Matrix(aln, a.Alphabet("SNP"))
+#     snp_model = mg.Model(network, m, snp_params=snp_params)
+
+#     mh = MetropolisHastings(ProposalKernel(), JC(), m, 800, snp_model) #TODO: Submodel unnecessary for snp. make optional?
+#     mh = mh.MetropolisHastings(mh.ProposalKernel(), GTR.JC(), m, 800, snp_model) #TODO: Submodel unnecessary for snp. make optional?
+#     result_state = mh.run()
+
+#     result_state.current_model.summary(network_path, summary_path)
+
+class SNP_Likelihood:
+    
+    def __init__(self, network : DAG, data : MSA ,snp_params : dict) -> None:
+        network_comp : NetworkComponent(set(), network)
+        tip_data_comp : MSAComponent(set(network_comp), data.grouping)
+        self.snp_model = ModelFactory(network_comp,)
+        
+class VPIComponent(ModelComponent):
+    
+    def __init__(self, dependencies: set[type]) -> None:
+        super().__init__(dependencies)
+    
+    def build(self, model: Model) -> None:
+        model
+        
+
+
+def SNP_Root_Func(Q_matrix, F_b_root, sample_ct : int, site_ct : int):
+    """
+    The root likelihood function for the SNP likelihood model
+
+    Args:
+        Q_matrix (_type_): _description_
+        F_b_root (_type_): _description_
+        sample_ct (int): _description_
+        site_ct (int): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    q_null_space = scipy.linalg.null_space(Q_matrix)
+    x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
+
+    F_b = to_array(F_b_root, partials_index(sample_ct + 1), site_ct) 
+    
+    L = np.zeros(site_ct) #self.data.siteCount()
+    
+    # EQ 20, Root probabilities
+    for site in range(site_ct):
+        L[site] = np.dot(F_b[:, site], x)
+    
+    #for non log probabilities, simply print np.sum(L)
+    return np.sum(np.log(L))
+
+
+def SNP_Internal_Func(Q_matrix, F_b_root, sample_ct : int, site_ct : int):
+    pass
+    
+def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dict=None, auto_detect:bool = False, summary_path:str = None, network_path:str = None) -> list[float]:
+    aln = MSA(filename, grouping=grouping, grouping_auto_detect = auto_detect)
+
+    #Read and parse the network described 
+    networks = NetworkParser(filename).get_all_networks()
+ 
+    likelihoods = []
+    for network in networks:
+        snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":False}
+        #Create model
+        snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None, snp_params=snp_params, verbose = True)
+        #Compute the likelihood
+        likelihoods.append(snp_model.likelihood())
+
+    return likelihoods
               
                 
                 

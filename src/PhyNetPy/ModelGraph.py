@@ -2,7 +2,7 @@
 Author : Mark Kessler
 Last Stable Edit : 7/16/23
 First Included in Version : 0.1.0
-
+Approved to Release Date : N/A
 """
 
 import math
@@ -123,9 +123,9 @@ class Model:
         self.nodetypes = {"leaf":[], "internal": [], "root":[]}
         
         #384
-        rand_seed = random.randint(0, 1000) #97 #508 #650 254 #
+        rand_seed = 992 #random.randint(0, 1000) #97 #508 #650 254 #
         self.seed = rand_seed
-        # print(f"MODEL SEED: {rand_seed}")
+        print(f"MODEL SEED: {rand_seed}")
         self.rng = np.random.default_rng(rand_seed)
         
         ##-------------------------------------------##
@@ -566,10 +566,7 @@ class Model:
         # elif self.data.get_type() == "SNP" or self.data.get_type() == "BINARY":
         #     return self.SNP_likelihood()
         return self.nodetypes["root"][0].get()
-            
 
-    # def MP_Allop_Score(self) -> float:
-    #     return self.MP_black_box.NetworkScore(self.network)
         
     
     
@@ -578,7 +575,7 @@ class Model:
     #     partials = self.felsenstein_root.get()
 
     #     # Should be the only child of the substitution model node
-    #     params_state = self.submodel_node.get_predecessors()[0]
+    #     params_state = self.submodel_node.get_model_parents()[0]
     #     base_freqs = params_state.base_freqs.reshape((4,))
         
     #     if self.verbose_out: #Display all cached partials
@@ -669,7 +666,7 @@ class Model:
         network_nodes.extend(self.netnodes_sans_root)
 
         inv_map = {v: k for k, v in self.network_node_map.items()}
-        net.addNodes([inv_map[node] for node in network_nodes])
+        net.add_nodes([inv_map[node] for node in network_nodes])
 
         for node in network_nodes:
             for branch in node.get_branches():
@@ -682,7 +679,7 @@ class Model:
             # Add edges
             if node.get_children() is not None:
                 for child in node.get_children():
-                    net.addEdges([inv_map[node], inv_map[child]]) 
+                    net.add_edges([inv_map[node], inv_map[child]]) 
 
         newick_str = net.newick()
 
@@ -769,13 +766,13 @@ class ModelNode:
         if model_node in self.predecessors:
             self.predecessors.remove(model_node)
 
-    def get_predecessors(self):
+    def get_model_parents(self):
         """
         Returns: the list of child nodes to this node
         """
         return self.predecessors
 
-    def get_successors(self):
+    def get_model_children(self):
         """
         Returns: the list of parent nodes to this node
         """
@@ -897,7 +894,7 @@ class CalculationNode(ABC, ModelNode):
         self.switch_updated()
 
         # Get parent nodes and check that this node is not the root (in which case we're done
-        neighbors = self.get_successors()
+        neighbors = self.get_model_children()
         if neighbors is None:
             return
 
@@ -957,7 +954,7 @@ class NetworkNode(ABC, ModelNode):
     def get_branches(self):
         if self.branches is None:
             self.branches = []
-            for child in self.get_predecessors():
+            for child in self.get_model_parents():
                 if type(child) is BranchLengthNode: # or type(child) is SNPBranchNode:
                     self.branches.append(child)
         return self.branches
@@ -1138,7 +1135,7 @@ class BranchLengthNode(BranchNode, CalculationNode):
         """
         if self.as_height:
             try:
-                node = self.get_successors()[0]
+                node = self.get_model_children()[0]
                 if node.get_parent() is None:
                     branch_len = 0
                 else:
@@ -1152,7 +1149,7 @@ class BranchLengthNode(BranchNode, CalculationNode):
 
         if self.updated_sub:
             # grab current substitution model
-            for child in self.get_predecessors():
+            for child in self.get_model_parents():
                 if type(child) is SubstitutionModel:
                     self.sub = child.get_submodel()
                     self.updated_sub = False
@@ -1176,17 +1173,17 @@ class TreeHeights(StateNode):
         # Only update the parts of the vector that have changed
         if self.heights is None:
             self.heights = new_vector
-            for branch_node in self.get_successors():
+            for branch_node in self.get_model_children():
                 branch_node.update(self.heights[branch_node.get_index()])
         else:
-            for branch_node in self.get_successors():
+            for branch_node in self.get_model_children():
                 if new_vector[branch_node.get_index()] != self.heights[branch_node.get_index()]:
                     branch_node.update(new_vector[branch_node.get_index()])
 
             self.heights = new_vector
 
     def singular_update(self, index: int, value: float):
-        for branch_node in self.get_successors():
+        for branch_node in self.get_model_children():
             if branch_node.get_index() == index:
                 branch_node.update(value)
 
@@ -1204,7 +1201,7 @@ class SubstitutionModelParams(StateNode):
     def update(self, new_freqs=None, new_trans=None):
 
         # should only have the one parent
-        submodel_node = self.get_successors()[0]
+        submodel_node = self.get_model_children()[0]
 
         if new_freqs is None and new_trans is None:
             raise ModelError("Nonsensical update")
@@ -1281,7 +1278,7 @@ class ExtantSpecies(StateNode):
         # should only have a single leaf calc node as the parent
         self.seq = new_sequence
         self.name = new_name
-        self.get_successors()[0].update(new_sequence, new_name)
+        self.get_model_children()[0].update(new_sequence, new_name)
 
     def seq_len(self):
         if type(self.seq) is list:
@@ -1328,7 +1325,7 @@ class FelsensteinLeafNode(NetworkNode, CalculationNode):
     def calc(self):
         # mark node as having been recalculated and cache the result
         if self.matrix is None:
-            for child in self.get_predecessors():
+            for child in self.get_model_parents():
                 if type(child) is ExtantSpecies:
                     self.matrix = vec_bin_array(child.get_seq(), 4)
 
@@ -1380,7 +1377,7 @@ class FelsensteinInternalNode(NetworkNode, CalculationNode):
 
     def calc(self):
 
-        children = self.get_predecessors()
+        children = self.get_model_parents()
 
         matrices = []
 
@@ -1630,7 +1627,7 @@ class SNPInternalNode(NetworkNode, CalculationNode):
 #         """
         
 #         #Get the network node parent of this branch object
-#         node_par = self.get_successors()[0]
+#         node_par = self.get_model_children()[0]
         
 #         #Calculate Q^t before calculating likelihoods
 #         self.transition()
@@ -1747,7 +1744,7 @@ class NetworkContainer(StateNode):
     
     def update(self, new_net : DAG):
         self.network = new_net
-        model_parents : list[CalculationNode] = self.get_successors()
+        model_parents : list[CalculationNode] = self.get_model_children()
         for model_parent in model_parents:
             model_parent.upstream()
         

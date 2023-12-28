@@ -2,7 +2,7 @@
 Author : Mark Kessler
 Last Stable Edit : 7/16/23
 First Included in Version : 0.1.0
-
+Approved to Release Date : N/A
 """
 
 from abc import ABC, abstractmethod
@@ -25,7 +25,6 @@ class ModelComponent(ABC):
 
 
 class ModelFactory:
-    
     
     def __init__(self, *items : ModelComponent):
         self.components = PriorityQueue()
@@ -61,7 +60,7 @@ class NetworkComponent(ModelComponent):
         model.network = self.network
         
         for node in self.network.get_nodes():
-            new_node = SampleNetworkNode(name=node.get_name())
+            new_node = ANetworkNode(name=node.get_name())
             model.network_node_map[node] = new_node
             
             if model.network.out_degree(node) == 0:  # This is a leaf
@@ -187,9 +186,9 @@ class BranchLengthComponent(ModelComponent):
             
         node_heights.update(node_heights_vec)
         
-class SampleNetworkNode(NetworkNode, CalculationNode):
+class ANetworkNode(NetworkNode, CalculationNode):
     def __init__(self, name: str = None):
-        super(SampleNetworkNode, self).__init__()
+        super(NetworkNode, self).__init__()
         super(CalculationNode).__init__()
         self.name = name
 
@@ -210,8 +209,8 @@ class SampleNetworkNode(NetworkNode, CalculationNode):
     def calc(self):
         print(f"Calculating: {self.name}")
         
-        if self.get_predecessors() is not None:
-            self.cached = self.likelihood([child.get() for child in self.get_predecessors()])
+        if self.get_model_parents() is not None:
+            self.cached = self.likelihood([child.get() for child in self.get_model_parents()])
         else:
             self.cached = self.likelihood()
             
