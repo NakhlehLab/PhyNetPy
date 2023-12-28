@@ -1,0 +1,30 @@
+
+#NEXUS
+
+BEGIN TAXA;
+
+DIMENSIONS NTAX=9;
+
+TAXLABELS
+01bA
+01yB
+01zB
+01xB
+01aA
+01xA
+01yA
+01zA
+01cA
+;
+
+END;
+
+BEGIN TREES;
+
+Tree g1 = (((01bA,((01yB,01zB),01xB)),(01aA,(01xA,(01yA, 01zA)))),01cA);
+
+END;
+
+
+
+
