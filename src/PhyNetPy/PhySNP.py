@@ -163,7 +163,7 @@ def rn_to_rn_minus_dim(set_of_rns : dict, dim : int):
 
     return rn_minus_dim
 
-def qt_2_cs(Qt:np.ndarray):
+def qt_2_cs(Qt : np.ndarray):
     """
     Convert a numpy matrix to a C# List<List<float>>
 
@@ -240,7 +240,7 @@ class SNPTransition:
                         self.Q[index][map_nr_to_index(n_prime - 1, r_prime)] = (n_prime - 1 - r_prime) * n_prime / coal
                     self.Q[index][map_nr_to_index(n_prime, r_prime + 1)] = (r_prime + 1) * u
 
-    def expt(self, t:float) -> np.ndarray:
+    def expt(self, t : float) -> np.ndarray:
         """
         Compute exp(Qt) efficiently
         """

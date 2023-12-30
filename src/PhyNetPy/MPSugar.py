@@ -636,44 +636,7 @@ class MUL(DAG):
         self.mul = None
         self.gene_map = gene_map
         self.rng = rng
-        
-        
-    def subtree_copy(self, net : DAG, retic_node : Node) -> DAG:
-        """
-        Make a copy of a subnetwork of a network *net* rooted at *retic_node*, with unique node names
-        TODO: move to graph class?
-        Args:
-            net (DAG): A Network
-            retic_node (Node): A node in net that is a reticulation node
-
-        Returns:
-            DAG: A subnetwork 
-        """
-    
-        q = deque()
-        q.appendleft(retic_node)
-        nodes = []
-        edges = []
-        
-        new_node = Node(name = retic_node.get_name() + "_copy")
-        nodes.append(new_node)
-        net_2_mul = {retic_node : new_node}
-        
-
-        while len(q) != 0:
-            cur = q.pop() #pop right for bfs
-
-            for neighbor in net.get_children(cur):
-                new_node = Node(name = neighbor.get_name() + "_copy")
-                nodes.append(new_node)
-                net_2_mul[neighbor] = new_node
-                edges.append([net_2_mul[cur], new_node])
-                
-                
-                #Resume search from the end of the chain if one existed, or this is neighbor if nothing was done
-                q.append(neighbor)
-        
-        return DAG(edges = edges, nodes=nodes)                
+                        
     
     def to_mul(self, net : DAG) -> DAG:
         """
@@ -690,8 +653,8 @@ class MUL(DAG):
         """
         #Number of network leaves must match the number of gene map keys
         if len(net.get_leaves()) != len(self.gene_map.keys()):
-            print([node.get_name() for node in net.get_leaves()])
-            print(net.newick())
+            # print([node.get_name() for node in net.get_leaves()])
+            # print(net.newick())
             raise InferAllopError(f"Input network has incorrect amount of leaves. Given : {len(net.get_leaves())} Expected : { len(self.gene_map.keys())}")
        
         copy_gene_map = copy.deepcopy(self.gene_map)
@@ -719,7 +682,8 @@ class MUL(DAG):
             
             if mul_tree.in_degree(cur) == 2:
                 #reticulation node. make a copy of subgraph
-                subtree = self.subtree_copy(mul_tree, cur)
+                #subtree = self.subtree_copy(mul_tree, cur)
+                subtree = mul_tree.subtree_copy(cur)
                 retic_pars = mul_tree.get_parents(cur)
                 a = retic_pars[0]
                 b = retic_pars[1]
@@ -787,7 +751,6 @@ class MUL(DAG):
         
         extra_lin_total += root_xl # Add in any extra lineages in the root branch. Tends to be 0. Is this necessary?
         
-
         return extra_lin_total
     
     def xl_helper(self, start_node : Node, edge_xl_map : dict, coal_map : dict, f:dict):
@@ -829,7 +792,7 @@ class MUL(DAG):
             else:
                 edge_xl_map[(start_node.get_name(), par.get_name())] = [sum_of_child_tops, sum_of_child_tops - len(coal_map[(start_node.get_name(), par.get_name())])]
             
-    def gene_tree_map(self, g : DAG, leaf_map:dict, mrca_cache: dict[frozenset[Node], Node]) -> dict:
+    def gene_tree_map(self, g : DAG, leaf_map : dict, mrca_cache: dict[frozenset[Node], Node]) -> dict:
         """
         Maps a gene tree (T) into a MUL tree (T'), where each have taxa from the set X 
 
@@ -878,57 +841,52 @@ class MUL(DAG):
         
         return edgeloc_2_tnode           
             
+    def XL(self, g : DAG, mrca_cache : dict[frozenset[Node], Node]) -> int:
+        """
+        Computes the number of extra lineages in the map from the gene tree g, into MUL tree T.
+        EQ1 from https://academic.oup.com/sysbio/article/71/3/706/6380964
         
+        Args:
+            g (DAG): A gene tree
 
-def XL(T:MUL, g:DAG, mrca_cache : dict[frozenset[Node], Node]) -> int:
-    """
-    Computes the number of extra lineages in the map from the gene tree g, into MUL tree T.
-    EQ1 from https://academic.oup.com/sysbio/article/71/3/706/6380964
+        Returns:
+            int: the minimum number of extra lineages over all possible allele maps
+        """
     
-    Args:
-        T (MUL): A MUL tree
-        g (DAG): A gene tree
+        return min([self.XL_Allele(g, allele_map.map, mrca_cache) for allele_map in g.get_item("allele maps")])
 
-    Returns:
-        int: the minimum number of extra lineages over all possible allele maps
-    """
-   
-    return min([XL_Allele(T, g, allele_map.map, mrca_cache) for allele_map in g.get_item("allele maps")])
+    def XL_Allele(self, g : DAG, f : dict, mrca_cache : dict[frozenset[Node], Node]) -> int:
+        """
+        Compute the extra lineages given a MUL tree T, a gene tree, g, and an allele mapping f.
 
-def XL_Allele(T:MUL, g:DAG, f:dict, mrca_cache : dict[frozenset[Node], Node])->int:
-    """
-    Compute the extra lineages given a MUL tree T, a gene tree, g, and an allele mapping f.
+        Args:
+            g (DAG): A gene tree
+            f (dict): An allele map from leaves of g to leaves of T
 
-    Args:
-        T (MUL): A MUL tree
-        g (DAG): A gene tree
-        f (dict): An allele map from leaves of g to leaves of T
+        Returns:
+            int: number of extra lineages
+        """
+        #map the gene tree into the MUL tree
+        edge_2_nodes = self.gene_tree_map(g, f, mrca_cache)
+        
+        #compute the extra lineages
+        return self.extra_lineages(edge_2_nodes, f)
 
-    Returns:
-        int: number of extra lineages
-    """
-    #map the gene tree into the MUL tree
-    edge_2_nodes = T.gene_tree_map(g, f, mrca_cache)
-    
-    #compute the extra lineages
-    return T.extra_lineages(edge_2_nodes, f)
+    def score(self, gt_list : list[DAG])->int:
+        """
+        Compute the total score of a MUL tree given a list of gene trees. Right side of EQ 2 from EQ1 from https://academic.oup.com/sysbio/article/71/3/706/6380964
 
-def score(T:MUL, gt_list:list[DAG])->int:
-    """
-    Compute the total score of a MUL tree given a list of gene trees. Right side of EQ 2 from EQ1 from https://academic.oup.com/sysbio/article/71/3/706/6380964
+        Args:
+            gt_list (list): a list of gene trees
 
-    Args:
-        T (MUL): A MUL tree
-        gt_list (list): a list of gene trees
-
-    Returns:
-        int: The MUL tree score 
-    """
-    # Sum the XL values over all gene trees
-    mrca_cache = {}    
-    gt_scores = [XL(T, gt, mrca_cache) for gt in gt_list]
-    #print(gt_scores)
-    return sum(gt_scores)
+        Returns:
+            int: The MUL tree score 
+        """
+        # Sum the XL values over all gene trees
+        mrca_cache = {}    
+        gt_scores = [self.XL(gt, mrca_cache) for gt in gt_list]
+        #print(gt_scores)
+        return sum(gt_scores)
 
 
 
@@ -959,8 +917,6 @@ class InferMPAllop:
     
    
 
-    
-    
 class MPAllopComponent(ModelComponent):
     
     def __init__(self, network : DAG, gene_map : dict[str, str], gene_trees : list[DAG], rng) -> None:
@@ -1058,7 +1014,7 @@ class ParsimonyScore(CalculationNode):
                 ##Invalid Network, return score of -inf so that this model is rejected
                 raise Exception("An invalid network has been proposed somehow")
             else:  
-                self.cached = -score(mul, g_trees)
+                self.cached = -1 * mul.score(g_trees)
         else:
             raise InferAllopError("Malformed Model. Parsimony Score function for MP ALLOP should only have 2 feeder nodes")
         
@@ -1258,6 +1214,6 @@ def single_network_score(start_net_filename : str, gene_trees_filename : str, ta
             gene_tree.put_item("allele maps", allele_map_set(gene_tree, taxon_map))
             gene_tree.put_item("leaf descendants", gene_tree.leaf_descendants_all())
     
-    return score(T, gene_trees)
+    return T.score(gene_trees)
 
 #print(single_network_score("/Users/mak17/Documents/PhyNetPy/src/bubble_J.nex", "/Users/mak17/Documents/PhyNetPy/src/J_pruned_v2.nex", {'U': ['01uA', '01uB'], 'T': ['01tA', '01tB'], 'B': ['01bA'], 'F': ['01fA'], 'C': ['01cA'], 'A': ['01aA'], 'D': ['01dA'], 'O': ['01oA']}))

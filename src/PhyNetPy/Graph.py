@@ -926,6 +926,41 @@ class DAG():
                 paths.append(path.append([par, start]))
         return paths
     
+    def subtree_copy(self, retic_node : Node):
+        """
+        Make a copy of a subnetwork of this DAG, rooted at @retic_node, with unique node names
+        
+        Args:
+            retic_node (Node): A node in net that is a reticulation node
+
+        Returns:
+            DAG: A subnetwork of the DAG being operated on
+        """
+    
+        q = deque()
+        q.appendleft(retic_node)
+        nodes = []
+        edges = []
+        
+        new_node = Node(name = retic_node.get_name() + "_copy")
+        nodes.append(new_node)
+        net_2_mul = {retic_node : new_node}
+        
+
+        while len(q) != 0:
+            cur = q.pop() #pop right for bfs
+
+            for neighbor in self.get_children(cur):
+                new_node = Node(name = neighbor.get_name() + "_copy")
+                nodes.append(new_node)
+                net_2_mul[neighbor] = new_node
+                edges.append([net_2_mul[cur], new_node])
+                
+                #Resume search from the end of the chain if one existed, or this is neighbor if nothing was done
+                q.append(neighbor)
+        
+        return DAG(edges = edges, nodes=nodes) 
+    
         
         
         
