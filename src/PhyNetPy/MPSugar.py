@@ -965,7 +965,7 @@ class MULNode(CalculationNode):
         self.updated = False
         return self.multree
     
-    def calc_sim(self):
+    def sim(self):
         pass
     
     def update(self):
@@ -997,6 +997,9 @@ class GeneTreesComponent(StateNode):
         return self.gene_trees
     
 class ParsimonyScore(CalculationNode):
+    """
+    THIS IS A TYPE OF PARAMETER COMBINATION. SHOULD NOT BE A STANDALONE NODE TYPE
+    """
     
     def __init__(self):
         super().__init__()
@@ -1021,7 +1024,7 @@ class ParsimonyScore(CalculationNode):
         self.updated = False
         return self.cached
     
-    def calc_sim(self):
+    def sim(self):
         pass
     
     def update(self):

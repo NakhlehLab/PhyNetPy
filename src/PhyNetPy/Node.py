@@ -54,6 +54,7 @@ class Node:
         self.seq = None
         self.t = None
         self.is_dirty = False
+        
 
     def length(self)->dict:
         """

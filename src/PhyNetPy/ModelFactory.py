@@ -14,6 +14,8 @@ from NetworkParser import NetworkParser as np
 from typing import Callable
 
 
+
+
 class ModelComponent(ABC):
     
     def __init__(self, dependencies : set[type]) -> None:
@@ -46,30 +48,50 @@ class ModelFactory:
                     component[1].component_dependencies.remove(type(next_component))
                     component[0] -= 1
         
-        return self.output_model
-
-
-# TODO: Probability multiplier component???   
+        return self.output_model 
             
 class NetworkComponent(ModelComponent):
+    """
+    Network Component Description:
+    
+    This component should be the first component built into the model, as most other components will
+    be connected to the network in some way. When built, the Model now contains a phylogenetic network 
+    where the root of that network should be the root of the Model.
+    
+    """
     def __init__(self, dependencies: set, net : DAG) -> None:
         super().__init__(dependencies)
         self.network = net
     
     def build(self, model : Model):
+        """
+        Attaches a network to the given Model
+
+        Args:
+            model (Model): A Model object, ideally empty. This component should be the first to be added.
+        """
+        
+        #set the model's reference to a network
         model.network = self.network
         
+        #create map from network nodes to model nodes, some bookkeeping
         for node in self.network.get_nodes():
-            new_node = ANetworkNode(name=node.get_name())
+            new_node = ANetworkNode(name=node.get_name(), node_type = "network")
             model.network_node_map[node] = new_node
             
-            if model.network.out_degree(node) == 0:  # This is a leaf
+            in_deg = model.network.in_degree(node)
+            out_deg = model.network.out_degree(node)
+            
+            if out_deg == 0:  # This is a leaf
                 model.nodetypes["leaf"].append(new_node)
-            elif model.network.in_degree(node) != 0:  # An internal node that is not the root
+            elif in_deg == 1 and out_deg != 0:  # An internal node that is not the root and is not a reticulation 
                 model.nodetypes["internal"].append(new_node)
+            elif in_deg == 2 and out_deg == 1:
+                model.nodetypes["reticulation"].append(new_node)
             else:  
                 model.nodetypes["root"].append(new_node)
     
+        #attach model nodes with the proper edges
         for edge in model.network.get_edges():
             # Handle network par-child relationships
             # Edge is from modelnode1 to modelnode2 in network, which means
@@ -82,38 +104,6 @@ class NetworkComponent(ModelComponent):
     
 class SubsitutionModelComponent(ModelComponent):
     pass
-
-class LikelihoodFunctionComponent(ModelComponent):
-    
-    def __init__(self, dependencies: set, root_func : Callable, internal_func : Callable, leaf_func : Callable) -> None:
-        super().__init__(dependencies)
-        self.root = root_func
-        self.internal = internal_func
-        self.leaf = leaf_func
-    
-    def build(self, model : Model) -> None:
-        for network_node in model.nodetypes["leaf"]:
-            network_node.set_likelihood_func(self.leaf)
-        for network_node in model.nodetypes["internal"]:
-            network_node.set_likelihood_func(self.internal)
-        for network_node in model.nodetypes["root"]:
-            network_node.set_likelihood_func(self.root)
-        
-class SimulationFunctionComponent(ModelComponent):
-    
-    def __init__(self, dependencies: set, root_func : Callable, internal_func : Callable, leaf_func : Callable) -> None:
-        super().__init__(dependencies)
-        self.root = root_func
-        self.internal = internal_func
-        self.leaf = leaf_func
-    
-    def build(self, model : Model) -> None:
-        for network_node in model.nodetypes["leaf"]:
-            network_node.set_simulation_func(self.leaf)
-        for network_node in model.nodetypes["internal"]:
-            network_node.set_simulation_func(self.internal)
-        for network_node in model.nodetypes["root"]:
-            network_node.set_simulation_func(self.root)
 
 class MSAComponent(ModelComponent):
     
@@ -156,7 +146,7 @@ class BranchLengthComponent(ModelComponent):
                     
                 for branch_len in branch_lengths:
                     #Create new branch
-                    branch = SNPBranchNode(branch_index, branch_len, self.snp_Q, self.vpis)
+                    branch = BranchLengthNode(branch_index, branch_len)
                     node_heights_vec.append(branch_len)
                     branch_index += 1
                     branches.append(branch)
@@ -187,16 +177,16 @@ class BranchLengthComponent(ModelComponent):
         node_heights.update(node_heights_vec)
         
 class ANetworkNode(NetworkNode, CalculationNode):
-    def __init__(self, name: str = None):
+    def __init__(self, name: str = None, node_type : str = None):
         super(NetworkNode, self).__init__()
         super(CalculationNode).__init__()
         self.name = name
+        self.node_type = node_type
 
     def node_move_bounds(self):
         return [0, 0]
     
     def update(self, new_name):
-        
         self.name = new_name
         self.upstream()
 
@@ -207,10 +197,8 @@ class ANetworkNode(NetworkNode, CalculationNode):
             return self.cached
 
     def calc(self):
-        print(f"Calculating: {self.name}")
-        
-        if self.get_model_parents() is not None:
-            self.cached = self.likelihood([child.get() for child in self.get_model_parents()])
+        if self.get_children() is not None:
+            self.cached = self.likelihood([child.get() for child in self.get_children()], self)
         else:
             self.cached = self.likelihood()
             
@@ -219,9 +207,8 @@ class ANetworkNode(NetworkNode, CalculationNode):
         # return calculation
         return self.cached
 
-    def calc_sim(self):
-        
-        self.cached = self.simulation(self.children)
+    def sim(self):
+        self.cached = self.simulation(self.get_parents())
         self.updated = False
 
         # return calculation
@@ -230,18 +217,18 @@ class ANetworkNode(NetworkNode, CalculationNode):
     def get_name(self):
         return self.name
 
-def sample_likelihood_func(num_list : list[int])->int:
-    return 1 + sum(num_list)  
-
-def leaf_likelihood_func()->int:
-    return 0
-
-def factory_tester():
+class ParameterComponent(ModelComponent):
+    def __init__(self, dependencies: set[type], param_name : str, param_value : float) -> None:
+        self.name : str = param_name
+        self.value : float = param_value
+        super().__init__(dependencies)
     
-    likelihood : LikelihoodFunctionComponent = LikelihoodFunctionComponent(set([NetworkComponent]), sample_likelihood_func, sample_likelihood_func, leaf_likelihood_func)
-    network : NetworkComponent = NetworkComponent(set(), np('/Users/mak17/Documents/PhyloGenPy/PhyloGenPy/src/PhyNetPy/Bayesian/mp_allop_start_net.nex').get_all_networks()[0])
-    
-    my_model : Model = ModelFactory(likelihood, network).build()
-    return my_model.likelihood()
+    def build(self, model: Model) -> None:
+        root = model.nodetypes["root"]
+        
+        return super().build(model)
+
+
+
 
 

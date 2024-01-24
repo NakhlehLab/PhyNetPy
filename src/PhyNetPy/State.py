@@ -75,10 +75,10 @@ class State:
         submodel (GTR): Any substitution model (can be subtype of GTR)
 
         """
-        #TODO: Remove hard coded birth death constants
+        #TODO: Reconcile with ModelFactory concept. Models should generally be empty. Maybe a State should always require a model input
         
         network = CBDP(1, .5, data.get_num_taxa()).generate_tree()  # base number of leaves to be the number of groups/taxa
-        self.current_model = Model(network, data, submodel, verbose=False)
+        self.current_model = Model(network, data, submodel)
         self.proposed_model = copy.deepcopy(self.current_model)
 
     def write_line_to_summary(self, line: str):

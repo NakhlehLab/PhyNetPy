@@ -6,6 +6,7 @@ Approved to Release Date : N/A
 """
 
 from math import sqrt, comb, pow
+from typing import Callable
 import numpy as np
 import scipy
 from scipy.linalg import expm
@@ -526,7 +527,6 @@ class PartialLikelihoods:
         #print("RULE 1 (2)")
         return new_vpi_key
                 
-                
     def Rule2(self, vpi_key_x : tuple, vpi_key_y :tuple, site_count : int, vector_len : int, branch_index_x:int, branch_index_y:int, branch_index_z:int) -> tuple:
         """
         Given branches x and y that have no leaf descendents in common and a parent branch z, and partial likelihood mappings for the population 
@@ -849,72 +849,254 @@ class PartialLikelihoods:
 
 #     result_state.current_model.summary(network_path, summary_path)
 
-class SNP_Likelihood:
+# class SNP_Likelihood:
     
-    def __init__(self, network : DAG, data : MSA ,snp_params : dict) -> None:
-        network_comp : NetworkComponent(set(), network)
-        tip_data_comp : MSAComponent(set(network_comp), data.grouping)
-        self.snp_model = ModelFactory(network_comp,)
+#     def __init__(self, network : DAG, data : MSA ,snp_params : dict) -> None:
+#         network_comp : NetworkComponent(set(), network)
+#         tip_data_comp : MSAComponent(set(network_comp), data.grouping)
+#         self.snp_model = ModelFactory(network_comp,)
         
-class VPIComponent(ModelComponent):
+# class VPIComponent(ModelComponent):
     
-    def __init__(self, dependencies: set[type]) -> None:
-        super().__init__(dependencies)
+#     def __init__(self, dependencies: set[type]) -> None:
+#         super().__init__(dependencies)
     
-    def build(self, model: Model) -> None:
-        model
+#     def build(self, model: Model) -> None:
+#         pass
         
 
 
-def SNP_Root_Func(Q_matrix, F_b_root, sample_ct : int, site_ct : int):
-    """
-    The root likelihood function for the SNP likelihood model
+# def SNP_Root_Func(Q_matrix, F_b_root, sample_ct : int, site_ct : int):
+#     """
+#     The root likelihood function for the SNP likelihood model
 
-    Args:
-        Q_matrix (_type_): _description_
-        F_b_root (_type_): _description_
-        sample_ct (int): _description_
-        site_ct (int): _description_
+#     Args:
+#         Q_matrix (_type_): _description_
+#         F_b_root (_type_): _description_
+#         sample_ct (int): _description_
+#         site_ct (int): _description_
 
-    Returns:
-        _type_: _description_
-    """
-    q_null_space = scipy.linalg.null_space(Q_matrix)
-    x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
+#     Returns:
+#         _type_: _description_
+#     """
+#     q_null_space = scipy.linalg.null_space(Q_matrix)
+#     x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
 
-    F_b = to_array(F_b_root, partials_index(sample_ct + 1), site_ct) 
+#     F_b = to_array(F_b_root, partials_index(sample_ct + 1), site_ct) 
     
-    L = np.zeros(site_ct) #self.data.siteCount()
+#     L = np.zeros(site_ct) #self.data.siteCount()
     
-    # EQ 20, Root probabilities
-    for site in range(site_ct):
-        L[site] = np.dot(F_b[:, site], x)
+#     # EQ 20, Root probabilities
+#     for site in range(site_ct):
+#         L[site] = np.dot(F_b[:, site], x)
     
-    #for non log probabilities, simply print np.sum(L)
-    return np.sum(np.log(L))
+#     #for non log probabilities, simply print np.sum(L)
+#     return np.sum(np.log(L))
 
 
-def SNP_Internal_Func(Q_matrix, F_b_root, sample_ct : int, site_ct : int):
-    pass
+# def SNP_Internal_Func(vpi_keys : list[tuple], node : ANetworkNode):
     
-def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dict=None, auto_detect:bool = False, summary_path:str = None, network_path:str = None) -> list[float]:
-    aln = MSA(filename, grouping=grouping, grouping_auto_detect = auto_detect)
+    
+#     #Get the network node parent of this branch object
+#     node_par = node.get_model_parents()[0]
+    
+    
+#     for vpi_key in vpi_keys:
+        
+#     #Calculate Q^t before calculating likelihoods
+#     self.transition()
+    
+#     if type(node_par) is SNPLeafNode:
+#         site_count = node_par.seq_len()
+#     elif type(node_par) is SNPInternalNode:
+#         site_count = node_par.site_count
+#     else:
+#         raise ModelError("site count error")
 
-    #Read and parse the network described 
-    networks = NetworkParser(filename).get_all_networks()
+#     vector_len = partials_index(node_par.possible_lineages() + 1)  
+
+#     # BOTTOM: Case 1, the branch is an external branch, so bottom likelihood is just the red counts
+#     if type(node_par) is SNPLeafNode:
+#         F_key = self.vpi_tracker.Rule0(node_par.red_count(), node_par.samples(), site_count, vector_len, self.index)  
+        
+#     # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
+#     else:
+#         # EQ 19
+#         # Get the top likelihoods of each of the child branches
+#         net_children = node_par.get_children()
+        
+#         if node_par.is_reticulation():
+#             #RULE 3
+#             x_branch = node_par.get_branch_from_child(net_children[0])
+#             F_t_x_key = x_branch.get()
+            
+#             possible_lineages = node_par.possible_lineages() 
+            
+#             #Get the other branch
+#             sibling_branches = node_par.get_branches()
+#             if sibling_branches[0] == self:
+#                 sibling_branch : BranchNode = sibling_branches[1]
+#             else:
+#                 sibling_branch : BranchNode = sibling_branches[0]
+            
+#             g_this = self.inheritance_probability()
+#             g_that = sibling_branch.inheritance_probability()
+            
+            
+#             if g_this + g_that != 1:
+#                 raise ModelError("Set of inheritance probabilities do not sum to 1 for node<" + node_par.name + ">")
+            
+#             F_b_key = self.vpi_tracker.Rule3(F_t_x_key, vector_len, g_this, g_that, site_count, possible_lineages, x_branch.index, self.index, sibling_branch.index)
+            
+#             #Do the calculations for the sibling branch
+            
+#             sibling_branch.transition()
+#             F_t_key_sibling = self.vpi_tracker.Rule1(F_b_key, site_count, vector_len, node_par.possible_lineages(), sibling_branch.Qt, sibling_branch.index)
+            
+#             sibling_branch.updated = False
+#             F_key = F_t_key_sibling
+            
+#         elif len(node_par.children) == 2:
+            
+#             y_branch : SNPBranchNode = node_par.get_branch_from_child(net_children[0])
+#             F_t_y_key = y_branch.get()
+#             y_branch_index = y_branch.index
+            
+#             z_branch : SNPBranchNode = node_par.get_branch_from_child(net_children[1], avoid_index=y_branch_index)
+#             F_t_z_key = z_branch.get()
+#             z_branch_index = z_branch.index
+            
+#             #Find out whether lineage y and z have leaves in common 
+#             if not net_children[1].leaf_descendants.isdisjoint(net_children[0].leaf_descendants): #If two sets are not disjoint
+#                 print("Y BRANCH INDEX: " + str(y_branch_index))
+#                 print("Z BRANCH INDEX: " + str(z_branch_index))
+#                 F_b_key = self.vpi_tracker.Rule4(F_t_z_key, site_count, vector_len, y_branch_index, z_branch_index, self.index)
+#             else: # Then use Rule 2
+#                 F_b_key = self.vpi_tracker.Rule2(F_t_y_key, F_t_z_key, site_count, vector_len, y_branch_index, z_branch_index, self.index)
+#                 #raise ModelError("temp catch")
+#             F_key = F_b_key
+#         else:
+#             #A node should only have one child if it is the root node. simply pass along the vpi
+#             F_key = node_par.get_branch_from_child(net_children[0]).get()
+                
+#     # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
+#     if node_par.parents is not None:
+#         F_key = self.vpi_tracker.Rule1(F_key, site_count, vector_len, node_par.possible_lineages(), self.Qt, self.index)
+#         self.updated = False
+#     else:
+#         self.updated = False
+
+# def SNP_Leaf_Func(vpi_keys : list[tuple], node : ANetworkNode):
+    
+#     F_key = self.vpi_tracker.Rule0(node_par.red_count(), node_par.samples(), site_count, vector_len, self.index) 
+#     pass
+    
+# def SNAPP_Likelihood(filename: str, u :float , v:float, coal:float, grouping:dict=None, auto_detect:bool = False, summary_path:str = None, network_path:str = None) -> list[float]:
+#     aln = MSA(filename, grouping=grouping, grouping_auto_detect = auto_detect)
+
+#     #Read and parse the network described 
+#     networks = NetworkParser(filename).get_all_networks()
  
-    likelihoods = []
-    for network in networks:
-        snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":False}
-        #Create model
-        snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None, snp_params=snp_params, verbose = True)
-        #Compute the likelihood
-        likelihoods.append(snp_model.likelihood())
+#     likelihoods = []
+#     for network in networks:
+#         snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":False}
+#         #Create model
+#         snp_model = Model(network, Matrix(aln, Alphabet("SNP")), None, snp_params=snp_params, verbose = True)
+#         #Compute the likelihood
+#         likelihoods.append(snp_model.likelihood())
 
-    return likelihoods
-              
-                
-                
+#     return likelihoods
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+#___________________________________________________________________#  
+
+class SNPTransitionMatrixNode(CalculationNode):
+    def __init__(self):
+        super().__init__()
+        self.Q = None
+    
+    def calc(self):
+        if self.dirty:
+            params = {}
+            
+            for child in self.get_model_children():
+                if type(child) == Parameter:
+                    params[child.name] = child.value
+            try:
+                self.Q = SNPTransition(params["samples"], params["u"], params["v"], params["coal"])
+            except KeyError:
+                raise ModelError("SNP Transition Matrix is either missing a parameter or does not match the key provided")
+            
+            self.cached = self.Q
+        return self.cached
+    
+    def get(self):
+        if self.dirty:
+            return self.calc()
+        else:
+            return self.cached
+            
+    def update(self):
+        self.upstream()
+
+
+class VPIAccumulator(Accumulator):
+    
+    def __init__(self, name: str, data_structure: object):
+        super().__init__("VPI", PartialLikelihoods())
+    
+class SNPInternalNode(ANetworkNode):
+    def __init__(self, name: str = None, node_type: str = None):
+        super().__init__(name, node_type)
+        
+    def calc(self):
+        """
+        Utilize the vpi algorithms from Rabier Et Al
+        """
+        
+        #
+    
+    
+    
+class SNPLikelihood(CalculationNode):
+    
+    def __init__(self):
+        super().__init__()
+    
+    def calc(self):
+        
+        transition_node : SNPTransitionMatrixNode = self.get_model_children(SNPTransitionMatrixNode)[0]
+        q_null_space = scipy.linalg.null_space(transition_node.get().Q)
+        x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
+
+        network_root_vpi_key = self.get_model_children(SNPInternalNode)[0].get()[0]
+        F_b_map = self.get_model_children(VPIAccumulator)[0].get_data().vpis[network_root_vpi_key]
+        
+        F_b = to_array(F_b_map, partials_index(self.snp_params["samples"] + 1), self.data.siteCount()) 
+
+        L = np.zeros(self.data.siteCount())
+       
+        # EQ 20, Root probabilities
+        for site in range(self.data.siteCount()):
+            L[site] = np.dot(F_b[:, site], x)
+    
+        print("NON-LOG PROBABILITY: " + str(np.sum(L)))
+        return np.sum(np.log(L))
+    
+  
+    
+    
+    
             
             
         
