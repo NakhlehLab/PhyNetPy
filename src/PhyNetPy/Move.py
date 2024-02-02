@@ -1,3 +1,10 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
+
 from __future__ import annotations
 from collections import deque
 import copy
@@ -6,6 +13,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from Node import Node
 from typing import TYPE_CHECKING
+from Graph import DAG
 if TYPE_CHECKING:
     from ModelGraph import *
 
@@ -24,9 +32,9 @@ def insert_node_in_edge(edge : list[Node], node : Node, net : DAG) -> None:
     
     #Rewire the edges
     ## print(f"EDGE: <{edge[0].get_name()}, {edge[1].get_name()}>")
-    net.removeEdge([y , x])
-    net.addEdges([y, node])
-    net.addEdges([node, x])
+    net.remove_edge([y , x])
+    net.add_edges([y, node])
+    net.add_edges([node, x])
 
     #update parent attributes
     x.remove_parent(y)
@@ -35,7 +43,7 @@ def insert_node_in_edge(edge : list[Node], node : Node, net : DAG) -> None:
     
 def connect_nodes(n1 : Node, n2 : Node, net : DAG) -> None:
     #Add the edge to the network
-    net.addEdges([n2, n1])
+    net.add_edges([n2, n1])
     
     #update parents
     # # print(n1)
@@ -209,8 +217,8 @@ class TaxaSwapMove(Move, ABC):
         second = net_leaves[indeces[1]]
 
         # Grab ExtantTaxa nodes
-        first_taxa = first.get_predecessors()[0]
-        sec_taxa = second.get_predecessors()[0]
+        first_taxa = first.get_model_parents()[0]
+        sec_taxa = second.get_model_parents()[0]
 
         # Swap names and sequences
         first_seq = first_taxa.get_seq()
@@ -251,8 +259,8 @@ class TaxaSwapMove(Move, ABC):
         second = net_leaves[indeces[1]]
 
         # Grab ExtantTaxa nodes
-        first_taxa = first.get_predecessors()[0]
-        sec_taxa = second.get_predecessors()[0]
+        first_taxa = first.get_model_parents()[0]
+        sec_taxa = second.get_model_parents()[0]
 
         # Swap names and sequences
         first_seq = first_taxa.get_seq()
@@ -404,575 +412,575 @@ ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THI
 """
 
 
-# class AddReticulation(Move):
-#     def __init__(self):
-#         super().__init__()
+class AddReticulation(Move):
+    def __init__(self):
+        super().__init__()
 
     
-#     def execute(self, model : Model) -> Model:
-#         """
-#         Adds a reticulation edge to the network
-#         """
-#         net : DAG = model.network
-#         print("-----BEFORE MOVE-----")
-#         net.pretty_print_edges()
-#         E_set = [item for item in net.edges] #.append((net.findRoot()[0], None)) # add (root, null) to edge set #TODO: ERROR
-#         # Select 2 perhaps non-distinct edges to connect with a reticulation edge-- we allow bubbles
-#         random_edges = [random.choice(E_set), random.choice(E_set)]
+    def execute(self, model : Model) -> Model:
+        """
+        Adds a reticulation edge to the network
+        """
+        net : DAG = model.network
+        print("-----BEFORE MOVE-----")
+        net.pretty_print_edges()
+        E_set = [item for item in net.edges] #.append((net.root()[0], None)) # add (root, null) to edge set #TODO: ERROR
+        # Select 2 perhaps non-distinct edges to connect with a reticulation edge-- we allow bubbles
+        random_edges = [random.choice(E_set), random.choice(E_set)]
         
-#         a : Node = random_edges[0][1]
-#         b : Node = random_edges[0][0]
-#         y : Node = random_edges[1][0]
-#         x : Node = random_edges[1][1]
+        a : Node = random_edges[0][1]
+        b : Node = random_edges[0][0]
+        y : Node = random_edges[1][0]
+        x : Node = random_edges[1][1]
         
-#         # print(f"Edge 1: <{b.get_name()}, {a.get_name()}")
-#         # print(f"Edge 2: <{y.get_name()}, {x.get_name()}")
-        
-        
-#         z : Node = Node() #, parent_nodes=[b], branch_len={b:[top_bl_1]})
-#         c : Node = Node(is_reticulation=True) #, parent_nodes=[retic_bot_parent, z], branch_len={retic_bot_parent:[top_bl_2], retic_top:[]})
+        # print(f"Edge 1: <{b.get_name()}, {a.get_name()}")
+        # print(f"Edge 2: <{y.get_name()}, {x.get_name()}")
         
         
-#         if a!=x or b!=y: #Not a bubble
-#             net.add_uid_node(z)
-#             net.add_uid_node(c)
+        z : Node = Node() #, parent_nodes=[b], branch_len={b:[top_bl_1]})
+        c : Node = Node(is_reticulation=True) #, parent_nodes=[retic_bot_parent, z], branch_len={retic_bot_parent:[top_bl_2], retic_top:[]})
+        
+        
+        if a!=x or b!=y: #Not a bubble
+            net.add_uid_node(z)
+            net.add_uid_node(c)
             
-#             insert_node_in_edge([b, a], c, net)
-#             # print("DOING NEXT INSERT")
-#             insert_node_in_edge([y, x], z, net)
-#             # print("NOW CONNECTING NODES")
-#             connect_nodes(c, z, net)
+            insert_node_in_edge([b, a], c, net)
+            # print("DOING NEXT INSERT")
+            insert_node_in_edge([y, x], z, net)
+            # print("NOW CONNECTING NODES")
+            connect_nodes(c, z, net)
             
             
-#             self.undo_info = [c, z, a, b, x, y]
-#             self.same_move_info = [node.get_name() for node in self.undo_info]
+            self.undo_info = [c, z, a, b, x, y]
+            self.same_move_info = [node.get_name() for node in self.undo_info]
         
-#         print("-----AFTER MOVE-----")
-#         net.pretty_print_edges()
-#         #net.print_graph()
-#         model.update_network()
-#         #Not handling branch lengths/bubbles at this time
-#         return model
+        print("-----AFTER MOVE-----")
+        net.pretty_print_edges()
+        #net.print_graph()
+        model.update_network()
+        #Not handling branch lengths/bubbles at this time
+        return model
 
-#     def undo(self, model : Model)-> None:
-#         net : DAG = model.network
-#         print("--------UNDOING MOVE------")
-#         if self.undo_info is not None:
+    def undo(self, model : Model)-> None:
+        net : DAG = model.network
+        print("--------UNDOING MOVE------")
+        if self.undo_info is not None:
             
-#             #undo parent settings
-#             self.undo_info[2].remove_parent(self.undo_info[0]) # c is not a's parent anymore
-#             self.undo_info[4].remove_parent(self.undo_info[1]) # z is not x's parent anymore
+            #undo parent settings
+            self.undo_info[2].remove_parent(self.undo_info[0]) # c is not a's parent anymore
+            self.undo_info[4].remove_parent(self.undo_info[1]) # z is not x's parent anymore
             
-#             #essentially RemoveRetic
-#             edges_2_remove = [[self.undo_info[1], self.undo_info[0]],
-#                             [self.undo_info[3], self.undo_info[0]],
-#                             [self.undo_info[0], self.undo_info[2]],
-#                             [self.undo_info[5], self.undo_info[1]],
-#                             [self.undo_info[1], self.undo_info[4]]]
+            #essentially RemoveRetic
+            edges_2_remove = [[self.undo_info[1], self.undo_info[0]],
+                            [self.undo_info[3], self.undo_info[0]],
+                            [self.undo_info[0], self.undo_info[2]],
+                            [self.undo_info[5], self.undo_info[1]],
+                            [self.undo_info[1], self.undo_info[4]]]
             
-#             for edge in edges_2_remove:
-#                 net.removeEdge(edge)
+            for edge in edges_2_remove:
+                net.remove_edge(edge)
             
-#             net.removeNode(self.undo_info[0])
-#             net.removeNode(self.undo_info[1])
-#             connect_nodes(self.undo_info[2], self.undo_info[3], net)
-#             connect_nodes(self.undo_info[4], self.undo_info[5], net)
+            net.remove_node(self.undo_info[0])
+            net.remove_node(self.undo_info[1])
+            connect_nodes(self.undo_info[2], self.undo_info[3], net)
+            connect_nodes(self.undo_info[4], self.undo_info[5], net)
             
-#         net.pretty_print_edges()
-#         model.update_network()
+        net.pretty_print_edges()
+        model.update_network()
 
-#     def same_move(self, model : Model) -> None:
-#         if type(model.network) is DAG:
-#             net : DAG = model.network
-#         else:
-#             net : DAG = model.network.get()
+    def same_move(self, model : Model) -> None:
+        if type(model.network) is DAG:
+            net : DAG = model.network
+        else:
+            net : DAG = model.network.get()
             
-#         if self.same_move_info is not None:
-#             nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
+        if self.same_move_info is not None:
+            nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
             
-#             #C and Z do not exist in the other network, just copy the names into new nodes
-#             a : Node = nodes[2]
-#             b : Node = nodes[3]
-#             x : Node = nodes[4]
-#             y : Node = nodes[5]
-#             c : Node = Node(name=self.same_move_info[0])
-#             z : Node = Node(name=self.same_move_info[1])
+            #C and Z do not exist in the other network, just copy the names into new nodes
+            a : Node = nodes[2]
+            b : Node = nodes[3]
+            x : Node = nodes[4]
+            y : Node = nodes[5]
+            c : Node = Node(name=self.same_move_info[0])
+            z : Node = Node(name=self.same_move_info[1])
             
-#             insert_node_in_edge([b, a], c, net)
-#             insert_node_in_edge([y, x], z, net)
-#             connect_nodes(c, z, net)
-#             net.addNodes(z)
-#             net.addNodes(c)
+            insert_node_in_edge([b, a], c, net)
+            insert_node_in_edge([y, x], z, net)
+            connect_nodes(c, z, net)
+            net.add_nodes(z)
+            net.add_nodes(c)
         
-#         model.update_network()
+        model.update_network()
     
-#     def hastings_ratio(self) -> float:
-#         return 1.0
+    def hastings_ratio(self) -> float:
+        return 1.0
     
-# class RemoveReticulation(Move):
-#     def __init__(self):
-#         super().__init__()
+class RemoveReticulation(Move):
+    def __init__(self):
+        super().__init__()
     
     
-#     def execute(self, model : Model) -> DAG:
-#         """
-#         Removes a reticulation edge from the network
-#         """
-#         net : DAG = model.network
-#         # net.print_graph()
-#         net.pretty_print_edges()
-#         #Select a random reticulation edge to remove
-#         retic_edge : list[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
+    def execute(self, model : Model) -> DAG:
+        """
+        Removes a reticulation edge from the network
+        """
+        net : DAG = model.network
+        # net.print_graph()
+        net.pretty_print_edges()
+        #Select a random reticulation edge to remove
+        retic_edge : list[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
         
-#         c : Node = retic_edge[1]
-#         z : Node = retic_edge[0]
+        c : Node = retic_edge[1]
+        z : Node = retic_edge[0]
         
         
-#         #In all 4 cases, c/z both have exactly one parent and one child after removal of the retic edge
-#         a : Node = net.findDirectSuccessors(c)[0] 
-#         b : Node = [node for node in c.get_parent(return_all=True) if node != z][0]
-#         x : Node = net.findDirectSuccessors(z)[0] 
-#         y : Node = z.get_parent()
+        #In all 4 cases, c/z both have exactly one parent and one child after removal of the retic edge
+        a : Node = net.get_children(c)[0] 
+        b : Node = [node for node in c.get_parent(return_all=True) if node != z][0]
+        x : Node = net.get_children(z)[0] 
+        y : Node = z.get_parent()
         
-#         if a!=x or b!=y: #Not a bubble
-#             a.remove_parent(c)
-#             x.remove_parent(z)
+        if a!=x or b!=y: #Not a bubble
+            a.remove_parent(c)
+            x.remove_parent(z)
             
-#             net.removeEdge([z, c])
-#             net.removeNode(c, True)
-#             net.removeNode(z, True)
+            net.remove_edge([z, c])
+            net.remove_node(c, True)
+            net.remove_node(z, True)
             
-#             connect_nodes(a, b, net)
-#             connect_nodes(x, y, net)
+            connect_nodes(a, b, net)
+            connect_nodes(x, y, net)
             
-#             self.undo_info = [c, z, a, b, x, y]
-#             self.same_move_info = [node.get_name() for node in self.undo_info]
+            self.undo_info = [c, z, a, b, x, y]
+            self.same_move_info = [node.get_name() for node in self.undo_info]
         
-#         #Not handling branch lengths/bubbles at this time
-#         net.pretty_print_edges()
-#         #net.print_graph()
-#         model.update_network()
-#         return model
+        #Not handling branch lengths/bubbles at this time
+        net.pretty_print_edges()
+        #net.print_graph()
+        model.update_network()
+        return model
 
-#     def undo(self, model : Model)-> None:
-#         net : DAG = model.network
-#         if self.undo_info is not None:
-#             net.addNodes(self.undo_info[0])
-#             net.addNodes(self.undo_info[1])
-#             insert_node_in_edge([self.undo_info[3], self.undo_info[2]], self.undo_info[0], net) # c into (a,b)
-#             insert_node_in_edge([self.undo_info[5], self.undo_info[4]], self.undo_info[1], net) # z into (x,y)
-#             connect_nodes(self.undo_info[0], self.undo_info[1], net) # connect c to z
+    def undo(self, model : Model)-> None:
+        net : DAG = model.network
+        if self.undo_info is not None:
+            net.add_nodes(self.undo_info[0])
+            net.add_nodes(self.undo_info[1])
+            insert_node_in_edge([self.undo_info[3], self.undo_info[2]], self.undo_info[0], net) # c into (a,b)
+            insert_node_in_edge([self.undo_info[5], self.undo_info[4]], self.undo_info[1], net) # z into (x,y)
+            connect_nodes(self.undo_info[0], self.undo_info[1], net) # connect c to z
         
-#         #net.print_graph()
-#         net.pretty_print_edges()
-#         model.update_network()
+        #net.print_graph()
+        net.pretty_print_edges()
+        model.update_network()
 
-#     def same_move(self, model : Model) -> None:
-#         net : DAG = model.network
-#         if self.same_move_info is not None:
-#             nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
-#             c : Node = nodes[0]
-#             z : Node = nodes[1]
-#             a : Node = nodes[2]
-#             b : Node = nodes[3]
-#             x : Node = nodes[4]
-#             y : Node = nodes[5]
+    def same_move(self, model : Model) -> None:
+        net : DAG = model.network
+        if self.same_move_info is not None:
+            nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
+            c : Node = nodes[0]
+            z : Node = nodes[1]
+            a : Node = nodes[2]
+            b : Node = nodes[3]
+            x : Node = nodes[4]
+            y : Node = nodes[5]
             
-#             net.removeEdge([z, c])
-#             net.removeNode(c, True)
-#             net.removeNode(z, True)
-#             connect_nodes(a, b, net)
-#             connect_nodes(x, y, net)
+            net.remove_edge([z, c])
+            net.remove_node(c, True)
+            net.remove_node(z, True)
+            connect_nodes(a, b, net)
+            connect_nodes(x, y, net)
         
-#         model.update_network()
+        model.update_network()
     
-#     def hastings_ratio(self) -> float:
-#         return 1.0
+    def hastings_ratio(self) -> float:
+        return 1.0
     
-# class RelocateReticulationSource(Move):
-#     def __init__(self):
-#         super().__init__()
+class RelocateReticulationSource(Move):
+    def __init__(self):
+        super().__init__()
     
     
-#     def execute(self, model : Model) -> DAG:
-#         """
-#         Removes a reticulation edge from the network
-#         """
-#         net : DAG = model.network
-#         #net.print_graph()
-#         #net.pretty_print_edges()
+    def execute(self, model : Model) -> DAG:
+        """
+        Removes a reticulation edge from the network
+        """
+        net : DAG = model.network
+        #net.print_graph()
+        #net.pretty_print_edges()
         
-#         #Select a random reticulation edge to relocate
-#         retic_edge : list[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
+        #Select a random reticulation edge to relocate
+        retic_edge : list[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
         
     
-#         c : Node = retic_edge[1]
-#         z : Node = retic_edge[0]
-#         x : Node = [node for node in net.findDirectSuccessors(z) if node != c][0]
-#         y : Node = z.get_parent()
+        c : Node = retic_edge[1]
+        z : Node = retic_edge[0]
+        x : Node = [node for node in net.get_children(z) if node != c][0]
+        y : Node = z.get_parent()
        
-#         #Remove edge destination
-#         net.removeNode(z, True) 
-#         x.remove_parent(z)
-#         connect_nodes(x, y, net)
+        #Remove edge destination
+        net.remove_node(z, True) 
+        x.remove_parent(z)
+        connect_nodes(x, y, net)
         
-#         #Select a new edge
-#         edge_set : list[list[Node]] = [edge for edge in net.edges if edge[1].is_reticulation() == False]
-#         new_edge : list[Node] = random.choice(edge_set)
-#         #print(f"NEW EDGE: {[node.get_name() for node in new_edge]}")
-#         #Add new destination and reconnect c and z
-#         net.addNodes(z)
-#         insert_node_in_edge(new_edge, z, net)
-#         connect_nodes(c, z, net)
+        #Select a new edge
+        edge_set : list[list[Node]] = [edge for edge in net.edges if edge[1].is_reticulation() == False]
+        new_edge : list[Node] = random.choice(edge_set)
+        #print(f"NEW EDGE: {[node.get_name() for node in new_edge]}")
+        #Add new destination and reconnect c and z
+        net.add_nodes(z)
+        insert_node_in_edge(new_edge, z, net)
+        connect_nodes(c, z, net)
         
-#         self.undo_info = [c, z, x, y, new_edge[1], new_edge[0]]
-#         self.same_move_info = [node.get_name() for node in self.undo_info]
+        self.undo_info = [c, z, x, y, new_edge[1], new_edge[0]]
+        self.same_move_info = [node.get_name() for node in self.undo_info]
         
-#         #Not handling branch lengths/bubbles at this time
-#         #net.pretty_print_edges()
-#         #net.print_graph()
-#         model.update_network()
-#         return model
+        #Not handling branch lengths/bubbles at this time
+        #net.pretty_print_edges()
+        #net.print_graph()
+        model.update_network()
+        return model
 
-#     def undo(self, model : Model)-> None:
-#         net : DAG = model.network
-#         if self.undo_info is not None:
-#             c : Node = self.undo_info[0]
-#             z : Node = self.undo_info[1]
-#             x : Node = self.undo_info[2]
-#             y : Node = self.undo_info[3]
-#             a : Node = self.undo_info[4]
-#             b : Node = self.undo_info[5]
+    def undo(self, model : Model)-> None:
+        net : DAG = model.network
+        if self.undo_info is not None:
+            c : Node = self.undo_info[0]
+            z : Node = self.undo_info[1]
+            x : Node = self.undo_info[2]
+            y : Node = self.undo_info[3]
+            a : Node = self.undo_info[4]
+            b : Node = self.undo_info[5]
             
-#             #restore old edge
-#             net.removeNode(z, True)
-#             a.remove_parent(z)
-#             connect_nodes(a, b, net)
-#             net.addNodes(z)
-#             connect_nodes(c, z, net)
+            #restore old edge
+            net.remove_node(z, True)
+            a.remove_parent(z)
+            connect_nodes(a, b, net)
+            net.add_nodes(z)
+            connect_nodes(c, z, net)
             
-#             #set z's parent back to y
-#             z.set_parent([y])
+            #set z's parent back to y
+            z.set_parent([y])
             
-#             #insert z back into the x, y edge
-#             insert_node_in_edge([y, x], z, net)
+            #insert z back into the x, y edge
+            insert_node_in_edge([y, x], z, net)
         
-#         model.update_network()
-#         net.print_graph()
+        model.update_network()
+        net.print_graph()
         
         
 
-#     def same_move(self, model : Model) -> None:
-#         net : DAG = model.network
-#         if self.same_move_info is not None:
-#             nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
-#             c : Node = nodes[0]
-#             z : Node = nodes[1]
-#             a : Node = nodes[2]
-#             b : Node = nodes[3]
-#             x : Node = nodes[4]
-#             y : Node = nodes[5]
+    def same_move(self, model : Model) -> None:
+        net : DAG = model.network
+        if self.same_move_info is not None:
+            nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
+            c : Node = nodes[0]
+            z : Node = nodes[1]
+            a : Node = nodes[2]
+            b : Node = nodes[3]
+            x : Node = nodes[4]
+            y : Node = nodes[5]
             
-#             #Remove edge destination
-#             net.removeNode(z, True) 
-#             connect_nodes(x, y, net)
+            #Remove edge destination
+            net.remove_node(z, True) 
+            connect_nodes(x, y, net)
             
-#             #Add new destination and reconnect c and z
-#             insert_node_in_edge([b, a], z, net)
-#             connect_nodes(c, z, net)
+            #Add new destination and reconnect c and z
+            insert_node_in_edge([b, a], z, net)
+            connect_nodes(c, z, net)
     
-#     def hastings_ratio(self) -> float:
-#         return 1.0
+    def hastings_ratio(self) -> float:
+        return 1.0
     
-# class RelocateReticulationDestination(Move):
-#     def __init__(self):
-#         super().__init__()
+class RelocateReticulationDestination(Move):
+    def __init__(self):
+        super().__init__()
     
 
-#     def execute(self, model : Model) -> DAG:
-#         """
-#         Removes a reticulation edge from the network
-#         """
-#         net : DAG = model.network
-#         #net.print_graph()
-#         #Select a random reticulation edge to relocate
-#         retic_edge : tuple[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
+    def execute(self, model : Model) -> DAG:
+        """
+        Removes a reticulation edge from the network
+        """
+        net : DAG = model.network
+        #net.print_graph()
+        #Select a random reticulation edge to relocate
+        retic_edge : tuple[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
         
-#         c : Node = retic_edge[1]
-#         z : Node = retic_edge[0]
+        c : Node = retic_edge[1]
+        z : Node = retic_edge[0]
         
-#         #In all 4 cases, c/z both have exactly one parent and one child after removal of the retic edge
-#         a : Node = net.findDirectSuccessors(c)[0]
-#         b : Node = [node for node in c.get_parent(return_all=True) if node != z][0]
+        #In all 4 cases, c/z both have exactly one parent and one child after removal of the retic edge
+        a : Node = net.get_children(c)[0]
+        b : Node = [node for node in c.get_parent(return_all=True) if node != z][0]
        
         
-#         #Remove edge src
-#         c.remove_parent(b)
-#         a.remove_parent(c)
-#         net.removeNode(c, True) 
-#         connect_nodes(a, b, net)
+        #Remove edge src
+        c.remove_parent(b)
+        a.remove_parent(c)
+        net.remove_node(c, True) 
+        connect_nodes(a, b, net)
         
-#         #Select a new edge
-#         edge_set : list[tuple[Node]] = [edge for edge in net.edges if edge[1].is_reticulation() == False]
-#         new_edge : tuple[Node] = random.choice(edge_set)
+        #Select a new edge
+        edge_set : list[tuple[Node]] = [edge for edge in net.edges if edge[1].is_reticulation() == False]
+        new_edge : tuple[Node] = random.choice(edge_set)
         
-#         #Add new destination and reconnect c and z
-#         net.addNodes(c)
-#         insert_node_in_edge(new_edge, c, net)
-#         connect_nodes(c, z, net)
+        #Add new destination and reconnect c and z
+        net.add_nodes(c)
+        insert_node_in_edge(new_edge, c, net)
+        connect_nodes(c, z, net)
         
-#         self.undo_info = [c, z, a, b, new_edge[1], new_edge[0]]
-#         self.same_move_info = [node.get_name() for node in self.undo_info]
+        self.undo_info = [c, z, a, b, new_edge[1], new_edge[0]]
+        self.same_move_info = [node.get_name() for node in self.undo_info]
         
-#         #Not handling branch lengths/bubbles at this time
-#         #net.print_graph()
-#         model.update_network()
-#         return model
+        #Not handling branch lengths/bubbles at this time
+        #net.print_graph()
+        model.update_network()
+        return model
 
-#     def undo(self, model : Model)-> None:
-#         net : DAG = model.network
-#         if self.undo_info is not None:
-#             c : Node = self.undo_info[0]
-#             z : Node = self.undo_info[1]
-#             a : Node = self.undo_info[2]
-#             b : Node = self.undo_info[3]
-#             x : Node = self.undo_info[4]
-#             y : Node = self.undo_info[5]
+    def undo(self, model : Model)-> None:
+        net : DAG = model.network
+        if self.undo_info is not None:
+            c : Node = self.undo_info[0]
+            z : Node = self.undo_info[1]
+            a : Node = self.undo_info[2]
+            b : Node = self.undo_info[3]
+            x : Node = self.undo_info[4]
+            y : Node = self.undo_info[5]
         
-#             # y : Node = [node for node in c.get_parent(return_all=True) if node.get_name() != z.get_name()][0]
-#             # x : Node = net.findDirectSuccessors(c)[0]
+            # y : Node = [node for node in c.get_parent(return_all=True) if node.get_name() != z.get_name()][0]
+            # x : Node = net.get_children(c)[0]
             
-#             #restore current edge
-#             net.removeNode(c, True)
-#             x.remove_parent(c)
-#             connect_nodes(x, y, net)
-#             net.addNodes(c)
+            #restore current edge
+            net.remove_node(c, True)
+            x.remove_parent(c)
+            connect_nodes(x, y, net)
+            net.add_nodes(c)
             
-#             #restore old edge
-#             net.addEdges([z, c])
-#             c.set_parent([b, z])
-#             insert_node_in_edge([b, a], c, net)
-#         model.update_network()
-#         net.print_graph()
+            #restore old edge
+            net.add_edges([z, c])
+            c.set_parent([b, z])
+            insert_node_in_edge([b, a], c, net)
+        model.update_network()
+        net.print_graph()
             
 
-#     def same_move(self, model : Model) -> None:
-#         net : DAG = model.network
-#         if self.same_move_info is not None:
-#             nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
-#             c : Node = nodes[0]
-#             z : Node = nodes[1]
-#             a : Node = nodes[2]
-#             b : Node = nodes[3]
-#             x : Node = nodes[4]
-#             y : Node = nodes[5]
+    def same_move(self, model : Model) -> None:
+        net : DAG = model.network
+        if self.same_move_info is not None:
+            nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
+            c : Node = nodes[0]
+            z : Node = nodes[1]
+            a : Node = nodes[2]
+            b : Node = nodes[3]
+            x : Node = nodes[4]
+            y : Node = nodes[5]
             
-#             #Remove edge src
-#             net.removeNode(c, True) 
-#             a.remove_parent(c)
-#             connect_nodes(a, b, net)
+            #Remove edge src
+            net.remove_node(c, True) 
+            a.remove_parent(c)
+            connect_nodes(a, b, net)
             
-#             #Add new destination and reconnect c and z
-#             net.addNodes(c)
-#             insert_node_in_edge([y, x], c, net)
-#             connect_nodes(c, z, net)
+            #Add new destination and reconnect c and z
+            net.add_nodes(c)
+            insert_node_in_edge([y, x], c, net)
+            connect_nodes(c, z, net)
         
-#         model.update_network() 
+        model.update_network() 
         
-#     def hastings_ratio(self) -> float:
-#         return 1.0
+    def hastings_ratio(self) -> float:
+        return 1.0
      
-# class RelocateReticulation(Move):
-#     def __init__(self):
-#         super().__init__()
+class RelocateReticulation(Move):
+    def __init__(self):
+        super().__init__()
     
 
     
-#     def execute(self, model : Model) -> DAG:
-#         """
-#         Removes a reticulation edge from the network
-#         """
-#         net : DAG = model.network
+    def execute(self, model : Model) -> DAG:
+        """
+        Removes a reticulation edge from the network
+        """
+        net : DAG = model.network
     
-#         #Select a random reticulation edge to remove
-#         retic_edge : tuple[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
+        #Select a random reticulation edge to remove
+        retic_edge : tuple[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
         
-#         c : Node = retic_edge[1]
-#         z : Node = retic_edge[0]
-#         a : Node = net.findDirectSuccessors(c)[0] 
-#         b : Node = [node for node in c.get_parent(return_all=True) if node != z][0]
-#         x : Node = [node for node in net.findDirectSuccessors(z) if node != c][0]
-#         y : Node = z.get_parent()
+        c : Node = retic_edge[1]
+        z : Node = retic_edge[0]
+        a : Node = net.get_children(c)[0] 
+        b : Node = [node for node in c.get_parent(return_all=True) if node != z][0]
+        x : Node = [node for node in net.get_children(z) if node != c][0]
+        y : Node = z.get_parent()
 
        
-#         if a!=x or b!=y: #Not a bubble
-#             net.removeNode(c, True)
-#             net.removeNode(z, True)
-#             x.remove_parent(z)
-#             a.remove_parent(c)
-#             c.set_parent([])
-#             z.set_parent([])
-#             connect_nodes(a, b, net)
-#             connect_nodes(x, y, net)
+        if a!=x or b!=y: #Not a bubble
+            net.remove_node(c, True)
+            net.remove_node(z, True)
+            x.remove_parent(z)
+            a.remove_parent(c)
+            c.set_parent([])
+            z.set_parent([])
+            connect_nodes(a, b, net)
+            connect_nodes(x, y, net)
             
-#             E_set = [item for item in net.edges if item != [z, c] and item != [b, c]] #.append((net.findRoot()[0], None)) # add (root, null) to edge set
-#             # Select 2 perhaps non-distinct edges to connect with a reticulation edge-- we allow bubbles
-#             random_edges = [random.choice(E_set), random.choice(E_set)]
+            E_set = [item for item in net.edges if item != [z, c] and item != [b, c]] #.append((net.root()[0], None)) # add (root, null) to edge set
+            # Select 2 perhaps non-distinct edges to connect with a reticulation edge-- we allow bubbles
+            random_edges = [random.choice(E_set), random.choice(E_set)]
             
-#             l : Node = random_edges[0][0]
-#             m : Node = random_edges[0][1]
-#             n : Node = random_edges[1][0]
-#             o : Node = random_edges[1][1]
+            l : Node = random_edges[0][0]
+            m : Node = random_edges[0][1]
+            n : Node = random_edges[1][0]
+            o : Node = random_edges[1][1]
             
-#             insert_node_in_edge([l, m], c, net)
-#             insert_node_in_edge([n, o], z, net)
-#             connect_nodes(c, z, net)
+            insert_node_in_edge([l, m], c, net)
+            insert_node_in_edge([n, o], z, net)
+            connect_nodes(c, z, net)
             
-#             #add the nodes back
-#             net.addNodes(c)
-#             net.addNodes(z)
+            #add the nodes back
+            net.add_nodes(c)
+            net.add_nodes(z)
             
-#             self.undo_info = [c, z, a, b, x, y, l, m, n, o]
-#             self.same_move_info = [node.get_name() for node in self.undo_info]
+            self.undo_info = [c, z, a, b, x, y, l, m, n, o]
+            self.same_move_info = [node.get_name() for node in self.undo_info]
         
-#         #Not handling branch lengths/bubbles at this time
-#         model.update_network()
-#         return model
+        #Not handling branch lengths/bubbles at this time
+        model.update_network()
+        return model
 
-#     def undo(self, model : Model)-> None:
-#         net : DAG = model.network
-#         if self.undo_info is not None:
-#             c : Node = self.undo_info[0]
-#             z : Node = self.undo_info[1]
-#             a : Node = self.undo_info[2]
-#             b : Node = self.undo_info[3]
-#             x : Node = self.undo_info[4]
-#             y : Node = self.undo_info[5]
-#             l : Node = self.undo_info[6]
-#             m : Node = self.undo_info[7]
-#             n : Node = self.undo_info[8]
-#             o : Node = self.undo_info[9]
+    def undo(self, model : Model)-> None:
+        net : DAG = model.network
+        if self.undo_info is not None:
+            c : Node = self.undo_info[0]
+            z : Node = self.undo_info[1]
+            a : Node = self.undo_info[2]
+            b : Node = self.undo_info[3]
+            x : Node = self.undo_info[4]
+            y : Node = self.undo_info[5]
+            l : Node = self.undo_info[6]
+            m : Node = self.undo_info[7]
+            n : Node = self.undo_info[8]
+            o : Node = self.undo_info[9]
             
-#             net.removeNode(c, True)
-#             net.removeNode(z, True)
-#             c.set_parent([z, b])
-#             z.set_parent([y])
-#             m.remove_parent(c)
-#             o.remove_parent(z)
-#             connect_nodes(m, l, net)
-#             connect_nodes(o, n, net)
+            net.remove_node(c, True)
+            net.remove_node(z, True)
+            c.set_parent([z, b])
+            z.set_parent([y])
+            m.remove_parent(c)
+            o.remove_parent(z)
+            connect_nodes(m, l, net)
+            connect_nodes(o, n, net)
             
-#             insert_node_in_edge([b, a], c, net)
-#             insert_node_in_edge([y, x], z, net)
+            insert_node_in_edge([b, a], c, net)
+            insert_node_in_edge([y, x], z, net)
             
-#             net.addNodes(c)
-#             net.addNodes(z)
+            net.add_nodes(c)
+            net.add_nodes(z)
         
-#         net.print_graph()
-#         model.update_network()
+        net.print_graph()
+        model.update_network()
             
             
-#     def same_move(self, model : Model) -> None:
-#         net : DAG = model.network
-#         if self.same_move_info is not None:
-#             nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
-#             c : Node = nodes[0]
-#             z : Node = nodes[1]
-#             a : Node = nodes[2]
-#             b : Node = nodes[3]
-#             x : Node = nodes[4]
-#             y : Node = nodes[5]
-#             l : Node = nodes[6]
-#             m : Node = nodes[7]
-#             n : Node = nodes[8]
-#             o : Node = nodes[9]
+    def same_move(self, model : Model) -> None:
+        net : DAG = model.network
+        if self.same_move_info is not None:
+            nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
+            c : Node = nodes[0]
+            z : Node = nodes[1]
+            a : Node = nodes[2]
+            b : Node = nodes[3]
+            x : Node = nodes[4]
+            y : Node = nodes[5]
+            l : Node = nodes[6]
+            m : Node = nodes[7]
+            n : Node = nodes[8]
+            o : Node = nodes[9]
             
-#             net.removeNode(c, True)
-#             net.removeNode(z, True)
+            net.remove_node(c, True)
+            net.remove_node(z, True)
             
-#             connect_nodes(a, b, net)
-#             connect_nodes(x, y, net)
+            connect_nodes(a, b, net)
+            connect_nodes(x, y, net)
             
-#             insert_node_in_edge((l, m), c, net)
-#             insert_node_in_edge((n, o), z, net)
+            insert_node_in_edge((l, m), c, net)
+            insert_node_in_edge((n, o), z, net)
             
-#             net.addNodes(c)
-#             net.addNodes(z)
-#         model.update_network()
+            net.add_nodes(c)
+            net.add_nodes(z)
+        model.update_network()
         
-#     def hastings_ratio(self) -> float:
-#         return 1.0
+    def hastings_ratio(self) -> float:
+        return 1.0
         
-# class FlipReticulation(Move):
-#     def __init__(self):
-#         super().__init__()
+class FlipReticulation(Move):
+    def __init__(self):
+        super().__init__()
     
     
-#     def execute(self, model : Model) -> DAG:
-#         """
-#         Removes a reticulation edge from the network
-#         """
-#         net : DAG = model.network
-#         #net.print_graph()
-#         #Select a random reticulation edge to remove
-#         retic_edge : tuple[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
+    def execute(self, model : Model) -> DAG:
+        """
+        Removes a reticulation edge from the network
+        """
+        net : DAG = model.network
+        #net.print_graph()
+        #Select a random reticulation edge to remove
+        retic_edge : tuple[Node] = random.choice([edge for edge in net.edges if edge[1].is_reticulation()])
         
-#         c : Node = retic_edge[1]
-#         z : Node = retic_edge[0]
+        c : Node = retic_edge[1]
+        z : Node = retic_edge[0]
        
-#         net.removeEdge([z, c])
-#         net.addEdges([c, z])
+        net.remove_edge([z, c])
+        net.add_edges([c, z])
         
-#         c.remove_parent(z)
-#         z.add_parent(c)
-#         c.set_is_reticulation(False)
-#         z.set_is_reticulation(True)
+        c.remove_parent(z)
+        z.add_parent(c)
+        c.set_is_reticulation(False)
+        z.set_is_reticulation(True)
         
-#         self.undo_info = [c, z]
-#         self.same_move_info = [c.get_name(), z.get_name()]
+        self.undo_info = [c, z]
+        self.same_move_info = [c.get_name(), z.get_name()]
         
-#         #Not handling branch lengths/bubbles at this time
-#         #net.print_graph()
-#         model.update_network()
-#         return model
+        #Not handling branch lengths/bubbles at this time
+        #net.print_graph()
+        model.update_network()
+        return model
 
-#     def undo(self, model : Model)-> None:
-#         net : DAG = model.network
-#         if self.undo_info is not None:
+    def undo(self, model : Model)-> None:
+        net : DAG = model.network
+        if self.undo_info is not None:
             
-#             c : Node = self.undo_info[0]
-#             z : Node = self.undo_info[1]
+            c : Node = self.undo_info[0]
+            z : Node = self.undo_info[1]
             
-#             net.removeEdge([c, z])
-#             net.addEdges([z, c])
+            net.remove_edge([c, z])
+            net.add_edges([z, c])
             
-#             z.remove_parent(c)
-#             c.add_parent(z)
+            z.remove_parent(c)
+            c.add_parent(z)
             
-#             c.set_is_reticulation(True)
-#             z.set_is_reticulation(False)
+            c.set_is_reticulation(True)
+            z.set_is_reticulation(False)
         
-#         model.update_network()
-#         net.print_graph()
+        model.update_network()
+        net.print_graph()
 
-#     def same_move(self, model : Model) -> None:
-#         net : DAG = model.network
-#         if self.same_move_info is not None:
-#             nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
-#             c : Node = nodes[0]
-#             z : Node = nodes[1]
+    def same_move(self, model : Model) -> None:
+        net : DAG = model.network
+        if self.same_move_info is not None:
+            nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
+            c : Node = nodes[0]
+            z : Node = nodes[1]
             
-#             net.removeEdge([z, c])
-#             net.addEdges([c, z])
+            net.remove_edge([z, c])
+            net.add_edges([c, z])
             
-#             c.remove_parent(z)
-#             z.add_parent(c)
-#             c.set_is_reticulation(False)
-#             z.set_is_reticulation(True)
-#         model.update_network()
+            c.remove_parent(z)
+            z.add_parent(c)
+            c.set_is_reticulation(False)
+            z.set_is_reticulation(True)
+        model.update_network()
             
-#     def hastings_ratio(self) -> float:
-#         return 1.0
+    def hastings_ratio(self) -> float:
+        return 1.0
     
 
 
@@ -987,6 +995,7 @@ class SwitchParentage(Move):
         self.removed_nodes : set[Node] = set()
         self.removed_edges : set[list[Node]] = set()
         
+        self.print_net = False
         
     def random_object(self, mylist, rng):
         if len(mylist) == 0:
@@ -997,65 +1006,59 @@ class SwitchParentage(Move):
     
     def execute(self, model : Model) -> Model:
         """
-        Adds a reticulation edge to the network
+        Executes the Swap-Parentage Move, described in detail at https://phylogenomics.rice.edu/tutorials.html
+
+        Args:
+            model (Model): A model object, for which there must be a populated network field 
+
+        Raises:
+            MoveError : Aborts move if something irrecoverably wrong happens trying to make the move. Errors should not 
+            happen and these will be removed in production after things are fully tested.
+
+        Returns:
+            Model: A modified model, with a newly proposed network topology
+            
         """
         net : DAG = model.network
         self.undo_info = copy.deepcopy(net)
-        
-        print("-----BEFORE MOVE-----")
-        net.pretty_print_edges()
-        net.print_graph()
-        net.print_adjacency()
-        print("-----BEGINNING MOVE-----")
-        #print(net.newick())
-
-        
+                
         #STEP 1: Select random non-root node
-        #node_2_change : Node = random.choice([node for node in net.nodes if node != net.findRoot()[0]])
-        node_2_change : Node =self.random_object([node for node in net.nodes if node != net.findRoot()[0]], model.rng)
+        node_2_change : Node = self.random_object([node for node in net.nodes if node != net.root()[0]], model.rng)
     
-        # STEP 1b: Disallow pointless changes (ie changing parentage)
-        node_pars = net.findDirectPredecessors(node_2_change)
+        # STEP 1b: Disallow pointless changes 
+        node_pars = net.get_parents(node_2_change)
         
         if len(node_pars) == 1:
-            root_node = net.findRoot()[0]
+            root_node = net.root()[0]
             if node_pars[0] == root_node:
-                root_kids = net.findDirectSuccessors(root_node)
+                root_kids = net.get_children(root_node)
                 other_kid = [node for node in root_kids if node != node_2_change][0]
                 if net.out_degree(other_kid) == 0:
                     return model
-                
-        print(f"CHANGING PARENTS OF :{node_2_change.get_name()}")
         
+       
+        if net.in_degree(node_2_change) == 2:    
+            changing_retic = True    
+        else:
+            changing_retic = False
+            
         #STEP 2: Get target subgenome count
         target : int = net.subgenome_count(node_2_change)
         
         #STEP 3: Remove a parent edge
-        edge_2_remove : list[Node] = self.random_object([edge for edge in net.edges if edge[1] == node_2_change], model.rng)
-        ## print(edge_2_remove)
+        edge_2_remove : list[Node] = self.random_object(net.in_edges(node_2_change), model.rng)
         self.delete_edge(net, edge_2_remove)
         
-        
-        
-        print("CHECKING DELETE ROUTINE...")
-        
-        net.print_adjacency()
-        
-        
-        
-        print("DONE CHECKING THE DELETE ROUTINE.")
-        
         is_first_iter = True
-        
         
         #STEP 4: Create new edges/parents
         if net.in_degree(node_2_change) == 1:
             cur_ct = net.subgenome_count(node_2_change)
         else:
-            #We severed (or should have severed) the only path out of the node
+            #We severed the only path out of the node
             cur_ct = 0
        
-       # # print(f"STARTING AT CUR_CT: {cur_ct}")
+       
         while cur_ct != target:
             
             # 4.0: Select the next edge to branch from
@@ -1064,9 +1067,9 @@ class SwitchParentage(Move):
                 ## print(branch)
                 node_2_change = Node()
                 net.add_uid_node(node_2_change)
-                net.removeEdge(branch)
+                net.remove_edge(branch)
                 self.valid_attachment_edges.remove(branch)
-                net.addEdges([[branch[0], node_2_change], [node_2_change, branch[1]]], as_list=True)
+                net.add_edges([[branch[0], node_2_change], [node_2_change, branch[1]]], as_list=True)
                 self.valid_attachment_edges.append([branch[0], node_2_change])
                 self.valid_attachment_edges.append([node_2_change, branch[1]])
                 downstream_node : Node =  node_2_change #branch[1]
@@ -1075,12 +1078,13 @@ class SwitchParentage(Move):
                 
             # 4.1 : Select an edge with a key of <= cur_ct and that wont create a cycle (ensured by edges_2_subgct)
             bfs_starts = [node for node in net.nodes if net.in_degree(node) == 0 and net.out_degree(node) != 0]
-            print(f"bfs_starts: {[bfs_start.get_name() for bfs_start in bfs_starts]}")
+            
             if len(bfs_starts)>1:
                 if node_2_change in bfs_starts:
                     bfs_starts.remove(node_2_change)
                 else:
-                    raise Exception("hmmm idk man")
+                    raise MoveError("hmmm idk man")
+            
             if len(bfs_starts) == 0:
                 print(f"SOMETHING FUNKY : {node_2_change.get_name()}")
                 net.print_graph()
@@ -1091,12 +1095,15 @@ class SwitchParentage(Move):
                 
             edges_to_ct : dict[int, set] = net.edges_to_subgenome_count(downstream_node, target - cur_ct, bfs_start)
             
-            # print(edges_to_ct)
+
         
             random_key = self.random_object([key for key in edges_to_ct.keys()], model.rng)
             
             try:
                 new_edge : list[Node] = self.random_object(list(edges_to_ct[random_key]), model.rng)
+                if new_edge[1] == downstream_node:
+                    #print("MAKING A BUBBLE-- THEORETICALLY")
+                    self.print_net = True
             except:
                 raise MoveError("No edges with a sufficiently low/exact amount")
             
@@ -1105,16 +1112,14 @@ class SwitchParentage(Move):
             connector_node = Node()
             net.add_uid_node(connector_node)
             new_edge_list = [[connector_node, new_edge[1]], [new_edge[0], connector_node], [connector_node, node_2_change]]
-            net.addEdges(new_edge_list, as_list = True)
+            net.add_edges(new_edge_list, as_list = True)
             self.valid_attachment_edges.append(new_edge_list[2])
-            net.removeEdge(new_edge)
+            net.remove_edge(new_edge)
             
-            # print("NET AFTER ITERATION")
-            # net.print_adjacency()
-            # print("ROOTS:")
-            # print([node.get_name() for node in net.findRoot()])
-            if len(net.findRoot()) > 1:
-                raise Exception("OOPS, more than one root")
+            
+            if len(net.root()) > 1:
+                raise MoveError("OOPS, more than one root")
+            
             cur_ct = net.subgenome_count(node_2_change)
         
             is_first_iter = False
@@ -1124,69 +1129,37 @@ class SwitchParentage(Move):
         net.remove_floaters()
         net.prune_excess_nodes()
         
-    
-        print("-----AFTER MOVE-----")
-        net.pretty_print_edges()
-        net.print_graph()
-        net.print_adjacency()
+        
+        if changing_retic:
+            # print(net.newick())
+            # net.pretty_print_edges()
+            # net.print_graph()
+            changing_retic = False
+       
         model.update_network()
-        print("----DONE WITH MOVE----")
+        
         self.same_move_info = copy.deepcopy(net)
         
         return model
 
     def undo(self, model : Model)-> None:
         
-        # print("--------UNDOING MOVE------")
         if self.undo_info is not None:
+            
             model.network = self.undo_info
-            
-            
-        #net.pretty_print_edges()
+    
         model.update_network()
 
     def same_move(self, model : Model) -> None:
-        
-    
             
         if self.same_move_info is not None:
             model.network = self.same_move_info
-        
+            
         model.update_network()
     
     def hastings_ratio(self) -> float:
         return 1.0
     
-    # def delete_edge(self, net : DAG, edge : list[Node]) -> Node:
-    #     print(f"Deleting edge: <{[edge[0].get_name(), edge[1].get_name()]}")
-        
-    #     if len(net.findDirectPredecessors(edge[0])) < 2:
-    #         #print(f"Children of edge[0] : {[node.get_name() for node in net.findDirectSuccessors(edge[0])]}")
-    #         a : Node = [node for node in net.findDirectSuccessors(edge[0]) if node != edge[1]][0]
-    #         if net.in_degree(edge[0]) == 0:
-    #             net.removeEdge([edge[0], a])
-    #             # net.removeNode(edge[0])
-    #         else:
-    #             b : Node = net.findDirectPredecessors(edge[0])[0] #tree node will only have 1
-                
-    #             redundant_tree_edge1 = [b, edge[0]]
-    #             redundant_tree_edge2 = [edge[0], a]
-
-    #             net.removeEdge(redundant_tree_edge1)
-    #             net.removeEdge(redundant_tree_edge2)
-
-    #             net.addEdges([b, a])
-                
-    #             # net.removeNode(edge[0])
-    #     else:
-    #         print([node.get_name() for node in net.findDirectPredecessors(edge[0])])
-    #         for parent in net.findDirectPredecessors(edge[0]):
-    #             print(f"Processing edge: <{[edge[0].get_name(), edge[1].get_name()]}")
-    #             self.delete_edge(net , [parent, edge[0]])
-                
-    #         # net.removeNode(edge[0])
-        
-    #     net.removeEdge(edge) 
             
     def delete_edge(self, net:DAG, edge:list[Node]):
         root = edge[1]
@@ -1195,158 +1168,61 @@ class SwitchParentage(Move):
         q = deque()
         q.appendleft(root)
 
-        while len(q) != 0:
-            # pop at end for bfs
-            cur = q.pop()
-            print(f"Processing node: {cur.get_name()}")
-            #print(f"NEIGHBORS: {[node.get_name() for node in net.findDirectPredecessors(cur)]}")
-            
-            neighbors = copy.copy(net.findDirectPredecessors(cur))
-            for neighbor in neighbors: #Backwards up toward root
-                print(f"Processing Neighbor: {neighbor.get_name()}")
-                net.removeEdge([neighbor, cur])
-                
-                
-                if net.in_degrees[neighbor] == 2:
-                    q.append(neighbor)
-                else:
-                    a : Node = [node for node in net.findDirectSuccessors(neighbor) if node != cur][0]
-                    # if net.in_degree(neighbor) == 0:
-                    #     net.removeEdge([neighbor, a])
-                    #     # net.removeNode(edge[0])
-                    # else:
-                    if net.in_degree(neighbor) != 0:
-                        b : Node = net.findDirectPredecessors(neighbor)[0] #tree node will only have 1
-                        
-                        redundant_tree_edge1 = [b, neighbor]
-                        redundant_tree_edge2 = [neighbor, a]
-
-                        net.removeEdge(redundant_tree_edge1)
-                        net.removeEdge(redundant_tree_edge2)
-
-                        net.addEdges([b, a])
-                    
-    
-            
-        
-    
-    
-class NNI(Move):
-    
-    def __init__(self):
-        super().__init__()
-        self.legal_forward_moves = None
-        self.legal_backwards_moves = None
-
-    def execute(self, model: Model) -> Model:
-        
-        net : DAG = model.network
-
-        valid_focals = {}
-
-        #only search internal TREE nodes
-        for n in [node for node in net.nodes if net.in_degree(node) != 0 and net.out_degree(node) != 0 and node.is_reticulation() == False]:
-            
-            par = n.get_parent()
-            children = net.findDirectSuccessors(par)
-            if len(children) <= 1:
-                continue #must have more than one kid to work
-            
-            if children[1] == n:
-                s = children[0]
-            else:
-                s = children[1]
-
-            chosen_child = net.findDirectSuccessors(n)[random.randint(0, 1)] #assumed >1 kid since n is a tree node
-            valid_focals[n] = [s, par, chosen_child]
-
-        if len(list(valid_focals.keys())) != 0:
-            self.legal_forward_moves = len(list(valid_focals.keys()))
-            choice = random.choice(list(valid_focals.keys()))
-
-            relatives = valid_focals[choice]
-            self.undo_info = [choice, relatives]
-            
-            #Add/Remove edges
-            net.removeEdge([relatives[1], relatives[0]]) # disconnect s from par
-            net.removeEdge([choice, relatives[2]]) # disconnect child from n
-            net.addEdges([relatives[1], relatives[2]]) #connect par to child
-            net.addEdges([choice, relatives[0]]) #connect s and n
-            
-            #Edit parent mappings
-            relatives[0].remove_parent(relatives[1])
-            relatives[0].add_parent(choice)
-            relatives[2].remove_parent(choice)
-            relatives[2].add_parent(relatives[1])
+        if net.in_degree(root) == 2:
+            bypass = True
         else:
-            raise MoveError("DID NOT FIND A LEGAL TOPOLOGY MOVE")
-        
-        
-        # Calculate legal backwards moves for hastings ratio
-        valid_focals2 = {}
-        for n in [node for node in net.nodes if net.in_degree(node) !=0 and net.out_degree(node) != 0 and node.is_reticulation() == False]:
-            par = n.get_parent()
-            children = net.findDirectSuccessors(par)
-            if len(children) <= 1:
-                continue
+            bypass = False
             
-            if children[1] == n:
-                s = children[0]
+        while len(q) != 0:
+            cur = q.pop()
+            
+            neighbors = copy.copy(net.get_parents(cur))
+            
+            if len(neighbors) == 2 and neighbors[0].get_name() == neighbors[1].get_name() and bypass:
+                #Bubble
+                b = copy.copy(net.get_parents(neighbors[1]))
+                
+                if len(b) != 0:
+                    net.remove_edge([b[0], neighbors[0]])
+                    net.remove_edge([neighbors[0], cur])
+                    net.remove_edge([neighbors[1], cur])
+                    net.add_edges([b[0], cur])
+                else:
+                    net.remove_edge([neighbors[0], cur])
+                
+                return 
             else:
-                s = children[1]
+                i = 1
+                b = copy.copy(net.get_parents(neighbors[0]))
+                for neighbor in neighbors:
+                    
+                    if not bypass or neighbor == edge[0]:
+                        net.remove_edge([neighbor, cur])
+                        
+                        if net.in_degrees[neighbor] == 2:
+                            q.append(neighbor)
+                        else:
+                            try:
+                                a : Node = [node for node in net.get_children(neighbor) if node != cur][0]
+                                
+                                if net.in_degree(neighbor) != 0:
+                                    b : Node = net.get_parents(neighbor)[0] #tree node will only have 1
+                                    
+                                    redundant_tree_edge1 = [b, neighbor]
+                                    redundant_tree_edge2 = [neighbor, a]
 
-            chosen_child = net.findDirectSuccessors(n)[random.randint(0, 1)]
-            valid_focals2[n] = [s, par, chosen_child]
+                                    net.remove_edge(redundant_tree_edge1)
+                                    net.remove_edge(redundant_tree_edge2)
 
-        self.legal_backwards_moves = len(list(valid_focals2.keys()))
-        if self.legal_backwards_moves == 0:
-            raise MoveError("ENTERED INTO STATE WHERE THERE ARE NO MORE LEGAL TOPOLOGY MOVES")
-        
-        model.update_network()
-
-    def undo(self, model : Model) -> None:
-        net : DAG = model.network
-        
-        if self.undo_info is not None:
-            relatives = self.undo_info[1]
-            choice = self.undo_info[0]
-
-            #Add/Remove edges
-            net.addEdges([relatives[1], relatives[0]]) # connect s to par
-            net.addEdges([choice, relatives[2]]) # connect child to n
-            net.removeEdge([relatives[1], relatives[2]]) #disconnect par from child
-            net.removeEdge([choice, relatives[0]]) #disconnect s and n
+                                    net.add_edges([b, a])
+                            except:
+                                if i == 2:
+                                    if len(b) != 0:
+                                        net.remove_edge([b[0], neighbor])
+                    i += 1
+                                    
+                    
+            bypass = False
             
-            #Edit parent mappings
-            relatives[0].add_parent(relatives[1])
-            relatives[0].remove_parent(choice)
-            relatives[2].add_parent(choice)
-            relatives[2].remove_parent(relatives[1])
-
-        model.update_network()
-
-    def same_move(self, model: Model) -> None:
-        net : DAG = model.network
-        if self.undo_info is not None:
-            relatives = self.undo_info[1]
-            choice = self.undo_info[0]
-
-            relatives_model = [net.has_node_named(node.get_name()) for node in relatives]
-            choice_model = net.has_node_named(choice.get_name())
-
-            #Add/Remove edges
-            net.removeEdge([relatives_model[1], relatives_model[0]]) # disconnect s from par
-            net.removeEdge([choice_model, relatives_model[2]]) # disconnect child from n
-            net.addEdges([relatives_model[1], relatives_model[2]]) #connect par to child
-            net.addEdges([choice_model, relatives_model[0]]) #connect s and n
-            
-            #Edit parent mappings
-            relatives_model[0].remove_parent(relatives_model[1])
-            relatives_model[0].add_parent(choice_model)
-            relatives_model[2].remove_parent(choice_model)
-            relatives_model[2].add_parent(relatives_model[1])
-
-        model.update_network()
+        
     
-    def hastings_ratio(self) -> float:
-        return self.legal_forward_moves / self.legal_backwards_moves

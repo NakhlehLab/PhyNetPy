@@ -1,18 +1,16 @@
-"""
-This Matrix data type is built from any of the usual file types (nexus, fasta, etc)
-and packages it into an easy to use and space efficient data type.
-
-The space the matrix takes up is determined by the size of its alphabet, and is 
-abstracted away. This class can represent a 4bit, 8bit, 32bit, or 64bit matrix.
-
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
 """
 
-from Bio import SeqIO, AlignIO
+
 import numpy as np
 import math
 from Alphabet import Alphabet
 from MSA import MSA
-import cProfile
+
 
 
 def list2Str(my_list: list) -> str:

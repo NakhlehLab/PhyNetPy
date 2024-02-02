@@ -1,3 +1,10 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
+
 from State import State
 from MSA import MSA
 from Matrix import Matrix
@@ -40,20 +47,17 @@ class MPAllopProposalKernel:
 
     def generate(self):
         """
-            Given a State obj, make changes to generate a new State that
-            is "close" to the prior state.
+        Given a State obj, make changes to generate a new State that
+        is "close" to the prior state.
 
-            Input: the state to be manipulated
+        Input: the state to be manipulated
         """
         return SwitchParentage()
-
-    def reset(self):
-        pass
     
 
 class HillClimbing:
     """
-        If the likelihood is better we take it. Simple Proposal Kernel
+    If the likelihood is better we take it. Simple Proposal Kernel
     """
 
     def __init__(self, pkernel, submodel, data, num_iter, model = None, stochastic : int = None):
@@ -66,6 +70,7 @@ class HillClimbing:
         self.submodel = submodel
         self.kernel = pkernel
         self.num_iter = num_iter
+        self.nets_2_scores = {}
         if stochastic is not None:
             self.rng = np.random.default_rng(stochastic)
         else:
@@ -85,7 +90,7 @@ class HillClimbing:
 
         # run a maximum of 10000 iterations
         iter_no = 0
-        
+        top_network_ct = 1
         valid_networks_2_likelihoods = {}
         
 
@@ -99,37 +104,47 @@ class HillClimbing:
             if is_valid:
                 # calculate the difference in score between the proposed state and the current state
                 cur_state_likelihood : float = self.current_state.likelihood()
+                
                 proposed_state_likelihood : float = self.current_state.proposed().likelihood()
+                
                 delta : float = cur_state_likelihood - proposed_state_likelihood
                 accepted : bool = True 
-                print(cur_state_likelihood)
-                # if cur_state_likelihood > -39:
-                #     print(f"MODEL SEED: {self.current_state.proposed().seed}")
+                
                     
-                #     raise Exception("UGH")
                 if delta <= 0:
                     self.current_state.commit(next_move)  
                 else:
-                    if self.rng is not None:
-                        if self.rng.random() < .188 * pow(.97 ,iter_no):
-                            self.current_state.commit(next_move)
-                        else:
-                            accepted = False
-                            self.current_state.revert(next_move)
-                    else:
-                        accepted = False
-                        self.current_state.revert(next_move)
+                    # if self.rng is not None:
+                    #     if self.rng.random() < .188 * pow(.97 ,iter_no):
+                    #         self.current_state.commit(next_move)
+                    #     else:
+                    #         accepted = False
+                    #         self.current_state.revert(next_move)
+                    # else:
+                    accepted = False
+                    self.current_state.revert(next_move)
                     
                 if self.current_state.current_model.network not in valid_networks_2_likelihoods.keys():
                     if accepted:
-                        valid_networks_2_likelihoods[self.current_state.current_model.network] = proposed_state_likelihood
-                    else:
-                        valid_networks_2_likelihoods[self.current_state.current_model.network] = cur_state_likelihood
+                        if valid_networks_2_likelihoods != {}:
+                            cur_max_val = max(valid_networks_2_likelihoods.values())
+                        if len(list(valid_networks_2_likelihoods.keys())) < top_network_ct:
+                            valid_networks_2_likelihoods[self.current_state.current_model.network] = proposed_state_likelihood
+                        elif proposed_state_likelihood > cur_max_val:
+                            valid_networks_2_likelihoods[self.current_state.current_model.network] = proposed_state_likelihood
+                            old_net = [net for net in valid_networks_2_likelihoods.keys() if valid_networks_2_likelihoods[net] == cur_max_val][0]
+                            del valid_networks_2_likelihoods[old_net]
+                    
                 
                 self.current_state.write_line_to_summary(
                     "ITER #" + str(iter_no) + " LIKELIHOOD = " + str(self.current_state.likelihood()))
+            else:
+                print("Invalid Network")
             iter_no += 1
-
+            
+        
+        self.nets_2_scores = valid_networks_2_likelihoods
+        
         self.current_state.write_line_to_summary("DONE. EXITED WITH 0 ERRORS")
         self.current_state.write_line_to_summary("--------------------------")
 
@@ -176,7 +191,7 @@ class HillClimbing:
 
 class MetropolisHastings:
     """
-        A special case of Hill Climbing, with a special proposal kernel
+    A special case of Hill Climbing.
     """
         
     def __init__(self, pkernel: ProposalKernel, submodel: GTR, data: Matrix, num_iter:int , model: Model = None):
@@ -269,7 +284,7 @@ class MetropolisHastings:
 def test():
     # pr = cProfile.Profile()
 
-    # n = NetworkBuilder(
+    # n = NetworkParser(
     # "C:\\Users\\markk\\OneDrive\\Documents\\PhyloPy\\PhyloPy\\src\\test\\MetroHastingsTests\\truePhylogeny.nex")
 
     # testnet = n.getNetwork(0)

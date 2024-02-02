@@ -1,7 +1,10 @@
 # PhyNetPy
 
-PhyNetPy is a Python Library that implements all the capabilities of PhyloNet, but with higher performance algorithms that are built to be more efficient and scalable.
-An official stable release date cannot yet be provided, but any first release will include some basic network inference methods.
+PhyNetPy is a Python Library that provides some improved methods from PhyloNet, as well as a framework for the development of Bayesian/Simulation based methods and structures.
+
+The current version of this software is v0.1.0, which is the release for the Botany Conference in Boise for July 2023.
+
+This version is unstable, and only meant to provide tutorial functionality. A stable release is planned for September 1, 2023.
 
 To install PhyNetPy, simply open up a command line instance and execute the following:
 `pip install phynetpy`. 

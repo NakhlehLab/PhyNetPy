@@ -1,3 +1,11 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
+
+
 from Bio.Nexus.Nexus import NexusError
 from Bio import AlignIO
 from nexus import NexusReader
@@ -74,6 +82,7 @@ class SeqRecord:
 
 
 class MSA:
+    
     """
     Wrapper class for a biopython MSA or a self-created one.
     Provides taxa name and sequence get services.

@@ -1,3 +1,11 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
+
+
 class AlphabetError(Exception):
     def __init__(self, message="Something went wrong mapping chars to numbers"):
         self.message = message
@@ -25,10 +33,6 @@ def n_ploidy(ploidy : int)->dict:
     alphabet["-"] = ploidy + 1
     
     return alphabet
-
-#########################
-
-
 
 
 

@@ -1,24 +1,30 @@
-from operator import index
+""" 
+Author : Mark Kessler
+Last Stable Edit : 12/5/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
+
 import traceback
 from nexus import NexusReader
 from Bio import Phylo
 from io import StringIO
 from Graph import DAG
-from Node import Node
-import copy
-from Node import NodeError
+from Node import Node, NodeError
 
-class NetworkBuilder2Error(Exception):
+
+class NetworkParserError(Exception):
     def __init__(self, message = "Something went wrong with building the network") -> None:
         self.message = message
         super().__init__(self.message)
 
 
-def merge_attributes(attr1 : dict, attr2 : dict) -> dict:
+def merge_attributes(inheritances : dict, parsed_node : Node, attr1 : dict, attr2 : dict) -> dict:
     """
 
-
     Args:
+        inheritances (dict):
+        parsed_node (Node): _description_
         attr1 (dict): _description_
         attr2 (dict): _description_
 
@@ -36,61 +42,31 @@ def merge_attributes(attr1 : dict, attr2 : dict) -> dict:
         comment_set.add(attr1["comment"])
     if "comment" in attr2:
         comment_set.add(attr2["comment"])
-
-    if "gamma" in attr1:
-        final_gamma = {}
-        
-        for key in attr1["gamma"]:
-            if attr1["gamma"][key][0] == None:
-                
-                attr1["gamma"][key][0] = 1 - attr2["gamma"][list(attr2["gamma"].keys())[0]][0]
-                
-            if key in attr2["gamma"]:
-                if attr2["gamma"][key][0] == None:
-                    attr2["gamma"][key][0] = 1 - attr1["gamma"][list(attr1["gamma"].keys())[0]][0]
-                gamma2 = attr2["gamma"][key]
-                gamma1 = attr1["gamma"][key]
-                
-                value = [gamma1]
-                value.extend([gamma2])
-                final_gamma[key] = value
-            else:
-                final_gamma[key] = [attr1["gamma"][key]]
-        for key in attr2["gamma"]:
-            if attr2["gamma"][key][0] == None:
-                attr2["gamma"][key][0] = 1 - attr1["gamma"][list(attr1["gamma"].keys())[0]][0]
-            if key not in attr1["gamma"]:
-                final_gamma[key] = [attr2["gamma"][key]]
-        
-        final_attr["gamma"] = final_gamma
     
+    #Sort out inheritance probabilities and branches
+    
+    final_attr["gamma"] = inheritances[parsed_node.get_name()]
     return final_attr
     
                 
         
-        
-        
-        
     
-        
-    
-
-class NetworkBuilder2:
+class NetworkParser:
 
     def __init__(self, filename):
         try:
             self.reader = NexusReader.from_file(filename)
         except Exception as err:
             traceback.print_exc()
-            raise NetworkBuilder2Error()
+            raise NetworkParserError("NexusReader library could not find or parse this file.")
         
         self.networks = []
-        self.internalCount = 0
+        self.internal_count = 0
         self.name_2_net = {}
-        self.inheritance_queue : set = set()
-        self.build()
+        self.inheritance = {} #Map from node names to their inheritance probabilities
+        self.parse()
 
-    def build(self):
+    def parse(self):
         """
         Using the reader object, iterate through each of the trees 
         defined in the file and store them as Network objects into the 
@@ -99,7 +75,7 @@ class NetworkBuilder2:
 
     
         if self.reader.trees is None:
-            raise NetworkBuilder2Error("There are no trees listed in the file")
+            raise NetworkParserError("There are no trees listed in the file")
 
         for t in self.reader.trees:
             # grab the right hand side of the tree definition for the tree, and the left for the name
@@ -108,17 +84,22 @@ class NetworkBuilder2:
 
             # parse the string handle
             tree = Phylo.read(handle, "newick")
-            newNetwork = self.buildFromTreeObj(tree)
+            new_network = self.parse_tree_block(tree)
             # build the graph of the network
-            self.networks.append(newNetwork)
-            self.name_2_net[newNetwork] = name
+            self.networks.append(new_network)
+            self.name_2_net[new_network] = name
             
-
-    def buildFromTreeObj(self, tree):
+    def parse_tree_block(self, tree)-> DAG:
         """
         Given a biopython Tree object (with nested clade objects)
         walk through the tree and build a network/ultrametric network
         from the nodes
+
+        Args:
+            tree (nexusreader tree): the nexus reader library tree data structure
+
+        Returns:
+            DAG: A phynetpy network obj that has the same topology and names as the input network.
         """
         
         # Build a parent dictionary from the biopython tree obj
@@ -134,41 +115,49 @@ class NetworkBuilder2:
         edges = []
         
         for node, par in parents.items():
-            parentNode = self.parseParent(par, net)
-            childNode = self.parseChild(node, net, parentNode)
-            #
-            childNode.add_parent(parentNode)
-            #
-            edges.append([parentNode, childNode])
+            parent_node = self.parse_parent(par, net)
+            child_node = self.parse_child(node, net, parent_node)
+            child_node.add_parent(parent_node)
+            edges.append([parent_node, child_node])
         
 
-        net.addEdges(edges, as_list=True)
+        net.add_edges(edges, as_list=True)
         
         return net
 
-    def parseAttributes(self, attrStr):
+    def parse_attributes(self, attrStr : str) -> list:
         """
         Takes the formatting string from the extended newick grammar and parses
         it into the event type and index.
 
-        IE: #H1 returns "Hybridization", 1
-        IE: #LGT21 returns "Lateral Gene Transfer", 21
+        IE: H1 returns "Hybridization", 1
+        IE: LGT21 returns "Lateral Gene Transfer", 21
+
+        Args:
+            attrStr (str): A node name, but one that carries information about the type of node.
+
+        Raises:
+            NodeError: if the node label does not match any sort of extended newick rules
+
+        Returns:
+            list: a list of two items, the first being a string describing the node type, the second an integer that gives an index
         """
+        
         if len(attrStr) < 2:
             raise NodeError("reticulation event label formatting incorrect")
 
         indexLookup = 0
 
         # decipher event type
-        if attrStr[1][0] == "R":
+        if attrStr[0] == "R":
             event = "Recombination"
             indexLookup = 1
-        elif attrStr[1][0] == "H":
+        elif attrStr[0] == "H":
             event = "Hybridization"
             indexLookup = 1
-        elif attrStr[1][0] == "L":
+        elif attrStr[0] == "L":
             try:
-                if attrStr[1][1] == "G" and attrStr[1][2] == "T":
+                if attrStr[1] == "G" and attrStr[2] == "T":
                     event = "Lateral Gene Transfer"
                     indexLookup = 3
             except:
@@ -178,27 +167,36 @@ class NetworkBuilder2:
 
         # parse node index
         try:
-            strnum = attrStr[1][indexLookup:]
+            strnum = attrStr[indexLookup:]
             num = int(strnum)
             return event, num
         except:
             raise NodeError("Invalid label format string (number error)")
 
-    def parseChild(self, node, network: DAG, parent : Node):
+    def parse_child(self, node, network: DAG, parent : Node):
+        """
+        
 
-        if network.has_node_named(node.name):
-            parsed_node : Node = network.has_node_named(node.name)
+        Args:
+            node (_type_): _description_
+            network (DAG): _description_
+            parent (Node): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        parsed_node : Node = network.has_node_named(node.name)
+        if parsed_node is not None:
             if node.branch_length is not None:
                 parsed_node.add_length(node.branch_length, parent)
             more_attr = self.parse_comment(node, parent)
             
-            parsed_node.attributes = merge_attributes(more_attr, parsed_node.attributes)
-            
+            parsed_node.attributes = merge_attributes(self.inheritance, parsed_node, more_attr, parsed_node.attributes)    
         else:
             if node.name is None:
-                newInternal = "Internal" + str(self.internalCount)
-                self.internalCount += 1
-                node.name = newInternal
+                new_internal = "Internal" + str(self.internal_count)
+                self.internal_count += 1
+                node.name = new_internal
                 
             parsed_node = Node(name=node.name)
             if node.name[0] == "#":
@@ -207,18 +205,18 @@ class NetworkBuilder2:
             parsed_node.add_length(node.branch_length, parent)
             parsed_node.attributes = self.parse_comment(node, parent)
             
-        network.addNodes(parsed_node)
+        network.add_nodes(parsed_node) 
         return parsed_node
     
-    def parseParent(self, node, network: DAG, parent : Node = None):
+    def parse_parent(self, node, network: DAG, parent : Node = None) -> Node:
         
-        if network.has_node_named(node.name):
-            #No need to do anything
-            return network.has_node_named(node.name)
+        parsed_node : Node = network.has_node_named(node.name)
+        if parsed_node is not None:
+            return parsed_node
         else:
             if node.name is None:
-                newInternal = "Internal" + str(self.internalCount)
-                self.internalCount += 1
+                newInternal = "Internal" + str(self.internal_count)
+                self.internal_count += 1
                 node.name = newInternal
                 
             parsed_node = Node(name=node.name)
@@ -230,23 +228,67 @@ class NetworkBuilder2:
                 
             parsed_node.attributes = self.parse_comment(node, parent)
             
-        network.addNodes(parsed_node)
+        network.add_nodes(parsed_node)
         return parsed_node
 
-    def parse_comment(self, node, parent:Node):
+    def parse_comment(self, node, parent : Node):
+        """
+        Each time a node block is processed, given its parent node (that should have already been processed)
+        look at the comment block if one exists and bookkeep any relevant information.
+        
+        In particular, hybrid nodes with a [&gamma = (0,1)] comment need to be recorded to keep track of inheritance probabilities
+        
+
+        Args:
+            node (nexus.node): a node block from the nexus library
+            parent (Node): a phynetpy Node obj that is the node block's parent in the network
+
+        Raises:
+            NetworkParserError: if two gamma values for a node do not sum to 1.
+
+        Returns:
+           dict: an attribute dictionary for the newly processed node block.
+        """
         attr = {}
         if node.name[0] == "#":
-            event, num = self.parseAttributes(node.name.split("#"))
+            event, num = self.parse_attributes(node.name.split("#")[1])
             attr["eventType"] = event
             attr["index"] = num
-            if parent is not None:
-                attr["gamma"] = {parent.get_name(): [None, node.branch_length]}
-        
-        if node.comment is not None:
-            if node.comment.split("=")[0] == "&gamma":
-                if parent is not None:
-                    attr["gamma"] = {parent.get_name(): [float(node.comment.split("=")[1]), node.branch_length]}
+            
+            if node.comment is not None:
+                #CASE WHERE A COMMENT IS FILLED OUT
+                if node.comment.split("=")[0] == "&gamma": 
+                    gamma = float(node.comment.split("=")[1])
+                    attr["gamma"] = {parent.get_name(): [gamma, node.branch_length]}
+                    if node.name in self.inheritance:
+                        for par, info in self.inheritance[node.name].items():
+                            if info[0] == 0:
+                                self.inheritance[node.name] = {par: [1-gamma, info[1]], parent.get_name():[gamma, node.branch_length]}
+                            else:
+                                if info[0] + gamma == 1:
+                                    self.inheritance[node.name] = {par: info, parent.get_name():[gamma, node.branch_length]}
+                                else:
+                                    raise NetworkParserError("Gamma values provided in newick string do not add to 1")
+                            break
+                    else:
+                        self.inheritance[node.name] = {parent.get_name():[gamma, node.branch_length]}
+                else:
+                    attr["comment"] = node.comment
             else:
+                #CASE WHERE A COMMENT IS NULL
+                
+                if node.name in self.inheritance:
+                    for par, info in self.inheritance[node.name].items(): #should only be one, just using a for loop to access it ez
+                        if info[0] == 0:
+                            self.inheritance[node.name] = {par: [.5, info[1]], parent.get_name():[.5, node.branch_length]}
+                        else:
+                            self.inheritance[node.name] = {par: info, parent.get_name():[1 - info[0], node.branch_length]}
+                        break
+        
+                else:
+                    self.inheritance[node.name] = {parent.get_name() : [0, node.branch_length]}  
+        else:
+            if node.comment is not None:
                 attr["comment"] = node.comment
         
         return attr
@@ -260,7 +302,3 @@ class NetworkBuilder2:
 
     def name_of_network(self, network):
         return self.name_2_net[network]
-
-# nb = NetworkBuilder2('src/PhyNetPy/test/files/paper_networks.nex')
-# net:DAG = nb.getNetwork(0)
-# net.printGraph()

@@ -1,3 +1,10 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
+
 import copy
 
 from BirthDeath import CBDP
@@ -5,7 +12,7 @@ from ModelGraph import Model
 from Matrix import Matrix
 from GTR import *
 from Move import Move
-from Graph import DAG
+
 
 
 class State:
@@ -68,10 +75,10 @@ class State:
         submodel (GTR): Any substitution model (can be subtype of GTR)
 
         """
-        #TODO: Remove hard coded birth death constants
+        #TODO: Reconcile with ModelFactory concept. Models should generally be empty. Maybe a State should always require a model input
         
         network = CBDP(1, .5, data.get_num_taxa()).generate_tree()  # base number of leaves to be the number of groups/taxa
-        self.current_model = Model(network, data, submodel, verbose=False)
+        self.current_model = Model(network, data, submodel)
         self.proposed_model = copy.deepcopy(self.current_model)
 
     def write_line_to_summary(self, line: str):
@@ -84,10 +91,11 @@ class State:
 
     def validate_proposed_network(self, prev_move : Move) -> bool:
         
-        if not self.proposed_model.network.is_acyclic():
-            self.revert(prev_move)
-            return False
         return True
+        # if not self.proposed_model.network.is_acyclic():
+        #     self.revert(prev_move)
+        #     return False
+        # return True
 
 
    

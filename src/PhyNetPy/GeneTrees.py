@@ -1,8 +1,14 @@
-
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
 
 from typing import Callable
 from Graph import DAG
-from NetworkParser import NetworkBuilder2 as nb
+
+
 
 def phynetpy_naming(taxa_name : str) -> str:
     if taxa_name[0:2].isnumeric():
@@ -22,18 +28,46 @@ class GeneTreeError(Exception):
         self.message = message
 
 class GeneTrees:
+    #TODO: Alter to use the GeneTree wrapper class
     
-    def __init__(self, naming_rule : Callable = phynetpy_naming) -> None:
-        self.trees = set()
-        self.taxa_names = set()
-        self.naming_rule = naming_rule
+    def __init__(self, gene_tree_list : list[DAG] = None, naming_rule : Callable = phynetpy_naming) -> None:
+        """
+        Wrapper class for a set of DAGs that represent gene trees
+
+        Args:
+            gene_tree_list (list[DAG], optional): A list of DAGs, should be trees (NOT networks). Defaults to None.
+            naming_rule (Callable, optional): a function f : str -> str. Defaults to phynetpy_naming.
+        """
+        
+        self.trees : set[DAG] = set()
+        self.taxa_names : set[str]= set()
+        self.naming_rule : Callable = naming_rule
+        
+        if gene_tree_list is not None:
+            for tree in gene_tree_list:
+                self.add(tree)
         
     def add(self, tree : DAG):
+        """
+        Add a gene tree to the collection. Any new gene labels that are apart of this tree will 
+        also be added to the collection of all gene tree leaf labels
+
+        Args:
+            tree (DAG): A DAG that is a tree, must not be a network.
+        """
+        
         self.trees.add(tree)
+        
         for leaf in tree.get_leaves():
             self.taxa_names.add(leaf.get_name())
         
-    def mp_allop_map(self) -> dict[str, list[str]]:
+    def mp_sugar_map(self) -> dict[str, list[str]]:
+        """
+        Create a subgenome mapping from the stored set of gene trees
+
+        Returns:
+            dict[str, list[str]]: subgenome mapping
+        """
         subgenome_map = {}
         if self.naming_rule is not None and len(self.taxa_names) != 0:
             for taxa_name in self.taxa_names:
@@ -44,14 +78,18 @@ class GeneTrees:
                     subgenome_map[key] = [taxa_name]
         return subgenome_map
     
+
+
+
+class GeneTree(DAG):
+    """
+    Wrapper class for a DAG that verifies tree status and contains operators that are specifically designed for gene trees.
+    """
     
-            
-            
-# nets = nb("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_nex_n1.nex").get_all_networks()
-# gt = GeneTrees()
-# for gene_tree in nets:
-#     gt.add(gene_tree)
-
-# print(gt.mp_allop_map())     
-
-
+    def __init__(self, edges=None, nodes=None, weights=None) -> None:
+        super().__init__(edges, nodes, weights)
+        #TODO: verify tree status somehow
+    
+    def map_to_species_network(self):
+        pass
+    

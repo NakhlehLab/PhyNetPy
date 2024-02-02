@@ -1,0 +1,22 @@
+#NEXUS
+
+BEGIN TAXA;
+DIMENSIONS NTAX=9;
+TAXALABELS
+A 
+B 
+C
+D 
+F
+T 
+U
+F
+O
+;
+END;
+
+BEGIN TREES;
+
+Tree starter = (O,(((D,C)UID_63,(A,B)UID_71)UID_55,(F,(((U,T)UID_70)#H0[&gamma=0.5],#H0)UID_72)UID_59)UID_69)UID_64;
+
+END;

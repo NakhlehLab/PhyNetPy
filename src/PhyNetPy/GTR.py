@@ -1,3 +1,11 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
+
+
 import numpy as np
 from numpy import linalg as lg
 import math

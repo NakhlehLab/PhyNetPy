@@ -1,5 +1,14 @@
+""" 
+Author : Mark Kessler
+Last Stable Edit : 7/16/23
+First Included in Version : 0.1.0
+Approved to Release Date : N/A
+"""
+
 from math import sqrt, comb, pow
+from typing import Callable
 import numpy as np
+import scipy
 from scipy.linalg import expm
 from MSA import MSA
 import clr
@@ -9,15 +18,22 @@ from System.Collections.Generic import *
 from System.Collections.Generic import List
 from System import String
 
+from BirthDeath import CBDP
+from NetworkParser import NetworkParser
+from Alphabet import Alphabet
+from Matrix import Matrix
+from ModelGraph import Model
+from ModelFactory import *
+from Graph import DAG
 global cs
 
-#cs = False
-cs = True
+cs = False
+#cs = True
 
 ### SETUP ###
 
 #TODO : fix absolute path
-clr.AddReference('/Users/mak17/Documents/PhyloGenPy/PhyloGenPy/src/PhyNetPy/Bayesian/Computations/PhyNetPy_DLLS.dll')
+clr.AddReference('/Users/mak17/Documents/mark-phynetpy/phynetpy_dev/src/DLLS/PhyNetPy_DLLS.dll')
 
 from PhyNetPy_DLLS import SNPEvals
 
@@ -76,7 +92,7 @@ def map_nr_to_index(n:int, r:int) -> int:
     starts = int(.5 * (n - 1) * (n + 2))
     return starts + r
  
-def to_array(Fb_map :dict, vector_len:int, site_count:int) -> np.ndarray:
+def to_array(Fb_map : dict, vector_len : int, site_count : int) -> np.ndarray:
     """
     Takes a vpi/partial likelihood mapping, and translates it into a matrix
     such that the columns denote the site, and the row indeces correspond to (n,r) pairs.
@@ -148,7 +164,7 @@ def rn_to_rn_minus_dim(set_of_rns : dict, dim : int):
 
     return rn_minus_dim
 
-def qt_2_cs(Qt:np.ndarray):
+def qt_2_cs(Qt : np.ndarray):
     """
     Convert a numpy matrix to a C# List<List<float>>
 
@@ -173,7 +189,7 @@ def qt_2_cs(Qt:np.ndarray):
 #########################
 
 
-class SNPTransition:
+class BiMarkersTransition:
     """
     Class that encodes the probabilities of transitioning from one (n,r) pair to another under a Biallelic model
 
@@ -225,7 +241,7 @@ class SNPTransition:
                         self.Q[index][map_nr_to_index(n_prime - 1, r_prime)] = (n_prime - 1 - r_prime) * n_prime / coal
                     self.Q[index][map_nr_to_index(n_prime, r_prime + 1)] = (r_prime + 1) * u
 
-    def expt(self, t:float) -> np.ndarray:
+    def expt(self, t : float) -> np.ndarray:
         """
         Compute exp(Qt) efficiently
         """
@@ -510,7 +526,6 @@ class PartialLikelihoods:
         del self.vpis[vpi_key]
         #print("RULE 1 (2)")
         return new_vpi_key
-                
                 
     def Rule2(self, vpi_key_x : tuple, vpi_key_y :tuple, site_count : int, vector_len : int, branch_index_x:int, branch_index_y:int, branch_index_z:int) -> tuple:
         """
@@ -808,14 +823,278 @@ class PartialLikelihoods:
         return None
             
 
-#####################
-### Method Caller ###
-#####################
-            
+######################
+### Model Building ###
+######################
 
-              
+
+class U(Parameter):
+    def __init__(self, value):
+        super().__init__("u", value)
+
+class V(Parameter):
+    def __init__(self, value):
+        super().__init__("v", value)
+
+class Coal(Parameter):
+    def __init__(self, value):
+        super().__init__("coal", value)
+
+class Samples(Parameter):
+    def __init__(self, value):
+        super().__init__("samples", value)
+
+class SiteParameter(Parameter):
+    def __init__(self, value):
+        super(Parameter).__init__("sitect", value)
+        
+class BiMarkersTransitionMatrixNode(CalculationNode):
+    def __init__(self):
+        super().__init__()
+    
+    def calc(self):
+        params = self.get_parameters()
+        return self.cache(BiMarkersTransition(params["samples"], params["u"], params["v"], params["coal"]))
+            
+    def sim(self):
+        pass
+    
+    def get(self):
+        if self.dirty:
+            return self.calc()
+        else:
+            return self.cached
+            
+    def update(self):
+        self.upstream()
+
+class VPIAccumulator(Accumulator):
+    
+    def __init__(self, name: str, data_structure: object):
+        super().__init__("VPI", PartialLikelihoods())
+    
+class BiMarkersInternalNode(ANetworkNode):
+    def __init__(self, name: str = None, node_type: str = None):
+        super().__init__(name, node_type)
+        
+    def calc(self):
+        """
+        Calculates both the top and bottom partial likelihoods, based on Eq 14 and 19.
+
+        Returns a list of length 2, element [0] is the bottom likelihoods, element [1] is the top likelihoods
+        
+        Calculated using eqs 12,14,16,19 from David Bryant, Remco Bouckaert, Joseph Felsenstein, Noah A. Rosenberg, Arindam RoyChoudhury, 
+        Inferring Species Trees Directly from Biallelic Genetic Markers: Bypassing Gene Trees in a Full Coalescent Analysis, Molecular Biology and 
+        Evolution, Volume 29, Issue 8, August 2012, Pages 1917-1932, https://doi.org/10.1093/molbev/mss086
+        
+        Also, Rule 3,4 for networks Rabier CE, Berry V, Stoltz M, Santos JD, Wang W, et al. 
+        (2021) On the inference of complex phylogenetic networks by Markov Chain Monte-Carlo. 
+        PLOS Computational Biology 17(9): e1008380. https://doi.org/10.1371/journal.pcbi.1008380
+        """
+        
+        #Get the network node parent of this branch object
+        #node_par = self.get_model_children()[0]
+        
+        #Calculate Q^t before calculating likelihoods
+        self.transition()
+        
+        if type(self) is SNPLeafNode:
+            site_count = self.seq_len()
+        elif type(self) is SNPInternalNode:
+            site_count = self.site_count
+        else:
+            raise ModelError("site count error")
+
+        vector_len = partials_index(self.possible_lineages() + 1)  
+
+        # BOTTOM: Case 1, the branch is an external branch, so bottom likelihood is just the red counts
+        if len(self.get_children()) == 0: #type(node_par) is SNPLeafNode:
+            F_key = self.vpi_tracker.Rule0(self.red_count(), self.samples(), site_count, vector_len, self.index)  
+            
+        # BOTTOM: Case 2, the branch is for an internal node, so bottom likelihoods need to be computed based on child tops
+        else:
+            # EQ 19
+            # Get the top likelihoods of each of the child branches
+            net_children = self.get_children()
+            
+            if self.is_reticulation():
+                #RULE 3
+                x_branch = self.get_branch_from_child(net_children[0])
+                F_t_x_key = x_branch.get()
+                
+                possible_lineages = self.possible_lineages() 
+                
+                #Get the other branch
+                sibling_branches = self.get_branches()
+                if sibling_branches[0] == self:
+                    sibling_branch : BranchNode = sibling_branches[1]
+                else:
+                    sibling_branch : BranchNode = sibling_branches[0]
+                
+                g_this = self.inheritance_probability()
+                g_that = sibling_branch.inheritance_probability()
                 
                 
+                if g_this + g_that != 1:
+                    raise ModelError("Set of inheritance probabilities do not sum to 1 for node<" + node_par.name + ">")
+                
+                F_b_key = self.vpi_tracker.Rule3(F_t_x_key, vector_len, g_this, g_that, site_count, possible_lineages, x_branch.index, self.index, sibling_branch.index)
+                
+                #Do the calculations for the sibling branch
+                
+                sibling_branch.transition()
+                F_t_key_sibling = self.vpi_tracker.Rule1(F_b_key, site_count, vector_len, node_par.possible_lineages(), sibling_branch.Qt, sibling_branch.index)
+                
+                sibling_branch.updated = False
+                F_key = F_t_key_sibling
+             
+            elif len(node_par.children) == 2:
+                
+                y_branch : SNPBranchNode = node_par.get_branch_from_child(net_children[0])
+                F_t_y_key = y_branch.get()
+                y_branch_index = y_branch.index
+                
+                z_branch : SNPBranchNode = node_par.get_branch_from_child(net_children[1], avoid_index=y_branch_index)
+                F_t_z_key = z_branch.get()
+                z_branch_index = z_branch.index
+                
+                #Find out whether lineage y and z have leaves in common 
+                if not net_children[1].leaf_descendants.isdisjoint(net_children[0].leaf_descendants): #If two sets are not disjoint
+                    print("Y BRANCH INDEX: " + str(y_branch_index))
+                    print("Z BRANCH INDEX: " + str(z_branch_index))
+                    F_b_key = self.vpi_tracker.Rule4(F_t_z_key, site_count, vector_len, y_branch_index, z_branch_index, self.index)
+                else: # Then use Rule 2
+                    F_b_key = self.vpi_tracker.Rule2(F_t_y_key, F_t_z_key, site_count, vector_len, y_branch_index, z_branch_index, self.index)
+                    #raise ModelError("temp catch")
+                F_key = F_b_key
+            else:
+                #A node should only have one child if it is the root node. simply pass along the vpi
+                F_key = node_par.get_branch_from_child(net_children[0]).get()
+                    
+        # TOP: Compute the top likelihoods based on the bottom likelihoods w/ eq 14&16
+        if node_par.parents is not None:
+            F_key = self.vpi_tracker.Rule1(F_key, site_count, vector_len, node_par.possible_lineages(), self.Qt, self.index)
+            self.updated = False
+        else:
+            self.updated = False
+    
+        # print("F_T (at site 0)")
+        # print(F_key)
+        # print(self.vpi_tracker.vpis[F_key][0])
+        
+        return F_key
+    
+    def calc_leaf_descendants(self):
+        """
+        Calculate the leaves that are descendants of a lineage/node.
+        
+        Returns:
+            leaf_descendants (set) : a set of node descendants
+        """
+        for child in self.get_children():
+            if len(child.get_children()) == 0:
+                self.leaf_descendants.add(child)
+            else:
+                #The union of all its children's descendants
+                self.leaf_descendants = self.leaf_descendants.union(child.calc_leaf_descendants())
+        
+        return self.leaf_descendants
+        
+    def get(self)->tuple:
+        if self.updated:
+            return self.calc()
+        else:
+            return self.cached
+
+    def possible_lineages(self):
+        """
+        Calculate the number of lineages that flow through this node.
+        For non-reticulation nodes, if branch x has children y,z:
+
+        Returns:
+            int: number of lineages
+        """
+
+        return sum([child.samples() for child in self.leaf_descendants])
+    
+class BiMarkersLikelihood(CalculationNode):
+    
+    def __init__(self):
+        super().__init__()
+    
+    def calc(self):
+        
+        transition_node : SNPTransitionMatrixNode = self.get_model_children(SNPTransitionMatrixNode)[0]
+        q_null_space = scipy.linalg.null_space(transition_node.get().Q)
+        x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
+
+        network_root_vpi_key = self.get_model_children(SNPInternalNode)[0].get()[0]
+        F_b_map = self.get_model_children(VPIAccumulator)[0].get_data().vpis[network_root_vpi_key]
+        
+        params = self.get_parameters()
+        F_b = to_array(F_b_map, partials_index(params["samples"] + 1), params["sitect"]) 
+
+        L = np.zeros(params["sitect"])
+       
+        # EQ 20, Root probabilities
+        for site in range(params["sitect"]):
+            L[site] = np.dot(F_b[:, site], x)
+    
+        print("NON-LOG PROBABILITY: " + str(np.sum(L)))
+        return np.sum(np.log(L))
+    
+    def get(self):
+        if self.dirty:
+            self.calc()
+        else:
+            return self.cached
+    
+    def sim(self):
+        pass
+    
+    def update(self):
+        pass
+    
+
+##########################
+### METHOD ENTRY POINT ###
+##########################
+            
+def MCMC_BIMARKERS(filename: str, u : float = .5 , v : float = .5, coal : float = 1, grouping : dict = None, auto_detect : bool = False, summary_path : str = None, network_path : str = None) -> float:
+    """
+    Given a filename that represents a path to a nexus file that defines and data, compute the maximum likelihood 
+    """
+
+    aln = MSA(filename, grouping=grouping, grouping_auto_detect=auto_detect)
+    #Only generates tree starting conditions
+    network_component : NetworkComponent = NetworkComponent(net = CBDP(1, .5, aln.num_groups()).generateTree())
+    msa_component : MSAComponent = MSAComponent(dependencies = {NetworkComponent}, grouping = grouping)
+    
+
+    model = ModelFactory()
+    snp_params={"samples": len(aln.get_records()), "u": u, "v": v, "coal" : coal, "grouping":True}
+    m = Matrix(aln, Alphabet("SNP"))
+    snp_model = Model(network, m, snp_params=snp_params)
+    m = m.Matrix(aln, a.Alphabet("SNP"))
+    snp_model = mg.Model(network, m, snp_params=snp_params)
+
+    mh = MetropolisHastings(ProposalKernel(), JC(), m, 800, snp_model) #TODO: Submodel unnecessary for snp. make optional?
+    mh = mh.MetropolisHastings(mh.ProposalKernel(), GTR.JC(), m, 800, snp_model) #TODO: Submodel unnecessary for snp. make optional?
+    result_state = mh.run()
+
+    result_state.current_model.summary(network_path, summary_path)
+
+class SNP_Likelihood:
+    
+    def __init__(self, network : DAG, data : MSA ,snp_params : dict) -> None:
+        network_comp : NetworkComponent(set(), network)
+        tip_data_comp : MSAComponent(set(network_comp), data.grouping)
+        self.snp_model = ModelFactory(network_comp,) 
+        
+  
+    
+    
+    
             
             
         
