@@ -3,7 +3,7 @@ Author: Mark Kessler
 
 Description: This file contains a model for computing Maximum Parsimony over data that includes allopolyploidization.
 
-Last Stable Edit: 12/5/23
+Last Stable Edit: 1/29/24
 Included in version : 0.1.0
 Approved to Release Date : N/A
 
@@ -889,9 +889,6 @@ class MUL(DAG):
         return sum(gt_scores)
 
 
-
-
-
 class InferMPAllop:
     
     def __init__(self, network : DAG, gene_map : dict[str, str], gene_trees : list[DAG], iter : int, rng) -> None:
@@ -915,7 +912,6 @@ class InferMPAllop:
         self.results = hc.nets_2_scores
         return end_state.likelihood()
     
-   
 
 class MPAllopComponent(ModelComponent):
     
@@ -931,9 +927,8 @@ class MPAllopComponent(ModelComponent):
         
         mul_node : MULNode = MULNode(self.gene_map, self.rng)
         net_node : NetworkContainer = NetworkContainer(self.network)
-        gene_trees_node : GeneTreesComponent = GeneTreesComponent(self.gene_trees)
+        gene_trees_node : GeneTreesNode = GeneTreesNode(self.gene_trees)
         score_root_node : ParsimonyScore = ParsimonyScore()
-        
         
         model.nodetypes["root"] = [score_root_node]
         model.nodetypes["internal"] = [mul_node]
@@ -945,25 +940,39 @@ class MPAllopComponent(ModelComponent):
         mul_node.join(score_root_node)
         net_node.join(mul_node)
         
+        
+        
+class NetworkContainer(StateNode):
+    def __init__(self, network : DAG):
+        super().__init__()
+        self.network : DAG = network
+    
+    def update(self, new_net : DAG):
+        self.network = new_net
+        model_parents : list[CalculationNode] = self.get_model_parents()
+        for model_parent in model_parents:
+            model_parent.upstream()
+        
+    def get(self) -> DAG:
+        return self.network
+
+
 class MULNode(CalculationNode):
     
     def __init__(self, gene_map : dict, rng):
         super().__init__()
         self.multree : MUL = MUL(gene_map, rng)
         
-    
     def calc(self):
         
-        model_children = self.get_model_parents()
+        model_children = self.get_model_children()
         if len(model_children) == 1:
             if type(model_children[0]) is NetworkContainer:
                 self.multree.to_mul(model_children[0].get())
             else:
                 raise InferAllopError("Malformed MP Allop Model Graph. Expected MUL Node to have Network Container Child")
         
-        self.cached : MUL = self.multree
-        self.updated = False
-        return self.multree
+        return self.cache(self.multree)
     
     def sim(self):
         pass
@@ -972,14 +981,14 @@ class MULNode(CalculationNode):
         self.upstream()
     
     def get(self):
-        if self.updated:
+        if self.dirty:
             return self.calc()
         else:
             return self.cached
     
 
 
-class GeneTreesComponent(StateNode):
+class GeneTreesNode(StateNode):
     
     def __init__(self, gene_tree_list : list[DAG]):
         super().__init__()
@@ -987,7 +996,7 @@ class GeneTreesComponent(StateNode):
     
     def update(self, new_tree : DAG, index : int):
         self.gene_trees[index] = new_tree
-        model_parents : list[CalculationNode] = self.get_model_children()
+        model_parents : list[CalculationNode] = self.get_model_parents()
         if len(model_parents) == 1:
             model_parents[0].upstream()
         else: 
@@ -997,41 +1006,33 @@ class GeneTreesComponent(StateNode):
         return self.gene_trees
     
 class ParsimonyScore(CalculationNode):
-    """
-    THIS IS A TYPE OF PARAMETER COMBINATION. SHOULD NOT BE A STANDALONE NODE TYPE
-    """
     
     def __init__(self):
         super().__init__()
         
-    
     def calc(self):
-        model_children = self.get_model_parents()
-        
+        model_children = self.get_model_children()
         
         if len(model_children) == 2:
-            g_trees : list[DAG] = [child for child in model_children if type(child) == GeneTreesComponent][0].get()
+            g_trees : list[DAG] = [child for child in model_children if type(child) == GeneTreesNode][0].get()
             mul : MUL = [child for child in model_children if type(child) == MULNode][0].get()
             
             if mul.gene_map is None:
                 ##Invalid Network, return score of -inf so that this model is rejected
                 raise Exception("An invalid network has been proposed somehow")
             else:  
-                self.cached = -1 * mul.score(g_trees)
+                return self.cache(-1 * mul.score(g_trees))
         else:
             raise InferAllopError("Malformed Model. Parsimony Score function for MP ALLOP should only have 2 feeder nodes")
-        
-        self.updated = False
-        return self.cached
     
     def sim(self):
         pass
     
     def update(self):
-        self.updated = True
+        self.dirty = True
     
     def get(self):
-        if self.updated:
+        if self.dirty:
             return self.calc()
         else:
             return self.cached
@@ -1045,7 +1046,7 @@ class ParsimonyScore(CalculationNode):
 
 
 
-def MP_SUGAR_WITH_STARTNET(start_network_file: str, gene_tree_file : str, subgenome_assign : dict[str, str], iter_ct : int = 500, seed = None):
+def INFER_MP_ALLOP_BOOTSTRAP(start_network_file: str, gene_tree_file : str, subgenome_assign : dict[str, str], iter_ct : int = 500, seed = None):
     rng = np.random.default_rng(seed=seed)
     gene_tree_list : list = NetworkParser(gene_tree_file).get_all_networks()
     start_net = NetworkParser(start_network_file).get_all_networks()[0]
@@ -1054,11 +1055,10 @@ def MP_SUGAR_WITH_STARTNET(start_network_file: str, gene_tree_file : str, subgen
     likelihood = mp_model.run()
     return mp_model.results
 
-def MP_SUGAR(gene_tree_file : str, taxon_assign : dict[str, str], iter_ct : int = 500, seed = None):
+def INFER_MP_ALLOP(gene_tree_file : str, taxon_assign : dict[str, str], iter_ct : int = 500, seed = None):
     
     rng = np.random.default_rng(seed=seed)
     start_net = partition_gene_trees(taxon_assign, rng = rng)
-    #start_net.print_graph()
     gene_tree_list : list = NetworkParser(gene_tree_file).get_all_networks()
     leaf_map = taxon_assign
     mp_model = InferMPAllop(start_net, leaf_map, gene_tree_list, iter_ct, rng = rng)
@@ -1147,11 +1147,11 @@ def test_p():
     # print(f"TESTER SEED : {test_seed}")
     scores = [] 
     for dummy in range(1):
-        test_seed = 48 #random.randint(0,1000) #698 # 464 #32 913 #868
+        test_seed = random.randint(0,1000) #698 # 464 #32 913 #868
         
-        print(f"TESTER SEED : {test_seed}")
+        #print(f"TESTER SEED : {test_seed}")
         try:
-            run_dict = MP_SUGAR('/Users/mak17/Documents/PhyNetPy/src/J_pruned_v2.nex',
+            run_dict = INFER_MP_ALLOP('/Users/mak17/Documents/PhyNetPy/src/J_pruned_v2.nex',
                     {'U': ['01uA', '01uB'], 'T': ['01tA', '01tB'], 'B': ['01bA'], 'F': ['01fA'], 'C': ['01cA'], 'A': ['01aA'], 'D': ['01dA'], 'O': ['01oA']},
                     seed = test_seed)
             scores.append(
@@ -1170,10 +1170,10 @@ def test_p():
             print(test_seed)
             raise Exception("HALT")
 
-    for mapping in scores:
-        for net, score in mapping.items():
-            print(score)
-            print(net.newick())   
+    # for mapping in scores:
+    #     for net, score in mapping.items():
+    #         print(score)
+    #         print(net.newick())   
     
     # print(
     #     MP_ALLOP(

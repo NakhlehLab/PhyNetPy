@@ -130,7 +130,7 @@ class Model:
         self.network_node_map : dict[Node, ModelNode] = {}
         self.snp_params = None #snp_params
                 
-        self.internal = [item for item in self.netnodes_sans_root if item not in self.network_leaves]
+        #self.internal = [item for item in self.netnodes_sans_root if item not in self.network_leaves]
         self.summary_str = ""
 
     def change_branch(self, index: int, value: float):
@@ -276,12 +276,12 @@ class ModelNode:
 
         Input: other_node (type ModelNode)
         """
-        self.add_successor(other_node)
-        other_node.add_predecessor(self)
+        self.add_predecessor(other_node)
+        other_node.add_successor(self)
 
     def unjoin(self, other_node):
-        self.remove_successor(other_node)
-        other_node.remove_predecessor(self)
+        self.remove_predecessor(other_node)
+        other_node.remove_successor(self)
 
     def remove_successor(self, model_node):
         """
@@ -305,7 +305,7 @@ class ModelNode:
         """
         Returns: the list of parent nodes to this node
         """
-        if of_type is not None:
+        if of_type is None:
             return self.predecessors
         else:
             return [node for node in self.predecessors if type(node) == of_type]
@@ -314,7 +314,7 @@ class ModelNode:
         """
         Returns: the list of child nodes to this node
         """
-        if of_type is not None:
+        if of_type is None:
             return self.successors
         else:
             return [node for node in self.successors if type(node) == of_type]
@@ -344,11 +344,11 @@ class ModelNode:
         TODO: PLS MAKE MORE EFFICIENT THIS IS DUMB
 
         """
-        if self.out_degree() == 0:
+        if self.in_degree() == 0:
             return {self}
         else:
             roots = set()
-            for neighbor in self.successors:
+            for neighbor in self.predecessors:
                 roots.update(neighbor.find_root())  # set update
 
             return roots
@@ -447,6 +447,21 @@ class CalculationNode(ABC, ModelNode):
         """
 
         self.dirty = True
+        
+    def cache(self, value):
+        self.cached = value
+        self.dirty = False
+        return self.cached
+    
+    def get_parameters(self)-> dict[str, float]:
+        """
+        Retrieves any parameters that are attached to this calculation node
+
+        Returns:
+            dict[str, float]: a map from parameter names to their values
+        """
+        return {child.name : child.value for child in self.get_model_children(Parameter)}
+        
 
 class StateNode(ABC, ModelNode):
     """

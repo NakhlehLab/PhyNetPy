@@ -59,9 +59,10 @@ class NetworkComponent(ModelComponent):
     where the root of that network should be the root of the Model.
     
     """
-    def __init__(self, dependencies: set, net : DAG) -> None:
+    def __init__(self, dependencies: set, net : DAG, node_constructor : Callable) -> None:
         super().__init__(dependencies)
         self.network = net
+        self.constructor = node_constructor
     
     def build(self, model : Model):
         """
@@ -76,7 +77,7 @@ class NetworkComponent(ModelComponent):
         
         #create map from network nodes to model nodes, some bookkeeping
         for node in self.network.get_nodes():
-            new_node = ANetworkNode(name=node.get_name(), node_type = "network")
+            new_node = self.constructor(node.get_name()) #ANetworkNode(name=node.get_name(), node_type = "network")
             model.network_node_map[node] = new_node
             
             in_deg = model.network.in_degree(node)

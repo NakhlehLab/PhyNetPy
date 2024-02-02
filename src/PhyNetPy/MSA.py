@@ -82,6 +82,7 @@ class SeqRecord:
 
 
 class MSA:
+    
     """
     Wrapper class for a biopython MSA or a self-created one.
     Provides taxa name and sequence get services.
