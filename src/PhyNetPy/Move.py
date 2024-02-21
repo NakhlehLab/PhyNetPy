@@ -1069,7 +1069,7 @@ class SwitchParentage(Move):
                 net.add_uid_node(node_2_change)
                 net.remove_edge(branch)
                 self.valid_attachment_edges.remove(branch)
-                net.add_edges([[branch[0], node_2_change], [node_2_change, branch[1]]], as_list=True)
+                net.add_edges([[branch[0], node_2_change], [node_2_change, branch[1]]])
                 self.valid_attachment_edges.append([branch[0], node_2_change])
                 self.valid_attachment_edges.append([node_2_change, branch[1]])
                 downstream_node : Node =  node_2_change #branch[1]
@@ -1112,7 +1112,7 @@ class SwitchParentage(Move):
             connector_node = Node()
             net.add_uid_node(connector_node)
             new_edge_list = [[connector_node, new_edge[1]], [new_edge[0], connector_node], [connector_node, node_2_change]]
-            net.add_edges(new_edge_list, as_list = True)
+            net.add_edges(new_edge_list)
             self.valid_attachment_edges.append(new_edge_list[2])
             net.remove_edge(new_edge)
             

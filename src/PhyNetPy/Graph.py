@@ -1,8 +1,8 @@
 """ 
 Author : Mark Kessler
-Last Edit : 11/28/23
-First Included in Version : 0.1.0
-Approved to Release Date : N/A
+Last Edit : 2/20/24
+First Included in Version : 1.0.0
+Approved for Release: NO
 """
 
 from collections import defaultdict, deque
@@ -12,9 +12,6 @@ import random
 from typing import Callable
 from Node import Node
 import numpy as np
-
-
-
 
 
 
@@ -202,17 +199,34 @@ class DAG():
         node.set_name(name)
         self.node_names[name] = node
         
-    def add_edges(self, edges, as_list = False):
+    def add_edges(self, edges)->None:
         """
-        If edges is a list of tuples, then add each tuple to the list of tuples
-        If edges is simply a tuple, then just add the tuple to the edge list.
+        If edges is a list of lists, 
+        then add each list (edge) to the list of edges
+        
+        If edges is simply a list, then just add the list to the edge array.
 
         Args:
             edges (?): Either a list[list[Node]] or a list[Node].
-            as_list (bool, optional): True means that edges will be processed as a list of edges, false means just a singular edge. Defaults to False.
+    
         """
+        as_list : bool = True
+        if len(edges) > 0:
+            if type(edges[0]) is list:
+                pass
+            elif type(edges[0]) is Node:
+                if len(edges) != 2:
+                    raise GraphError("'edges' parameter has node elements but \
+                                     is not of length 2.")
+                as_list = False
+            else:
+                raise GraphError("'edges' parameter needs to be a list of Node\
+                                 arrays, or a singular Node array (of size 2)")                                 
+                                 
         if as_list:
             for edge in edges:
+                if type(edge) is not list:
+                    raise GraphError("")
                 self.edges.append(edge) 
                 self.out_degrees[edge[0]] += 1
                 self.in_degrees[edge[1]] += 1
@@ -222,6 +236,8 @@ class DAG():
                 self.reclassify_node(edge[0], True, True)
                 self.reclassify_node(edge[1], False, True)    
         else:
+            if type(edge) is tuple:
+                edge = list(edge)
             self.edges.append(edges)
             edges[1].add_parent(edges[0])
             self.out_degrees[edges[0]] += 1
@@ -328,7 +344,6 @@ class DAG():
                 if self.in_degrees[node] == 0:
                     self.roots.append(node)
                     
-    
     def get_outgroup(self):
         return self.outgroup
         
@@ -523,8 +538,8 @@ class DAG():
 
             for neighbor in self.get_children(cur):
                 if neighbor not in visited:
-                    t_par = cur.attribute_value_if_exists("t")
-                    t_nei = neighbor.attribute_value_if_exists("t")
+                    t_par = cur.attribute_value("t")
+                    t_nei = neighbor.attribute_value("t")
                     
                     #Handle case that a "t" value doesn't exist
                     if t_par is None or t_nei is None:
@@ -918,7 +933,6 @@ class DAG():
         print(self.outgroup)
         print(new_outgroup.get_name())
         
-    
     def rootpaths(self, start : Node):
         paths : list[list[list[Node]]] = [] #A list of paths, each path is a list of edges (which are lists of nodes)
         for par in self.get_parents(start):

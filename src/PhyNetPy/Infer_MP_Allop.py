@@ -214,7 +214,7 @@ def generate_tree_from_clusters(tree_clusters:set)->DAG:
     nodes.append(root)
     
     #add all the accumulated nodes and edges
-    net.add_edges(edges, as_list=True)
+    net.add_edges(edges)
     net.add_nodes(nodes)
         
     return net
@@ -301,14 +301,14 @@ def partition_gene_trees(gene_map : dict[str, list[str]], num_retic : int = 1, r
             
             #Add the clade's nodes/edges now that the connection points have been selected
             simple_network.add_nodes(clade.nodes)
-            simple_network.add_edges(clade.edges, as_list=True)
+            simple_network.add_edges(clade.edges)
             
             #remove and add back edges
             simple_network.remove_edge([b, a])
        
             simple_network.remove_edge([d, c])
            
-            simple_network.add_edges([[new_node2, a], [b, new_node2], [new_node3, c], [d, new_node3]], as_list=True)
+            simple_network.add_edges([[new_node2, a], [b, new_node2], [new_node3, c], [d, new_node3]])
             
    
             #handle the parent bindings
@@ -690,7 +690,7 @@ class MUL(DAG):
                 mul_tree.remove_edge([b, cur])
                 mul_tree.add_edges([b, subtree.root()[0]])
                 mul_tree.add_nodes(subtree.nodes)
-                mul_tree.add_edges(subtree.edges, as_list=True)
+                mul_tree.add_edges(subtree.edges)
                 processed.add(subtree.root()[0])
             
             
@@ -912,7 +912,6 @@ class InferMPAllop:
         self.results = hc.nets_2_scores
         return end_state.likelihood()
     
-
 class MPAllopComponent(ModelComponent):
     
     def __init__(self, network : DAG, gene_map : dict[str, str], gene_trees : list[DAG], rng) -> None:
@@ -940,8 +939,6 @@ class MPAllopComponent(ModelComponent):
         mul_node.join(score_root_node)
         net_node.join(mul_node)
         
-        
-        
 class NetworkContainer(StateNode):
     def __init__(self, network : DAG):
         super().__init__()
@@ -955,7 +952,6 @@ class NetworkContainer(StateNode):
         
     def get(self) -> DAG:
         return self.network
-
 
 class MULNode(CalculationNode):
     
@@ -986,8 +982,6 @@ class MULNode(CalculationNode):
         else:
             return self.cached
     
-
-
 class GeneTreesNode(StateNode):
     
     def __init__(self, gene_tree_list : list[DAG]):
@@ -1037,15 +1031,6 @@ class ParsimonyScore(CalculationNode):
         else:
             return self.cached
         
-
-
-#######################################################################################
-#######################################################################################
-#######################################################################################
-#######################################################################################
-
-
-
 def INFER_MP_ALLOP_BOOTSTRAP(start_network_file: str, gene_tree_file : str, subgenome_assign : dict[str, str], iter_ct : int = 500, seed = None):
     rng = np.random.default_rng(seed=seed)
     gene_tree_list : list = NetworkParser(gene_tree_file).get_all_networks()
@@ -1065,83 +1050,14 @@ def INFER_MP_ALLOP(gene_tree_file : str, taxon_assign : dict[str, str], iter_ct 
     likelihood = mp_model.run()
     return mp_model.results
 
-# def test2():
-#     mul = MUL({"B": ["B"], "A": ["A"], "C": ["C"], "D":["D"], "X": ["X1", "X2"], "Y": ["Y1", "Y2"], "Z": ["Z1", "Z2"]}, np.random.default_rng(913))
-#     start_net = NetworkParser("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/Bayesian/mp_allop_start_net.nex").get_all_networks()[0]
-#     mul.to_mul(start_net)
-#     gt_list = NetworkParser("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/Bayesian/mp_allop_tester.nex").get_all_networks()
-#     print(score(mul, gt_list))
-        
 
-# def test3():
-#     mul = MUL({"B": ["01bA"], "A": ["01aA"], "X": ["01xA", "01xB"], "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]}, np.random.default_rng(913))
-#     start_net = NetworkParser("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/scenarioD_ideal.nex").get_all_networks()[0]
-#     mul.to_mul(start_net)
-#     gt_list = NetworkParser("/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/D10.nex").get_all_networks()
-#     print(score(mul, gt_list))      
            
+
+
+
+    
+    
 def test():
-    
-    # test_seed = random.randint(0,1000) #698
-    # print(f"TESTER SEED : {test_seed}")
-    scores = []
-    for dummy in range(1):
-        test_seed = random.randint(0,1000) #698 # 464 #32 913 #
-        
-        print(f"TESTER SEED : {test_seed}")
-        try:
-            # scores.append(
-            #     MP_ALLOP('/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_nex_n1.nex',
-            #         {'F': ['01fA'], 'T': ['01tA', '01tB'], 'W': ['01wA', '01wB'], 'B': ['01bA'], 'V': ['01vA', '01vB'], 'A': ['01aA'], 'U': ['01uA', '01uB'], 'C': ['01cA'], 'E': ['01eA'], 'X': ['01xA', '01xB'], 'Y': ['01yA', '01yB'], 'O': ['01oA'], 'Z': ['01zB', '01zA'], 'D': ['01dA']},
-            #         seed= test_seed)
-            # )
-            # scores.append(MP_ALLOP(
-            #         '/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/D10.nex', 
-            #         {"B": ["01bA"], "A": ["01aA"], "X": ["01xA", "01xB"], "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]},
-            #         seed = test_seed
-            #         ))
-            MP_SUGAR('/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_nex_n1.nex',
-                    {'F': ['01fA'], 'T': ['01tA', '01tB'], 'W': ['01wA', '01wB'], 'B': ['01bA'], 'V': ['01vA', '01vB'], 'A': ['01aA'], 'U': ['01uA', '01uB'], 'C': ['01cA'], 'E': ['01eA'], 'X': ['01xA', '01xB'], 'Y': ['01yA', '01yB'], 'O': ['01oA'], 'Z': ['01zB', '01zA'], 'D': ['01dA']},
-                    seed= random.randint(0, 1000))
-        except:
-            print(test_seed)
-            raise Exception("HALT")
-
-    print(scores)
-
-def test_start():
-    scores = []
-    for dummy in range(15):
-        test_seed = random.randint(0,1000) #698 # 464 #32 913 #
-        
-        print(f"TESTER SEED : {test_seed}")
-        try:
-            run_dict = MP_SUGAR_WITH_STARTNET("/Users/mak17/Documents/PhyNetPy/src/bubble_J_sad.nex", '/Users/mak17/Documents/PhyNetPy/src/J_pruned_v2.nex',
-                    {'U': ['01uA', '01uB'], 'T': ['01tA', '01tB'], 'B': ['01bA'], 'F': ['01fA'], 'C': ['01cA'], 'A': ['01aA'], 'D': ['01dA'], 'O': ['01oA']},
-                    seed = test_seed)
-            scores.append(
-                run_dict
-            )
-            print(run_dict)
-            # scores.append(MP_ALLOP(
-            #         '/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/D10.nex', 
-            #         {"B": ["01bA"], "A": ["01aA"], "X": ["01xA", "01xB"], "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]},
-            #         seed = test_seed
-            #         ))
-            # scores.append(MP_SUGAR('/Users/mak17/Documents/PhyNetPy/src/J_nex_n1.nex',
-            #         {'F': ['01fA'], 'T': ['01tA', '01tB'], 'W': ['01wA', '01wB'], 'B': ['01bA'], 'V': ['01vA', '01vB'], 'A': ['01aA'], 'U': ['01uA', '01uB'], 'C': ['01cA'], 'E': ['01eA'], 'X': ['01xA', '01xB'], 'Y': ['01yA', '01yB'], 'O': ['01oA'], 'Z': ['01zB', '01zA'], 'D': ['01dA']},
-            #         seed= random.randint(0, 1000)))
-        except:
-            print(test_seed)
-            raise Exception("HALT")
-
-    for mapping in scores:
-        for net, score in mapping.items():
-            print(score)
-            print(net.newick())
-    
-    
-def test_p():
     
     # test_seed = random.randint(0,1000) #698
     # print(f"TESTER SEED : {test_seed}")
@@ -1170,31 +1086,12 @@ def test_p():
             print(test_seed)
             raise Exception("HALT")
 
-    # for mapping in scores:
-    #     for net, score in mapping.items():
-    #         print(score)
-    #         print(net.newick())   
-    
-    # print(
-    #     MP_ALLOP(
-    #         '/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_trees(7).nex', 
-    #         {'W': ['01wB', '03wA', '01wA', '02wB', '02wA', '03wB'], 'B': ['02bA', '01bA', '03bA'], 'X': ['03xA', '02xB', '02xA', '01xB', '03xB', '01xA'], 'E': ['01eA', '03eA', '02eA'], 'Y': ['02yB', '01yB', '01yA', '03yA', '02yA', '03yB'], 'D': ['03dA', '01dA', '02dA'], 'U': ['03uA', '03uB', '02uA', '01uB', '02uB', '01uA'], 'T': ['03tA', '02tA', '02tB', '03tB', '01tA', '01tB'], 'F': ['03fA', '01fA', '02fA'], 'Z': ['02zA', '01zA', '03zB', '03zA', '01zB', '02zB'], 'A': ['01aA', '02aA', '03aA'], 'V': ['03vA', '02vA', '01vA', '01vB', '02vB', '03vB'], 'C': ['02cA', '03cA', '01cA'], 'O': ['01oA']},
-    #         seed = random.randint(0,1000)
-    #         )
-    #     )
-    
-    # print(
-    #     MP_ALLOP('/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/J_nex_n1.nex',
-    #              {'F': ['01fA'], 'T': ['01tA', '01tB'], 'W': ['01wA', '01wB'], 'B': ['01bA'], 'V': ['01vA', '01vB'], 'A': ['01aA'], 'U': ['01uA', '01uB'], 'C': ['01cA'], 'E': ['01eA'], 'X': ['01xA', '01xB'], 'Y': ['01yA', '01yB'], 'O': ['01oA'], 'Z': ['01zB', '01zA'], 'D': ['01dA']},
-    #              seed= random.randint(0, 1000))
-        
-    # )
 
     
 # cp = Profile()  
 # cp.enable()
 
-test_p()
+test()
 #test_start()
 
 # cp.disable()

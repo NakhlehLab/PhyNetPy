@@ -189,7 +189,7 @@ class Node:
         else:
             self.attributes[key] = value
 
-    def attribute_value_if_exists(self, attr:str):
+    def attribute_value(self, attr:str):
         """
         If attr is a key in the attributes mapping, then
         its value will be returned.

@@ -47,7 +47,7 @@ class MatrixCastError(Exception):
 
 class Matrix:
 
-    def __init__(self, alignment: MSA, alphabet=Alphabet("DNA")):
+    def __init__(self, alignment: MSA, alphabet=Alphabet(Alphabet.DNA)):
         """
         Takes one single MultipleSequenceAlignment object, along with an Alphabet object,
         represented as either DNA, RNA, PROTEIN, CODON, SNP, or BINARY (for now). The default
@@ -63,7 +63,7 @@ class Matrix:
         # ith element of the array = count of the number of times
         # column i appears in the original uncompressed matrix
         self.count : list = list()
-        self.alphabet : Alphabet= alphabet
+        self.alphabet : Alphabet = alphabet
         self.type : str = alphabet.get_type()
         self.taxa2Rows = dict()
         self.rows2Taxa = dict()
