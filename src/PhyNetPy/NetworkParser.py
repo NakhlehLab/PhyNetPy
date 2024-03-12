@@ -121,7 +121,7 @@ class NetworkParser:
             edges.append([parent_node, child_node])
         
 
-        net.add_edges(edges, as_list=True)
+        net.add_edges(edges)
         
         return net
 

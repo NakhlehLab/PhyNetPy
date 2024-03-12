@@ -1,25 +1,16 @@
 """ 
 Author : Mark Kessler
-Last Stable Edit : 7/16/23
+Last Stable Edit : 2/8/24
 First Included in Version : 0.1.0
-Approved to Release Date : N/A
 """
 
-import math
 import warnings
 import random
 from abc import ABC, abstractmethod
-from math import comb, pow
 from GTR import *
 from Graph import DAG
-from Matrix import Matrix
 from Move import Move
-#from Bayesian.SNPTransition import SNPTransition
-from scipy.special import binom
-import scipy
-#from Bayesian.SNPModule import *
 from Node import Node
-#from Bayesian.InferAllop import InferMPAllop
 from typing import Callable
 
 
@@ -111,7 +102,7 @@ class Model:
         rand_seed = random.randint(0, 1000)
         self.seed = rand_seed
         print(f"MODEL SEED: {rand_seed}")
-        self.rng = np.random.default_rng(rand_seed)
+        self.rng : np.random.Generator = np.random.default_rng(rand_seed)
         
         ##-------------------------------------------##
         
@@ -190,7 +181,7 @@ class Model:
         2) summary_filename : a string that is the name of the file to output logging information.
                               if the filename does not exist, a new file will be created in the current directory
 
-        TODO: TEST FILE CREATION
+        TODO: WILL NOT WORK
 
         """
         # Step 1: create network obj
@@ -850,7 +841,7 @@ class ExtantSpecies(StateNode):
         # should only have a single leaf calc node as the parent
         self.seq = new_sequence
         self.name = new_name
-        self.get_model_children()[0].update(new_sequence, new_name)
+        self.get_model_parents()[0].update(new_sequence, new_name)
 
     def seq_len(self):
         if type(self.seq) is list:

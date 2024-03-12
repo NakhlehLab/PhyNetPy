@@ -873,9 +873,10 @@ class VPIAccumulator(Accumulator):
     def __init__(self, name: str, data_structure: object):
         super().__init__("VPI", PartialLikelihoods())
     
-class BiMarkersInternalNode(ANetworkNode):
+class BiMarkersNode(ANetworkNode):
     def __init__(self, name: str = None, node_type: str = None):
         super().__init__(name, node_type)
+        self.leaf_descendants : 
         
     def calc(self):
         """
@@ -892,18 +893,13 @@ class BiMarkersInternalNode(ANetworkNode):
         PLOS Computational Biology 17(9): e1008380. https://doi.org/10.1371/journal.pcbi.1008380
         """
         
-        #Get the network node parent of this branch object
-        #node_par = self.get_model_children()[0]
         
-        #Calculate Q^t before calculating likelihoods
-        self.transition()
         
-        if type(self) is SNPLeafNode:
-            site_count = self.seq_len()
-        elif type(self) is SNPInternalNode:
-            site_count = self.site_count
+        if len(self.get_children()) == 0: 
+            site_count = 1 #self.seq_len()
         else:
-            raise ModelError("site count error")
+            site_count = self.site_count
+        
 
         vector_len = partials_index(self.possible_lineages() + 1)  
 
@@ -1006,7 +1002,7 @@ class BiMarkersInternalNode(ANetworkNode):
         else:
             return self.cached
 
-    def possible_lineages(self):
+    def possible_lineages(self)->int:
         """
         Calculate the number of lineages that flow through this node.
         For non-reticulation nodes, if branch x has children y,z:
@@ -1014,8 +1010,19 @@ class BiMarkersInternalNode(ANetworkNode):
         Returns:
             int: number of lineages
         """
-
-        return sum([child.samples() for child in self.leaf_descendants])
+        if len(self.get_children()) == 0:
+            return self.samples()
+        else:
+            return sum([child.samples() for child in self.leaf_descendants])
+    
+    def samples(self)->int:
+        if len(self.get_children()) == 0:
+            seqs = self.get_model_children(ExtantSpecies)[0].get_seq()
+            return sum([rec.ploidy() for rec in seqs]) 
+        else:
+            Warning("Calling samples method on a node that is not a leaf")
+            
+    
     
 class BiMarkersLikelihood(CalculationNode):
     
@@ -1024,11 +1031,11 @@ class BiMarkersLikelihood(CalculationNode):
     
     def calc(self):
         
-        transition_node : SNPTransitionMatrixNode = self.get_model_children(SNPTransitionMatrixNode)[0]
+        transition_node : BiMarkersTransition = self.get_model_children(BiMarkersTransition)[0]
         q_null_space = scipy.linalg.null_space(transition_node.get().Q)
         x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
 
-        network_root_vpi_key = self.get_model_children(SNPInternalNode)[0].get()[0]
+        network_root_vpi_key = self.get_model_children(BiMarkersNode)[0].get()[0]
         F_b_map = self.get_model_children(VPIAccumulator)[0].get_data().vpis[network_root_vpi_key]
         
         params = self.get_parameters()

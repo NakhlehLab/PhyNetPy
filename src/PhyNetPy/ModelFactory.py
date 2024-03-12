@@ -13,6 +13,8 @@ from Graph import DAG
 from NetworkParser import NetworkParser as np
 from typing import Callable
 
+from MSA import MSA
+
 
 
 
@@ -108,19 +110,20 @@ class SubsitutionModelComponent(ModelComponent):
 
 class MSAComponent(ModelComponent):
     
-    def __init__(self, dependencies: set, grouping : dict[str, str] = None) -> None:
+    def __init__(self, dependencies: set, aln : MSA, grouping : dict[str, str] = None) -> None:
         super().__init__(dependencies)
         self.grouping : dict[str, str] = grouping
+        self.aln : MSA = aln
         
     def build(self, model : Model) -> None:
         group_no = 0
         for network_node, model_node in model.network_node_map.items():
             if model_node in model.nodetypes["leaf"]:
-                #sequence = self.data.get_number_seq(node.get_name()) 
+                
                 if self.grouping is not None:
-                    sequences = model.data.aln.group_given_id(group_no)
+                    sequences = self.aln.group_given_id(group_no)
                 else:
-                    sequences = model.data.aln.seq_by_name(network_node.get_name())
+                    sequences = list(self.aln.seq_by_name(network_node.get_name()))
                 
                 new_ext_species : ExtantSpecies = ExtantSpecies(network_node.get_name(), sequences)
                 new_ext_species.join(model_node)
@@ -138,7 +141,7 @@ class BranchLengthComponent(ModelComponent):
         for network_node, model_node in model.network_node_map.items():
             
             branches = []
-            gamma = network_node.attribute_value_if_exists("gamma")
+            gamma = network_node.attribute_value("gamma")
 
             for branch_par, branch_lengths in network_node.length().items():
                 

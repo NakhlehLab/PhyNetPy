@@ -176,7 +176,7 @@
                 
     #             # Create branch for this leaf and add it to the height/length vector
     #             branches = []
-    #             gamma = node.attribute_value_if_exists("gamma")
+    #             gamma = node.attribute_value("gamma")
     #             print(gamma)
     #             for branch_par, branch_lengths in node.length().items():
                     
@@ -235,7 +235,7 @@
 
 
     #             branches = []
-    #             gamma = node.attribute_value_if_exists("gamma")
+    #             gamma = node.attribute_value("gamma")
     #             print(gamma)
                 
     #             for branch_par, branch_lengths in node.length().items():
