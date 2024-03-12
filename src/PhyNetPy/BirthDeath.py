@@ -1,6 +1,6 @@
 """ 
 Author : Mark Kessler
-Last Stable Edit : 2/20/24
+Last Stable Edit : 2/21/24
 First Included in Version : 1.0.0
 Approved for Release: YES
 """
@@ -378,7 +378,6 @@ class CBDP:
         self.pBirth = self.gamma / (self.gamma + self.mu)
         self.pDeath = self.mu / (self.gamma + self.mu)
     
-  
     def set_n(self, value : int) -> None:
         """
         Set the number of taxa for the simulated trees.
@@ -496,42 +495,46 @@ class CBDP:
     def connect(index : int, nodes : list[Node]) -> list[Node]:
         """
         nodes-- a list of nodes (list[i] is the ith node along a horizontal
-        axis that alternates between species and internal s_i nodes/speciation events)
+                axis that alternates between species and 
+                internal s_i nodes/speciation events)
 
         index-- the node to connect to its parent in the tree
 
         Given the nodes and a node to connect, create a new edge.
 
         The parent node is defined to be the closest to nodes[index] in terms
-        of time and proximity in the list. There are two candidates, the left and right 
-        candidate. Each candidate is the nearest element in the list such that the time 
-        attribute is larger than nodes[index]. The parent is the minimum of the 
-        two candidates.
+        of time and proximity in the list. There are two candidates, 
+        the left and right candidate. Each candidate is the nearest element in 
+        the list such that the time attribute is larger than nodes[index]. 
+        The parent is the minimum of the two candidates.
 
         Returns: the edge from nodes[index] to its correct parent
-
         """
+        node_t : float = nodes[index].attribute_value("t")
 
         # find right candidate
-        copy_index = index + 1
-        right_candidate = None
+        right_index : int = index + 1
+        right_candidate : Node = None
 
-        while copy_index < len(nodes):
+        while right_index < len(nodes):
             # search in the list to the right (ie increase the index)
-            if nodes[copy_index].attribute_value("t") > nodes[index].attribute_value("t"):
-                right_candidate = nodes[copy_index]
+            right_t = nodes[right_index].attribute_value("t")
+            
+            if right_t > node_t:
+                right_candidate = nodes[right_index]
                 break
-            copy_index += 1
+            right_index += 1
 
         # find left candidate
-        copy_index = index - 1
+        left_index = index - 1
         left_candidate = None
-        while copy_index >= 0:
+        while left_index >= 0:
             # search in the left part of the list
-            if nodes[copy_index].attribute_value("t") > nodes[index].attribute_value("t"):
-                left_candidate = nodes[copy_index]
+            left_t : float = nodes[left_index].attribute_value("t")
+            if left_t > node_t:
+                left_candidate = nodes[left_index]
                 break
-            copy_index -= 1
+            left_index -= 1
 
         # take the minimum time (leaves being at time 0, root being at max time)
         if left_candidate is None and right_candidate is None:
@@ -542,32 +545,38 @@ class CBDP:
         elif right_candidate is None:
             selection = left_candidate
         else:
-            comp = right_candidate.attribute_value("t") - left_candidate.attribute_value("t")
-            if comp >= 0:
+            right_cand_t = right_candidate.attribute_value("t")
+            left_cand_t = left_candidate.attribute_value("t")
+            
+            if right_cand_t - left_cand_t >= 0:
                 selection = left_candidate
             else:
                 selection = right_candidate
 
         # create new edge
-        nodeT = nodes[index].attribute_value("t")
-        futureT = selection.attribute_value("t")
+        node_T = nodes[index].attribute_value("t")
+        future_T = selection.attribute_value("t")
         new_edge = [selection, nodes[index]]
 
         # set the branch length of the current node
-        nodes[index].set_length(futureT - nodeT, selection)
+        nodes[index].set_length(future_T - node_T, selection)
 
         return new_edge
 
-    def sample_trees(self, m : int) -> list:
+    def generate_trees(self, m : int) -> list:
         """
-        Generate m trees and add them to the list of generated trees
+        Generate m number of trees and add them to the list of generated trees
 
         Returns: the list of all generated trees from this run and any prior
-                    uncleared runs.
+                 uncleared runs.
         """
-        for dummy in range(m):
+        for _ in range(m):
             self.generated_trees.append(self.generate_tree())
 
         return self.generated_trees
 
-   
+    def clear_generated(self) -> None:
+        """
+        Empty out the generated tree array
+        """
+        self.generated_trees = []

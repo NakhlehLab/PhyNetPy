@@ -1,8 +1,8 @@
 """ 
 Author : Mark Kessler
-Last Stable Edit : 7/16/23
-First Included in Version : 0.1.0
-Approved to Release Date : N/A
+Last Stable Edit : 2/21/24
+First Included in Version : 1.0.0
+Approved for Release: No but close
 """
 
 from typing import Callable
@@ -10,16 +10,29 @@ from Graph import DAG
 
 
 
-def phynetpy_naming(taxa_name : str) -> str:
-    if taxa_name[0:2].isnumeric():
-        sample_no = int(taxa_name[0:2])
-    else:
-        raise GeneTreeError("Error Applying PhyNetPy Naming Rule: first 2 digits is not numerical")
+def phynetpy_naming(taxa_name : str) -> list:
+    """
+    
+
+    Args:
+        taxa_name (str): _description_
+
+    Raises:
+        GeneTreeError: _description_
+        GeneTreeError: _description_
+
+    Returns:
+        list: _description_
+    """
+    if not taxa_name[0:2].isnumeric():
+        raise GeneTreeError("Error Applying PhyNetPy Naming Rule: \
+                             first 2 digits is not numerical")
     
     if taxa_name[2].isalpha():
         return taxa_name[2].upper()
     else:
-        raise GeneTreeError("Error Applying PhyNetPy Naming Rule: 3rd position is not an a-z character")
+        raise GeneTreeError("Error Applying PhyNetPy Naming Rule: \
+                             3rd position is not an a-z character")
     
     
 class GeneTreeError(Exception):
@@ -28,15 +41,18 @@ class GeneTreeError(Exception):
         self.message = message
 
 class GeneTrees:
-    #TODO: Alter to use the GeneTree wrapper class
     
-    def __init__(self, gene_tree_list : list[DAG] = None, naming_rule : Callable = phynetpy_naming) -> None:
+    def __init__(self, gene_tree_list : list[DAG] = None, 
+                 naming_rule : Callable = phynetpy_naming) -> None:
         """
         Wrapper class for a set of DAGs that represent gene trees
 
         Args:
-            gene_tree_list (list[DAG], optional): A list of DAGs, should be trees (NOT networks). Defaults to None.
-            naming_rule (Callable, optional): a function f : str -> str. Defaults to phynetpy_naming.
+            gene_tree_list (list[DAG], optional): A list of DAGs, should be 
+                                                  trees (NOT networks). 
+                                                  Defaults to None.
+            naming_rule (Callable, optional): a function f : str -> str. 
+                                              Defaults to phynetpy_naming.
         """
         
         self.trees : set[DAG] = set()
@@ -49,8 +65,9 @@ class GeneTrees:
         
     def add(self, tree : DAG):
         """
-        Add a gene tree to the collection. Any new gene labels that are apart of this tree will 
-        also be added to the collection of all gene tree leaf labels
+        Add a gene tree to the collection. Any new gene labels that belong to
+        this tree will also be added to the collection of all 
+        gene tree leaf labels.
 
         Args:
             tree (DAG): A DAG that is a tree, must not be a network.
@@ -81,15 +98,16 @@ class GeneTrees:
 
 
 
-class GeneTree(DAG):
-    """
-    Wrapper class for a DAG that verifies tree status and contains operators that are specifically designed for gene trees.
-    """
+# class GeneTree(DAG):
+#     """
+#     Wrapper class for a DAG that verifies tree status and contains operators 
+#     that are specifically designed for gene trees.
+#     """
     
-    def __init__(self, edges=None, nodes=None, weights=None) -> None:
-        super().__init__(edges, nodes, weights)
-        #TODO: verify tree status somehow
+#     def __init__(self, edges=None, nodes=None, weights=None) -> None:
+#         super().__init__(edges, nodes, weights)
+#         #TODO: verify tree status somehow
     
-    def map_to_species_network(self):
-        pass
+#     def map_to_species_network(self):
+#         pass
     

@@ -10,87 +10,89 @@ import copy
 import math
 import random
 from typing import Callable
-from Node import Node
+from .Node import Node
 import numpy as np
 
 
 
 
-def random_object(mylist : list, rng):
+def random_object(mylist : list[object], rng : np.random.Generator) -> object:
     """
     Select a random item from a list using an rng object (for testing consistency and debugging purposes)
 
     Args:
-        mylist (list): a list of any type
-        rng : the random rng object
+        mylist (list[object]): a list of any type
+        rng (np.random.Generator) : the result of a .default_rng(seed) call
 
     Returns:
-        ? : an item from mylist
+        object : an item from mylist
     """
     rand_index = rng.integers(0, len(mylist))
     return mylist[rand_index]
 
-def newickSubstring(children, node):
-    """
-    Returns the newick string for a subtree beginning at node
+# def newickSubstring(children, node):
+#     """
+#     Returns the newick string for a subtree beginning at node
 
-    ie a whole tree (A, (B, C)D)E with newickSubstring(D) returns (B, C)D
+#     ie a whole tree (A, (B, C)D)E with newickSubstring(D) returns (B, C)D
 
-    node-- the root node (type Node) that starts the computation
-    children-- a mapping from parent nodes to a list of their children
+#     node-- the root node (type Node) that starts the computation
+#     children-- a mapping from parent nodes to a list of their children
     
-    """
-    if node in children.keys():
+#     """
+#     if node in children.keys():
 
-        retStr = "("
+#         retStr = "("
 
-        for child in children[node][0]:
-            if not children[node][1]:
-                retStr += newickSubstring(children, child)
-            else:
-                retStr += child.get_name()
-                if child.length() is not None:
-                    #TODO: NETWORKS?
-                    retStr += ":" + str(list(child.length().values())[0])
-            retStr += ", "
+#         for child in children[node][0]:
+#             if not children[node][1]:
+#                 retStr += newickSubstring(children, child)
+#             else:
+#                 retStr += child.get_name()
+#                 if child.length() is not None:
+#                     #TODO: NETWORKS?
+#                     retStr += ":" + str(list(child.length().values())[0])
+#             retStr += ", "
 
-        retStr = retStr[:-2]  # Get rid of spurious comma
+#         retStr = retStr[:-2]  # Get rid of spurious comma
 
-        retStr += ")" + node.get_name()
-        if node.length() is not None:
-            retStr += ":" + str(list(node.length().values())[0])
-    else:
-        retStr = node.get_name()
-        if node.length() is not None:
-            retStr += ":" + str(list(node.length().values())[0])
+#         retStr += ")" + node.get_name()
+#         if node.length() is not None:
+#             retStr += ":" + str(list(node.length().values())[0])
+#     else:
+#         retStr = node.get_name()
+#         if node.length() is not None:
+#             retStr += ":" + str(list(node.length().values())[0])
 
-    return retStr
+#     return retStr
 
 
 class GraphError(Exception):
     """
-    This exception is raised when a graph is malformed, or if a graph operation fails.
+    This exception is raised when a graph is malformed, 
+    or if a graph operation fails.
     """
 
     def __init__(self, message="Error with a Graph Instance"):
         self.message = message
         super().__init__(self.message)
 
-
-
 class DAG():
     """
-    This class represents a directed graph containing nodes of any data type, and edges.
-    An edge is a list [a,b] where a and b are nodes in the graph, and the direction of the edge
-    is from a to b. [a,b] is NOT the same as [b,a], as this is a DIRECTED graph.
+    This class represents a directed acyclic graph containing nodes and edges.
+    An edge is a list [a,b] where a and b are nodes in the graph, 
+    and the direction of the edge is from a to b (a is b's parent). 
+    [a,b] is NOT the same as [b,a], as this is a DIRECTED graph.
 
     Allowances:
-    1) You may create cycles-- BUT we have provided a method to check if this graph object is acyclic
-    2) You may have multiple roots. Be mindful of whether this graph is connected and what root you wish to operate on
-    3) You may end up with floater nodes/edges, ie this may be an unconnected graph with multiple connected components. 
-       We will provide in the next release a method to check for whether your graph object is one single connected component. 
+    1) You may create cycles-- BUT we have provided a method to check if this 
+       graph object is acyclic
+    2) You may have multiple roots. Be mindful of whether this graph is 
+       connected and what root you wish to operate on.
+    3) You may end up with floater nodes/edges, ie this may be an unconnected 
+       graph with multiple connected components. We will provide a method to 
+       check for whether your graph object is one single connected component. 
        We have also provided methods to remove such artifacts.
-    
     
     """
     
@@ -1020,12 +1022,12 @@ def newick_help(net : DAG, node : Node, processed_retics : set[Node]):
     if node in net.leaves:
         return node.get_name()
     else:
-        if net.in_degrees[node] == 2 and node in processed_retics:
+        if net.in_degrees[node] >= 2 and node in processed_retics:
             if node.get_name()[0] != "#":
                 return "#" + node.get_name()
             return node.get_name()
         else:
-            if net.in_degrees[node] == 2:
+            if net.in_degrees[node] >= 2:
                 processed_retics.add(node)
                 if node.get_name()[0] != "#":
                     node_name = "#" + node.get_name()
