@@ -1,0 +1,86 @@
+class TaxaSwapMove(Move, ABC):
+    #TODO: Figure out why I even need this
+
+    def execute(self, model: Model) -> Model:
+        """
+
+        Args:
+            model (Model): A model
+
+        Raises:
+            MoveError: if there aren't enough taxa to warrant a swap
+
+        Returns:
+            Model: An altered model that is the result of swapping around taxa sequences
+        """
+        # Make a copy of the model
+        proposedModel = model
+
+        # Select two random leaf nodes
+        net_leaves = proposedModel.get_network_leaves()
+
+        if len(net_leaves) < 3:
+            raise MoveError("TAXA SWAP: NOT ENOUGH TAXA")
+
+        indeces = np.random.choice(len(net_leaves), 2, replace=False)
+        first = net_leaves[indeces[0]]
+        second = net_leaves[indeces[1]]
+
+        # Grab ExtantTaxa nodes
+        first_taxa = first.get_model_parents()[0]
+        sec_taxa = second.get_model_parents()[0]
+
+        # Swap names and sequences
+        first_seq = first_taxa.get_seq()
+        sec_seq = sec_taxa.get_seq()
+        first_name = first_taxa.get_name()
+        sec_name = sec_taxa.get_name()
+
+        self.undo_info = [first_taxa, sec_taxa]
+        self.same_move_info = indeces
+
+        # Update the data
+        first_taxa.update(sec_seq, sec_name)
+        sec_taxa.update(first_seq, first_name)
+
+        return proposedModel
+
+    def undo(self, model: Model) -> None:
+        """
+        Literally just swap them back
+        """
+        first_taxa = self.undo_info[0]
+        sec_taxa = self.undo_info[1]
+        # Swap names and sequences
+        first_seq = first_taxa.get_seq()
+        sec_seq = sec_taxa.get_seq()
+        first_name = first_taxa.get_name()
+        sec_name = sec_taxa.get_name()
+
+        # Update the data
+        first_taxa.update(sec_seq, sec_name)
+        sec_taxa.update(first_seq, first_name)
+
+    def same_move(self, model: Model) -> None:
+        net_leaves = model.get_network_leaves()
+
+        indeces = self.same_move_info
+        first = net_leaves[indeces[0]]
+        second = net_leaves[indeces[1]]
+
+        # Grab ExtantTaxa nodes
+        first_taxa = first.get_model_parents()[0]
+        sec_taxa = second.get_model_parents()[0]
+
+        # Swap names and sequences
+        first_seq = first_taxa.get_seq()
+        sec_seq = sec_taxa.get_seq()
+        first_name = first_taxa.get_name()
+        sec_name = sec_taxa.get_name()
+
+        # Update the data
+        first_taxa.update(sec_seq, sec_name)
+        sec_taxa.update(first_seq, first_name)
+
+    def hastings_ratio(self) -> None:
+        return 1.0
