@@ -9,7 +9,7 @@ import traceback
 from nexus import NexusReader
 from Bio import Phylo
 from io import StringIO
-from Network import Network, Edge, Node, NodeError
+from Network import *
 from warnings import warn
 
 
@@ -118,6 +118,8 @@ class NetworkParser:
             # build the graph of the network
             self.networks.append(new_network)
             self.name_2_net[new_network] = name
+            #reset the inheritance map for the next network
+            self.inheritance = {}
             
     def parse_tree_block(self, tree) -> Network:
         """
@@ -141,7 +143,7 @@ class NetworkParser:
                 parents[child] = clade
 
         # create new empty directed acyclic graph
-        net = Network()
+        net = Network(edges = EdgeSet(), nodes = NodeSet())
 
         # populate said graph with nodes and their attributes
         for node, par in parents.items():
@@ -266,7 +268,7 @@ class NetworkParser:
             
         return parsed_node
     
-    def parse_parent(self, node, network: Network, 
+    def parse_parent(self, node, network : Network, 
                      parent : Node = None) -> Node:
         """
         Process a node that is the parent of the other node due to be processed
@@ -295,7 +297,7 @@ class NetworkParser:
                 node.name = newInternal
             
             # Make a Node obj
-            parsed_node : Node = Node(name=node.name)
+            parsed_node : Node = Node(name = node.name)
             
             # Set the time of the Node
             if parent is None:

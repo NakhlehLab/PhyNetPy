@@ -2,7 +2,9 @@
 Author : Mark Kessler
 Last Stable Edit : 4/9/24
 First Included in Version : 1.0.0
-Approved for Release : NO
+Docs   - [x]
+Tests  - [ ]
+Design - [x]
 """
 
 from State import State
@@ -11,7 +13,7 @@ from Matrix import Matrix
 from ModelGraph import Model
 import time
 
-from Move import *
+from ModelMove import *
 from GTR import *
 import random
 
@@ -74,21 +76,14 @@ class MCMC_SEQ_Kernel(ProposalKernel):
     def __init__(self) -> None:
         super().__init__()
 
-    def generate(self) -> RootBranchMove | UniformBranchMove | TopologyMove:
+    def generate(self) -> Move:
         """
         Return one of three moves, with probability distribution [10, 50, 40].
         TODO: These probabilities need to be customizable?!
         
         Returns:
-            RootBranchMove | UniformBranchMove | TopologyMove: Returns a 
-                                                               RootBranch move 
-                                                               10% of the time, 
-                                                               UniformBranchMove 
-                                                               50% of the time,
-                                                               and a 
-                                                               TopologyMove 
-                                                               the other 40% of 
-                                                               the time.
+            Move: Returns a RootBranch move 10% of the time, UniformBranchMove 
+                  50% of the time, and a TopologyMove the other 40% of the time.
         """
         random_num = random.random()
 
@@ -106,6 +101,7 @@ class Infer_MP_Allop_Kernel(ProposalKernel):
     
     def __init__(self) -> None:
         super().__init__()
+        self.iter = 0
    
     def generate(self) -> SwitchParentage:
         """
@@ -115,7 +111,9 @@ class Infer_MP_Allop_Kernel(ProposalKernel):
             SwitchParentage: A new switch parentage move. 
                              Randomness is priced-in
         """
-        return SwitchParentage()
+        new_move = SwitchParentage(self.iter)
+        self.iter += 1
+        return new_move
     
 ########################################
 #### HILL CLIMB, MH, and SIM ANNEAL ####

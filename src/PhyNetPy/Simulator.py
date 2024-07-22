@@ -23,7 +23,7 @@ class NetworkConverter:
         
         self.validate_network() 
 
-        self.mul_tree = Network()
+        self.mul_tree = Network( nodes = NodeSet(), edges = EdgeSet())
         self._copy_network_nodes()
         self._add_network_edges()
         self._process_reticulations()

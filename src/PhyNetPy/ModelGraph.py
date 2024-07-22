@@ -5,12 +5,13 @@ First Included in Version : 0.1.0
 """
 
 from __future__ import annotations
+from collections import defaultdict
 import warnings
 import random
 from abc import ABC, abstractmethod
 from GTR import *
 from Network import Network, Edge, Node
-from Move import Move
+from ModelMove import Move
 from MSA import SeqRecord
 from typing import Callable
 
@@ -71,8 +72,16 @@ class Model:
        
         # Maintain links to various internal structures and bookkeeping 
         # data 
+        
+        # Access all nodes of a given type
+        self.all_nodes : dict[type, list[ModelNode]] = defaultdict(list)
+        
+        # Access the internal network
         self.network : Network = None 
         self.network_container = None
+        
+        # Access all network nodes of a certain kind 
+        # (these are only explicitly defined by the in/out maps)
         self.nodetypes = {"leaf":[], 
                           "internal": [], 
                           "reticulation":[], 
@@ -578,7 +587,7 @@ class NetworkNode(ABC, ModelNode):
     and all the height/branch length hookups.
     """
 
-    def __init__(self, branch=None):
+    def __init__(self, branch = None):
         super(NetworkNode, self).__init__()
         self.branches = branch
         self.network_parents : list[NetworkNode]= None
@@ -679,8 +688,9 @@ class NetworkNode(ABC, ModelNode):
         return self.children
 
 class BranchNode(ABC, ModelNode):
-    def __init__(self, vector_index: int, branch_length: float) -> None:
+    def __init__(self, vector_index : int, branch_length : float) -> None:
         super().__init__()
+        
         self.index : int = vector_index
         self.branch_length : float = branch_length
         self.net_parent : NetworkNode = None

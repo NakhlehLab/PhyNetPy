@@ -2,7 +2,10 @@
 Author : Mark Kessler
 Last Edit : 4/3/24
 First Included in Version : 1.0.0
-Approved for Release : NO. Untested
+
+Docs   - [x]
+Tests  - [ ]
+Design - [ ]
 """
 
 
@@ -168,7 +171,7 @@ class Matrix:
         self.populate_counts(new_data)
         self.data = new_data
 
-    def get_ij(self, i : int, j : int) -> int | np.int8 | np.int32 | np.int64:
+    def get_ij(self, i : int, j : int) -> int:
         """
         Returns the data point at row i, and column j.
 
@@ -177,7 +180,7 @@ class Matrix:
             j (int): column index
 
         Returns:
-            int | np.int8 | np.int32 | np.int64: the data point.
+            int: the data point.
         """
         return self.data[i][j]
 

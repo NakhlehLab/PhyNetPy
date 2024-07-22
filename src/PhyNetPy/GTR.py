@@ -2,13 +2,17 @@
 Author : Mark Kessler
 Last Stable Edit : 4/12/24
 First Included in Version : 1.0.0
-Approved for Release : No. Ensure exponential closed form accuracy.
+
+Docs   - [x]
+Tests  - [ ]
+Design - [ ]
 """
 
 import warnings
 import numpy as np
 from numpy import linalg as lg
 import math
+import numpy.typing as npt
 
 """
 SOURCES:
@@ -59,17 +63,20 @@ class GTR:
     This is the Generalized Time Reversible (GTR) model.
     """
 
-    def __init__(self, base_freqs : list[float] | np.ndarray, 
-                       transitions : list[float] | np.ndarray, 
+    def __init__(self, base_freqs : list[float], 
+                       transitions : list[float], 
                        states : int = 4):
         """
         Args:
-            base_freqs (list[float] | np.ndarray): an array of floats of 
-                                                   'states' length. Must sum
-                                                   to 1.
-            transitions (list[float] | np.ndarray): an array of floats that is 
-                                                    ('states'^2 - 'states) / 2 
-                                                    long.
+            base_freqs (list[float]): an array of 
+                                                                floats of 
+                                                                'states' length. 
+                                                                Must sum to 1.
+            transitions (list[float]): an array of 
+                                                                 floats that is 
+                                                                 ('states'^2 - 
+                                                                 'states) / 2 
+                                                                 long.
             states (int, optional): Number of possible data states.  
                                     Defaults to 4 (For DNA, {A, C, G, T}).
 
@@ -79,10 +86,10 @@ class GTR:
         """
 
         self.states : int = states
-        self.freqs : list[float] | np.ndarray = base_freqs
-        self.trans : list[float] | np.ndarray = transitions
+        self.freqs : list[float] = base_freqs
+        self.trans : list[float] = transitions
         
-        self.is_valid(self.trans, self.freqs, self.states)
+        self._is_valid(self.trans, self.freqs, self.states)
 
         # compute Q, the instantaneous probability matrix
         self.Q = self.buildQ()
@@ -117,17 +124,19 @@ class GTR:
         if "base frequencies" in param_names:
             self.freqs = params["base frequencies"]
         
-        self.is_valid(self.trans, self.freqs, self.states)
+        self._is_valid(self.trans, self.freqs, self.states)
         self.buildQ()
            
-    def get_hyperparams(self) -> list[list[float] | np.ndarray]:
+    def get_hyperparams(self) -> list[list[float]]:
         """
         Gets the base frequency and transition arrays.
 
         Returns:
-            list[list[float] | np.ndarray]: List that contains the base 
-                                            frequencies in the first element, 
-                                            and the transitions in the second.
+            list[list[float]]: List that contains the
+                                                         base frequencies in the
+                                                         first element, and the 
+                                                         transitions in the 
+                                                         second.
         """
         return self.freqs, self.trans
 
@@ -196,14 +205,15 @@ class GTR:
 
         return self.Qt
     
-    def is_valid(self, transitions: list[float] | np.ndarray, 
-                 freqs : list[float] | np.ndarray, states : int) -> None:
+    def _is_valid(self, transitions: list[float], 
+                 freqs : list[float], 
+                 states : int) -> None:
         """
         Ensure frequencies and transitions are well formed.
 
         Args:
-            transitions (list[float] | np.ndarray): Transition list.
-            freqs (list[float] | np.ndarray): Base frequency list. 
+            transitions (list[float]): Transition list.
+            freqs (list[float]): Base frequency list. 
                                               Must sum to 1.
         """
         
@@ -215,7 +225,7 @@ class GTR:
         proper_len = ((states - 1) * states) / 2
         if len(transitions) != proper_len:
             raise SubstitutionModelError(f"Incorrect number of transition \
-                                          rates. Got {len(transitions)}. 
+                                          rates. Got {len(transitions)}. \
                                           Expected {proper_len}!")
 
 class K80(GTR):
@@ -311,13 +321,14 @@ class F81(GTR):
     A closed form for the matrix (Q) exponential exists.
     """
 
-    def __init__(self, bases : list[float] | np.ndarray):
+    def __init__(self, bases : list[float]) -> None:
         """
         Initialize the F81 model with a list of base frequencies of length 4.
         Transition probabilities will all be the same.
 
         Args:
-            bases (list[float] | np.ndarray): a list of 4 base frequency values.
+            bases (list[float]): a list of 4 base 
+                                                           frequency values.
         """
         trans = np.ones((6, 1))
         if len(self.freqs) != 4 or sum(self.freqs) != 1:
@@ -419,21 +430,23 @@ class HKY(GTR):
     parameters are free.
     """
 
-    def __init__(self, base_freqs : list | np.ndarray, 
-                 transitions : list | np.ndarray) -> None:
+    def __init__(self, base_freqs : list[float], 
+                 transitions : list[float]) -> None:
         """
         Initialize the HKY model with 4 base frequencies that sum to 1, and a
         transition array of length 6 with the equivalency pattern 
         [a, b, a, a, b, a].
 
         Args:
-            base_freqs (list | np.ndarray): Array of 4 values that sum to 1.
-            transitions (list | np.ndarray): Array of length 6 with the 
-                                             equivalency pattern 
-                                             [a, b, a, a, b, a].
+            base_freqs (list[float]): Array of 4 values that 
+                                                         sum to 1.
+            transitions (list[float]): Array of length 6 with
+                                                          the equivalency 
+                                                          pattern 
+                                                          [a, b, a, a, b, a].
         """
         
-        self.is_valid(transitions, base_freqs)
+        self._is_valid(transitions, base_freqs)
 
         super().__init__(base_freqs, transitions)
     
@@ -456,22 +469,27 @@ class HKY(GTR):
         if "base frequencies" in param_names:
             self.freqs = params["base frequencies"]
         
-        self.is_valid(self.trans, self.freqs)
+        self._is_valid(self.trans, self.freqs)
         self.buildQ()
     
-    def is_valid(self, transitions: list[float] | np.ndarray, 
-                 freqs : list[float] | np.ndarray) -> None:
+    def _is_valid(self, transitions: list[float], 
+                 freqs : list[float]) -> None:
         """
         Ensure frequencies and transitions are well formed.
 
         Args:
-            transitions (list[float] | np.ndarray): Transition list. Must be of 
-                                                    length 6 and the transitions 
-                                                    must all be equal, and all 
-                                                    transversions must all be 
-                                                    equal.
-            freqs (list[float] | np.ndarray): Base frequency list. Must be of 
-                                              length 4 and sum to 1.
+            transitions (list[float]): Transition list
+                                                                 . Must be of 
+                                                                 length 6 and 
+                                                                 the transitions 
+                                                                 must all be 
+                                                                 equal, and all 
+                                                                 transversions 
+                                                                 must all be 
+                                                                 equal.
+            freqs (list[float]): Base frequency list.
+                                                           Must be of length 4 
+                                                           and sum to 1.
         """
         
         if len(freqs) != 4:
@@ -499,21 +517,23 @@ class K81(GTR):
     the pattern [a, b, c, c, b, a].
     """
     
-    def __init__(self, transitions : list[float] | np.ndarray) -> None:
+    def __init__(self, 
+                 transitions : list[float]) -> None:
         """
         Initialize with a list of 6 transition probabilities that follow the 
         pattern [a, b, c, c, b, a]. All base frequencies are assumed to be
         equal.
 
         Args:
-            transitions (list[float] | np.ndarray): A list of floats, 6 long.
+            transitions (list[float]): A list of 
+                                                                 floats, 6 long.
 
         Raises:
             SubstitutionModelError: if the transition probabilities are not 
                                     of correct pattern.
         """
         
-        self.is_valid(transitions)
+        self._is_valid(transitions)
 
         base_freqs = [.25, .25, .25, .25]
 
@@ -536,17 +556,20 @@ class K81(GTR):
         if "transitions" in param_names:
             self.trans = params["transitions"]
     
-        self.is_valid(self.trans)
+        self._is_valid(self.trans)
         self.buildQ()
     
-    def is_valid(self, transitions: list[float] | np.ndarray) -> None:
+    def _is_valid(self, 
+                 transitions: list[float]) -> None:
         """
         Ensure frequencies and transitions are well formed.
 
         Args:
-            transitions (list[float] | np.ndarray): Transition list. Must be of 
-                                                    length 6 and the transitions 
-                                                    must follow the equivalency 
+            transitions (list[float]): Transition list. Must be of 
+                                                    length 6 and 
+                                                    the transitions 
+                                                    must follow the 
+                                                    equivalency 
                                                     pattern of
                                                     [a, b, c, c, b, a]
         """
@@ -563,13 +586,15 @@ class SYM(GTR):
     Developed by Zharkikh in 1994, this model assumes that all base frequencies 
     are equal, and all transition probabilities are free.
     """
-    def __init__(self, transitions : list[float] | np.ndarray):
+    def __init__(self,
+                 transitions : list[float]) -> None:
         """
         Initialize with a list of 6 free transition probabilities. Base 
         frequencies are all equal.
 
         Args:
-            transitions (list[float] | np.ndarray): A list of 6 probabilities
+            transitions (list[float]): A list of 6 
+                                                                 probabilities.
 
         Raises:
             SubstitutionModelError: if transitions is not of length 6.
@@ -609,8 +634,8 @@ class TN93(GTR):
     frequency parameters are free.
     """
 
-    def __init__(self, base_freqs : list[float] | np.ndarray,
-                 transitions : list[float] | np.ndarray) -> None:
+    def __init__(self, base_freqs : list[float],
+                 transitions : list[float]) -> None:
         """
         Initialize with a list of 4 free base frequencies, and 6 transitions 
         that follow the pattern [a, b, a, a, c, a].
@@ -644,17 +669,19 @@ class TN93(GTR):
         if "transitions" in param_names:
             self.trans = params["transitions"]
         
-        self.is_valid(self.trans, self.freqs)
+        self._is_valid(self.trans, self.freqs)
         self.buildQ()
 
-    def is_valid(self, transitions: list[float] | np.ndarray, 
-                 freqs : list[float] | np.ndarray, states : int) -> None:
+    def _is_valid(self, 
+                 transitions: list[float], 
+                 freqs : list[float], 
+                 states : int) -> None:
         """
         Ensure frequencies and transitions are well formed.
 
         Args:
-            transitions (list[float] | np.ndarray): Transition list.
-            freqs (list[float] | np.ndarray): Base frequency list. 
+            transitions (list[float]): Transition list.
+            freqs (list[float]): Base frequency list. 
                                               Must sum to 1.
         """
         
@@ -666,7 +693,7 @@ class TN93(GTR):
         proper_len = ((states - 1) * states) / 2
         if len(transitions) != proper_len:
             raise SubstitutionModelError(f"Incorrect number of transition \
-                                          rates. Got {len(transitions)}. 
+                                          rates. Got {len(transitions)}. \
                                           Expected {proper_len}!")
         
         if transitions[0] != transitions[2] \

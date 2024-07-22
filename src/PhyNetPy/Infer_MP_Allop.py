@@ -5,9 +5,13 @@ Description: This file contains the method Infer_MP_Allop_2.0, which
 is a maximum parsimony approach to inferring phylogenetic networks that contain
 allopolyploid, polyploid, and autopolyploid species, given a set of gene trees.
 
-Last Edit: 4/2/24
+Last Edit: 5/10/24
 Included in version : 1.0.0
-Approved for Release: NO.
+
+TODO: fix bootstrapping algo, components
+Docs   - [x]
+Tests  - [ ]
+Design - [ ]
 
 """
 from __future__ import annotations
@@ -15,7 +19,7 @@ from cProfile import Profile
 import copy
 import io
 import math
-from Network import Network, Edge, Node, MUL
+from Network import *
 import GraphUtils as utils
 from collections import defaultdict, deque
 import pulp as p
@@ -27,8 +31,9 @@ from ModelGraph import *
 from ModelFactory import *
 from MetropolisHastings import *
 from State import *
+from NetworkMoves import *
 import pstats, io
-
+import random
 
 """
 Sources:
@@ -78,6 +83,69 @@ class InferAllopError(Exception):
 #########################
 #### HELPER FUNCTIONS ###
 #########################
+
+def dict_subtract(cur : dict[Node, int], goal : dict[Node, int]) -> dict:
+    if cur.keys() == goal.keys():
+        dif = {key : goal[key] - cur[key] for key in cur.keys()}
+        return dif
+    raise Exception("Error subtracting unequal dicts")    
+
+def nodes_to_improve(net : Network, 
+                     n : Node,
+                     nti : dict[Node, int], 
+                     lti : dict[Node, int]):
+
+    if net.out_degree(n) == 0:
+        nti[n] = lti[n]
+    else:
+        nti[n] = min([nodes_to_improve(net, node, nti, lti) for node in net.get_children(n)])
+    
+    return nti[n]
+   
+def attach(net : Network, nti : dict[Node, int]):
+    
+    n : Node = random.choice([n for n in list(nti.keys()) if nti[n] != 0])
+    valid_srcs = net.edges_to_subgenome_count(n, nti[n])
+    dest_edge = random.choice(net.in_edges(n))
+    
+    subct = random.choice(list(valid_srcs.keys()))
+    src_edge = random.choice(valid_srcs[subct])
+    
+    add_hybrid(net, src_edge, dest_edge)
+    
+def resolve_ploidy(net : Network, subgenomes : dict[str, list[str]]) -> Network:
+    """
+    Given a tree and a subgenome mapping of network leaves to genes, add 
+    reticulation edges such that each leaf has the desired ploidy.
+
+    Args:
+        net (Network): A standard binary tree. Each leaf will have ploidy 1.
+        subgenomes (dict[str, list[str]]): A subgenome mapping. Maps names of 
+                                           subgenomes to the gene names.
+
+    Returns:
+        Network: A reconciled network with correct ploidy.
+    """
+    cur_ploidy = {node : net.subgenome_count(node) 
+                  for node in net.get_leaves()}
+    goal_ploidy = {node : len(subgenomes[node.get_name()]) 
+                   for node in net.get_leaves()}
+    
+    while cur_ploidy != goal_ploidy:
+        
+        #Figure out all the nodes that need increases in ploidy
+        lti = dict_subtract(cur_ploidy, goal_ploidy)
+        nti = {}
+        nodes_to_improve(net, net.root()[0], nti, lti)
+        
+        #Determine valid reticulation spots
+        attach(net, nti)
+       
+        #Recalculate leaf ploidy
+        cur_ploidy = {node : net.subgenome_count(node) 
+                  for node in net.get_leaves()} 
+    
+    return net
 
 def random_object(mylist : list, rng : np.random.Generator) -> object:
     """
@@ -174,7 +242,7 @@ def generate_tree_from_clusters(tree_clusters : set[str]) -> Network:
         Network: the MDC network.
     """
     
-    net : Network = Network()
+    net : Network = Network( nodes = NodeSet(), edges = EdgeSet())
     root : Node = Node(name = "ROOT")
     net.add_nodes(root)
     
@@ -241,97 +309,40 @@ def generate_tree_from_clusters(tree_clusters : set[str]) -> Network:
     return net
 
 def partition_gene_trees(gene_map : dict[str, list[str]], 
-                         num_retic : int = 1, 
                          rng = None) -> Network:
     """
-    TODO : SOMETHING AINT RIGHT as of 4.2.24, pls investigate
-    ex: 
+    Generate a starting network given a subgenome mapping.
+    
+    Turn this map:
+     
     {"B": ["01bA"], "A": ["01aA"], "C": ["01cA"], "X": ["01xA", "01xB"], 
     "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]}
+    
+    into a network in which B, A, and C are all diploid while X, Y, and Z have 
+    ploidy 2.
 
     Args:
         gene_map (dict[str, list[str]]): 
 
     Returns:
-        Network : _description_
+        Network : A bootstrapped starting network with correct ploidy values.
     """
-    retic_ct = 0
-    
-    std_leaves = [leaf for leaf in gene_map.keys() if len(gene_map[leaf]) == 1]
-    std_leaves.sort()
-    
-    ploidy_leaves = [leaf for leaf in gene_map.keys() \
-                    if len(gene_map[leaf]) != 1]
-    
-    yule_generator : Yule = Yule(.1, len(std_leaves), rng = rng)
+  
+    #Start with a network with the number of diploid leaves
+    yule_generator : Yule = Yule(.1, len(gene_map.keys()), rng = rng)
     simple_network : Network = yule_generator.generate_network()
 
-    #Change the names of the leaves to match 
-    for leaf_pair in zip(simple_network.get_leaves(), std_leaves):
-        net_leaf : Node = leaf_pair[0]
-        simple_network.update_node_name(net_leaf, leaf_pair[1])
+    # Change the names of the leaves to match the keys of the gene map
+    name_idx = 0
+    names = list(gene_map.keys())
+    for leaf in simple_network.get_leaves():
+        simple_network.update_node_name(leaf, names[name_idx])
+        name_idx += 1
     
-    #Partition the ploidy samples
-    partitions : list[set[str]] = []
-    for dummy in range(num_retic):
-        partitions.append(set())
-    
-    #partition randomly
-    for ploidy_leaf in ploidy_leaves:
-        rand_set : set[str] = random_object(partitions, rng = rng)
-        rand_set.add(ploidy_leaf)
-    
-    # Make clades out of each partition and hook them up to the simple network 
-    # via a reticulation node.
-    for partition in partitions:
-        yule_generator = Yule(.1, len(partition), rng = rng)
-        if len(partition) > 0:
-            
-            clade : Network = yule_generator.generate_network()
-            
-            for node in clade.get_nodes():
-                new_name : str = node.get_name() + "_c" + str(retic_ct)
-                clade.update_node_name(node, new_name)  
-            
-            for leaf_pair in zip(clade.get_leaves(), partition):
-                net_leaf : Node = leaf_pair[0]
-                clade.update_node_name(net_leaf, leaf_pair[1])
-                
-            #Connect to graph
-            
-            #Make new internal nodes for proper attachment
-            node1 = Node(name = "#H" + str(retic_ct), is_reticulation = True)
-            node2 = Node(name = "H" + str(retic_ct) + "_par1")
-            node3 = Node(name = "H" + str(retic_ct) + "_par2")
-            clade_root : Node = clade.root()[0]
-
-            clade.add_nodes([node1, node2, node3])
-            clade.add_edges(Edge(node1, clade_root))
-            clade.add_edges(Edge(node2, node1))
-            clade.add_edges(Edge(node3, node1))
-
-            #Get the connection points
-            connecting_edges = simple_network.diff_subtree_edges(rng = rng)
-            a : Node = connecting_edges[0].dest
-            b : Node = connecting_edges[0].src
-            c : Node = connecting_edges[1].dest
-            d : Node = connecting_edges[1].src
-            
-            # Add the clade's nodes/edges 
-            # now that the connection points have been selected
-            simple_network.add_nodes(clade.get_nodes())
-            simple_network.add_edges(clade.get_edges())
-            
-            # Remove and add back edges
-            simple_network.remove_edge([b, a])
-            simple_network.remove_edge([d, c])
-           
-            simple_network.add_edges([Edge(node2, a), Edge(b, node2), 
-                                      Edge(node3, c), Edge(d, node3)])
-            
-            retic_ct += 1
-
-    return simple_network 
+    # Network is now a tree with the right names and right amount of leaves.
+    # Continue adding reticulations such that the ploidy values 
+    # (amount of genes for each subgenome) are correct. 
+    return resolve_ploidy(simple_network, gene_map)
 
 def get_other_copies(gene_tree_leaf : Node, gene_map : dict) -> list[str]:
     """
@@ -677,8 +688,7 @@ class Allop_MUL(MUL):
         
         # Root of g will be mapped to this edge, 
         # but doesn't count as a coal event
-        root_xl = edge_2_xl[(None, root.get_name())][0] \
-                  - len(coal_event_map[(None, root.get_name())]) - 1 
+        root_xl = edge_2_xl[(None, root.get_name())][0] - len(coal_event_map[(None, root.get_name())]) - 1 
     
         extra_lin_total = 0
         mul_leaves = self.mul.get_leaves()
@@ -763,7 +773,8 @@ class Allop_MUL(MUL):
             
             edge_xl_map[(par_name, start_node.get_name())] = [bottom, top]
             
-    def gene_tree_map(self, g : Network, leaf_map : dict, 
+            
+    def gene_tree_map(self, g : Network, leaf_map : AlleleMap, 
                       mrca_cache: dict[frozenset[Node], Node]) -> dict:
         """
         Maps a gene tree (T) into a MUL tree (T'), where each have taxa 
@@ -771,8 +782,9 @@ class Allop_MUL(MUL):
 
         Args:
             g (Network): The gene tree
-            leaf_map (dict): A function f: string -> string from gene tree leaf
-                             names to MUL tree leaf names. Aka an allele map.
+            leaf_map (AlleleMap): A function f: string -> string from gene tree 
+                                  leaf names to MUL tree leaf names. 
+                                  An allele map.
         """
         # Let v′ = MRCA_T′(C_T(v)), and let u′ be the parent node of v′. 
         # Then, v is mapped to any point pv, excluding node u′, 
@@ -794,7 +806,8 @@ class Allop_MUL(MUL):
             if node not in gene_tree_leaves: 
                 c_t_ofv = leaf_desc_map[node] 
 
-                cluster_names = [leaf_map[leaf.get_name()] for leaf in c_t_ofv]
+                cluster_names = [leaf_map.map[leaf.get_name()] 
+                                 for leaf in c_t_ofv]
                 cluster = frozenset(cluster_names)
                 
                 # Calculate the most recent common ancestor of all the nodes in
@@ -840,11 +853,12 @@ class Allop_MUL(MUL):
             int: the minimum number of extra lineages over all 
                  possible allele maps
         """
-    
-        return min([self.XL_Allele(g, allele_map, mrca_cache) 
-                    for allele_map in g.get_item("allele maps")])
+        xl = [self.XL_Allele(g, allele_map, mrca_cache) 
+                    for allele_map in g.get_item("allele maps")]
 
-    def XL_Allele(self, g : Network, f : dict, 
+        return min(xl)
+
+    def XL_Allele(self, g : Network, f : AlleleMap, 
                   mrca_cache : dict[frozenset[Node], Node]) -> int:
         """
         Compute the extra lineages given a MUL tree T, a gene tree, g, 
@@ -852,7 +866,7 @@ class Allop_MUL(MUL):
 
         Args:
             g (Network): A gene tree
-            f (dict): An allele map from leaves of g to leaves of T
+            f (AlleleMap): An allele map from leaves of g to leaves of T
 
         Returns:
             int: number of extra lineages
@@ -1026,7 +1040,7 @@ class MPAllopComponent(ModelComponent):
         # Add scoring function
         score_root_node : ParsimonyScore = ParsimonyScore()
         
-        # Book-keeping
+        # Book-keeping TODO: Fix this.
         model.nodetypes["root"] = [score_root_node]
         model.nodetypes["internal"] = [mul_node]
         model.nodetypes["leaf"] = [gene_trees_node, net_node]
@@ -1260,7 +1274,7 @@ class ParsimonyScore(CalculationNode):
 #### METHODS ####
 #################
 
-def INFER_MP_ALLOP_BOOTSTRAP(start_network_file: str, 
+def INFER_MP_ALLOP_BOOTSTRAP(start_network_file : str, 
                              gene_tree_file : str,
                              subgenome_assign : dict[str, str], 
                              iter_ct : int = 500, 
@@ -1428,7 +1442,7 @@ def test():
 # cp = Profile()  
 # cp.enable()
 
-test()
+#test()
 #test_start()
 
 # cp.disable()

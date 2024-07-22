@@ -1,0 +1,10 @@
+1) Directed edges in a network are listed with the parent first, then child.
+        ie. [a, b] indicates that node a is node b's parent.
+
+2) Time starts at the root/origin.
+        ie. a node n with height = 3 and a node m with height = 4 means that n
+        is closer to the root than m with respect to time.
+
+3) Time is measured in coalescent units.
+
+4) ...

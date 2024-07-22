@@ -11,7 +11,7 @@ from BirthDeath import CBDP
 from ModelGraph import Model
 from Matrix import Matrix
 from GTR import *
-from Move import Move
+from ModelMove import Move
 
 
 

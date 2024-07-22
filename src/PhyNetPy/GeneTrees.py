@@ -2,7 +2,10 @@
 Author : Mark Kessler
 Last Edit : 3/28/24
 First Included in Version : 1.0.0
-Approved for Release: Yes, post test-suite final inspection.
+
+Docs   - [x]
+Tests  - [ ]
+Design - [ ]
 """
 
 from typing import Callable

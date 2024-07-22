@@ -1,8 +1,10 @@
 """ 
 Author : Mark Kessler
-Last Edit : 4/2/24
+Last Edit : 5/10/24
 First Included in Version : 1.0.0
-Approved for Release: NO
+Docs   - [x]
+Tests  - [ ] 
+Design - [ ]
 """
 
 from __future__ import annotations
@@ -10,9 +12,13 @@ from collections import defaultdict, deque
 import copy
 import math
 import random
-from typing import Callable
+from typing import Any, Callable
 import warnings
 import numpy as np
+import sys
+import networkx as nx
+
+sys.setrecursionlimit(300)
 
 
 ##########################           
@@ -125,7 +131,7 @@ class NetworkError(Exception):
     This exception is raised when a network is malformed, 
     or if a network operation fails.
     """
-    def __init__(self, message="Error with a Graph Instance"):
+    def __init__(self, message = "Error with a Graph Instance"):
         self.message = message
         super().__init__(self.message)
 
@@ -133,14 +139,14 @@ class NodeError(Exception):
     """
     This exception is raised when a Node operation fails.
     """
-    def __init__(self, message="Error in Node Class"):
+    def __init__(self, message = "Error in Node Class"):
         super().__init__(message)
         
 class EdgeError(Exception):
     """
     This exception is raised when an Edge operation fails.
     """
-    def __init__(self, message="Error in Edge Class"):
+    def __init__(self, message = "Error in Edge Class"):
         super().__init__(message)
 
 ##########################
@@ -149,114 +155,124 @@ class EdgeError(Exception):
 
 class Node:
     """
-    Node class that provides support for branch lengths, parent child 
-    relationships, and network constructs like reticulation 
-    nodes and other phylogenetic attributes.
+    Node class that provides support for managing network constructs like 
+    reticulation nodes and other phylogenetic attributes.
     """
 
-    def __init__(self, attr = None, is_reticulation = False, 
-                 name = None) -> None:
+    def __init__(self, name : str = None, is_reticulation : bool = False, 
+                 attr : dict = dict()) -> None:
+        """
+        Initialize a node with a name, attribute mapping, and a hybrid flag.
+
+        Args:
+            name (str, optional): A Node name. Defaults to None, but nodes need
+                                  to be named, in general.
+            is_reticulation (bool, optional): Flag that marks a node as a 
+                                              reticulation node if set to True. 
+                                              Defaults to False.
+            attr (dict, optional): Fill a mapping with any other user defined 
+                                   values. Defaults to an empty dictionary.
+        """
         
-        if attr is None:
-            self.attributes = {}
-        else:
-            self.attributes = attr
+        self.attributes = attr
             
-        self.is_retic = is_reticulation
-        
-        # if parent_nodes is None:
-        #     self.parent = []
-        # else:
-        #     self.parent = parent_nodes
-            
+        self.is_retic : bool = is_reticulation
         self.name : str = name
         self.seq : list[str] = None
         self.t : float = None
         self.is_dirty : bool = False
     
     def get_time(self) -> float:
+        """
+        Get the speciation time for this node.
+        
+        Closer to 0 implies a time closer to the origin (the root). A larger 
+        time implies a time closer to the present (leaves). 
+        
+        Returns:
+            float: Speciation time, typically in coalescent units.
+        """
         return self.t
     
     def set_time(self, t : float) -> None:
-        self.t = t 
+        """
+        Set the speciation time for this node. The arg 't' must be a 
+        non-negative number.
+
+        Args:
+            t (float): _description_
+        """
+        if t >= 0:
+            self.t = t 
+        else:
+            raise NodeError("Please set speciation time, t, to a non-negative\
+                             number!")
         
-    def as_string(self):
+    def as_string(self) -> str:
+        """
+        Create a description of a node and summarize its attributes.
+
+        Returns:
+            str: A string description of the node.
+        """
         myStr = "Node " + str(self.name) + ": "
         myStr += "t = " + str(round(self.t, 4)) + " "
-        # if len(self.parent) > 0 :
-        #     myStr += " has parent(s) " + str([node.get_name() for node in 
-        #                                       self.get_parent(return_all=True)])
         myStr += " is a reticulation node? " + str(self.is_retic)
         myStr += " has attributes: " + str(self.attributes)
 
         return myStr
 
-    def get_name(self):
+    def get_name(self) -> str:
         """
         Returns the name of the node
+
+        Returns:
+            str: Node label.
         """
         return self.name
 
-    def set_name(self, new_name):
+    def set_name(self, new_name : str) -> None:
         """
         Sets the name of the node to new_name.
+    
+        Args:
+            new_name (str): A new string label for this node.
         """
         self.name = new_name
         self.is_dirty = True
 
-    # def add_parent(self, par):
-    #     """
-    #     Add 'par' to the list of parent nodes for this node
-    #     """
-
-    #     #check for lousy input
-    #     if type(par) is not Node:
-    #         raise NodeError("Attempted to add a non node entity as a parent")
-
-    #     if not par in self.parent:
-    #         self.parent.append(par)
-    
-    # def remove_parent(self, old_par):
-    #     if old_par in self.parent:
-    #         self.parent.remove(old_par)
-        
-    # def get_parent(self, return_all=False):
-    #     """
-    #     Retrieve either the one/first parent or the whole list of parents
-
-    #     If return_all is set to True, then the method will return the whole array.
-    #     The default behavior is just to return one.
-
-    #     Returns: Either a node obj, or a list of node objs
-    #     """
-    #     if return_all:
-    #         return self.parent
-    #     else:
-    #         return self.parent[0]
-
-    # def set_parent(self, new_parents):
-    #     """
-    #     Set the parent array to new_parents, a list of Node objs
-    #     """
-    #     self.parent = list(new_parents)
-
-    def set_is_reticulation(self, is_retic):
+    def set_is_reticulation(self, is_retic : bool) -> None:
         """
-        Sets whether a node is a reticulation Node (or not)
+        Sets whether a node is a reticulation Node (or not).
+
+        Args:
+            is_retic (bool): Hybrid flag. True if this node is a 
+                             reticulation node, false otherwise
         """
         self.is_retic = is_retic
 
-    def is_reticulation(self):
+    def is_reticulation(self) -> bool:
         """
         Retrieves whether a node is a reticulation Node (or not)
+
+        Returns:
+            bool: True, if this node is a reticulation. False otherwise.
         """
         return self.is_retic
 
-    def add_attribute(self, key, value, append = False, add = False):
+    def add_attribute(self, key : Any, value : Any, 
+                      append : bool = False) -> None:
         """
         Put a key and value pair into the node attribute dictionary.
 
         If the key is already present, it will overwrite the old value.
+        Args:
+            key (Any): Attribute key.
+            value (Any): Attribute value for the key.
+            append (bool, optional): If True, appends the given value to the 
+                                     existing value for the key.   
+                                     If false, simply replaces. 
+                                     Defaults to False.
         """
         
         if append:
@@ -264,10 +280,7 @@ class Node:
                 content = self.attributes[key]
         
                 if type(content) is dict:
-                    if add:
-                        content = dict_merge(content, value)
-                    else:
-                        content.update(value)
+                    content = dict_merge(content, value)
                     self.attributes[key] = content
                 elif type(content) is list:
                     content.extend(value)
@@ -275,23 +288,61 @@ class Node:
         else:
             self.attributes[key] = value
 
-    def attribute_value(self, attr : str) -> object:
+    def attribute_value(self, key : Any) -> object:
         """
-        If attr is a key in the attributes mapping, then
+        If key is a key in the attributes mapping, then
         its value will be returned.
 
         Otherwise, returns None.
+
+        Args:
+           key (Any): A lookup key.
+
+        Returns:
+            object: The value of key, if key is present.
         """
-        if attr in self.attributes:
-            return self.attributes[attr]
+        if key in self.attributes.keys():
+            return self.attributes[key]
         else:
             return None
     
     def set_seq(self, sequence : str) -> None:
+        """
+        Associate a data sequence with this node, if this node is a leaf in a 
+        network.
+
+        Args:
+            sequence (str): A data sequence, in characters. It is recommended to
+                            use the alphabet and matrix classes to obtain this.
+        """
         self.seq = sequence
     
     def get_seq(self) -> str:
+        """
+        Gets the data sequence associated with this node.
+
+        Returns:
+            str: Data sequence.
+        """
         return self.seq
+    
+    def duplicate(self) -> Node:
+        """
+        Duplicate this node by copying all data into a separate Node object.
+        
+        Useful for crafting copies of networks without having to deep copy. 
+        NOTE: A node may only be a member of one network.
+
+        Returns:
+            Node: _description_
+        """
+        dopel = Node(self.name, self.is_retic, self.attributes)
+        dopel.set_seq(self.seq)
+        if self.t is not None:
+            dopel.set_time(self.t)
+        dopel.is_dirty = self.is_dirty
+        
+        return dopel
     
 class NodeSet:
     """
@@ -300,6 +351,9 @@ class NodeSet:
     """
     
     def __init__(self) -> None:
+        """
+        Initialize an empty set of network nodes
+        """
         self.nodes : set[Node] = set()
         self.in_degree : dict[Node, int] = defaultdict(int)
         self.out_degree : dict[Node, int] = defaultdict(int)
@@ -308,11 +362,27 @@ class NodeSet:
         self.node_names : dict[str, Node] = {}
 
     def add(self, node : Node) -> None:
+        """
+        Add a node to the network node set.
+
+        Args:
+            node (Node): A new node to put in the network.
+        """
         if node not in self.nodes:
             self.nodes.add(node)
             self.node_names[node.get_name()] = node
     
-    def contains(self, edge : Edge) -> bool:
+    def ready(self, edge : Edge) -> bool:
+        """
+        Check if an edge is allowed to be added to the network (both nodes must
+        be in the node set before an edge can be added)
+
+        Args:
+            edge (Edge): A potential new network edge.
+
+        Returns:
+            bool: True if edge can be safely added, False otherwise.
+        """
         return edge.src in self.nodes and edge.dest in self.nodes
     
     def in_deg(self, node : Node) -> int:
@@ -376,7 +446,16 @@ class NodeSet:
         return self.out_map[node]
     
     def process(self, edge : Edge, removal : bool = False) -> None:
-        if edge.src in self.nodes and edge.dest in self.nodes:
+        """
+        Keep track of network data (in/out degrees, in/out edge maps) upon 
+        the addition or removal of an edge for a network.
+
+        Args:
+            edge (Edge): The edge that is being added or removed
+            removal (bool, optional): False if edge is being added, True if 
+                                      edge is being removed. Defaults to False.
+        """
+        if self.ready(edge):
             if not removal:
                 self.out_degree[edge.src] += 1
                 self.in_degree[edge.dest] += 1
@@ -388,11 +467,22 @@ class NodeSet:
                 self.out_map[edge.src].remove(edge)
                 self.in_map[edge.dest].remove(edge)
                 
-
     def get_set(self) -> set[Node]:
+        """
+        Grab the set of nodes.
+
+        Returns:
+            set[Node]: V, the node set of a network.
+        """
         return self.nodes
     
     def remove(self, node : Node) -> None:
+        """
+        Remove a node from V, and update necessary mappings.
+
+        Args:
+            node (Node): Node to remove from the network.
+        """
         if node in self.nodes:
             self.nodes.remove(node)
             del self.in_degree[node]
@@ -402,14 +492,43 @@ class NodeSet:
             del self.node_names[node.get_name()] 
 
 class Edge:
+    """
+    Class that encodes node to node relationships, as well as any applicable 
+    bookkeeping data and parameters that are applicable to edges.
+    """
     
     def __init__(self, source : Node, destination : Node) -> None:
+        """
+        An edge has a source (parent) and a destination (child). Edges in a 
+        phylogenetic context are always directed.
+
+        Args:
+            source (Node): Parent node.
+            destination (Node): Child node.
+        """
         self.src : Node = source
         self.dest : Node = destination
         self.gamma : float = None
-        self.length : float = None
         
-    def contains(self, node : Node | str) -> bool:
+        #If the source and destination nodes already have defined times, 
+        # go ahead and use them.
+        if source.get_time() is not None and destination.get_time() is not None:
+            self.length : float  = destination.get_time() - source.get_time()
+        else:
+            self.length : float = None
+        
+    def ready(self, node : Node | str) -> bool:
+        """
+        Check to see if a node is in an edge. Checking via node name is also 
+        supported.
+        
+        Args:
+            node (Node | str): Look up based on object or name.
+
+        Returns:
+            bool: True if the node is in the edge either as the source node or 
+                  destination node, False if not.
+        """
         if type(node) == str:
             if node == self.src.get_name() or node == self.dest.get_name():
                 return True
@@ -420,42 +539,138 @@ class Edge:
             return False
     
     def set_length(self, length : float) -> None:
+        """
+        Sets the branch length of this edge.
+
+        Args:
+            length (float): a branch length value (>0).
+        """
         self.length = length
     
     def get_length(self) -> float:
+        """
+        Gets the branch length of this edge. If it is not equivalent to the
+        current times of the source and destination nodes, then a warning
+        is raised that the branch lengths are not equivalent, and that either
+        the times are outdated or the branch length field is outdated.
+
+        Returns:
+            float: branch length.
+        """
+        srct = self.src.get_time() 
+        destt = self.dest.get_time()
+        if srct is not None and destt is not None:
+            if self.length != destt - srct:
+                warnings.warn("This edge has a length field set to a number \
+                               that is not equal to the differences in time for\
+                               its source and destination!")
         return self.length
 
     def set_gamma(self, gamma : float) -> None:
+        """
+        Set the inheritance probability of this edge. Only applicable to 
+        hybrid edges, but no warning will be raised if you attempt to set the 
+        probability of a non-hybrid edge.
+
+        Args:
+            gamma (float): A probability (between 0 and 1).
+        """
         self.gamma = gamma
     
     def get_gamma(self) -> float:
+        """
+        Gets the inheritance probability for this edge.
+
+        Returns:
+            float: A probability (between 0 and 1).
+        """
         return self.gamma
     
     def to_names(self) -> tuple[str]:
+        """
+        Get the names of the source and destination nodes. 
+
+        Returns:
+            tuple[str]: 2-tuple, in the format (source name, destination name).
+        """
         return (self.src.get_name(), self.dest.get_name())
+    
+    def duplicate(self, new_src : Node = None, new_dest : Node = None) -> Edge:
+        """
+        Craft an identical edge to this edge object, just in a new object.
+        Useful in building subnetworks of a network that is in hand.
+
+        Returns:
+            Edge: An identical edge to this one, with respect to the data they 
+                  hold.
+        """
+        if new_src is None or new_dest is None:
+            new_edge = Edge(self.src, self.dest)
+        else:
+            new_edge = Edge(new_src, new_dest)
+        new_edge.set_length(self.length)
+        new_edge.set_gamma(self.gamma)
+        return new_edge
           
 class EdgeSet:
     """
     Data structure that serves the purpose of keeping track of edges that belong
-    to a network. 
+    to a network. We call this set E.
     """
     
     def __init__(self) -> None:
+        """
+        Initialize the set of edges, E, for a network.
+        """
+        
+        # Map (src, dest) tuples to a list of edges. this list will have 1 
+        # element for most, but in the case of bubbles will contain 2. This 
+        # exists purely to deal with bubbles 
         self.hash : dict[tuple[Node], list[Edge]] = defaultdict(list)
+        
+        # Edge set, E
         self.edges : set[Edge] = set()
     
     def add(self, edge : Edge) -> None:
+        """
+        Add an edge to E.
+
+        Args:
+            edge (Edge): A new edge to add to E.
+        """
         if edge not in self.edges:
             self.hash[(edge.src, edge.dest)].append(edge)
             self.edges.add(edge)
             
     def remove(self, edge : Edge) -> None:
+        """
+        Remove an edge from E.
+
+        Args:
+            edge (Edge): An edge that is currently in E.
+        """
         if edge in self.edges:
             self.hash[(edge.src, edge.dest)].remove(edge)
             self.edges.remove(edge)
             
     def get(self, source : Node, destination : Node, 
             gamma : float = None) -> Edge:
+        """
+        Given a source node, destination node, and an inheritance probability,
+        get the edge in E that matches the data.
+
+        Args:
+            source (Node): Parent node.
+            destination (Node): Child node.
+            gamma (float, optional): Inheritance probability, for bubble 
+                                     identifiability reasons. Defaults to None.
+
+        Raises:
+            EdgeError: If no edges in E satisfy the given data.
+
+        Returns:
+            Edge: The edge in E that matches the given data.
+        """
         
         valid_edges : list[Edge] = self.hash[(source, destination)]
         
@@ -477,7 +692,26 @@ class EdgeSet:
                               destination nodes. Networks are not allowed to \
                               have such topology.")
     
+    def get_all(self, source : Node, destination : Node) -> list[Edge]:
+        """
+        Retrieves all edges in E with the given data.
+
+        Args:
+            source (Node): Parent node.
+            destination (Node): Child node.
+
+        Returns:
+            list[Edge]: List of all edges that match the source and destination.
+        """
+        return self.hash[(source, destination)]
+    
     def get_set(self) -> set[Edge]:
+        """
+        Get the set, E, for a network.
+
+        Returns:
+            set[Edge]: Edge set, E.
+        """
         return self.edges
     
 
@@ -504,13 +738,13 @@ class Network():
        
        
     Formulation:
-    DAG = (E, V), where E is the set of all edges [a,b], where a is b's parent,
-    and a and b are elements of V, the set of all nodes. 
+    Network = (E, V), where E is the set of all edges [a,b], where a is 
+    b's parent, and a and b are elements of V, the set of all nodes. 
     
     """
 
-    def __init__(self, edges : EdgeSet = EdgeSet(), 
-                 nodes : NodeSet = NodeSet()) -> None:
+    def __init__(self, edges : EdgeSet = None, 
+                 nodes : NodeSet = None) -> None:
         """
         Initialize a Network object.
         You may initialize with any combination of edges/nodes,
@@ -529,9 +763,16 @@ class Network():
         # Blob storage for anything that you want to associate with 
         # this network. Just give it a string key!
         self.items : dict[str, object] = {}
-    
-        self.edges : EdgeSet = edges
-        self.nodes : NodeSet = nodes
+
+        if edges is not None:
+            self.edges : EdgeSet = edges
+        else:
+            self.edges : EdgeSet = EdgeSet()
+        
+        if nodes is not None:
+            self.nodes : NodeSet = nodes
+        else:
+            self.nodes : NodeSet = NodeSet()
         
         # Initialize the unique id count
         self.UID = 0
@@ -543,9 +784,9 @@ class Network():
             self.nodes.process(edge)
         
         self.leaves : list[Node] = [node for node in list(self.nodes.get_set())
-                        if self.nodes.out_degrees[node] == 0]
+                        if self.nodes.out_degree[node] == 0]
         self.roots : list[Node] = [node for node in list(self.nodes.get_set()) 
-                        if self.nodes.in_degrees[node] == 0]
+                        if self.nodes.in_degree[node] == 0]
     
     def node_edge_consistency_check(self) -> None:
         
@@ -613,7 +854,7 @@ class Network():
         # Determine whether the param is a list of edges, or a single edge. 
         if type(edges) == list:
             for edge in edges: 
-                if self.nodes.contains(edge):              
+                if self.nodes.ready(edge):              
                     self.edges.add(edge)
                     self.nodes.process(edge)  
                     self.reclassify_node(edge.src, True, True)
@@ -623,7 +864,7 @@ class Network():
                                         at least one of which does not belong\
                                         to this network.")
         else:
-            if self.nodes.contains(edges):
+            if self.nodes.ready(edges):
                 self.edges.add(edges)
                 self.nodes.process(edges)
                 self.reclassify_node(edges.src, True, True)
@@ -680,23 +921,20 @@ class Network():
         Removes edge from the list of edges. Does not delete nodes with no edges
         Has no effect if 'edge' is not in the graph.
         """
-
-        if type(edge) == list[Node]:
+    
+        if type(edge) == list:
             if len(edge) == 2:
-                edge = self.get_edge(edge[0], edge[1], gamma)
+                edge = self.get_edge(edge[0], edge[1], gamma) 
             else:
                 raise NetworkError("Please provide a list of two nodes,\
                                  in the format [src, dest]")
                 
-        if edge in self.edges:
+        if edge in self.get_edges():
             # Remove the edge from the edge set
             self.edges.remove(edge)
-            
-            # Remove the parent of the child node
-            edge.dest.remove_parent(edge.src)
-            
+        
             #Make the edge set aware of the edge removal
-            self.nodes.process(edge, removal=True)
+            self.nodes.process(edge, removal = True)
             
             # Reclassify the nodes, as they may be leaves/roots/etc now.
             self.reclassify_node(edge.src, True, False)
@@ -808,8 +1046,7 @@ class Network():
         The node will be added to V as a result of this function.
 
         Args:
-            node (Node): Any node object.
-            create (bool): Flag that indicates whether to use the node param
+            node (Node): Any node object. Defaults to None.
         Returns:
             (Node): the added/edited node that has been added to the graph.
         """
@@ -926,7 +1163,7 @@ class Network():
 
         node (Node): any node in V.
         """
-        if node in self.nodes.get_set():
+        if node in self.get_nodes():
             return [edge.src for edge in self.nodes.in_map[node]]
         else:
             raise NetworkError("Attempted to calculate parents of a node that \
@@ -939,7 +1176,7 @@ class Network():
 
         node (Node): any node in V.
         """
-        if node in self.nodes.get_set():
+        if node in self.get_nodes():
             return [edge.dest for edge in self.nodes.out_map[node]]
         else:
             raise NetworkError("Attempted to calculate children of a node that \
@@ -1037,8 +1274,8 @@ class Network():
                     
                     # We need to connect cur to its new successor
                     if node_removed:
-                        self.remove_edge([previous_node, current_node])
-                        self.add_edges([cur, current_node])    
+                        # self.remove_edge([previous_node, current_node])
+                        self.add_edges(Edge(cur, current_node))    
         
                     
                     # Resume search from the end of the chain if one existed, 
@@ -1233,6 +1470,7 @@ class Network():
         Returns:
             int: subgenome count
         """
+        
         if n not in self.get_nodes():
             raise NetworkError("Input node is not in the graph")
         
@@ -1262,18 +1500,44 @@ class Network():
         while len(q) != 0:
             cur = q.pop() #pop right for bfs
 
-            for neighbor in self.get_children(cur):
-                edges.append(self.edges.get(cur, neighbor))
-                
-                # Resume search from the end of the chain if one existed, 
-                # or this is neighbor if nothing was done
-                q.append(neighbor)
+            for edge in self.out_edges(cur):
+                edges.append(edge)
+                q.append(edge.dest)
+        
+        return edges
+    
+    def edges_upstream_of_node(self, n : Node) -> list[Edge]:
+        """
+        Returns the set (as a list) of edges that are in all paths from the root
+        to this node.
+        
+        Useful in avoiding the creation of cycles when adding edges.
+
+        Args:
+            n (Node): A node in a graph.
+        Returns:
+            edges (list[Edge]): The set of all edges in the subgraph of n.
+        """
+        if n not in self.get_nodes():
+            raise NetworkError("Input node is not in the graph.")
+        
+        q = deque()
+        q.appendleft(n)
+        
+        edges : list[Edge] = list()
+        
+        while len(q) != 0:
+            cur = q.pop() #pop right for bfs
+
+            for edge in self.in_edges(cur):
+                edges.append(edge)
+                q.append(edge.src)
         
         return edges
     
     def edges_to_subgenome_count(self, downstream_node : Node = None, 
                                  delta : float = math.inf, 
-                                 start_node : Node = None) -> dict[Edge, int]:
+                                 start_node : Node = None) -> dict[int, list[Edge]]:
         """
         Maps edges to their subgenome counts.
         
@@ -1334,7 +1598,7 @@ class Network():
         
         #Filter out edges that would create a cycle from param edge
         if downstream_node is not None:
-            filter2 = {}
+            filter2 : dict = {}
             for subct, edges in filter1.items():
                 for target in edges:
                     downstream_edges = self.edges_downstream_of_node(downstream_node)
@@ -1387,8 +1651,8 @@ class Network():
         """
         
         #Maintain structures for checking nodes that are visited or in the recursive stack
-        visited = {node : False for node in list(self.nodes.get_set())}
-        rec_stack = {node : False for node in list(self.nodes.get_set())}
+        visited = {node : False for node in self.get_nodes()}
+        rec_stack = {node : False for node in self.get_nodes()}
 
         #Call recursive dfs on each root node / each connected component
         for node in self.root():
@@ -1550,11 +1814,10 @@ class Network():
     
         q = deque()
         q.appendleft(retic_node)
-        nodes = NodeSet()
-        edges = EdgeSet()
+        net_copy = Network()
         
         new_node = Node(name = retic_node.get_name() + "_copy")
-        nodes.add(new_node)
+        net_copy.add_nodes(new_node)
         net_2_mul = {retic_node : new_node}
         
 
@@ -1563,15 +1826,48 @@ class Network():
 
             for neighbor in self.get_children(cur):
                 new_node = Node(name = neighbor.get_name() + "_copy")
-                nodes.add(new_node)
+                net_copy.add_nodes(new_node)
                 net_2_mul[neighbor] = new_node
-                edges.add(Edge(net_2_mul[cur], new_node))
+                net_copy.add_edges(Edge(net_2_mul[cur], new_node))
                 
                 # Resume search from the end of the chain if one 
                 # existed, or this is neighbor if nothing was done
                 q.append(neighbor)
         
-        return Network(edges = edges, nodes=nodes) 
+        return net_copy 
+    
+    def duplicate(self) -> list:
+        """
+        Copy this network into a new network object, also with new node and 
+        edge objects.
+
+        Returns:
+            Network: A carbon copy of this Network.
+        """
+        net_copy : Network = Network()
+        
+        old_new = {}
+        
+        for node in self.get_nodes():
+            new = node.duplicate()
+            old_new[node] = new
+            net_copy.add_nodes(new)
+        
+        for edge in self.get_edges():
+            new_src = old_new[edge.src]
+            new_dest = old_new[edge.dest]
+            new = edge.duplicate(new_src, new_dest)
+            
+            net_copy.add_edges(new)
+        
+        return net_copy, old_new
+    
+    def to_networkx(self) -> nx.Graph:
+        nx_network = nx.MultiDiGraph()
+        nx_network.add_nodes_from([node.get_name() for node in self.get_nodes()])
+        nx_network.add_edges_from([edge.to_names() for edge in self.get_edges()])
+        return nx_network
+    
     
 class DAGNetwork(Network):
     """
@@ -1633,6 +1929,7 @@ class MUL(Network):
             Network: a MUL tree (as a Network obj)
         """
         
+        
         # Number of network leaves must match the number of gene map keys
         if len(net.get_leaves()) != len(self.gene_map.keys()):
             raise NetworkError(f"Input network has incorrect amount of \
@@ -1643,14 +1940,18 @@ class MUL(Network):
         mul_tree = Network()
         
         # Create copies of all the nodes in net and keep track of the conversion
-        network_2_mul : dict[Node, Node] = {node : Node(name = node.get_name()) 
-                                            for node in net.nodes}
+        network_2_mul : dict[Node, Node] = {node : node.duplicate() for node in net.get_nodes()}
         
         # Add all nodes and edges from net into the mul tree
-        mul_tree.add_nodes(list(network_2_mul.values()))
-        for edge in net.edges:
-            mul_tree.add_edges([network_2_mul[edge[0]], network_2_mul[edge[1]]])
         
+        #NODES
+        mul_tree.add_nodes(list(network_2_mul.values()))
+        
+        #EDGES
+        for edge in net.get_edges():
+            new_edge = edge.duplicate(network_2_mul[edge.src],
+                                      network_2_mul[edge.dest])
+            mul_tree.add_edges(new_edge)
         
         # Bottom-Up traversal starting at leaves. Algorithm from STEP 1 in (2)
         
@@ -1667,13 +1968,15 @@ class MUL(Network):
             if mul_tree.in_degree(cur) == 2:
                 #reticulation node. make a copy of subgraph
                 subtree = mul_tree.subtree_copy(cur)
+                
                 retic_pars = mul_tree.get_parents(cur)
                 a = retic_pars[0]
                 b = retic_pars[1]
+            
                 mul_tree.remove_edge([b, cur])
                 mul_tree.add_nodes(subtree.get_nodes())
-                mul_tree.add_edges(Edge(b, subtree.root()[0]))
                 mul_tree.add_edges(subtree.get_edges())
+                mul_tree.add_edges(Edge(b, subtree.root()[0]))
                 processed.add(subtree.root()[0])
         
             processed.add(cur)
@@ -1683,14 +1986,40 @@ class MUL(Network):
                 if cop.issubset(processed):
                     traversal_queue.append(par)
         
+        
+        
         #Get rid of excess connection nodes
+        
         mul_tree.clean([False, False, True])
+        
+        
         
         #Rename tips based on gene mapping
         for leaf in mul_tree.get_leaves():
             new_name = copy_gene_map[leaf.get_name().split("_")[0]].pop()
             mul_tree.update_node_name(leaf, new_name)
 
-        self.mul = mul_tree  
+        self.mul = mul_tree 
+     
         return mul_tree  
 
+
+
+
+def test():
+    
+    net = Network()
+    
+    n1 = Node("n1")
+    n2 = Node("n2")
+    e1 = Edge(n1, n2)
+    e1.set_gamma(.4)
+    e2 = Edge(n1, n2)
+    e2.set_gamma(.6)
+    
+    net.add_nodes([n1, n2])
+    net.add_edges([e1, e2])
+    
+
+    net.pretty_print_edges()
+    

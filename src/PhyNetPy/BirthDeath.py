@@ -2,14 +2,17 @@
 Author : Mark Kessler
 Last Edit : 3/28/24
 First Included in Version : 1.0.0
-Approved for Release: Yes, post test-suite final inspection.
+
+Docs   - [x]
+Tests  - [ ]
+Design - [x]
 """
 
 
 import random
 import numpy as np
 import scipy
-from Network import Network, Edge, Node
+from Network import *
 from math import log, exp
 
 
@@ -40,8 +43,8 @@ class BirthDeathSimError(Exception):
 #### HELPER FUNCTIONS ####
 ##########################
 
-def random_species_selection(nodes : list[Node], 
-                             rng : np.random.Generator) -> Node:
+def _random_species_selection(nodes : list[Node], 
+                              rng : np.random.Generator) -> Node:
     """
     Returns a random live Node from an array/set. The Node returned
     will be operated on during a birth or death event
@@ -56,14 +59,14 @@ def random_species_selection(nodes : list[Node],
     Returns:
         Node: The randomly selected node to operate on
     """
-    live_nodes = live_species(nodes)
+    live_nodes = _live_species(nodes)
     
     #use the rng object to select an index
     randomInt = rng.integers(0, len(live_nodes))
     
     return live_nodes[randomInt]
 
-def live_species(nodes : list[Node]) -> list[Node]:
+def _live_species(nodes : list[Node]) -> list[Node]:
     """
     Returns a subset of Nodes that represent live lineages. 
     A Node represents a live lineage if it has an attribute "live" set to True.
@@ -171,7 +174,7 @@ class Yule:
             raise BirthDeathSimError("Birth rate must be > 0")
         self.gamma = value
         
-    def draw_waiting_time(self) -> float:
+    def _draw_waiting_time(self) -> float:
         """
         Draw a waiting time until the next speciation event from 
         a memory-less exponential distribution.
@@ -184,7 +187,7 @@ class Yule:
         random_float_01 = self.rng.random()
         return scipy.stats.expon.ppf(random_float_01, scale = scale) 
 
-    def event(self, network : Network) -> int: 
+    def _event(self, network : Network) -> int: 
         """
         A speciation event occurs. Selects a random living lineage.
 
@@ -200,7 +203,7 @@ class Yule:
         """
 
         # select random live lineage to branch from
-        spec_node = random_species_selection(network.nodes.get_set(), self.rng)
+        spec_node = _random_species_selection(network.nodes.get_set(), self.rng)
 
         # keep track of the old parent, we need to disconnect edges
         # This node is guaranteed to only have 1 parent, since the network
@@ -208,7 +211,7 @@ class Yule:
         old_parent = network.get_parents(spec_node)[0]
 
         # calculate the branch length to the internal node
-        next_time = self.draw_waiting_time()
+        next_time = self._draw_waiting_time()
         branch_len = 0
         parent_time = old_parent.get_time() 
         
@@ -265,13 +268,13 @@ class Yule:
         Returns:
             Network: The simulated tree
         """
-        net : Network = Network()
+        net : Network = Network(nodes = NodeSet(), edges = EdgeSet())
         
         # Set up the tree with 2 living lineages and an "internal" root node
         node1 = Node(attr={"t": 0, "label": "root", "live": False}, name="root")
         node1.set_time(0)
-        node2 = Node(parent_nodes=[node1], attr={"live": True}, name="spec1")
-        node3 = Node(parent_nodes=[node1], attr={"live": True}, name="spec2")
+        node2 = Node(attr={"live": True}, name="spec1")
+        node3 = Node(attr={"live": True}, name="spec2")
 
         net.add_nodes([node1, node2, node3])
         net.add_edges([Edge(node1, node2), Edge(node1, node3)])
@@ -285,18 +288,19 @@ class Yule:
                 return net
             
             #create N lineages
-            while len(live_species(net.get_nodes())) < self.N:
-                self.event(net)
+            while len(_live_species(net.get_nodes())) < self.N:
+                self._event(net)
 
             # populate remaining branches with branch lengths according to
             # Eq 5.1? Just taking sigma_n for now
-            next_time = self.draw_waiting_time()
+            next_time = self._draw_waiting_time()
 
-            for node in live_species(net.get_nodes()):
+            for node in _live_species(net.get_nodes()):
                 node.add_attribute("t", self.elapsed_time + next_time)
                 node.set_time(self.elapsed_time + next_time)
-                parent = net.get_parents(node)[0]
-                if len(parent) != 0:
+                parents = net.get_parents(node)
+                if len(parents) != 0:
+                    parent = parents[0]
                     parent_time = parent.get_time()
                     final_len= self.elapsed_time + next_time - parent_time
                     net.get_edge(parent, node).set_length(final_len)
@@ -308,11 +312,11 @@ class Yule:
 
         else:
             while self.elapsed_time < self.time:
-                status = self.event(net, "T")
+                status = self._event(net, "T")
                 if status == -1:
                     break
 
-            for node in live_species(net.get_nodes()):
+            for node in _live_species(net.get_nodes()):
                 # the live lineages are all leaves, 
                 # and are thus all at the goal time
                 node.add_attribute("t", self.time)
@@ -427,7 +431,7 @@ class CBDP:
         else:
             raise BirthDeathSimError("Sampling rate must be drawn from (0,1]")
     
-    def qinv(self, r:float) -> float:
+    def _qinv(self, r:float) -> float:
         """
         Draw a time from the Qinv distribution from (2)
 
@@ -440,7 +444,7 @@ class CBDP:
         term3 = 1 - pow(r, 1 / self.N)
         return term1 * log(term2 / term3)
 
-    def finv(self, r:float, t:float) -> float:
+    def _finv(self, r:float, t:float) -> float:
         """   
         Draw a sample speciation time from the Finv distribution from (2)
 
@@ -455,7 +459,7 @@ class CBDP:
         term2 = self.gamma - (self.mu * exp(-1 * t * rate_dif))
         term3 = r * (1 - exp(-1 * t * rate_dif))
         
-        #finv equation
+        #_finv equation
         log_term = log((term2 - self.mu * term3) / (term2 - self.gamma * term3))
         
         return term1 * log_term
@@ -468,16 +472,16 @@ class CBDP:
 
         Returns: A network with n taxa chosen from the proper distributions.
         """
-        net = Network()
+        net = Network(nodes = NodeSet(), edges = EdgeSet())
 
         # step 1
         r = [random.random() for _ in range(self.N)]
 
         # step 2
-        t = self.qinv(r[0])
+        t = self._qinv(r[0])
 
         # step 3
-        s = {self.finv(r[i], t): (i + .5) for i in range(1, self.N)}
+        s = {self._finv(r[i], t): (i + .5) for i in range(1, self.N)}
 
         # step 4 setup
 
@@ -500,7 +504,7 @@ class CBDP:
         # step 4
         for i in range(2 * self.N - 1):
             # for each node, connect it to the correct parent
-            new_edge : Edge = self.connect(i, net.get_nodes())
+            new_edge : Edge = self._connect(i, net.get_nodes())
             if new_edge is not None:
                 net.add_edges(new_edge)
 
@@ -510,7 +514,7 @@ class CBDP:
         return net
 
     @staticmethod
-    def connect(index : int, nodes : list[Node]) -> Edge:
+    def _connect(index : int, nodes : list[Node]) -> Edge:
         """
         nodes-- a list of nodes (list[i] is the ith node along a horizontal
                 axis that alternates between species and 

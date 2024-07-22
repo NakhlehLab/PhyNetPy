@@ -2,7 +2,9 @@
 Author : Mark Kessler
 Last Edit : 4/9/24
 First Included in Version : 1.0.0
-Approved for Release : Yes, post test-suite inspection.
+Docs   - [x]
+Tests  - [ ]
+Design - [x]
 """
 
 #########################
@@ -18,7 +20,7 @@ class AlphabetError(Exception):
 #### HELPER FUNCTIONS ####
 ##########################
 
-def n_ploidy(ploidy : int) -> dict[str, int]:
+def _n_ploidy(ploidy : int) -> dict[str, int]:
     """
     Only for SNP alphabet initialization
 
@@ -94,11 +96,14 @@ class Alphabet:
     
     USER = {}
     
-    ALPHABET_NAMES = {DNA : "DNA", RNA : "RNA", PROTEIN : "PROTEIN", 
-                      CODON : "CODON", SNP : "SNP", USER : "USER"}
+    ALPHABETS = [DNA, RNA, PROTEIN, CODON, SNP]
+    ALPHABET_NAMES = ["DNA", "RNA", "PROTEIN", "CODON", "SNP"]
+    
 
   
-    def __init__(self, alphabet_type : dict[str, int], alphabet : dict = {}, 
+    def __init__(self, 
+                 alphabet_type : dict[str, int], 
+                 alphabet : dict[str, int] = {}, 
                  snp_ploidy : int = None) -> None:
         """
         Args:
@@ -118,14 +123,14 @@ class Alphabet:
         self.alphabet = alphabet_type
         
         if alphabet_type == self.SNP and snp_ploidy is not None:
-            self.alphabet = n_ploidy(snp_ploidy)
+            self.alphabet = _n_ploidy(snp_ploidy)
         elif alphabet_type == self.USER:
             if alphabet is not None:
                 self.alphabet = alphabet
             else:
                 raise AlphabetError("User defined alphabet was not provided")
 
-    def map(self, char:str) -> int:
+    def map(self, char : str) -> int:
         """
         Return mapping for a character encountered in a nexus file
 
@@ -157,7 +162,10 @@ class Alphabet:
         Returns:
             str: the type of alphabet being used
         """
-        return self.ALPHABET_NAMES[self.alphabet]
+        if self.alphabet in self.ALPHABETS:
+            return self.ALPHABET_NAMES[self.ALPHABETS.index(self.alphabet)]
+        else:
+            return "USER"
 
     def reverse_map(self, state:int)->str:
         """

@@ -1,8 +1,10 @@
 """ 
 Author : Mark Kessler
-Last Stable Edit : 4/10/24
+Last Edit : 5/14/24
 First Included in Version : 1.0.0
-Approved for Release : NO
+Docs   - [x]
+Tests  - [ ]
+Design - [ ]
 """
 
 from abc import ABC, abstractmethod
@@ -14,6 +16,28 @@ from NetworkParser import NetworkParser as np
 from typing import Callable
 
 from MSA import MSA
+
+##########################
+#### HELPER FUNCTIONS ####
+##########################
+
+def join_network(node : ModelNode, model : Model) -> None:
+    """
+    Make @node a model child of all network class model nodes.
+
+    Args:
+        node (ModelNode): A ModelNode.
+        model (Model): The model, with a network attached.
+    """
+    for internal_node in model.nodetypes["internal"]:
+        node.join(internal_node)
+    for leaf_node in model.nodetypes["leaf"]:
+        node.join(leaf_node)
+    for root_node in model.nodetypes["root"]:
+        node.join(root_node)
+    for retic in model.nodetypes["reticulation"]:
+        node.join(retic)
+    
 
 ##########################
 #### MODEL COMPONENTS ####
@@ -156,6 +180,7 @@ class MSAComponent(ModelComponent):
                 
                 new_ext_species = ExtantSpecies(network_node.get_name(),
                                                 sequences)
+                model.all_nodes[ExtantSpecies].append(new_ext_species)
                 new_ext_species.join(model_node)
                     
 class ANetworkNode(NetworkNode, CalculationNode):
@@ -241,7 +266,6 @@ class ModelFactory:
         
         return self.output_model 
             
-
 
 
 

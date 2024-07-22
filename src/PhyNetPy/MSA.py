@@ -1,6 +1,6 @@
 """ 
 Author : Mark Kessler
-Last Stable Edit : 4/8/24
+Last Stable Edit : 5/14/24
 First Included in Version : 1.0.0
 Approved for Release: No.
 """
@@ -134,7 +134,7 @@ class SeqRecord:
                                if char.isdigit() 
                                or char in set(["A", "B", "C", "D", "E", "F"])]
         
-        if len(num_seq) != len(self.seq):
+        if len(num_seq) != len(self):
             warnings.warn("Some characters were not able to be mapped to a \
                            hexadecimal number. Please double check your \
                            sequence to be sure all characters come from the set\
@@ -171,6 +171,15 @@ class SeqRecord:
             int: ploidy value.
         """
         return self.ploidyness
+
+    def __len__(self) -> int:
+        """
+        Define the length of a SeqRecord to be the length of the sequence
+
+        Returns:
+            int: _description_
+        """
+        return len(self.seq)
 
 class MSA:
     
@@ -435,5 +444,20 @@ class MSA:
                 for record in self.group_given_id(gid):
                     record.set_ploidy(sequence_ploidy[gid])
                 
-                    
+    def dim(self) -> tuple[int]:
+        """
+        Return the dimensions of the MSA.
+        
+        The number of rows (first index) is equal to the number of SeqRecord 
+        objects, and the number of columns (second index), is equal to the 
+        length of each SeqRecord (they should all be the same).
+
+        Returns:
+            tuple[int]: row, col tuple that describes the dimensions of the MSA.
+        """
+        if len(self.records) > 0:
+            return (len(self.records), len(self.records[0]))
+        else:
+            return (0,0)
+                     
             

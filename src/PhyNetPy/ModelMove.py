@@ -1,6 +1,6 @@
 """ 
 Author : Mark Kessler
-Last Stable Edit : 4/8/24
+Last Stable Edit : 4/22/24
 First Included in Version : 1.0.0
 Approved for Release : No
 """
@@ -13,9 +13,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 from typing import TYPE_CHECKING
 from Network import Network, Edge, Node
+from Logger import *
 if TYPE_CHECKING:
     from ModelGraph import *
-
 
 
 #########################
@@ -54,22 +54,22 @@ def insert_node_in_edge(edge : Edge, node : Node, net : Network) -> None:
     net.add_edges(Edge(a, node))
     net.add_edges(Edge(node, b))
     
-def connect_nodes(n1 : Node, n2 : Node, net : Network) -> None:
+def connect_nodes(src : Node, dest : Node, net : Network) -> None:
     """
     Given two nodes in a network, connect them and check whether or not a 
     reticulation is created.
 
     Args:
-        n1 (Node): _description_
-        n2 (Node): _description_
-        net (Network): _description_
+        src (Node): The parent of the new edge
+        dest (Node): The child of the new edge
+        net (Network): Network for which to add the edge
     """
     #Add the edge to the network
-    net.add_edges(Edge(n2, n1))
+    net.add_edges(Edge(src, dest))
   
-    #Check if n1 is now a reticulation
-    if len(net.get_parents(n1)) > 1:
-        n1.set_is_reticulation(True)
+    #Check if dest is now a reticulation
+    if len(net.in_degree(dest)) > 1:
+        dest.set_is_reticulation(True)
 
 ###########################
 #### MOVE PARENT CLASS ####
@@ -241,9 +241,6 @@ class RootBranchMove(Move, ABC):
     def hastings_ratio(self) -> float:
         return -1 * self.exp_param * (self.old_root_height - self.new_root_height)
 
-
-
-
 class TopologyMove(Move):
     """
     NNI Topology Move
@@ -372,121 +369,121 @@ class TopologyMove(Move):
 """
 ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THIS BASIC NETWORK STRUCTURE:
 
-                  y
+                  a
                     \
                      \  
                       \
-            b          z  
+            x          z  
            / \        / \
           /   \      /   \
          /     \    /     \
         /        c         \
        /         |          \
       /          |           \
-                 a            x
+                 y            b
 
 """
 
 
 class AddReticulation(Move):
+    """
+    Last edit July 19, 2024.
+    """
+    
     def __init__(self):
         super().__init__()
 
-    
     def execute(self, model : Model) -> Model:
-        """
-        Adds a reticulation edge to the network
-        """
+        
         net : Network = model.network
-        print("-----BEFORE MOVE-----")
-        net.pretty_print_edges()
-        E_set = [item for item in net.edges] #.append((net.root()[0], None)) # add (root, null) to edge set #TODO: ERROR
-        # Select 2 perhaps non-distinct edges to connect with a reticulation edge-- we allow bubbles
-        random_edges = [random.choice(E_set), random.choice(E_set)]
         
-        a : Node = random_edges[0][1]
-        b : Node = random_edges[0][0]
-        y : Node = random_edges[1][0]
-        x : Node = random_edges[1][1]
+        #Select random two edges
+        src_e = random.choice(net.get_edges())
+        avoid_these_edges = net.edges_upstream_of_node(src_e.src)
+        dest_e = random.choice([e for e in net.get_edges() if e not in avoid_these_edges])
         
-        # print(f"Edge 1: <{b.get_name()}, {a.get_name()}")
-        # print(f"Edge 2: <{y.get_name()}, {x.get_name()}")
+        """
+        a -----> z ------> b   (src edge)
+                 |
+                 |
+                 |
+                 v
+        x -----> c ------> y   (dest edge)
+        """
+        a : Node = src_e.src
+        b : Node = src_e.dest
+        x : Node = dest_e.src
+        y : Node = dest_e.dest
+        z : Node = net.add_uid_node() #in branch a->b
+        c : Node = net.add_uid_node() #in branch x->y
+        c.set_is_reticulation(True)
         
-        
-        z : Node = Node() #, parent_nodes=[b], branch_len={b:[top_bl_1]})
-        c : Node = Node(is_reticulation=True) #, parent_nodes=[retic_bot_parent, z], branch_len={retic_bot_parent:[top_bl_2], retic_top:[]})
-        
-        
-        if a!=x or b!=y: #Not a bubble
-            net.add_uid_node(z)
-            net.add_uid_node(c)
+        if a==x and b==y: 
+            #Bubble
+            insert_node_in_edge(net.get_edge(a, b), z, net)
+            insert_node_in_edge(net.get_edge(z, b), c, net)
+            connect_nodes(z, c, net)  
+        else: 
+            #Not a bubble
+            insert_node_in_edge(net.get_edge(x, y), c, net)
+            insert_node_in_edge(net.get_edge(a, b), z, net)
+            connect_nodes(z, c, net)
             
-            insert_node_in_edge([b, a], c, net)
-            # print("DOING NEXT INSERT")
-            insert_node_in_edge([y, x], z, net)
-            # print("NOW CONNECTING NODES")
-            connect_nodes(c, z, net)
             
-            
-            self.undo_info = [c, z, a, b, x, y]
-            self.same_move_info = [node.get_name() for node in self.undo_info]
+        self.undo_info = [a, b, x, y, c, z]
+        self.same_move_info = [node.get_name() for node in self.undo_info]
         
-        print("-----AFTER MOVE-----")
-        net.pretty_print_edges()
-        #net.print_graph()
         model.update_network()
-        #Not handling branch lengths/bubbles at this time
         return model
 
     def undo(self, model : Model)-> None:
         net : Network = model.network
-        print("--------UNDOING MOVE------")
+        
+        
         if self.undo_info is not None:
+            a : Node = self.undo_info[0]
+            b : Node = self.undo_info[1]
+            x : Node = self.undo_info[2]
+            y : Node = self.undo_info[3]
+            c : Node = self.undo_info[4]
+            z : Node = self.undo_info[5]
             
-            #undo parent settings
-            self.undo_info[2].remove_parent(self.undo_info[0]) # c is not a's parent anymore
-            self.undo_info[4].remove_parent(self.undo_info[1]) # z is not x's parent anymore
+    
+            # UNNECESSARY GIVEN REMOVE NODE DETACHES ALL EDGES
+            # edges_2_remove = [[a, z], [z, b], [x, c], [c, y], [z, c]] 
             
-            #essentially RemoveRetic
-            edges_2_remove = [[self.undo_info[1], self.undo_info[0]],
-                            [self.undo_info[3], self.undo_info[0]],
-                            [self.undo_info[0], self.undo_info[2]],
-                            [self.undo_info[5], self.undo_info[1]],
-                            [self.undo_info[1], self.undo_info[4]]]
+            # for edge in edges_2_remove:
+            #     net.remove_edge(edge)
             
-            for edge in edges_2_remove:
-                net.remove_edge(edge)
-            
-            net.remove_node(self.undo_info[0])
-            net.remove_node(self.undo_info[1])
-            connect_nodes(self.undo_info[2], self.undo_info[3], net)
-            connect_nodes(self.undo_info[4], self.undo_info[5], net)
-            
-        net.pretty_print_edges()
+            net.remove_node(c)
+            net.remove_node(z)
+            connect_nodes(a, b, net)
+            connect_nodes(x, y, net)
+
         model.update_network()
 
     def same_move(self, model : Model) -> None:
-        if type(model.network) is DAG:
-            net : Network = model.network
-        else:
-            net : Network = model.network.get()
-            
+        
+        net : Network = model.network
+        
         if self.same_move_info is not None:
             nodes : list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
             
             #C and Z do not exist in the other network, just copy the names into new nodes
-            a : Node = nodes[2]
-            b : Node = nodes[3]
-            x : Node = nodes[4]
-            y : Node = nodes[5]
-            c : Node = Node(name=self.same_move_info[0])
-            z : Node = Node(name=self.same_move_info[1])
+            a : Node = nodes[0]
+            b : Node = nodes[1]
+            x : Node = nodes[2]
+            y : Node = nodes[3]
+            c : Node = Node(name=self.same_move_info[4], is_reticulation = True)
+            z : Node = Node(name=self.same_move_info[5])
             
-            insert_node_in_edge([b, a], c, net)
-            insert_node_in_edge([y, x], z, net)
-            connect_nodes(c, z, net)
             net.add_nodes(z)
             net.add_nodes(c)
+            
+            insert_node_in_edge([a, b], z, net)
+            insert_node_in_edge([x, y], c, net)
+            connect_nodes(z, c, net)
+            
         
         model.update_network()
     
@@ -958,10 +955,8 @@ class FlipReticulation(Move):
     def hastings_ratio(self) -> float:
         return 1.0
     
-
-
 class SwitchParentage(Move):
-    def __init__(self):
+    def __init__(self, debug_id : int):
         super().__init__()
         
         #STEP 0: Set up edge/node tracking
@@ -970,7 +965,7 @@ class SwitchParentage(Move):
         self.added_nodes : set[Node] = set()
         self.removed_nodes : set[Node] = set()
         self.removed_edges : set[list[Node]] = set()
-        
+        self.logger = Logger(debug_id)
         self.print_net = False
         
     def random_object(self, mylist, rng):
@@ -982,7 +977,8 @@ class SwitchParentage(Move):
     
     def execute(self, model : Model) -> Model:
         """
-        Executes the Swap-Parentage Move, described in detail at https://phylogenomics.rice.edu/tutorials.html
+        Executes the Swap-Parentage Move, described in detail at
+        https://phylogenomics.rice.edu/tutorials.html.
 
         Args:
             model (Model): A model object, for which there must be a populated network field 
@@ -995,11 +991,12 @@ class SwitchParentage(Move):
             Model: A modified model, with a newly proposed network topology
             
         """
+        
         net : Network = model.network
-        self.undo_info = copy.deepcopy(net)
+        self.undo_info = copy.deepcopy(net) #TODO: get rid of this deep copy
                 
         #STEP 1: Select random non-root node
-        node_2_change : Node = self.random_object([node for node in net.nodes if node != net.root()[0]], model.rng)
+        node_2_change : Node = self.random_object([node for node in net.get_nodes() if node != net.root()[0]], model.rng)
     
         # STEP 1b: Disallow pointless changes 
         node_pars = net.get_parents(node_2_change)
@@ -1019,10 +1016,11 @@ class SwitchParentage(Move):
             changing_retic = False
             
         #STEP 2: Get target subgenome count
+        
         target : int = net.subgenome_count(node_2_change)
         
         #STEP 3: Remove a parent edge
-        edge_2_remove : list[Node] = self.random_object(net.in_edges(node_2_change), model.rng)
+        edge_2_remove : Edge = self.random_object(net.in_edges(node_2_change), model.rng)
         self.delete_edge(net, edge_2_remove)
         
         is_first_iter = True
@@ -1035,26 +1033,27 @@ class SwitchParentage(Move):
             cur_ct = 0
        
        
+        iter_no = 0
         while cur_ct != target:
-            
+
             # 4.0: Select the next edge to branch from
             if not is_first_iter:
-                branch : list[Node] = self.random_object(list(self.valid_attachment_edges), model.rng)
-                ## print(branch)
+                branch : Edge = self.random_object(list(self.valid_attachment_edges), model.rng)
                 node_2_change = net.add_uid_node()
                 net.remove_edge(branch)
                 self.valid_attachment_edges.remove(branch)
-                net.add_edges([[branch[0], node_2_change], [node_2_change, branch[1]]])
-                self.valid_attachment_edges.append([branch[0], node_2_change])
-                self.valid_attachment_edges.append([node_2_change, branch[1]])
+                net.add_edges([Edge(branch.src, node_2_change),
+                               Edge(node_2_change, branch.dest)])
+                self.valid_attachment_edges.append(Edge(branch.src, node_2_change))
+                self.valid_attachment_edges.append(Edge(node_2_change, branch.dest))
                 downstream_node : Node =  node_2_change #branch[1]
             else:
                 downstream_node = node_2_change
                 
             # 4.1 : Select an edge with a key of <= cur_ct and that wont create a cycle (ensured by edges_2_subgct)
-            bfs_starts = [node for node in net.nodes if net.in_degree(node) == 0 and net.out_degree(node) != 0]
+            bfs_starts = [node for node in net.get_nodes() if net.in_degree(node) == 0 and net.out_degree(node) != 0]
             
-            if len(bfs_starts)>1:
+            if len(bfs_starts) > 1:
                 if node_2_change in bfs_starts:
                     bfs_starts.remove(node_2_change)
                 else:
@@ -1068,15 +1067,14 @@ class SwitchParentage(Move):
             else:
                 bfs_start = bfs_starts[0]
                 
+            # print(f"DOWNSTREAM NODE: {downstream_node}")
             edges_to_ct : dict[int, set] = net.edges_to_subgenome_count(downstream_node, target - cur_ct, bfs_start)
-            
-
         
             random_key = self.random_object([key for key in edges_to_ct.keys()], model.rng)
             
             try:
-                new_edge : list[Node] = self.random_object(list(edges_to_ct[random_key]), model.rng)
-                if new_edge[1] == downstream_node:
+                new_edge : Edge = self.random_object(list(edges_to_ct[random_key]), model.rng)
+                if new_edge.dest == downstream_node:
                     #print("MAKING A BUBBLE-- THEORETICALLY")
                     self.print_net = True
             except:
@@ -1085,7 +1083,9 @@ class SwitchParentage(Move):
             
             # 4.2 : Connect the unconnected node to the new branch selected in 4.1
             connector_node = net.add_uid_node()
-            new_edge_list = [[connector_node, new_edge[1]], [new_edge[0], connector_node], [connector_node, node_2_change]]
+            new_edge_list = [Edge(connector_node, new_edge.dest), 
+                             Edge(new_edge.src, connector_node), 
+                             Edge(connector_node, node_2_change)]
             net.add_edges(new_edge_list)
             self.valid_attachment_edges.append(new_edge_list[2])
             net.remove_edge(new_edge)
@@ -1097,22 +1097,20 @@ class SwitchParentage(Move):
             cur_ct = net.subgenome_count(node_2_change)
         
             is_first_iter = False
+            iter_no += 1
+            
             
         #STEP 5: Remove excess nodes created by initial edge removal if they exist
         
         net.clean()
         
-        
         if changing_retic:
-            # print(net.newick())
-            # net.pretty_print_edges()
-            # net.print_graph()
             changing_retic = False
        
         model.update_network()
         
         self.same_move_info = copy.deepcopy(net)
-        
+    
         return model
 
     def undo(self, model : Model)-> None:
@@ -1134,22 +1132,21 @@ class SwitchParentage(Move):
         return 1.0
     
             
-    def delete_edge(self, net:DAG, edge:list[Node]):
-        root = edge[1]
+    def delete_edge(self, net : Network, edge : Edge):
+        root = edge.dest 
 
-        
         q = deque()
         q.appendleft(root)
 
         if net.in_degree(root) == 2:
             bypass = True
         else:
-            bypass = False
+            bypass = False 
             
         while len(q) != 0:
-            cur = q.pop()
+            cur = q.pop() 
             
-            neighbors = copy.copy(net.get_parents(cur))
+            neighbors = copy.copy(net.get_parents(cur)) 
             
             if len(neighbors) == 2 and neighbors[0].get_name() == neighbors[1].get_name() and bypass:
                 #Bubble
@@ -1159,35 +1156,35 @@ class SwitchParentage(Move):
                     net.remove_edge([b[0], neighbors[0]])
                     net.remove_edge([neighbors[0], cur])
                     net.remove_edge([neighbors[1], cur])
-                    net.add_edges([b[0], cur])
+                    net.add_edges(Edge(b[0], cur))
                 else:
                     net.remove_edge([neighbors[0], cur])
                 
                 return 
-            else:
+            else: 
                 i = 1
-                b = copy.copy(net.get_parents(neighbors[0]))
+                b = copy.copy(net.get_parents(neighbors[0])) 
                 for neighbor in neighbors:
                     
-                    if not bypass or neighbor == edge[0]:
-                        net.remove_edge([neighbor, cur])
+                    if not bypass or neighbor == edge.src: 
+                        net.remove_edge([neighbor, cur]) 
                         
-                        if net.in_degrees[neighbor] == 2:
+                        if net.in_degree(neighbor) == 2:
                             q.append(neighbor)
                         else:
                             try:
-                                a : Node = [node for node in net.get_children(neighbor) if node != cur][0]
+                                a : Node = [node for node in net.get_children(neighbor) if node != cur][0] 
                                 
                                 if net.in_degree(neighbor) != 0:
-                                    b : Node = net.get_parents(neighbor)[0] #tree node will only have 1
+                                    b : Node = net.get_parents(neighbor)[0] 
                                     
-                                    redundant_tree_edge1 = [b, neighbor]
-                                    redundant_tree_edge2 = [neighbor, a]
+                                    redundant_tree_edge1 = [b, neighbor] 
+                                    redundant_tree_edge2 = [neighbor, a] 
 
                                     net.remove_edge(redundant_tree_edge1)
                                     net.remove_edge(redundant_tree_edge2)
 
-                                    net.add_edges([b, a])
+                                    net.add_edges(Edge(b, a))
                             except:
                                 if i == 2:
                                     if len(b) != 0:
@@ -1197,7 +1194,6 @@ class SwitchParentage(Move):
                     
             bypass = False
             
-
 class SwitchParentage2(Move):
     def __init__(self):
         super().__init__()
@@ -1324,7 +1320,7 @@ class SwitchParentage2(Move):
             prev = cur
             net.remove_node(cur)
     
-    def reattach(self, net:DAG, cur : int, target : int, rng: np.random.Generator) -> None:
+    def reattach(self, net : Network, cur : int, target : int, rng : np.random.Generator) -> None:
         ##STILL NEED TO DO THIS....
         
         if not is_first_iter:
@@ -1390,4 +1386,4 @@ class SwitchParentage2(Move):
         
             
             
-    
+
