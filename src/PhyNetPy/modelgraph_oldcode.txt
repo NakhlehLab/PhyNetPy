@@ -376,7 +376,7 @@
     #     x = q_null_space / (q_null_space[0] + q_null_space[1]) # normalized so the first two values sum to one
 
     #     F_b_map = self.vpis.vpis[self.snp_root.get()[0]]
-    #     F_b = to_array(F_b_map, partials_index(self.snp_params["samples"] + 1), self.data.siteCount()) 
+    #     F_b = to_array(F_b_map, n_to_index(self.snp_params["samples"] + 1), self.data.siteCount()) 
     #     print(F_b) 
         
     #     L = np.zeros(self.data.siteCount())
@@ -865,7 +865,7 @@ __________________________
 #         else:
 #             raise ModelError("site count error")
 
-#         vector_len = partials_index(node_par.possible_lineages() + 1)  
+#         vector_len = n_to_index(node_par.possible_lineages() + 1)  
 
 #         # BOTTOM: Case 1, the branch is an external branch, so bottom likelihood is just the red counts
 #         if type(node_par) is SNPLeafNode:
@@ -976,3 +976,107 @@ __________________________
         
 #     def get(self) -> DAG:
 #         return self.network
+
+
+
+
+class BranchLengthComponent(ModelComponent):
+    """
+    Component that adds branch length data to a network.
+    """
+    def __init__(self, dependencies: set[type]) -> None:
+        super().__init__(dependencies)
+    
+    def build(self, model : Model):
+        """
+        Attach branch length data to a model's network.
+
+        Args:
+            model (Model): A Model obj which has a network built into it.
+        """
+        # branch_index = 0
+        # node_heights = TreeHeights()
+        # node_heights_vec = []
+        
+        # for network_node, model_node in model.network_node_map.items():
+            
+        #     branches = []
+        #     gamma = network_node.attribute_value("gamma")
+
+        #     for branch_par, branch_lengths in network_node.length().items():
+                
+        #         if gamma is not None:
+        #             gammas = gamma[branch_par.get_name()]
+                    
+        #         for branch_len in branch_lengths:
+        #             #Create new branch
+        #             branch = BranchLengthNode(branch_index, branch_len)
+        #             node_heights_vec.append(branch_len)
+        #             branch_index += 1
+        #             branches.append(branch)
+        #             branch.set_net_parent(branch_par)
+                    
+        #             if gamma is not None:
+        #                 print("GAMMAS: " + str(gammas))
+        #                 if branch_par.get_name() in gamma.keys():
+                            
+        #                     if len(gammas)==1:
+        #                         branch.set_inheritance_probability(gammas[0][0])
+        #                     else:
+        #                         if gammas[0][1] == branch_len:
+        #                             branch.set_inheritance_probability(gammas[0][0])
+        #                             gammas = [gammas[1]]
+        #                         else:
+        #                             branch.set_inheritance_probability(gammas[1][0])
+        #                             gammas = [gammas[0]]
+                        
+        #             # Each branch has a link to the vector
+        #             node_heights.join(branch)
+                   
+        
+        #     # Point the branch length node to the leaf node
+        #     for branch in branches:
+        #         branch.join(model_node)
+            
+        # node_heights.update(node_heights_vec)
+
+
+# def convert_to_heights(node, adj_dict):
+#     """
+#     This is a recursive function that is used to take a model that is initialized
+#     with branch heights and turn it into a model based on node heights.
+
+#     Usage: convert_to_heights(root_node, {})
+
+#     The resulting heights are conditioned such that t=0 is at the root. Need to subtract dictionary value from
+#     max(heights of all leaves) to get heights such that the root is the time furthest in the past
+
+#     input: a ModelNode, to change the whole graph use the root.
+#     output: a dictionary that maps each model node to a float height value
+
+#     """
+    
+#     if node.get_parent() is None:  # Root
+#         adj_dict[node] = 0  # Start root at t=0
+#     else:
+#         # For all other nodes, the height will be the branch length plus the node height of its parent
+#         for branch in node.get_branches():
+#             # Doesn't matter which parent is used to calculate node height, so just use the first one
+#             if type(branch) is SNPBranchNode:
+#                 if branch.net_parent in adj_dict.keys():
+#                     adj_dict[node] = branch.get_length() + adj_dict[branch.net_parent]
+#             else:
+#                 adj_dict[node] = branch.get() + adj_dict[node.get_parent()]
+
+#     # Done at the leaves
+#     if type(node) is FelsensteinLeafNode or type(node) is SNPLeafNode:
+#         return adj_dict
+
+#     # Otherwise, recursively call on the children of this node
+#     if node.get_children() is not None:
+#         for child in node.get_children():
+#             # combine maps of all children
+#             adj_dict.update(convert_to_heights(child, adj_dict))
+
+#     # Return the built-up mapping
+#     return adj_dict

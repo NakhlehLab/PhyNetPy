@@ -1,28 +1,40 @@
 """ 
 Author : Mark Kessler
-Last Stable Edit : 2/21/24
+Last Edit : 3/28/24
 First Included in Version : 1.0.0
-Approved for Release: No but close
+
+Docs   - [x]
+Tests  - [ ]
+Design - [ ]
 """
 
 from typing import Callable
-from Graph import DAG
+from Network import Network
 
-
-
-def phynetpy_naming(taxa_name : str) -> list:
-    """
+#########################
+#### EXCEPTION CLASS #### 
+#########################   
     
+class GeneTreeError(Exception):
+    def __init__(self, message = "Gene Tree Module Error") -> None:
+        super().__init__(message = message)
+        self.message = message
+        
+##########################
+#### HELPER FUNCTIONS #### 
+##########################
+  
+def phynetpy_naming(taxa_name : str) -> str:
+    """
+    The default method for sorting taxa labels into groups
 
     Args:
-        taxa_name (str): _description_
-
+        taxa_name (str): a taxa label from a nexus file
     Raises:
-        GeneTreeError: _description_
-        GeneTreeError: _description_
+        GeneTreeError: if there is a problem applying the naming rule
 
     Returns:
-        list: _description_
+        str: a string that is the key for this label
     """
     if not taxa_name[0:2].isnumeric():
         raise GeneTreeError("Error Applying PhyNetPy Naming Rule: \
@@ -33,29 +45,31 @@ def phynetpy_naming(taxa_name : str) -> list:
     else:
         raise GeneTreeError("Error Applying PhyNetPy Naming Rule: \
                              3rd position is not an a-z character")
-    
-    
-class GeneTreeError(Exception):
-    def __init__(self, message = "Gene Tree Module Error") -> None:
-        super().__init__(message = message)
-        self.message = message
+
+####################
+#### GENE TREES ####
+####################
 
 class GeneTrees:
+    """
+    A container for a set of networks that are binary and represent a 
+    gene tree.
+    """
     
-    def __init__(self, gene_tree_list : list[DAG] = None, 
+    def __init__(self, gene_tree_list : list[Network] = None, 
                  naming_rule : Callable = phynetpy_naming) -> None:
         """
-        Wrapper class for a set of DAGs that represent gene trees
+        Wrapper class for a set of networks that represent gene trees
 
         Args:
-            gene_tree_list (list[DAG], optional): A list of DAGs, should be 
-                                                  trees (NOT networks). 
-                                                  Defaults to None.
+            gene_tree_list (list[Network], optional): A list of networks, 
+                                                      of the binary tree 
+                                                      variety. Defaults to None.
             naming_rule (Callable, optional): a function f : str -> str. 
                                               Defaults to phynetpy_naming.
         """
         
-        self.trees : set[DAG] = set()
+        self.trees : set[Network] = set()
         self.taxa_names : set[str]= set()
         self.naming_rule : Callable = naming_rule
         
@@ -63,16 +77,16 @@ class GeneTrees:
             for tree in gene_tree_list:
                 self.add(tree)
         
-    def add(self, tree : DAG):
+    def add(self, tree : Network):
         """
         Add a gene tree to the collection. Any new gene labels that belong to
         this tree will also be added to the collection of all 
         gene tree leaf labels.
 
         Args:
-            tree (DAG): A DAG that is a tree, must not be a network.
+            tree (Network): A network that is a tree, must be binary.
         """
-        
+
         self.trees.add(tree)
         
         for leaf in tree.get_leaves():
@@ -94,20 +108,3 @@ class GeneTrees:
                 else:
                     subgenome_map[key] = [taxa_name]
         return subgenome_map
-    
-
-
-
-# class GeneTree(DAG):
-#     """
-#     Wrapper class for a DAG that verifies tree status and contains operators 
-#     that are specifically designed for gene trees.
-#     """
-    
-#     def __init__(self, edges=None, nodes=None, weights=None) -> None:
-#         super().__init__(edges, nodes, weights)
-#         #TODO: verify tree status somehow
-    
-#     def map_to_species_network(self):
-#         pass
-    

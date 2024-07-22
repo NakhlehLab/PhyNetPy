@@ -4,15 +4,21 @@ Last Stable Edit : 2/8/24
 First Included in Version : 0.1.0
 """
 
+from __future__ import annotations
+from collections import defaultdict
 import warnings
 import random
 from abc import ABC, abstractmethod
 from GTR import *
-from Graph import DAG
-from Move import Move
-from Node import Node
+from Network import Network, Edge, Node
+from ModelMove import Move
+from MSA import SeqRecord
 from typing import Callable
 
+
+##########################
+#### HELPER FUNCTIONS ####
+##########################
 
 def vec_bin_array(arr, m):
     """
@@ -33,100 +39,77 @@ def vec_bin_array(arr, m):
     return ret
 
 
-# def convert_to_heights(node, adj_dict):
-#     """
-#     This is a recursive function that is used to take a model that is initialized
-#     with branch heights and turn it into a model based on node heights.
-
-#     Usage: convert_to_heights(root_node, {})
-
-#     The resulting heights are conditioned such that t=0 is at the root. Need to subtract dictionary value from
-#     max(heights of all leaves) to get heights such that the root is the time furthest in the past
-
-#     input: a ModelNode, to change the whole graph use the root.
-#     output: a dictionary that maps each model node to a float height value
-
-#     """
-    
-#     if node.get_parent() is None:  # Root
-#         adj_dict[node] = 0  # Start root at t=0
-#     else:
-#         # For all other nodes, the height will be the branch length plus the node height of its parent
-#         for branch in node.get_branches():
-#             # Doesn't matter which parent is used to calculate node height, so just use the first one
-#             if type(branch) is SNPBranchNode:
-#                 if branch.net_parent in adj_dict.keys():
-#                     adj_dict[node] = branch.get_length() + adj_dict[branch.net_parent]
-#             else:
-#                 adj_dict[node] = branch.get() + adj_dict[node.get_parent()]
-
-#     # Done at the leaves
-#     if type(node) is FelsensteinLeafNode or type(node) is SNPLeafNode:
-#         return adj_dict
-
-#     # Otherwise, recursively call on the children of this node
-#     if node.get_children() is not None:
-#         for child in node.get_children():
-#             # combine maps of all children
-#             adj_dict.update(convert_to_heights(child, adj_dict))
-
-#     # Return the built-up mapping
-#     return adj_dict
-
+#########################
+#### EXCEPTION CLASS ####
+#########################
 
 class ModelError(Exception):
     """
-    Class to handle any errors related to building the model or running likelihoods computations
-    on the model.
+    Class to handle any errors related to building the model or running 
+    likelihoods computations on the model.
     """
 
     def __init__(self, message="Model is Malformed"):
         super().__init__(message)
 
-
-        
+#####################
+#### MODEL CLASS ####
+#####################
 
 class Model:
     """
-    Class that describes a DAG structure that lazily computes a model likelihood.
+    Class that implements a version of probabilistic graphical modeling, for 
+    phylogenetics. Generally, it is made up of a network, along with various
+    parameters and components that are attached to the model in order to 
+    compute either a model likelihood or simulate data over a set of model
+    parameters.
     """
 
-    def __init__(self): #, network: DAG = None, data: Matrix = None, submodel=JC()):
+    def __init__(self): 
+        """
+        Initialize an empty model.
+        """
        
-        ##-------ONLY USE THIS STUFF AS OF NOW-------##
-        self.network = None #network
+        # Maintain links to various internal structures and bookkeeping 
+        # data 
+        
+        # Access all nodes of a given type
+        self.all_nodes : dict[type, list[ModelNode]] = defaultdict(list)
+        
+        # Access the internal network
+        self.network : Network = None 
         self.network_container = None
-        self.nodetypes = {"leaf":[], "internal": [], "reticulation":[], "root":[]}
-        self.parameters : dict = {} #Maps parameter names (a string) to their parameter node (parent class) object
         
-        rand_seed = random.randint(0, 1000)
-        self.seed = rand_seed
-        print(f"MODEL SEED: {rand_seed}")
-        self.rng : np.random.Generator = np.random.default_rng(rand_seed)
+        # Access all network nodes of a certain kind 
+        # (these are only explicitly defined by the in/out maps)
+        self.nodetypes = {"leaf":[], 
+                          "internal": [], 
+                          "reticulation":[], 
+                          "root":[]}
         
-        ##-------------------------------------------##
+        # Maps parameter names (a string) to their parameter 
+        # node (parent class) object
+        self.parameters : dict[str, Parameter] = {} 
         
-        # self.sub = submodel
-        # self.data = data
+        # RNG object used to consistently select objects (useful mainly for 
+        # debugging purposes, by setting a consistent seed instead of a random
+        # seed).
+        self.seed = random.randint(0, 1000)
+        self.rng : np.random.Generator = np.random.default_rng(self.seed)
         
-        # self.verbose_out = False
-        
-        self.nodes = []
-        self.netnodes_sans_root = []
-        self.network_leaves = []
-        
-        self.tree_heights = None  # type TreeHeights
-        self.submodel_node = None # type SubstitutionModel
-       
+        # Map for the conversion between network Node objects and their 
+        # associated model node object "wrapper"
         self.network_node_map : dict[Node, ModelNode] = {}
-        self.snp_params = None #snp_params
-                
-        #self.internal = [item for item in self.netnodes_sans_root if item not in self.network_leaves]
+        
+        #Log output
         self.summary_str = ""
 
-    def change_branch(self, index: int, value: float):
+    def change_branch(self, index: int, value: float) -> None:
         """
-        Change a branch length in the model and update any nodes upstream from the changed node
+        Change a branch length in the model and update any nodes 
+        upstream from the changed node.
+        
+        TODO: Edit for edge update
 
         Inputs: index - index into the heights/lengths vector
                 value - new height/length to replace the old one
@@ -134,85 +117,77 @@ class Model:
         """
         self.tree_heights.singular_update(index, value)
 
-    
-    def update_network(self):
+    def update_network(self) -> None:
+        """
+        Ensure that the network field and network container field
+        are accessing the same network.
+        """
         if self.network_container is not None:
+            # Network container is a state node, and thus has an update method.
             self.network_container.update(self.network)
                 
-
-    def update_parameter(self, param_name : str, param_value):
+    def update_parameter(self, param_name : str, param_value : object) -> None:
+        """
+        Change the parameter value of the parameter with name 'param_name'
+    
+        Args:
+            param_name (str): The name of the parameter to update. 
+            param_value (object): A value, in whatever type the given
+                                  parameter takes on.
+        """
         self.parameters[param_name].update(param_value)
             
-
-    def likelihood(self):
+    def likelihood(self) -> float:
         """
         Calculates the likelihood of the model graph lazily, by only
         calculating parts of the model that have been updated/state changed.
         
-        Delegates which likelihood based on the type of model. This method is the only 
-        likelihood method that should be called outside of this module!!!
+        Delegates which likelihood based on the type of model. This method is 
+        the only likelihood method that should be called outside of this 
+        module!!!
 
-        Inputs:
-        Outputs: A numerical likelihood value, the dot product of all root vector likelihoods
+        
+        Returns: 
+            float: A numerical likelihood value, the product of all root
+                   vector likelihoods.
         """
         #TODO: this will change with root probability component
         return self.nodetypes["root"][0].get()
 
-    def execute_move(self, move: Move):
+    def execute_move(self, move : Move) -> Model:
         """
         The operator move has asked for permission to work on this model.
-        Pass the move this model and get the model that is the result of the operation on this model. IT IS THE SAME OBJ
+        Pass the move this model and get the model that is the result of the 
+        operation on this model. 
 
-        Input: move, a Move obj or any subtype
-        Output: the !same! obj that is the result of doing Move on this Model obj
+        Args:
+            move (Move): A concrete subclass instance of Move.
+        
+        Returns: 
+            Model: This !same! obj. The model will have changed based on the 
+                   result of the move.
         """
         return move.execute(self)
 
-    def summary(self, tree_filename: str, summary_filename: str):
+    def summary(self, tree_filename : str, summary_filename : str) -> None:
         """
-        Writes summary of calculations to a file, and gets the current state of the model
-        and creates a network obj so that the newick format can be output.
+        Writes summary of calculations to a file, and gets the current state of 
+        the model and creates a network obj so that the newick format 
+        can be output.
 
         Inputs:
-        1) tree_filename : a string that is the name of the file to output a newick string to.
-                           if the filename does not exist, a new file will be created in the directory in which
-                           one is operating in.
+        1) tree_filename (str): A string that is the name of the file to output
+                                 a newick string to. If the filename does not 
+                                 exist, a new file will be created in the 
+                                 directory in which one is operating in.
 
-        2) summary_filename : a string that is the name of the file to output logging information.
-                              if the filename does not exist, a new file will be created in the current directory
-
-        TODO: WILL NOT WORK
+        2) summary_filename (str): A string that is the name of the file to 
+                                   output logging information. If the filename 
+                                   does not exist, a new file will be created 
+                                   in the current directory.
 
         """
-        # Step 1: create network obj
-        net = DAG()
-
-        network_nodes = []
-        if self.data.get_type() == "SNP":
-            network_nodes.extend([self.snp_root])
-        else:
-            network_nodes.extend([self.felsenstein_root])
-            
-        network_nodes.extend(self.network_leaves)
-        network_nodes.extend(self.netnodes_sans_root)
-
-        inv_map = {v: k for k, v in self.network_node_map.items()}
-        net.add_nodes([inv_map[node] for node in network_nodes])
-
-        for node in network_nodes:
-            for branch in node.get_branches():
-                branch_len = branch.get()
-                if node.parents is not None:
-                    inv_map[node].set_length(branch_len, None)
-                else:
-                    inv_map[node].set_length(branch_len, None)
-
-            # Add edges
-            if node.get_children() is not None:
-                for child in node.get_children():
-                    net.add_edges([inv_map[node], inv_map[child]]) 
-
-        newick_str = net.newick()
+        newick_str = self.network.newick()
 
         # Write newick string to output file
         if tree_filename is not None:
@@ -226,111 +201,122 @@ class Model:
             text_file2.write(self.summary_str)
             text_file2.close()
 
+
+################################################
+#### PROBABILISTIC GRAPHICAL MODELING NODES ####
+################################################
+
+
 class ModelNode:
     """
     Class that defines the graphical structure and shared interactions between
     any node in the Model.
     """
 
-    def __init__(self, successors : list = None, predecessors : list = None, node_type : str = None):
-        self.successors = successors
-        self.predecessors = predecessors
-        self.node_type = node_type
+    def __init__(self, 
+                 children : list = None, 
+                 parents : list = None, 
+                 node_type : str = None):
+        
+        self.children : list[ModelNode] = children
+        self.parents : list[ModelNode] = parents
+        self.node_type : str = node_type
 
-    def add_successor(self, model_node):
+    def add_child(self, model_node : ModelNode) -> None:
         """
         Adds a successor to this node.
 
         Input: model_node (type ModelNode)
 
         """
-        if self.successors is None:
-            self.successors = [model_node]
+        if self.children is None:
+            self.children = [model_node]
         else:
-            self.successors.append(model_node)
+            self.children.append(model_node)
 
-    def add_predecessor(self, model_node):
+    def add_parent(self, model_node : ModelNode) -> None:
         """
         Adds a predecessor to this node.
 
         Input: model_node (type ModelNode)
         """
-        if self.predecessors is None:
-            self.predecessors = [model_node]
+        if self.parents is None:
+            self.parents = [model_node]
         else:
-            self.predecessors.append(model_node)
+            self.parents.append(model_node)
 
-    def join(self, other_node):
+    def join(self, other_node : ModelNode) -> None:
         """
         Adds other_node as a parent, and adds this node as
-        a child of other_node
+        a child of other_node.
 
-        Input: other_node (type ModelNode)
+        Args:
+            other_node (ModelNode): A ModelNode to join this ModelNode to.
         """
-        self.add_predecessor(other_node)
-        other_node.add_successor(self)
+        self.add_parent(other_node)
+        other_node.add_child(self)
 
-    def unjoin(self, other_node):
-        self.remove_predecessor(other_node)
-        other_node.remove_successor(self)
+    def unjoin(self, other_node : ModelNode) -> None:
+        self.remove_parent(other_node)
+        other_node.remove_child(self)
 
-    def remove_successor(self, model_node):
+    def remove_child(self, model_node):
         """
         Removes a successor to this node.
 
         Input: model_node (type ModelNode)
         """
-        if model_node in self.successors:
-            self.successors.remove(model_node)
+        if model_node in self.children:
+            self.children.remove(model_node)
 
-    def remove_predecessor(self, model_node):
+    def remove_parent(self, model_node):
         """
         Removes a predecessor to this node.
 
         Input: model_node (type ModelNode)
         """
-        if model_node in self.predecessors:
-            self.predecessors.remove(model_node)
+        if model_node in self.parents:
+            self.parents.remove(model_node)
 
-    def get_model_parents(self, of_type : type = None):
+    def get_model_parents(self, of_type : type = None) -> list[ModelNode]:
         """
         Returns: the list of parent nodes to this node
         """
         if of_type is None:
-            return self.predecessors
+            return self.parents
         else:
-            return [node for node in self.predecessors if type(node) == of_type]
+            return [node for node in self.parents if type(node) == of_type]
 
-    def get_model_children(self, of_type : type = None): 
+    def get_model_children(self, of_type : type = None) -> list[ModelNode]: 
         """
         Returns: the list of child nodes to this node
         """
         if of_type is None:
-            return self.successors
+            return self.children
         else:
-            return [node for node in self.successors if type(node) == of_type]
+            return [node for node in self.children if type(node) == of_type]
 
-    def in_degree(self):
+    def in_degree(self) -> int:
         """
         Calculates the in degree of the current node (ie number of children)
 
         If 0, this node is a leaf
         """
-        if self.predecessors is None:
+        if self.parents is None:
             return 0
-        return len(self.predecessors)
+        return len(self.parents)
 
-    def out_degree(self):
+    def out_degree(self) -> int:
         """
         Calculates the out degree of the current node (ie number of parents)
 
         If 0, this node is a root of the Model
         """
-        if self.successors is None:
+        if self.children is None:
             return 0
-        return len(self.successors)
+        return len(self.children)
 
-    def find_root(self):
+    def find_root(self) -> list[ModelNode]:
         """
         TODO: PLS MAKE MORE EFFICIENT THIS IS DUMB
 
@@ -339,28 +325,35 @@ class ModelNode:
             return {self}
         else:
             roots = set()
-            for neighbor in self.predecessors:
+            for neighbor in self.parents:
                 roots.update(neighbor.find_root())  # set update
 
             return roots
         
 class CalculationNode(ABC, ModelNode):
     """
-    Subclass of a ModelNode that calculates a portion of the model likelihood.
+    TODO: flush out some logic and return types. 
+    
+    Subclass of a ModelNode that calculates a portion of the model likelihood or
+    data simulation.
+    
+    In probabilistic graphical modeling, this is also known as a deterministic 
+    node.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(CalculationNode, self).__init__()
-        self.dirty = True  # defaults to dirty since calculation hasn't been done yet
+        
+        # defaults to dirty since calculation hasn't been done yet
+        self.dirty = True  
         self.cached = None
         
-    
-
     @abstractmethod
     def get(self):
         """
-        Either retrieves the cached calculation or redoes the calculation for this node
-        This is an abstract method, due to the fact that the type of recalculation will vary.
+        Either retrieves the cached calculation or redoes the calculation for 
+        this node. This is an abstract method, due to the fact that the type of
+        recalculation will vary.
 
         Returns: a vector of partial likelihoods
         """
@@ -378,7 +371,7 @@ class CalculationNode(ABC, ModelNode):
         pass
     
     @abstractmethod
-    def sim(self, *args, **kwargs):
+    def sim(self, *args, **kwargs) -> None:
         """
         This method should be implemented in each CalculationNode subclass.
         Doing a calculation should be a unique operation depending on the type of node.
@@ -387,35 +380,44 @@ class CalculationNode(ABC, ModelNode):
         """
         pass
     
-    def update(self, *args, **kwargs):
+    def update(self, *args, **kwargs) -> None:
         """
         This method should be implemented in each CalculationNode subclass.
         Updating internal data should be handled on an individual basis.
 
-        When the model graph runs its calculate routine, this update method will have marked
-        this calculation node and any calculation nodes upstream as needing recalculation.
+        When the model graph runs its calculate routine, this update method 
+        will have marked this calculation node and any calculation nodes 
+        upstream as needing recalculation.
         """
         self.upstream()
         
-    def upstream(self):
+    def upstream(self) -> None:
         """
-        Finds a path within the model graph from this node to the root, and marks each node along the way as updated
-        using the switch_updated() method
+        Finds a path within the model graph from this node to the root, and 
+        marks each node along the way as updated using the 
+        switch_updated() method.
 
-        If all neighbors need to be recalculated, then so must every node upstream of it, and so we may stop updating
+        If all neighbors need to be recalculated, then so must every node 
+        upstream of it, and so we may stop updating.
         """
         # First update self
         self.make_dirty()
 
-        # Get parent nodes and check that this node is not the root (in which case we're done)
-        neighbors = self.get_model_parents()
+        # Get parent nodes and check that this node is not the root 
+        # (in which case we're done). Only leaves may be of class other than
+        # CalculationNode, so it is safe to assume a model parent has the 
+        # upstream method implemented on it
+        neighbors : list[CalculationNode] = self.get_model_parents()
         if neighbors is None:
             return
 
         roots = self.find_root()
 
-        # If all parent nodes are marked to be recalculated, then so must be each path from this node to the root,
-        # so no further steps are required
+
+        #TODO: Streamline this, this is bad logic
+        # If all parent nodes are marked to be recalculated, then so must 
+        # be each path from this node to the root, so no further steps are 
+        # required
         all_dirty = True
         for neighbor in neighbors:
             if not neighbor.dirty:
@@ -429,37 +431,50 @@ class CalculationNode(ABC, ModelNode):
                     return
                 neighbor.upstream()
 
-    def make_dirty(self):
+    def make_dirty(self) -> None:
         """
-        A model node is updated if any of its calculation nodes downstream have been changed.
+        A model node is updated if any of its calculation nodes downstream have 
+        been changed.
 
-        This method will be called when a downstream node calls its upstream() method, setting this node
-        as a node that needs to be recalculated.
+        This method will be called when a downstream node calls its upstream() 
+        method, setting this node as a node that needs to be recalculated.
         """
-
         self.dirty = True
         
-    def cache(self, value):
+    def cache(self, value : object) -> object:
+        """
+        Place some likelihood calculation or simulated data in the cache.
+
+        Args:
+            value (object): Some simulated data or likelihood computations.
+
+        Returns:
+            object: The value that was just cached.
+        """
         self.cached = value
         self.dirty = False
         return self.cached
     
-    def get_parameters(self)-> dict[str, float]:
+    def get_parameters(self) -> dict[str, float]:
         """
-        Retrieves any parameters that are attached to this calculation node
+        Retrieves any parameters that are attached to this calculation node.
 
         Returns:
-            dict[str, float]: a map from parameter names to their values
+            dict[str, float]: A map from parameter names to their values.
         """
-        return {child.name : child.value for child in self.get_model_children(Parameter)}
+        params = self.get_model_children(Parameter)
+        return {child.name : child.value for child in params}
         
-
 class StateNode(ABC, ModelNode):
     """
-    Model leaf nodes that hold some sort of data that calculation nodes use
+    TODO: Make init and update docs.
+    Model leaf nodes that hold some sort of data that calculation nodes use.
+    
+    In probabilistic graphical modeling, these are either clamped, constant, or
+    observed values for parameters or data.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     @abstractmethod
@@ -467,28 +482,104 @@ class StateNode(ABC, ModelNode):
         pass
 
 class Parameter(StateNode):
-    def __init__(self, name : str, value):
-        super().__init__()
-        self.name = name
-        self.value = value
+    """
+    A subtype of a StateNode, that is a parameter for the model.
+    A parameter typically holds a numerical value that defines some sort of 
+    prior distribution, or a value that defines behavior of 
+    transition matrices, etc.
+    """
     
-    def update(self, value):
-        self.value = value
+    def __init__(self, name : str, value : object) -> None:
+        """
+        A parameter is defined by its name and value.
+
+        Args:
+            name (str): Name. ie, "u" for red -> green transition probability 
+                        for SNPs.
+            value (object): Value for the parameter. Ie, for "u", valid values 
+                            would be numbers from 0 to 1.
+        """
+        super().__init__()
         
-        for par in self.get_model_parents():
-            par.update() #Any non-leaf node of a model should be a calculation node
+        #Define the name of the parameter, and its value.
+        self.name : str = name
+        self.value : object = value
+    
+    def update(self, value : object) -> None:
+        """
+        After changing the parameter, things that rely on the parameter for 
+        their own computations need to be updated to reflect the change.
+        
+        Ie, for SNP models, if the parameter value u (red -> green transition
+        probability) changes, then the Q matrix needs to be re-populated with 
+        values.
+
+        Args:
+            value (object): A new value for the parameter.
+        """
+        self.value = value
+        parents : list[ModelNode] = self.get_model_parents()
+        
+        for par in parents:
+            #Any non-leaf node of a model should be a calculation node
+            par.update() 
+    
+    def get_name(self) -> str:
+        """
+        Get the name of the parameter.
+
+        Returns:
+            str: The parameter name
+        """
+        return self.name
+    
+    def get_value(self) -> object:
+        """
+        Get the value of the parameter
+
+        Returns:
+            object: Some value.
+        """
+        return self.value
             
 class Accumulator(StateNode):
-    def __init__(self, name : str, data_structure : object):
+    """
+    Class that accumulates data from computations made across the model.
+    Ie, for MCMC_Bimarkers, the vectors for partial likelihoods are defined by
+    branches all across the network. Each network branch contributes to 
+    maintaining bookkeeping for this data structure, and thus an Accumulator 
+    node makes it easy to access from anywhere.
+    
+    Essentially a data bookkeeping structure.
+    """
+    def __init__(self, name : str, data_structure : object) -> None:
+        """
+        Accumulators are defined by name and the data they store.
+
+        Args:
+            name (str): Label for the accumulator
+            data_structure (object): The data store.
+        """
         super().__init__()
         self.data = data_structure
-        self.name = name
+        self.name : str = name
     
-    def update(self):
+    def update(self) -> None:
+        """
+        Update behaviors are defined in the subclass implementation.
+        """
         pass
     
-    def get_data(self):
+    def get_data(self) -> object:
+        """
+        Grab the data stored in this accumulator.
+
+        Returns:
+            object: The data store.
+        """
         return self.data
+
+#------#
 
 class NetworkNode(ABC, ModelNode):
     """
@@ -496,7 +587,7 @@ class NetworkNode(ABC, ModelNode):
     and all the height/branch length hookups.
     """
 
-    def __init__(self, branch=None):
+    def __init__(self, branch = None):
         super(NetworkNode, self).__init__()
         self.branches = branch
         self.network_parents : list[NetworkNode]= None
@@ -519,16 +610,16 @@ class NetworkNode(ABC, ModelNode):
                 self.branches[branch.dest()] = branch
         return self.branches
 
-    def add_successor(self, model_node):
+    def add_child(self, model_node):
         """
         Adds a successor to this node.
 
         Input: model_node (type ModelNode)
         """
-        if self.successors is None:
-            self.successors = [model_node]
+        if self.children is None:
+            self.children = [model_node]
         else:
-            self.successors.append(model_node)
+            self.children.append(model_node)
 
         if type(model_node) is NetworkNode:
             if self.parents is None:
@@ -536,29 +627,29 @@ class NetworkNode(ABC, ModelNode):
             else:
                 self.parents.append(model_node)
 
-    def remove_successor(self, model_node):
+    def remove_child(self, model_node):
         """
         Removes a predecessor to this node.
 
         Input: model_node (type ModelNode)
         """
-        if model_node in self.successors:
-            self.successors.remove(model_node)
+        if model_node in self.children:
+            self.children.remove(model_node)
             if self.parents is not None and model_node in self.parents:
                 self.parents.remove(model_node)
                 if len(self.parents) == 0:
                     self.parents = None
 
-    def add_predecessor(self, model_node):
+    def add_parent(self, model_node):
         """
         Adds a predecessor to this node.
 
         Input: model_node (type ModelNode)
         """
-        if self.predecessors is None:
-            self.predecessors = [model_node]
+        if self.parents is None:
+            self.parents = [model_node]
         else:
-            self.predecessors.append(model_node)
+            self.parents.append(model_node)
 
         if type(model_node) is FelsensteinInternalNode or type(model_node) is FelsensteinLeafNode:
         #\
@@ -568,14 +659,14 @@ class NetworkNode(ABC, ModelNode):
             else:
                 self.children.append(model_node)
 
-    def remove_predecessor(self, model_node):
+    def remove_parent(self, model_node):
         """
         Removes a predecessor to this node.
 
         Input: model_node (type ModelNode)
         """
-        if model_node in self.predecessors:
-            self.predecessors.remove(model_node)
+        if model_node in self.parents:
+            self.parents.remove(model_node)
             if self.children is not None:
                 if model_node in self.children:
                     self.children.remove(model_node)
@@ -597,8 +688,9 @@ class NetworkNode(ABC, ModelNode):
         return self.children
 
 class BranchNode(ABC, ModelNode):
-    def __init__(self, vector_index: int, branch_length: float) -> None:
+    def __init__(self, vector_index : int, branch_length : float) -> None:
         super().__init__()
+        
         self.index : int = vector_index
         self.branch_length : float = branch_length
         self.net_parent : NetworkNode = None
@@ -803,39 +895,83 @@ class SubstitutionModelParams(StateNode):
 
 class SubstitutionModel(CalculationNode):
     """
-    TODO: Make this consistent with having the two separate transition/transversion parameters
+    TODO: Make this consistent with having the two separate 
+    transition/transversion parameters
     """
-    def __init__(self, submodel: GTR):
-        super().__init__()
-        self.sub = submodel
+    def __init__(self, submodel : GTR) -> None:
+        """
+        Deterministic node that is often hooked up to transition, transversion,
+        and base frequency parameters.
 
-    def update(self, new_sub_model: GTR):
+        Args:
+            submodel (GTR): Any time reversible substitution model.
+        """
+        super().__init__()
+        self.sub : GTR = submodel
+
+    def update(self, new_sub_model : GTR) -> None:
+        """
+        Change the substitution model being used.
+
+        Args:
+            new_sub_model (GTR): The new type of substitution model to use.
+                                 Be careful that the associated parameters 
+                                 hooked up to this node still apply! If they do
+                                 not, then the get() method will fail.
+            
+        """
         # Set the new parameters
         self.sub = new_sub_model
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
 
-    def get(self):
-        if self.updated:
+    def get(self) -> GTR:
+        """
+        Based on the associated parameters, initialize a substitution model.
+
+        Returns:
+            GTR: The substitution model with the parameters values in the model 
+                 graph.
+        """
+        if self.dirty:
             return self.calc()
         else:
             return self.cached
 
-    def calc(self):
-        self.updated = False
+    def calc(self) -> GTR:
+        #No longer in need of an update
+        self.dirty = False
+        
+        param_dict : dict[str, object] = {}
+        params : list[Parameter]= self.get_model_children(Parameter)
+        for param_node in params:
+            param_dict[param_node.name] = param_node.value
+        
+        self.sub.set_params(param_dict)
         self.cached = self.sub
         return self.sub
 
-    def get_submodel(self):
+    def get_submodel(self) -> GTR:
         return self.sub
 
 class ExtantSpecies(StateNode):
+    """
+    Node that links network leaf nodes to their MSA data. Falls under the 
+    category of observed data.
+    """
 
-    def __init__(self, name: str, sequence: list):
+    def __init__(self, name : str, sequences: list[SeqRecord]) -> None:
+        """
+        Link a taxon name to its set of data sequences.
+
+        Args:
+            name (str): Taxon label.
+            sequence (list[SeqRecord]): list of data sequences associated with 
+                                        this taxa.
+        """
         super().__init__()
-        self.name = name
-        #print("ADDING SEQ TO " + self.name + " : " + str(sequence))
-        self.seq = sequence
+        self.name : str = name
+        self.seqs : list[SeqRecord]= sequences
 
     def update(self, new_sequence: list, new_name: str):
         # should only have a single leaf calc node as the parent
@@ -843,16 +979,32 @@ class ExtantSpecies(StateNode):
         self.name = new_name
         self.get_model_parents()[0].update(new_sequence, new_name)
 
-    def seq_len(self):
-        if type(self.seq) is list:
-            return len(self.seq[0].get_seq())
-        else:
-            return len(self.seq)
+    def seq_len(self) -> int:
+        """
+        Get the sequence length of all sequences associated with this taxon.
 
-    def get_seq(self):
-        return self.seq
+        Returns:
+            int: Length of data sequence.
+        """
+        return len(self.seqs[0].get_seq())
+        
 
-    def get_name(self):
+    def get_seqs(self) -> list[SeqRecord]:
+        """
+        Get the list of sequence records associated with this taxon.
+
+        Returns:
+            list[SeqRecord]: List of sequence records.
+        """
+        return self.seqs
+
+    def get_name(self) -> str:
+        """
+        Get the taxon label.
+
+        Returns:
+            str: Taxon label.
+        """
         return self.name
 
 

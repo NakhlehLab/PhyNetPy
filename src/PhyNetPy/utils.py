@@ -4,14 +4,50 @@ import traceback
 
 import networkx as nx
 from Bio import Phylo
-from Graph import DAG, Node
+from Network import Network, Node, NetworkError
 from NetworkParser import NetworkParser, NetworkParserError
 from collections import deque
 import dendropy
 
+def generate_branch_lengths(network : Network) -> None:
+    """
+    Assumes that each node in the graph does not yet have a branch length 
+    associated with it, but has a defined "t" attribute.
+    
+    Calculates and assigns a value to a nodes "length" field based on the t vals
 
+    Raises:
+        Exception: If a node is encountered that does not have a "t" 
+                   value defined in its attribute dictionary
+    """
+    root = network.root()[0]
+    root.add_length(0, None)
+    
+    # stack for dfs
+    q = deque()
+    q.append(root)
+    visited = set()
 
-def add_parallel_edge(parent: Node, child: Node, network: DAG):
+    while len(q) != 0:
+        cur : Node = q.pop()
+
+        for neighbor in network.get_children(cur):
+            if neighbor not in visited:
+                t_par : float = cur.attribute_value("t")
+                t_nei : float = neighbor.attribute_value("t")
+                
+                #Handle case that a "t" value doesn't exist
+                if t_par is None or t_nei is None:
+                    raise NetworkError("Assumption that t attribute exists\
+                                      for all nodes has been violated")
+                neighbor.add_length(t_par - t_nei, cur)
+            
+                q.append(neighbor)
+                visited.add(neighbor)
+    
+    
+
+def add_parallel_edge(network : Network, parent: Node, child: Node) -> None:
     """
     Adds a parallel edge between parent and child in network
                    parent
@@ -24,23 +60,29 @@ def add_parallel_edge(parent: Node, child: Node, network: DAG):
                      |
                    child
     """
+    #Double check to make sure the passed parameters are actually in the network
     if [parent, child] not in network.edges:
-        raise ValueError(
-            f"Edge {parent.get_name()}->{child.get_name()} does not exist in network {network.print_adjacency()}")
-    inserted_node1, inserted_node2 = Node(), Node()
-    network.add_uid_node(inserted_node1)
-    network.add_uid_node(inserted_node2)
-    network.removeEdge([parent, child])
-    network.addEdges([
+        raise NetworkError(
+            f"Edge {parent.get_name()}->{child.get_name()} does not exist \
+                in network {network.print_adjacency()}")
+    
+    #Create new nodes that are required to make the parallel edge
+    
+    inserted_node1 = network.add_uid_node()
+    inserted_node2 = network.add_uid_node()
+    
+    network.remove_edge([parent, child])
+    network.add_edges([
         [parent, inserted_node2],
         [inserted_node2, inserted_node1],
+        [inserted_node2, inserted_node1],
         [inserted_node1, child]
-    ], as_list=True)
-
-    network.addEdges([[inserted_node2, inserted_node1]], as_list=True)
+    ])
 
 
-def bfs(network: DAG):
+
+
+def bfs(network: Network):
     q = [network.root()[0]]
     visited = set()
     while q:
@@ -53,17 +95,18 @@ def bfs(network: DAG):
                 q.append(child)
 
 
-def get_leaf_name_set(network: DAG):
+def get_leaf_name_set(network: Network):
     return set([node.get_name() for node in network.get_leaves()])
 
-def convert_to_networkx(network: DAG):
+def convert_to_networkx(network: Network):
     G = nx.DiGraph()
     edges = []
     for edge in network.get_edges():
         edges.append((edge[0].get_name(), edge[1].get_name()))
     G.add_edges_from(edges)
     return G
-def plot_network(network: DAG):
+
+def plot_network(network: Network):
     import matplotlib.pyplot as plt
     G = convert_to_networkx(network)
     indegrees = G.in_degree()
@@ -72,10 +115,10 @@ def plot_network(network: DAG):
     plt.savefig("network.png")
 
 
-def remove_binary_nodes(net: DAG):
+def remove_binary_nodes(net: Network):
     """Modified based on DAG.prune_excess_nodes()"""
 
-    def prune(net: DAG) -> bool:
+    def prune(net: Network) -> bool:
         root = net.root()[0]
         q = deque([root])
         net_updated = False
@@ -116,12 +159,12 @@ def remove_binary_nodes(net: DAG):
             break
 
 
-def print_topology_newick(net: DAG):
+def print_topology_newick(net: Network):
     newick = re.sub(r':\[.*?\]', '', net.newick())
     newick = newick.replace(" ", "")
     print(newick)
 
-def is_tree(graph: DAG):
+def is_tree(graph: Network):
     visited = set()
     stack = [graph.root()[0]]   
     while stack:
@@ -139,7 +182,7 @@ def is_tree(graph: DAG):
 
 
 
-def preorder_traversal(tree: DAG):
+def preorder_traversal(tree: Network):
     if not is_tree(tree):
         raise Exception("Not a valid tree")
 
@@ -158,7 +201,7 @@ def preorder_traversal(tree: DAG):
 
     return result
 
-def postorder_traversal(net: DAG):
+def postorder_traversal(net: Network):
     root = net.root()[0]
     stack = [root]
     searched_nodes = []
@@ -186,7 +229,7 @@ def postorder_traversal(net: DAG):
 
 
 
-def init_node_heights(graph: DAG):
+def init_node_heights(graph: Network):
     nodes = postorder_traversal(graph)
     for node in nodes:
         if not node.attribute_value('t'):
@@ -201,7 +244,7 @@ def init_node_heights(graph: DAG):
 
 
 
-def has_cycle(network: DAG):
+def has_cycle(network: Network):
     def dfs(node, visited, stacked):
         if node in stacked:
             return True

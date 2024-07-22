@@ -2,8 +2,7 @@ import collections
 import copy
 from enum import Enum, unique, auto
 from abc import ABC, abstractmethod
-from Graph import DAG
-from Node import Node
+from Network import Network, Edge, Node
 from NetworkParser import NetworkParser
 import random
 import math
@@ -14,7 +13,7 @@ from dendropy.simulate import treesim
 
 
 class NetworkConverter:
-    def __init__(self, net: DAG):
+    def __init__(self, net: Network):
         self.network = net
         self.mul_tree = None
         self.network_to_mul_map = {}
@@ -24,7 +23,7 @@ class NetworkConverter:
         
         self.validate_network() 
 
-        self.mul_tree = DAG()
+        self.mul_tree = Network( nodes = NodeSet(), edges = EdgeSet())
         self._copy_network_nodes()
         self._add_network_edges()
         self._process_reticulations()
@@ -38,7 +37,7 @@ class NetworkConverter:
         """Checks network validity for correct ploidyness and structure"""
         pass
 
-    def make_clade_copy(self, network: DAG, node: Node) -> DAG: # dag.subtree_copy does this if you'd like to use that as well
+    def make_clade_copy(self, network: Network, node: Node) -> DAG: # dag.subtree_copy does this if you'd like to use that as well
         q = collections.deque([node])
         nodes, edges = [], []
 
@@ -57,7 +56,7 @@ class NetworkConverter:
                 # resume search from the end of the chain if one exists, or this is neighbor if nothing was done
                 q.append(neighbor)
 
-        return DAG(edges=edges, nodes=nodes)
+        return Network(edges=edges, nodes=nodes)
 
     def _copy_network_nodes(self):
         self.network_to_mul_map = {
@@ -165,7 +164,7 @@ class TreeSimulator:
         return tree
 
 
-    def generate_gene_trees(self, network: DAG, n_individuals_per_species, n_gene_trees, save_dir=None):
+    def generate_gene_trees(self, network: Network, n_individuals_per_species, n_gene_trees, save_dir=None):
         tns = dendropy.TaxonNamespace()
         unpruned_containing_tree = self.generate_unpruned_containing_tree(network, tns)
         if save_dir is not None:

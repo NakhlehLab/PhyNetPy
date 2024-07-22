@@ -1,8 +1,11 @@
 """ 
 Author : Mark Kessler
-Last Stable Edit : 7/16/23
-First Included in Version : 0.1.0
-Approved to Release Date : N/A
+Last Edit : 4/3/24
+First Included in Version : 1.0.0
+
+Docs   - [x]
+Tests  - [ ]
+Design - [ ]
 """
 
 
@@ -11,52 +14,59 @@ import math
 from Alphabet import Alphabet
 from MSA import MSA
 
+##########################
+#### HELPER FUNCTIONS ####
+##########################
 
-
-def list2Str(my_list: list) -> str:
+def list_to_string(my_list : list[str]) -> str:
     """
     Turns a list of characters into a string
     """
     sb = ""
     for char in my_list:
-        sb += str(char)
+        sb += char
     return sb
 
+#########################
+#### EXCEPTION CLASS ####
+#########################
 
-class MatrixException2(Exception):
+class MatrixException(Exception):
     """
-        This exception is raised when the file contains too many different labels
-        given the alphabet supplied
-        """
+    This exception is raised when there is an error either in parsing data
+    into the matrix object, or if there is an error during any sort of 
+    operation
+    """
 
-    def __init__(self, message="File tried to list too many states!"):
+    def __init__(self, message = "Matrix Error"):
         self.message = message
         super().__init__(self.message)
 
-
-class MatrixCastError(Exception):
-    """
-        This exception is raised when the file contains too many different labels
-        given the alphabet supplied
-        """
-
-    def __init__(self, type1, type2):
-        self.message = "Disallowed Matrix cast from " + type1 + "to " + type2
-        super().__init__(self.message)
-
+################
+#### MATRIX ####
+################
 
 class Matrix:
-
-    def __init__(self, alignment: MSA, alphabet=Alphabet(Alphabet.DNA)):
+    """
+    Class that stores and reduces MSA data to only the relevant/unique sites
+    that exist. The only reduction mechanism so far is applicable only to DNA.
+    All other data types will simply be stored in a 2d numpy matrix.
+    
+    Accepts any data that is defined by the Alphabet class in Alphabet.py.
+    """
+    
+    def __init__(self, 
+                 alignment: MSA, 
+                 alphabet = Alphabet(Alphabet.DNA)) -> None:
         """
-        Takes one single MultipleSequenceAlignment object, along with an Alphabet object,
-        represented as either DNA, RNA, PROTEIN, CODON, SNP, or BINARY (for now). The default
-        is DNA                
+        Takes one single MSA object, along with an Alphabet object,
+        represented as either DNA, RNA, PROTEIN, CODON, SNP, or BINARY. 
+        The default is DNA.              
         """
 
         # ith element of the array = column i's distinct site pattern index in
         # the compressed matrix
-        self.uniqueSites : int = None
+        self.unique_sites : int = None
         self.data : np.ndarray = None
         self.locations : list = list()
 
@@ -65,21 +75,24 @@ class Matrix:
         self.count : list = list()
         self.alphabet : Alphabet = alphabet
         self.type : str = alphabet.get_type()
-        self.taxa2Rows = dict()
-        self.rows2Taxa = dict()
+        self.taxa_to_rows = dict()
+        self.rows_to_taxa = dict()
 
         # the next binary state to map a new character to
-        self.nextState : int = 0
+        self.next_state : int = 0
 
         ##Parse the input file into a list of sequence records
-        self.seqRecords : list = alignment.get_records()
+        self.seqs : list = alignment.get_records()
         self.aln : MSA = alignment
 
         ##turn sequence record objects into the matrix data
-        self.populateData()
+        self.populate_data()
     
-
-    def populateData(self):
+    def populate_data(self) -> None:
+        """
+        Stores and simplifies the MSA data.
+        """
+        
         # init the map from chars to binary
         # set the number of mappable states based on the alphabet type
         if self.type == "DNA" or self.type == "RNA":
@@ -90,143 +103,193 @@ class Matrix:
             self.data = np.array([], dtype=np.int8)
         elif self.type == "PROTEIN":
             # Prespecified substitution rates between aminos
-            #
             self.bits = math.pow(2, 32)
             self.data = np.array([], dtype=np.int32)
         else:
             self.bits = math.pow(2, 64)
             self.data = np.array([], dtype=np.int64)
 
-        self.stateMap = {}
+        self.state_map : dict[str, int]= {}
 
         # translate the data into the matrix
         index = 0
         
-        for r in self.seqRecords:
-            self.taxa2Rows[r.get_name()] = index
-            self.rows2Taxa[index] = r.get_name()
-            print("mapping " + str(r.get_name()) + " to row number " + str(index))
-            
+        for r in self.seqs:
+            self.taxa_to_rows[r.get_name()] = index
+            self.rows_to_taxa[index] = r.get_name()
+            # print("mapping " + str(r.get_name()) + \
+            #       " to row number " + str(index))
+        
             for char in r.get_seq():
-                # use the alphabet to map characters to their bit states and add to
-                # the data as a column
-                self.data = np.append(self.data, np.array([self.alphabet.map(char)]), axis=0)
+                # use the alphabet to map characters to their bit states 
+                # and add to the data as a column
+                char_as_array = np.array([self.alphabet.map(char)])
+                self.data = np.append(self.data, char_as_array, axis = 0)
         
             index += 1
 
         # the dimensions of the uncompressed matrix
-        self.numTaxa = self.aln.num_groups()  # = num taxa if each group is only made of one taxa
-        self.seqLen = len(self.seqRecords[0].get_seq())
+        # = num taxa if each group is only made of one taxa
+        self.num_taxa = self.aln.num_groups()  
+        
+        self.seq_len = len(self.seqs[0].get_seq())
 
         # compress the matrix and fill out the locations and count fields
-        # TODO: ASK ABOUT SIMPLIFICATION SCHEME
+        # only compresses for DNA as of 4/3/24
         if self.type == "DNA":
             self.simplify()
-            #self.uniqueSites = self.seqLen
         else:
-            self.uniqueSites = self.seqLen
+            self.unique_sites = self.seq_len
 
-    def map(self, state):
+    def simplify(self) -> None:
+        """
+        Reduces the matrix of data by removing non-unique site patterns, 
+        and records the location and count of the unique site patterns.
         """
 
-        TODO: STILL UNUSED AS OF 12/16/22
-        Return f(state), where f: {alphabet} -> int.
-        
-        If state is not yet defined in the map, then select its binary 
-        representation and then return it. Otherwise, simply return f(state).
-        """
+        new_data : np.ndarray = np.empty((self.num_taxa, 0), dtype = np.int8)
 
-        if state not in self.stateMap:
-            if len(self.stateMap.keys()) > self.bits:
-                raise MatrixException2
+        column_data = dict()
+        unique_sites = 0
+
+        for i in range(self.seq_len):
+
+            col = self.get_column(i, self.data, 0)
+            col_str = list_to_string(col)
+
+            if col_str in column_data:
+                self.locations.append(column_data[col_str])
             else:
-                # map state to the next state
-                self.stateMap[state] = self.nextState
-                self.nextState += 1
-                return self.stateMap[state]
-        else:
-            return self.stateMap[state]
-
-    def simplify(self):
-        """
-                Reduces the matrix of taxa and removes non-unique site patterns, 
-                and records the location and count of the unique site patterns
-                """
-
-        newData : np.ndarray = np.empty((self.numTaxa, 0), dtype=np.int8)
-
-        columnData = dict()
-        uniqueSites = 0
-
-        for i in range(self.seqLen):
-
-            col = self.getColumn(i, self.data, 0)
-            colStr = list2Str(col)
-
-            if colStr in columnData:
-                self.locations.append(columnData[colStr])
-            else:
-                columnData[colStr] = i
+                column_data[col_str] = i
                 self.locations.append(i)
-                uniqueSites += 1
-                newData = np.append(newData, col.reshape((col.size, 1)), axis=1)
+                unique_sites += 1
+                new_data = np.append(new_data, 
+                                     col.reshape((col.size, 1)),
+                                     axis = 1)
 
-        self.uniqueSites = uniqueSites
-        self.populateCounts(newData)
-        self.data = newData
+        self.unique_sites = unique_sites
+        self.populate_counts(new_data)
+        self.data = new_data
 
-    def verification(self):
-        print(self.data.reshape(self.get_num_taxa, self.uniqueSites))
-        print(self.locations)
-        print(self.count)
-        print(self.stateMap)
-
-    def getIJ(self, row, col):
-        return self.data[row][col]
-
-    def getIJ_char(self, row, col):
-        return self.charMatrix()[row][col]
-
-    def rowGivenName(self, label):
-        return self.taxa2Rows[label]
-
-    def getSeq(self, label):
-        return self.charMatrix()[self.rowGivenName(label)]
-
-    def get_number_seq(self, label):
-        return self.data[self.rowGivenName(label)]
-
-    def getColumn(self, i, data, sites):
+    def get_ij(self, i : int, j : int) -> int:
         """
-        Returns ith column of data matrix
+        Returns the data point at row i, and column j.
+
+        Args:
+            i (int): row index
+            j (int): column index
+
+        Returns:
+            int: the data point.
+        """
+        return self.data[i][j]
+
+    def get_ij_char(self, i : int, j : int) -> str:
+        """
+        get the character at row i, column j in the character matrix that is
+        associated with the data.
+
+        Args:
+            i (int): row index
+            j (int): column index
+
+        Returns:
+            str: the character at [i][j]
+        """
+        return self.char_matrix()[i][j]
+
+    def row_given_name(self, label : str) -> int:
+        """
+        Retrieves the row index of the taxa that has name 'label'
+
+        Args:
+            label (str): name of a taxon.
+
+        Returns:
+            int: a row index
+        """
+        return self.taxa_to_rows[label]
+
+    def get_seq(self, label : str) -> np.ndarray:
+        """
+        Gets the array of characters for a given taxon.
+
+        Args:
+            label (str): the name of a taxon.
+
+        Returns:
+            np.ndarray: an array of characters, with data type 'U1'.
+        """
+        return self.char_matrix()[self.row_given_name(label)]
+
+    def get_number_seq(self, label : str) -> np.ndarray:
+        """
+        Gets the numerical data for a given taxon with the name 'label'.
+
+        Args:
+            label (str): name of a taxon
+
+        Returns:
+            np.ndarray: a 1 dimensional array of integers, of some specific type
+        """
+        return self.data[self.row_given_name(label)]
+
+    def get_column(self, i : int, data : np.ndarray, sites : int) -> np.ndarray:
+        """
+        Returns ith column of a data matrix, with 'sites' elements
+
+        Args:
+            i (int): column index
+            data (np.ndarray): a matrix 
+            sites (int): dimension of the column
+
+        Returns:
+            np.ndarray: the data at column 'i' with length 'sites'
         """
 
         if sites == 0:
-            data = data.reshape(self.numTaxa, self.seqLen)
+            data = data.reshape(self.num_taxa, self.seq_len)
         else:
-            data = data.reshape(self.numTaxa, sites)
+            data = data.reshape(self.num_taxa, sites)
 
         return data[:, i]
 
-    def getColumnAt(self, i):
+    def get_column_at(self, i : int) -> np.ndarray:
         """
-        Returns ith column of data matrix
+        Returns ith column of the data matrix
+
+        Args:
+            i (int): column index
+
+        Returns:
+            np.ndarray: the data at column i
         """
         return self.data[:, i]
 
-    def siteCount(self):
-        return self.uniqueSites
-
-    def populateCounts(self, newData):
+    def site_count(self) -> int:
         """
-                Generates a count list that maps the ith distinct column to the number
-                of times it appears in the original alignment matrix
-                """
-        for i in range(self.uniqueSites):
-            col = self.getColumn(i, newData, self.uniqueSites)
+        Returns the number of unique sites in the MSA/Data
+
+        Returns:
+            int: number of unique sites
+        """
+        return self.unique_sites
+
+    def populate_counts(self, new_data : np.ndarray) -> None:
+        """
+        Generates a count list that maps the ith distinct column to the number
+        of times it appears in the original alignment matrix.
+
+        Args:
+            new_data (np.ndarray): The simplified data matrix, that only has
+                                   distinct column values.
+        """
+        
+        for i in range(self.unique_sites):
+            col = self.get_column(i, new_data, self.unique_sites)
             first = True
-            for k in range(self.seqLen):
-                col2 = self.getColumn(k, self.data, 0)
+            for k in range(self.seq_len):
+                col2 = self.get_column(k, self.data, 0)
 
                 if list(col) == list(col2):
                     if first:
@@ -235,26 +298,15 @@ class Matrix:
                     else:
                         self.count[i] += 1
 
-    def asDNA(self):
-        if (self.type == "RNA" or self.type == "Proteins"):
-            raise MatrixCastError(self.type, "DNA")
-        elif self.type == "codon":
-            # switch from codon matrix to DNA matrix
-            self.type = "DNA"
-            self.populateData()
-        return
+    def char_matrix(self) -> np.ndarray:
+        """
+        Get the character matrix from the matrix of alphabet states.
 
-    def asProtein(self):
-        if (self.type == "RNA" or self.type == "Proteins"):
-            raise MatrixCastError(self.type, "DNA")
-        elif self.type == "codon":
-            # switch from codon matrix to DNA matrix
-            self.type = "DNA"
-            self.populateData()
-        return
-
-    def charMatrix(self):
-        matrix = np.zeros(self.data.shape, dtype='U1')
+        Returns:
+            np.ndarray: the character matrix, that will have equivalent 
+                        dimensionality to the state matrix.
+        """
+        matrix = np.zeros(self.data.shape, dtype = 'U1')
         rows, cols = matrix.shape
 
         for i in range(rows):
@@ -263,11 +315,32 @@ class Matrix:
 
         return matrix
 
-    def get_num_taxa(self):
-        return self.numTaxa
+    def get_num_taxa(self) -> int:
+        """
+        Get the number of taxa represented in this matrix.
 
-    def name_given_row(self, index):
-        return self.rows2Taxa[index]
+        Returns:
+            int: the number of taxa
+        """
+        return self.num_taxa
 
-    def get_type(self):
+    def name_given_row(self, index : int) -> str:
+        """
+        Get the name of the taxa associated with the row of data at 'index'
+
+        Args:
+            index (int): a row index
+
+        Returns:
+            str: the taxon name
+        """
+        return self.rows_to_taxa[index]
+
+    def get_type(self) -> str:
+        """
+        Get the type of data of this matrix
+
+        Returns:
+            str: the data type
+        """
         return self.type

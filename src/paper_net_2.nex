@@ -1,0 +1,27 @@
+#NEXUS
+
+BEGIN TAXA;
+DIMENSIONS NTAX=4;
+TAXALABELS
+A
+B
+C
+D
+;
+END;
+
+BEGIN DATA;
+  Dimensions nchar=1;
+  Format datatype=snp missing=? gap=- matchchar=.;
+  Matrix
+    A   0
+    B   0
+    C   0  
+    D   0       
+  ;
+END;
+
+BEGIN TREES;
+Tree net = ((A:.035, ((B:.012, (C:.01)#H0[&gamma=.7]:.002)I1:.018)#H1[&gamma=.6]:.005)I2:.015, (#H1:.01, (D:.015, #H0:.005)I3:.025)I4:.01)R;
+           
+END;
