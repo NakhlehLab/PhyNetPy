@@ -14,7 +14,6 @@ import networkx as nx
 import matplotlib.pyplot as plt 
 
 
-
 def _retic_edge_choice(retic_map : dict[Node, list[Edge]], 
                       funcs : list[dict[Node, Edge]]) -> list[dict[Node, Edge]]:
     """
@@ -120,7 +119,7 @@ def subnet_given_leaves(net : Network, leaf_set : list[Node]) -> Network:
             old_edge = net.get_edge(cur, child)
         
             #Add equivalent edge
-            new_edge = Edge(old_new_map[cur], new_child)
+            new_edge = DiEdge(old_new_map[cur], new_child)
             new_edge.set_gamma(old_edge.get_gamma())
             new_edge.set_length(old_edge.get_length())
 
@@ -201,7 +200,7 @@ def dominant_tree(net : Network) -> Network:
     return dom
 
 
-        
+     
         
         
         

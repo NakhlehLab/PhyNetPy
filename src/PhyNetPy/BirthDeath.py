@@ -243,9 +243,9 @@ class Yule:
         network.add_nodes([new_spec_node, new_internal])
 
         # add the newly created branches 
-        edge1 = Edge(new_internal, new_spec_node)
-        edge2 = Edge(new_internal, spec_node)
-        edge3 = Edge(old_parent, new_internal)
+        edge1 = DiEdge(new_internal, new_spec_node)
+        edge2 = DiEdge(new_internal, spec_node)
+        edge3 = DiEdge(old_parent, new_internal)
         
         edge3.set_length(branch_len)
         
@@ -277,7 +277,7 @@ class Yule:
         node3 = Node(attr={"live": True}, name="spec2")
 
         net.add_nodes([node1, node2, node3])
-        net.add_edges([Edge(node1, node2), Edge(node1, node3)])
+        net.add_edges([DiEdge(node1, node2), DiEdge(node1, node3)])
         
             
         # until the tree contains N extant taxa, keep having speciation events
@@ -578,7 +578,7 @@ class CBDP:
         # create new edge
         node_T = nodes[index].get_time() #.attribute_value("t")
         future_T = selection.get_time() #.attribute_value("t")
-        new_edge = Edge(selection, nodes[index])
+        new_edge = DiEdge(selection, nodes[index])
 
         # set the branch length of the current node
         new_edge.set_length(node_T - future_T)

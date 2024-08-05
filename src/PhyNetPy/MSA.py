@@ -459,5 +459,30 @@ class MSA:
             return (len(self.records), len(self.records[0]))
         else:
             return (0,0)
-                     
+    
+    def distance(self, seq1 : SeqRecord, seq2 : SeqRecord) -> float:
+        #TODO:
+        pass
+    
+    def distance_matrix(self) -> dict[tuple[SeqRecord], float]:
+        """
+        Using the distance helper, calculates pairwise distances for each pair
+        of (different) SeqRecords in this MSA.
+
+        Returns:
+            dict[tuple[SeqRecord], float]: Map from SeqRecord pairs to the
+                                           distance between them.
+        """
+        D = dict()
+        
+        for seqr in self.records:
+            for seqr2 in self.records:
+                if seqr != seqr2:
+                    D[(seqr, seqr2)] = self.distance(seqr, seqr2)
+                    
+        return D
+        
+        
+                    
+                           
             

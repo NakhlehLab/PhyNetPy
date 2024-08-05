@@ -581,7 +581,7 @@ class Accumulator(StateNode):
 
 #------#
 
-class NetworkNode(ABC, ModelNode):
+class NetworkNode(ABC, ModelNode, Node):
     """
     Class that handles common functionality of all network nodes
     and all the height/branch length hookups.

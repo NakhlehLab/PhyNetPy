@@ -250,7 +250,7 @@ class NetworkParser:
             network.add_nodes(parsed_node) 
             
         # Add edge from the parent to child
-        new_edge : Edge = Edge(parent, parsed_node)
+        new_edge : Edge = DiEdge(parent, parsed_node)
         
         # Add branch length
         if node.branch_length is not None:

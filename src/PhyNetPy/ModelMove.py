@@ -51,8 +51,8 @@ def insert_node_in_edge(edge : Edge, node : Node, net : Network) -> None:
     
     #Rewire the edges
     net.remove_edge(edge)
-    net.add_edges(Edge(a, node))
-    net.add_edges(Edge(node, b))
+    net.add_edges(DiEdge(a, node))
+    net.add_edges(DiEdge(node, b))
     
 def connect_nodes(src : Node, dest : Node, net : Network) -> None:
     """
@@ -65,7 +65,7 @@ def connect_nodes(src : Node, dest : Node, net : Network) -> None:
         net (Network): Network for which to add the edge
     """
     #Add the edge to the network
-    net.add_edges(Edge(src, dest))
+    net.add_edges(DiEdge(src, dest))
   
     #Check if dest is now a reticulation
     if len(net.in_degree(dest)) > 1:
@@ -1042,10 +1042,10 @@ class SwitchParentage(Move):
                 node_2_change = net.add_uid_node()
                 net.remove_edge(branch)
                 self.valid_attachment_edges.remove(branch)
-                net.add_edges([Edge(branch.src, node_2_change),
-                               Edge(node_2_change, branch.dest)])
-                self.valid_attachment_edges.append(Edge(branch.src, node_2_change))
-                self.valid_attachment_edges.append(Edge(node_2_change, branch.dest))
+                net.add_edges([DiEdge(branch.src, node_2_change),
+                               DiEdge(node_2_change, branch.dest)])
+                self.valid_attachment_edges.append(DiEdge(branch.src, node_2_change))
+                self.valid_attachment_edges.append(DiEdge(node_2_change, branch.dest))
                 downstream_node : Node =  node_2_change #branch[1]
             else:
                 downstream_node = node_2_change
@@ -1083,9 +1083,9 @@ class SwitchParentage(Move):
             
             # 4.2 : Connect the unconnected node to the new branch selected in 4.1
             connector_node = net.add_uid_node()
-            new_edge_list = [Edge(connector_node, new_edge.dest), 
-                             Edge(new_edge.src, connector_node), 
-                             Edge(connector_node, node_2_change)]
+            new_edge_list = [DiEdge(connector_node, new_edge.dest), 
+                             DiEdge(new_edge.src, connector_node), 
+                             DiEdge(connector_node, node_2_change)]
             net.add_edges(new_edge_list)
             self.valid_attachment_edges.append(new_edge_list[2])
             net.remove_edge(new_edge)
@@ -1156,7 +1156,7 @@ class SwitchParentage(Move):
                     net.remove_edge([b[0], neighbors[0]])
                     net.remove_edge([neighbors[0], cur])
                     net.remove_edge([neighbors[1], cur])
-                    net.add_edges(Edge(b[0], cur))
+                    net.add_edges(DiEdge(b[0], cur))
                 else:
                     net.remove_edge([neighbors[0], cur])
                 
@@ -1184,7 +1184,7 @@ class SwitchParentage(Move):
                                     net.remove_edge(redundant_tree_edge1)
                                     net.remove_edge(redundant_tree_edge2)
 
-                                    net.add_edges(Edge(b, a))
+                                    net.add_edges(DiEdge(b, a))
                             except:
                                 if i == 2:
                                     if len(b) != 0:

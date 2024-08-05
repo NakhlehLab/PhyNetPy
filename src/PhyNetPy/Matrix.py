@@ -12,7 +12,7 @@ Design - [ ]
 import numpy as np
 import math
 from Alphabet import Alphabet
-from MSA import MSA
+from MSA import MSA, SeqRecord
 
 ##########################
 #### HELPER FUNCTIONS ####
@@ -82,7 +82,7 @@ class Matrix:
         self.next_state : int = 0
 
         ##Parse the input file into a list of sequence records
-        self.seqs : list = alignment.get_records()
+        self.seqs : list[SeqRecord] = alignment.get_records()
         self.aln : MSA = alignment
 
         ##turn sequence record objects into the matrix data

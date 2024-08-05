@@ -286,14 +286,14 @@ def generate_tree_from_clusters(tree_clusters : set[str]) -> Network:
                 # Already found the cluster before
                 if type(subtree) == frozenset: 
                     #connect previous cluster to this current cluster parent
-                    new_edge = Edge(cluster_parent, processed_clusters[subtree])
+                    new_edge = DiEdge(cluster_parent, processed_clusters[subtree])
                     net.add_edges(new_edge)
                 else: 
                     # subtree is simply a taxa label (a string), 
                     # so create a new node
                     taxa_node = Node(name = subtree)
                     net.add_nodes(taxa_node)
-                    net.add_edges(Edge(cluster_parent, taxa_node))
+                    net.add_edges(DiEdge(cluster_parent, taxa_node))
                 
             processed_clusters[cluster] = cluster_parent
             tree_clusters.remove(cluster)
@@ -304,7 +304,7 @@ def generate_tree_from_clusters(tree_clusters : set[str]) -> Network:
 
     #connect the 2 disjoint clusters together with the root
     for root_child in root_children:   
-        net.add_edges(Edge(root, root_child))
+        net.add_edges(DiEdge(root, root_child))
         
     return net
 

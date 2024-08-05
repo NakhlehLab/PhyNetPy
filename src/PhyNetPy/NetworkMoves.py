@@ -99,11 +99,11 @@ def add_hybrid(net : Network,
         n2.set_time((x.get_time() + y.get_time()) / 2.0)  
         
     # Add back new edges 
-    edges : list[Edge] = [Edge(a, n1), 
-                            Edge(n1, b), 
-                            Edge(x, n2), #x to n2 is a hybrid edge
-                            Edge(n2, y), 
-                            Edge(n1, n2)] #n1 to n2 is a hybrid edge
+    edges : list[Edge] = [DiEdge(a, n1), 
+                            DiEdge(n1, b), 
+                            DiEdge(x, n2), #x to n2 is a hybrid edge
+                            DiEdge(n2, y), 
+                            DiEdge(n1, n2)] #n1 to n2 is a hybrid edge
     
     net.add_edges(edges)
         
@@ -160,7 +160,7 @@ def remove_hybrid(net : Network, hybrid_edge : Edge) -> None:
     net.remove_node(n1)
 
     # Add back new edges 
-    net.add_edges([Edge(a, b), Edge(x, y)])       
+    net.add_edges([DiEdge(a, b), DiEdge(x, y)])       
 
 def nni(net : Network) -> None:
     pass
