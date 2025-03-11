@@ -1,11 +1,28 @@
-from Network import Node, Network, Edge
-import numpy as np
-import random
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
 
+##############################################################################
+##  -- PhyNetPy --                                                              
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
+from Network import NetworkError, Node, Network, Edge
+import random
 from GeneTrees import *
 
 """
-For now, the three moves I have chosen to implement for network editing are as
+For now, the four moves I have chosen to implement for network editing are as
 follows:
 
 1) Add reticulation -- Needed in order to increase network level. With proper 
@@ -15,6 +32,10 @@ follows:
 2) Remove reticulation -- Needed in order to decrease network level.
 
 3) NNI -- Needed in order to change topologies within a given network level.
+ 
+4) Node height change -- Needed in order to change the height of a node within
+                         the network. This is useful for changing the time of
+                         speciation events.
 """
 
 #########################
@@ -22,8 +43,10 @@ follows:
 #########################
 
 def add_hybrid(net : Network,
-               source : Edge = None, destination : Edge = None, 
-               t_src : float = None, t_dest : float = None) -> None:
+               source : Edge = None, 
+               destination : Edge = None, 
+               t_src : float = None, 
+               t_dest : float = None) -> None:
     """
     Adds a hybrid edge from src to dest. If no source or destination edge is 
     provided, edges will be chosen at random. Edges are connected at the midway
@@ -42,11 +65,16 @@ def add_hybrid(net : Network,
     b                   y
     
     Args:
-        net (Network): _description_
-        source (Edge, optional): _description_. Defaults to None.
-        destination (Edge, optional): _description_. Defaults to None.
-        t_src (float, optional): _description_. Defaults to None.
-        t_dest (float, optional): _description_. Defaults to None.
+        net (Network): A network.
+        source (Edge, optional): A source edge, the origin of the hybrid edge.
+                                 Defaults to None.
+        destination (Edge, optional): A destination edge. Defaults to None.
+        t_src (float, optional): From the diagram, the speciation time at n1.
+                                 Defaults to None.
+        t_dest (float, optional): From the diagram, the speciation time at n2. 
+                                  Defaults to None.
+    Returns:
+        N/A
     """
     src : Edge
     dest : Edge
@@ -58,10 +86,10 @@ def add_hybrid(net : Network,
     n2 : Node
     
     if source is None or destination is None:
-        src : Edge = random.choice(net.get_edges())
+        src : Edge = random.choice(net.E())
         a = src.src
         b = src.dest
-        valid_dests = [edge for edge in net.get_edges()
+        valid_dests = [edge for edge in net.E()
                        if edge not in net.edges_downstream_of_node(b)]
         dest = random.choice(valid_dests)
         x = dest.src
@@ -100,14 +128,15 @@ def add_hybrid(net : Network,
         
     # Add back new edges 
     edges : list[Edge] = [Edge(a, n1), 
-                            Edge(n1, b), 
-                            Edge(x, n2), #x to n2 is a hybrid edge
-                            Edge(n2, y), 
-                            Edge(n1, n2)] #n1 to n2 is a hybrid edge
+                          Edge(n1, b), 
+                          Edge(x, n2), #x to n2 is a hybrid edge
+                          Edge(n2, y), 
+                          Edge(n1, n2)] #n1 to n2 is a hybrid edge
     
     net.add_edges(edges)
         
-def remove_hybrid(net : Network, hybrid_edge : Edge) -> None:
+def remove_hybrid(net : Network, 
+                  hybrid_edge : Edge) -> None:
     """
     Removes a hybrid edge from a network.
 
@@ -123,16 +152,16 @@ def remove_hybrid(net : Network, hybrid_edge : Edge) -> None:
     v                   v
     b                   y
     
-    
-    Args:
-        net (Network): A network.
-        hybrid_edge (Edge): An edge in E, whose destination node is a 
-                            reticulation node.
-
     Raises:
         Exception: If the given edge destination is not a reticulation, or if 
                    the given edge source is a reticulation node (In which case
                    the resulting network will be malformed).
+    Args:
+        net (Network): A network.
+        hybrid_edge (Edge): An edge in E, whose destination node is a 
+                            reticulation node.
+    Returns:
+        N/A
     """
     
     #Assumption 1
@@ -156,15 +185,49 @@ def remove_hybrid(net : Network, hybrid_edge : Edge) -> None:
 
 
     #Remove all edges by removing the nodes.
-    net.remove_node(n2)
-    net.remove_node(n1)
+    net.remove_nodes(n2)
+    net.remove_nodes(n1)
 
     # Add back new edges 
-    net.add_edges([Edge(a, b), Edge(x, y)])       
+    net.add_edges([Edge(a, b),Edge(x, y)])       
 
-def nni(net : Network) -> None:
-    pass
-
+def nni(net: Network) -> None:
+    """
+    Perform a nearest neighbor interchange (NNI) on the network.
+    
+    Args:
+        net (Network): A network.
+    Returns:
+        N/A
+    """
+    # Select an internal edge at random
+    internal_edges = [edge for edge in net.E() if not edge.dest in net.get_leaves()]
+    if not internal_edges:
+        raise Exception("No internal edges available for NNI.")
+    
+    edge = random.choice(internal_edges)
+    a, b = edge.src, edge.dest
+    
+    # Get the neighbors of the nodes connected by the edge
+    a_neighbors = [node for node in net.get_children(a) if node != b]
+    b_neighbors = [node for node in net.get_children(b) if node != a]
+    
+    if not a_neighbors or not b_neighbors:
+        raise Exception("Not enough neighbors for NNI.")
+    
+    # Select one neighbor from each set
+    c = random.choice(a_neighbors)
+    d = random.choice(b_neighbors)
+    
+    # Remove the original edges
+    net.remove_edge(edge)
+    net.remove_edge(Edge(a, c))
+    net.remove_edge(Edge(b, d))
+    
+    # Add the new edges
+    net.add_edge(Edge(a, d))
+    net.add_edge(Edge(b, c))
+    net.add_edge(Edge(a, b))
 
 def node_height_change(n : Node, 
                        net : Network, 
@@ -189,133 +252,27 @@ def node_height_change(n : Node,
         n (Node): A node whose height needs to be changed.
         net (Network): The network that contains node n.
         height (float): The new height of node n.
-    """
-    pass    
-
-
-"""
-TODO: Intelligent move kernel. Using a black box for a network, evaluate what 
-network contstructs are susceptible to edit.
-
-"""  
-
-class MoveScale:
-    """
-    This class is essentially a tag that tells either a network or model move
-    how to adjust a branch length or gamma ratio edit. 
-    """
-    
-    def __init__(self, severity : float, directionality : int = 1) -> None:
-        self.severity = severity
-        self.sign = directionality
-    
-    def adjust_branch(self, e : Edge) -> None:
-        """
-        For low severities, returns a distribution that exponentially favors 
-        small, incremental changes.
-        
-        For low-medium, returns a prior that applies a conservative but linear
-        approach to the smaller side of the change scale.
-        
-        For medium, returns a distribution that draws linearly from the whole 
-        range of allowable changes
-        
-        For medium-high, returns a distribution that draws linearly from the 
-        upper range of allowable changes.
-        
-        For high, returns a distribution that exponentially favors the most 
-        extreme of changes.
-
-        Args:
-            e (Edge): _description_
-
-        Returns:
-            float: _description_
-        """
-        
-        cur_bl = e.get_length()
-        
-        s = self.severity
-        
-        if s < .1: #low
-            #Beta = 1/gamma
-            
-            #The higher the gamma, the more concentrated the samples 
-            # will be to 0
-            
-            #lower the beta, the closer to 0
-            
-            #The lower the s, the more concentrated the samples should be to 0.
-            #Which means beta should be directly proportional to s by some 
-            # factor.
-            
-            beta = s
-            new_bl = self.sign * np.random.Generator.exponential(scale = 1)
-        elif s < .3: #low-med
-            pass
-        elif s < .7: #med
-            pass
-        elif s < .9: #med-high
-            pass
-        else: #high
-            pass
-            
-        cur_len = e.get_length()
-        
-    
-    
-    def adjust_gamma(self, e : Edge) -> float:
-        pass
-        
-        
-        
-        
-
-def blackbox(net : Network, gt : GeneTrees) -> dict[Edge, list[float]]:
-    """
-    Maps network edges to a vector of support probabilites for the different 
-    types of edits that can be made. A number closer to one supposes that that
-    edge is not a good candidate for a given edit, a number close to 0 implies
-    that the current data is a mismatch for the true network.
-    
-    Vector indeces are as follows:
-    1) Add Reticulation (either as src or destination)
-    2) Remove Reticulation (either as src or destination)
-    3) Lengthen Branch 
-    4) Shorten Branch
-    5) Reduce Gamma (inheritance probability)
-    6) Increase Gamma (inheritance probability)
-
-    Args:
-        net (Network): Species Tree.
-        gt (GeneTrees): Supporting set of gene trees.
-
+        extend (bool, optional): Flag to retain subtree branch lengths. Defaults to False.
     Returns:
-        dict[Edge, list[float]]: Map from edges to hotness values for each move
-                                 type.
+        N/A
     """
-    pass
+    parents = net.get_parents(n)
+    children = net.get_children(n)
 
+    if not parents or not children:
+        raise NetworkError("Node must have both parents and children.")
 
-# Maybe evaluate MCMC with and without curating a top move?
-def curate_top_move(hotness : dict[Edge, list[float]]) -> MoveScale:
-    """
-    Given a black box generated set of edges that need editing in some way, 
-    curate the most important move to make. This method looks through and 
-    prioritizes in this order:
-    
-    1) Reticulation moves. Having the right reticulation topology is important
-        --> indeces 0,1
-    2) Having the correct branch lengths 
-        --> indeces 2,3
-    3) Having the correct inheritance ratios
-        --> indeces 4,5
-    
-    Also, given the severity of the hotness number, this method suggests a 
-    severity of the suggested move. Ie. if a branch length is much too long and 
-    doesn't fit the gene trees hardly at all, then a more extreme edit is 
-    required as to avoid having to make the same move again.
-    
-    Args:
-        hotness (dict[Edge, list[float]]): _description_
-    """
+    max_parent_height = max(parent.get_time() for parent in parents)
+    min_child_height = min(child.get_time() for child in children)
+
+    if not (min_child_height < height < max_parent_height):
+        raise NetworkError("New height is out of bounds.")
+
+    if extend:
+        if height < max_parent_height:
+            raise NetworkError("New height is too close to the root when extending.")
+        for child in children:
+            child.set_time(child.get_time() + (height - n.get_time()))
+
+    n.set_time(height)
+

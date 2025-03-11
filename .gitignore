@@ -16,6 +16,8 @@ lib64/
 parts/
 sdist/
 var/
+Data/
+Nexus/
 *.egg-info/
 .installed.cfg
 *.egg

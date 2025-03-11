@@ -1,6 +1,25 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --                                                              
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
 """ 
 Author : Mark Kessler
-Last Stable Edit : 4/12/24
+Last Stable Edit : 3/11/25
 First Included in Version : 1.0.0
 
 Docs   - [x]
@@ -8,11 +27,11 @@ Tests  - [ ]
 Design - [ ]
 """
 
+from typing import Any, Union
 import warnings
 import numpy as np
 from numpy import linalg as lg
 import math
-import numpy.typing as npt
 
 """
 SOURCES:
@@ -44,9 +63,42 @@ class SubstitutionModelError(Exception):
     formulation of a substitution model, whether it be inputs that don't 
     adhere to requirements or there is an issue in computation.
     """
-    def __init__(self, message = "Unknown substitution model error") -> None:
+    def __init__(self, 
+                 message : str = "Unknown substitution model error") -> None:
+        """
+        Create a custom SubstitutionModelError with a custom message. To 
+        be used in situations where substitution model calculations are 
+        irrecoverably in err.
+
+        Args:
+            message (str, optional): Custom error message. Defaults to 
+                                     "Unknown substitution model error".
+        Returns:
+            N/A
+        """
         self.message = message
         super().__init__(self.message)
+        
+def _disable_for_subclass(method) -> function:
+    """
+    A decorator to disable a method for subclasses by raising a 
+    NotImplementedError.
+    
+    Args:
+        method (function): The method to be disabled.
+    Returns:
+        function: The wrapper function that raises the error
+    """
+    def wrapper(self, *args, **kwargs):
+        # Check if the method is being called from an instance of a subclass
+        if type(self) is not method.__qualname__.split('.')[0]:
+            raise NotImplementedError(
+                f"The method '{method.__name__}' is disabled \
+                  for the subclass '{self.__class__.__name__}'."
+            )
+        return method(self, *args, **kwargs)
+
+    return wrapper
 
 #############################
 #### SUBSTITUTION MODELS ####
@@ -63,26 +115,26 @@ class GTR:
     This is the Generalized Time Reversible (GTR) model.
     """
 
-    def __init__(self, base_freqs : list[float], 
-                       transitions : list[float], 
-                       states : int = 4):
+    def __init__(self, 
+                 base_freqs : list[float], 
+                 transitions : list[float], 
+                 states : int = 4) -> None:
         """
-        Args:
-            base_freqs (list[float]): an array of 
-                                                                floats of 
-                                                                'states' length. 
-                                                                Must sum to 1.
-            transitions (list[float]): an array of 
-                                                                 floats that is 
-                                                                 ('states'^2 - 
-                                                                 'states) / 2 
-                                                                 long.
-            states (int, optional): Number of possible data states.  
-                                    Defaults to 4 (For DNA, {A, C, G, T}).
-
+        Create a GTR substitution model object with the required/needed 
+        parameters. 
+        
         Raises:
             SubstitutionModelError: If the base frequency or transition arrays
                                     are malformed.
+        Args:
+            base_freqs (list[float]): An array of floats of 'states' length. 
+                                      Must sum to 1.
+            transitions (list[float]): An array of floats that is 
+                                       ('states'^2 - 'states') / 2 long.
+            states (int, optional): Number of possible data states.  
+                                    Defaults to 4 (For DNA, {A, C, G, T}).
+        Returns:
+            N/A
         """
 
         self.states : int = states
@@ -97,22 +149,33 @@ class GTR:
 
     def getQ(self) -> np.ndarray:
         """
-        Get the Q matrix
+        Get the Q matrix.
 
-        Returns: np array obj
+        Args:
+            N/A
+        Returns: 
+            np.ndarray: numpy array object that represents the Q matrix
         """
         return self.Q
 
-    def set_hyperparams(self, params : dict[str, object]) -> None:
+    def set_hyperparams(self, params : dict[str, Any]) -> None:
         """
         Change any of the base frequencies/states/transitions parameters, and 
         recompute the Q matrix accordingly.
-
+        
+        Raises:
+            SubstitutionModelError: If parameters are malformed/invalid.
         Args:
-            params (dict[str, object]): A mapping from gtr parameter names to 
+            params (dict[str, Any]): A mapping from gtr parameter names to 
                                         their values. For the GTR superclass,
                                         names must be limited to ["states", 
-                                        "base frequencies", "transitions"]
+                                        "base frequencies", "transitions"]. 
+                                        Parameter value type for "states" is an 
+                                        int, parameter value type for 
+                                        "base frequencies" and "transitions" is
+                                        a list[float].
+        Returns: 
+            N/A
         """
         
         param_names = params.keys()
@@ -127,16 +190,16 @@ class GTR:
         self._is_valid(self.trans, self.freqs, self.states)
         self.buildQ()
            
-    def get_hyperparams(self) -> list[list[float]]:
+    def get_hyperparams(self) -> tuple[list[float], list[float]]:
         """
         Gets the base frequency and transition arrays.
-
+        Args:
+            N/A
         Returns:
-            list[list[float]]: List that contains the
-                                                         base frequencies in the
-                                                         first element, and the 
-                                                         transitions in the 
-                                                         second.
+            tuple[list[float], list[float]]: List that contains the base 
+                                             frequencies in the first element, 
+                                             and the transitions in the 
+                                             second.
         """
         return self.freqs, self.trans
 
@@ -144,6 +207,8 @@ class GTR:
         """
         Get the number of states for this substitution model.
 
+        Args:
+            N/A
         Returns:
             int: Number of states.
         """
@@ -153,6 +218,11 @@ class GTR:
         """
         Populate the normalized Q matrix with the correct values.
         Based on (1)
+
+        Args:
+            N/A
+        Returns:
+            np.ndarray: A numpy ndarray that represents the just built Q matrix.
         """
         self.Q = np.zeros((self.states, self.states), dtype = np.double)
 
@@ -190,6 +260,9 @@ class GTR:
             t (float): Generally going to be a positive number for phylogenetic
                        applications. Represents time, in coalescent units 
                        or any other unit.
+        Returns:
+            np.ndarray: A numpy ndarray that is the result of the matrix 
+                        exponential with respect to Q and time t.
         """
 
         eigenvals, eigenvecs = lg.eigh(self.Q)
@@ -205,16 +278,21 @@ class GTR:
 
         return self.Qt
     
-    def _is_valid(self, transitions: list[float], 
-                 freqs : list[float], 
-                 states : int) -> None:
+    def _is_valid(self, 
+                  transitions: list[float], 
+                  freqs : list[float], 
+                  states : int) -> None:
         """
         Ensure frequencies and transitions are well formed.
-
+        
+        Raises:
+            SubstitutionModelError: If transitions or frequencies are malformed.
         Args:
             transitions (list[float]): Transition list.
-            freqs (list[float]): Base frequency list. 
-                                              Must sum to 1.
+            freqs (list[float]): Base frequency list. Must sum to 1.
+            states (int): Number of states.
+        Returns:
+            N/A
         """
         
         # Check for malformed inputs
@@ -241,12 +319,16 @@ class K80(GTR):
 
     def __init__(self, alpha : float, beta : float) -> None:
         """
+        Initialize K80 model.
+        
+        Raises:
+            SubstitutionModelError: if alpha and beta do not sum to 1.
+        
         Args:
             alpha (float): transversion param
             beta (float): transition param
-
-        Raises:
-            SubstitutionModelError: if alpha and beta do not sum to 1.
+        Returns:
+            N/A
         """
         if alpha + beta != 1:
             raise SubstitutionModelError("K2P Transversion + Transition params \
@@ -258,18 +340,22 @@ class K80(GTR):
         trans[4] = beta
         self.beta = beta
         self.alpha = alpha
-        super().__init__(bases, trans)
+        super().__init__(bases, list(trans))
     
-    def set_hyperparams(self, params : dict[str, object]) -> None:
+    def set_hyperparams(self, params : dict[str, float]) -> None:
         """
         Change any of the base frequencies/states/transitions parameters, and 
         recompute the Q matrix accordingly.
-
+        
+        Raises:
+            SubstitutionModelError: If parameters are malformed/invalid.
         Args:
-            params (dict[str, object]): A mapping from gtr parameter names to 
+            params (dict[str, float ]): A mapping from gtr parameter names to 
                                         their values. For the K80 class,
                                         names must be limited to ["alpha", 
-                                        "beta"]
+                                        "beta"].
+        Returns:
+            N/A
         """
         
         param_names = params.keys()
@@ -282,7 +368,7 @@ class K80(GTR):
         if self.alpha + self.beta != 1:
             raise SubstitutionModelError("Error. K80 Alpha and Beta parameters \
                                           do not sum to 1.")
-        
+
         self.buildQ()
 
     def expt(self, t : float) -> np.ndarray:
@@ -298,6 +384,9 @@ class K80(GTR):
             t (float): Generally going to be a positive number for phylogenetic
                        applications. Represents time, in coalescent units 
                        or any other unit.
+        Returns:
+            np.ndarray: A numpy ndarray that is the result of the matrix 
+                        exponential with respect to Q and time t.
         """
         
         self.Qt = np.zeros((self.states, self.states), dtype = np.double)
@@ -326,27 +415,38 @@ class F81(GTR):
         Initialize the F81 model with a list of base frequencies of length 4.
         Transition probabilities will all be the same.
 
+        Raises:
+            SubstitutionModelError: If the base frequencies given do not sum to 
+                                    1 or if the list does not have exactly 4 
+                                    elements.
         Args:
-            bases (list[float]): a list of 4 base 
-                                                           frequency values.
+            bases (list[float]): a list of 4 base frequency values.
+        Returns:
+            N/A
         """
         trans = np.ones((6, 1))
         if len(self.freqs) != 4 or sum(self.freqs) != 1:
                 raise SubstitutionModelError("F81 is only defined for 4 states\
                                              or your frequencies do not \
                                              sum to 1")
-        super().__init__(bases, trans)
+        super().__init__(bases, list(trans))
     
-    def set_hyperparams(self, params : dict[str, object]) -> None:
+    @_disable_for_subclass
+    def set_hyperparams(self, params : dict[str, list[float]]) -> None:
         """
-        Change any of the base frequencies/states/transitions parameters, and 
+        Change the base frequency parameter, and 
         recompute the Q matrix accordingly.
 
+        Raises:
+            SubstitutionModelError: If the base frequencies given do not sum to 
+                                    1 or the list is over 4 elements long.
         Args:
-            params (dict[str, object]): A mapping from gtr parameter names to 
-                                        their values. For the GTR superclass,
-                                        names must be limited to 
-                                        ["base frequencies"].
+            params (dict[str, list[float]]): A mapping from gtr parameter names 
+                                             to their values. For the F81
+                                             class, names must be limited 
+                                             to ["base frequencies"].
+        Returns:
+            N/A
         """
         
         param_names = params.keys()
@@ -399,28 +499,15 @@ class JC(F81):
     def __init__(self) -> None:
         """
         No arguments need to be provided, as the JC Q matrix is fixed.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         bases = np.ones((4, 1)) * .25 
-        super().__init__(bases)
-        
-    def expt(self, t : float) -> np.ndarray:
-        """
-        TODO: Fill in closed form solution
-
-        Args:
-            t (float): Time, in coalescent units.
-
-        Returns:
-            np.ndarray: e^(Q*t)
-        """
-        return super().expt(t)
-    
-    def set_hyperparams(self, params : dict[str, object]) -> None:
-        warnings.warn("Attempting to set parameters for the Jukes Cantor model.\
-                       No parameters are needed for this model, and whatever\
-                       operation was attempted will have no effect.")
-        return 
-         
+        super().__init__(list(bases))
+               
 class HKY(GTR):
     """
     For DNA only (4 states, 6 transitions).
@@ -437,6 +524,8 @@ class HKY(GTR):
         transition array of length 6 with the equivalency pattern 
         [a, b, a, a, b, a].
 
+        Raises:
+            SubstitutionModelError: If inputs are malformed in any way.
         Args:
             base_freqs (list[float]): Array of 4 values that 
                                                          sum to 1.
@@ -444,22 +533,28 @@ class HKY(GTR):
                                                           the equivalency 
                                                           pattern 
                                                           [a, b, a, a, b, a].
+        Returns:
+            N/A
         """
         
-        self._is_valid(transitions, base_freqs)
+        self._is_valid(transitions, base_freqs, 4)
 
         super().__init__(base_freqs, transitions)
     
-    def set_hyperparams(self, params : dict[str, object]) -> None:
+    def set_hyperparams(self, params : dict[str, list[float]]) -> None:
         """
         Change any of the base frequencies/states/transitions parameters, and 
         recompute the Q matrix accordingly.
 
+        Raises:
+            SubstitutionModelError: If parameters are malformed/invalid.
         Args:
-            params (dict[str, object]): A mapping from gtr parameter names to 
-                                        their values. For the HKY class,
-                                        names must be limited to 
-                                        ["base frequencies", "transitions"]
+            params (dict[str, list[float]]): A mapping from gtr parameter names 
+                                             to their values. For the HKY class, 
+                                             names must be limited to 
+                                             ["base frequencies", "transitions"]
+        Returns:
+            N/A
         """
         
         param_names = params.keys()
@@ -469,30 +564,31 @@ class HKY(GTR):
         if "base frequencies" in param_names:
             self.freqs = params["base frequencies"]
         
-        self._is_valid(self.trans, self.freqs)
+        self._is_valid(self.trans, self.freqs, 4)
         self.buildQ()
     
-    def _is_valid(self, transitions: list[float], 
-                 freqs : list[float]) -> None:
+    def _is_valid(self, 
+                  transitions: list[float], 
+                  freqs : list[float],
+                  states : int
+                  ) -> None:
         """
         Ensure frequencies and transitions are well formed.
-
+       
+        Raises:
+            SubstitutionModelError: If parameters are malformed/invalid.
         Args:
-            transitions (list[float]): Transition list
-                                                                 . Must be of 
-                                                                 length 6 and 
-                                                                 the transitions 
-                                                                 must all be 
-                                                                 equal, and all 
-                                                                 transversions 
-                                                                 must all be 
-                                                                 equal.
-            freqs (list[float]): Base frequency list.
-                                                           Must be of length 4 
-                                                           and sum to 1.
+            transitions (list[float]): Transition list. Must be of length 6 and 
+                                       the transitions must all be equal, and 
+                                       all transversions must all be equal.
+            freqs (list[float]): Base frequency list. Must be of length 4 
+                                 and sum to 1.
+            states (int): Number of states.
+        Returns:
+            N/A
         """
         
-        if len(freqs) != 4:
+        if len(freqs) != states:
             raise SubstitutionModelError("Base frequency list must be of \
                                           length 4.")
         if sum(freqs) != 1:
@@ -517,38 +613,41 @@ class K81(GTR):
     the pattern [a, b, c, c, b, a].
     """
     
-    def __init__(self, 
-                 transitions : list[float]) -> None:
+    def __init__(self, transitions : list[float]) -> None:
         """
         Initialize with a list of 6 transition probabilities that follow the 
         pattern [a, b, c, c, b, a]. All base frequencies are assumed to be
         equal.
 
-        Args:
-            transitions (list[float]): A list of 
-                                                                 floats, 6 long.
-
         Raises:
-            SubstitutionModelError: if the transition probabilities are not 
+            SubstitutionModelError: If the transition probabilities are not 
                                     of correct pattern.
-        """
-        
-        self._is_valid(transitions)
+        Args:
+            transitions (list[float]): A list of floats, 6 long.
+        Returns:
+            N/A
 
+        """
         base_freqs = [.25, .25, .25, .25]
+        
+        self._is_valid(transitions, base_freqs, 4)
 
         super().__init__(base_freqs, transitions)
     
-    def set_hyperparams(self, params : dict[str, object]) -> None:
+    def set_hyperparams(self, params : dict[str, list[float]]) -> None:
         """
         Change the transitions parameters, and recompute the Q matrix 
         accordingly.
 
+        Raises: 
+            SubstitutionModelError: If the parameters are malformed/invalid.
         Args:
-            params (dict[str, object]): A mapping from gtr parameter names to 
-                                        their values. For the K81 class,
-                                        names must be limited to 
-                                        ["transitions"]
+            params (dict[str, list[float]]): A mapping from gtr parameter names 
+                                             to their values. For the K81 class, 
+                                             names must be limited to
+                                             ["transitions"].
+        Returns:
+            N/A
         """
         
         param_names = params.keys()
@@ -556,22 +655,27 @@ class K81(GTR):
         if "transitions" in param_names:
             self.trans = params["transitions"]
     
-        self._is_valid(self.trans)
+        self._is_valid(self.trans, self.freqs, 4)
         self.buildQ()
     
     def _is_valid(self, 
-                 transitions: list[float]) -> None:
+                 transitions: list[float],
+                 freqs : list[float],
+                 states : int) -> None:
         """
         Ensure frequencies and transitions are well formed.
 
+        Raises: 
+            SubstitutionModelError: If the parameters are malformed/invalid.
         Args:
-            transitions (list[float]): Transition list. Must be of 
-                                                    length 6 and 
-                                                    the transitions 
-                                                    must follow the 
-                                                    equivalency 
-                                                    pattern of
-                                                    [a, b, c, c, b, a]
+            transitions (list[float]): Transition list. Must be of length 6 and 
+                                       the transitions must follow the 
+                                       equivalency pattern of
+                                       [a, b, c, c, b, a].
+            freqs (list[float]): unused for this function.
+            states (int): unused for this function.
+        Returns:
+            N/A
         """
         
         if transitions[0] != transitions[5] \
@@ -586,33 +690,40 @@ class SYM(GTR):
     Developed by Zharkikh in 1994, this model assumes that all base frequencies 
     are equal, and all transition probabilities are free.
     """
-    def __init__(self,
-                 transitions : list[float]) -> None:
+    def __init__(self, transitions : list[float]) -> None:
         """
         Initialize with a list of 6 free transition probabilities. Base 
         frequencies are all equal.
 
-        Args:
-            transitions (list[float]): A list of 6 
-                                                                 probabilities.
-
         Raises:
-            SubstitutionModelError: if transitions is not of length 6.
+            SubstitutionModelError: if the transitions array is not of length 6.
+            
+        Args:
+            transitions (list[float]): A list of 6 transition rates.
+        
+        Returns:
+            N/A
+
         """
         base_freqs = np.ones((4, 1)) * .25
                
-        super().__init__(base_freqs, transitions)
+        super().__init__(list(base_freqs), transitions)
     
-    def set_hyperparams(self, params : dict[str, object]) -> None:
+    def set_hyperparams(self, params : dict[str, list[float]]) -> None:
         """
         Change any of the base frequencies/states/transitions parameters, and 
         recompute the Q matrix accordingly.
-
+        
+        Raises:
+            SubstitutionModelError: if the transitions array is not of length 6
         Args:
-            params (dict[str, object]): A mapping from gtr parameter names to 
-                                        their values. For the HKY class,
-                                        names must be limited to 
-                                        ["transitions"]
+            params (dict[str, list[float]]): A mapping from gtr parameter names 
+                                             to their values. For the SYM class,
+                                             names must be limited to 
+                                             ["transitions"].
+        Returns:
+            N/A          
+                    
         """
         
         param_names = params.keys()
@@ -634,7 +745,8 @@ class TN93(GTR):
     frequency parameters are free.
     """
 
-    def __init__(self, base_freqs : list[float],
+    def __init__(self, 
+                 base_freqs : list[float],
                  transitions : list[float]) -> None:
         """
         Initialize with a list of 4 free base frequencies, and 6 transitions 
@@ -642,7 +754,14 @@ class TN93(GTR):
         
         Raises:
             SubstitutionModelError: If the transitions or base frequency lists
-            are malformed.
+                                    are malformed.
+
+        Args:
+            base_freqs (list[float]): A list of 4 base frequencies 
+            transitions (list[float]): A list of 6 transitions that follow the
+                                       above pattern.
+        Returns:
+            N/A
         """
 
         if transitions[0] != transitions[2] \
@@ -652,24 +771,30 @@ class TN93(GTR):
 
         super().__init__(base_freqs, transitions)
         
-    def set_hyperparams(self, params : dict[str, object]) -> None:
+    def set_hyperparams(self, params : dict[str, list[float]]) -> None:
         """
         Change any of the base frequencies/transitions parameters, and 
         recompute the Q matrix accordingly.
 
+        Raises:
+            SubstitutionModelError: If the new parameters are invalid.
         Args:
-            params (dict[str, object]): A mapping from gtr parameter names to 
-                                        their values. For the HKY class,
-                                        names must be limited to 
-                                        ["base frequencies", "transitions"]
+            params (dict[str, list[float]]): A mapping from gtr parameter names 
+                                             to their values. For the TN93 
+                                             class, names must be limited to 
+                                             ["base frequencies", "transitions"]
+        Returns:
+            N/A
         """
         
         param_names = params.keys()
         
         if "transitions" in param_names:
             self.trans = params["transitions"]
+        if "base frequencies" in param_names:
+            self.freqs = params["base frequencies"]
         
-        self._is_valid(self.trans, self.freqs)
+        self._is_valid(self.trans, self.freqs, 4)
         self.buildQ()
 
     def _is_valid(self, 
@@ -678,11 +803,16 @@ class TN93(GTR):
                  states : int) -> None:
         """
         Ensure frequencies and transitions are well formed.
+        
+        Raises:
+            SubstitutionModelError: If any of the inputs are malformed/invalid.
 
         Args:
-            transitions (list[float]): Transition list.
-            freqs (list[float]): Base frequency list. 
-                                              Must sum to 1.
+            transitions (list[float]): Transition rate list.
+            freqs (list[float]): Base frequency list. Must sum to 1.
+            states (int): Number of states. For DNA, 4.
+        Returns:
+            N/A
         """
         
         # Check for malformed inputs

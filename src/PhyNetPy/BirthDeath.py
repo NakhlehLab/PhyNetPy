@@ -1,13 +1,39 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
 """ 
 Author : Mark Kessler
-Last Edit : 3/28/24
-First Included in Version : 1.0.0
+Last Edit : 3/11/25
+First Included in Version : 2.0.0
 
 Docs   - [x]
 Tests  - [ ]
 Design - [x]
-"""
 
+SOURCES:
+
+1) https://www.sciencedirect.com/science/article/pii/S0022519309003300#bib24
+
+2) https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
+
+
+"""
 
 import random
 import numpy as np
@@ -15,27 +41,26 @@ import scipy
 from Network import *
 from math import log, exp
 
-
-"""
-SOURCES:
-
-1) https://www.sciencedirect.com/science/article/pii/S0022519309003300#bib24
-
-2) https://academic.oup.com/sysbio/article/59/4/465/1661436#app2
-
-"""
-
 #########################
 #### EXCEPTION CLASS ####
 #########################
 
-class BirthDeathSimError(Exception):
+class BirthDeathSimulationError(Exception):
     """
     This exception is thrown whenever something irrecoverably wrong happens
     during the process of generating a network within the Yule or CBDP algorithm
     """
 
-    def __init__(self, message = "Something went wrong simulating a network"):
+    def __init__(self, message : str = "Something went wrong generating a\
+                                        network"):
+        """
+        Create a custom BirthDeathSimulationError by providing an error message.
+
+        Args:
+            message (str, optional): A custom error message. Defaults to 
+                                     "Something went wrong generating a
+                                     network".
+        """
         self.message = message
         super().__init__(self.message)
 
@@ -62,7 +87,7 @@ def _random_species_selection(nodes : list[Node],
     live_nodes = _live_species(nodes)
     
     #use the rng object to select an index
-    randomInt = rng.integers(0, len(live_nodes))
+    randomInt : int = rng.integers(0, len(live_nodes)) # type: ignore
     
     return live_nodes[randomInt]
 
@@ -71,7 +96,12 @@ def _live_species(nodes : list[Node]) -> list[Node]:
     Returns a subset of Nodes that represent live lineages. 
     A Node represents a live lineage if it has an attribute "live" set to True.
 
-    nodes (list[Node]) -- an array of Node objects
+    Args:
+        nodes (list[Node]): a list of all nodes in a network
+
+    Returns:
+        list[Node]: the subset of nodes in a network that represent 
+                    live lineages (have attr key value pair "live" : True).
     """
     return [node for node in nodes if node.attribute_value("live") is True]
 
@@ -95,21 +125,28 @@ class Yule:
     rng -- numpy random number generator for drawing speciation times
     """
 
-    def __init__(self, gamma : float, n : int = None, time : float = None, 
-                 rng : np.random.Generator = None) -> None:
+    def __init__(self, 
+                 gamma : float, 
+                 n : Union[int, None] = None, 
+                 time : Union[float, None] = None, 
+                 rng : Union[np.random.Generator, None] = None) -> None:
         """
-        Args:
-            gamma (float): Birth rate. Should be strictly positive.
-            n (int, optional): Number of taxa in simulated network. 
-                               Defaults to None.
-            time (float, optional): Age of simulated network, alternative to 
-                                    simulating to a number of taxa. 
-                                    Defaults to None.
-            rng (np.random.Generator, optional): A random number generator.
-                                                 Defaults to None.
-
         Raises:
-            BirthDeathSimError: If something goes wrong simulating networks.
+            BirthDeathSimulationError: If something goes wrong simulating 
+                                       networks.
+        Args:
+            gamma (Union[float, None]): Birth rate. Should be strictly positive.
+            n (Union[int, None], optional): Number of taxa in simulated network. 
+                                            Defaults to None.
+            time (Union[float, None], optional): Age of simulated network, 
+                                                 alternative to 
+                                                 simulating to a number of taxa. 
+                                                 Defaults to None.
+            rng (Union[np.random.Generator, None], optional): A random number 
+                                                              generator.
+                                                              Defaults to None.
+        Returns:
+            N/A
         """
         # set birth rate
         self.set_gamma(gamma)
@@ -119,9 +156,10 @@ class Yule:
             self.set_taxa(n)
         else:
             if time is None:
-                raise BirthDeathSimError("If you do not provide a value for the\
-                                         number of taxa, please provide a time \
-                                         constraint for network simulation")
+                raise BirthDeathSimulationError("If you do not provide a value\
+                                                 for the number of taxa, please\
+                                                 provide a time constraint for\
+                                                 network simulation")
             self.set_time(time)
 
         # current number of live lineages, always starts at 2
@@ -136,7 +174,11 @@ class Yule:
         # a list of trees generated under this model
         self.generated_networks : list[Network] = []
         
-        self.rng : np.random.Generator = rng
+        if rng is not None: 
+            self.rng : np.random.Generator = rng
+        else:
+            seed : int = random.randint(0,10000)
+            self.rng : np.random.Generator = np.random.default_rng(seed)
 
     def set_time(self, value : float) -> None:
         """
@@ -144,6 +186,8 @@ class Yule:
 
         Args:
             value (float): The age of any future simulated trees
+        Returns:
+            N/A
         """
         self.condition = "T"
         self.time = value
@@ -152,27 +196,32 @@ class Yule:
         """
         Set simulated tree taxa count
 
+        Raises:
+            BirthDeathSimulationError: if value < 2
         Args:
             value (int): an integer >= 2
-
-        Raises:
-            BirthDeathSimError: if value < 2
+        Returns:
+            N/A
         """
         self.condition = "N"
         self.N = value
         if value < 2:
-            raise BirthDeathSimError("Please use a value >= 2")
+            raise BirthDeathSimulationError("Please use a value >= 2")
     
-    def set_gamma(self, value : float) -> None:
+    def set_gamma(self, new_gamma : float) -> None:
         """
         Setter for the gamma (birth rate) parameter
 
+        Raises:
+            BirthDeathSimulationError: if new_gamma <= 0
         Args:
-            value (float): the new birth rate
+            new_gamma (float): the new birth rate
+        Returns:
+            N/A
         """
-        if value <= 0:
-            raise BirthDeathSimError("Birth rate must be > 0")
-        self.gamma = value
+        if new_gamma <= 0:
+            raise BirthDeathSimulationError("Birth rate must be > 0")
+        self.gamma = new_gamma
         
     def _draw_waiting_time(self) -> float:
         """
@@ -182,10 +231,15 @@ class Yule:
         Since each lineage is equally likely for each event 
         under the Yule Model, the waiting time is given by the parameter 
         numlineages * birthRate or .lin * .gamma
+        
+        Args:
+            N/A
+        Returns:
+            float: waiting time value until next speciation event.
         """
         scale = 1 / (self.lin * self.gamma)
-        random_float_01 = self.rng.random()
-        return scipy.stats.expon.ppf(random_float_01, scale = scale) 
+        random_float_01 : float  = self.rng.random()
+        return scipy.stats.expon.ppf(random_float_01, scale = scale)# type: ignore
 
     def _event(self, network : Network) -> int: 
         """
@@ -197,13 +251,13 @@ class Yule:
         Set the parent to the chosen node as that internal node.
 
         Args:
-            network(Network): the network currently being built
-        
-        Returns: 0 if success, -1 if no more events can happen.      
+            network (Network): the network currently being built
+        Returns: 
+            int: 0 if success, -1 if no more events can happen.      
         """
 
         # select random live lineage to branch from
-        spec_node = _random_species_selection(network.nodes.get_set(), self.rng)
+        spec_node = _random_species_selection(network.V(), self.rng)
 
         # keep track of the old parent, we need to disconnect edges
         # This node is guaranteed to only have 1 parent, since the network
@@ -265,18 +319,22 @@ class Yule:
         After the nth event, draw one more time and fill out the remaining
         branch lengths.
 
+        Args:
+            N/A
         Returns:
             Network: The simulated tree
         """
-        net : Network = Network(nodes = NodeSet(), edges = EdgeSet())
+        net : Network = Network()
         
         # Set up the tree with 2 living lineages and an "internal" root node
-        node1 = Node(attr={"t": 0, "label": "root", "live": False}, name="root")
-        node1.set_time(0)
-        node2 = Node(attr={"live": True}, name="spec1")
-        node3 = Node(attr={"live": True}, name="spec2")
+        node1 = Node("root", 
+                     attr={"t" : 0, "label" : "root", "live" : False},
+                     t = 0)
+        node2 = Node("spec1", attr={"live" : True})
+        node3 = Node("spec2", attr={"live" : True})
 
-        net.add_nodes([node1, node2, node3])
+        
+        net.add_nodes(node1, node2, node3)
         net.add_edges([Edge(node1, node2), Edge(node1, node3)])
         
             
@@ -288,14 +346,14 @@ class Yule:
                 return net
             
             #create N lineages
-            while len(_live_species(net.get_nodes())) < self.N:
+            while len(_live_species(net.V())) < self.N:
                 self._event(net)
 
             # populate remaining branches with branch lengths according to
             # Eq 5.1? Just taking sigma_n for now
             next_time = self._draw_waiting_time()
 
-            for node in _live_species(net.get_nodes()):
+            for node in _live_species(net.V()):
                 node.add_attribute("t", self.elapsed_time + next_time)
                 node.set_time(self.elapsed_time + next_time)
                 parents = net.get_parents(node)
@@ -312,11 +370,11 @@ class Yule:
 
         else:
             while self.elapsed_time < self.time:
-                status = self._event(net, "T")
+                status = self._event(net)
                 if status == -1:
                     break
 
-            for node in _live_species(net.get_nodes()):
+            for node in _live_species(net.V()):
                 # the live lineages are all leaves, 
                 # and are thus all at the goal time
                 node.add_attribute("t", self.time)
@@ -339,6 +397,11 @@ class Yule:
     def clear_generated(self) -> None:
         """
         Empty out the generated network array
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         self.generated_networks = []
 
@@ -346,12 +409,13 @@ class Yule:
         """
         Generate a set number of trees.
 
-        num_networks-- number of networks to generate
-
-        Outputs: the array of generated networks. 
-                 (includes all that have been previously generated)
+        Args:
+            num_networks (int): The number of networks to generate
+        Returns: 
+            list[Network]: The array of generated networks. 
+                           (includes all that have been previously generated)
         """
-        for dummy in range(num_networks):
+        for _ in range(num_networks):
             self.generated_networks.append(self.generate_network())
 
         return self.generated_networks
@@ -361,40 +425,61 @@ class CBDP:
     Constant Rate Birth Death Process Network simulation
     """
 
-    def __init__(self, gamma : float, mu : float, n : int, sample : float = 1):
+    def __init__(self, 
+                 gamma : float,
+                 mu : float, 
+                 n : int, 
+                 sample : float = 1) -> None:
         """
         Create a new Constant Rate Birth Death Simulator.
         
+        You need the following parameters:
+        1) A birth rate (gamma, as always)
+        2) A death rate (mu, and should always be less than the birth rate 
+                         so that networks can actually be generated and reach 
+                         the goal amount of species)
+        3) A goal amount of species in the simulated network.
+        4) A sampling rate.
+        
+        Raises:
+            BirthDeathSimError: if birth/death/sample/n parameters 
+                                are non-sensical
         Args:
             gamma (float): birth rate
             mu (float): death rate
             n (int): number of taxa for simulated trees
             sample (float, optional): Sampling rate from (0, 1]. Defaults to 1.
+        Returns:
+            N/A
         """
         
         self.set_sample(sample)
         self.set_bd(gamma, mu)
         self.set_n(n)
         
-        self.generated_networks = []
+        self.generated_networks : list[Network]= []
 
     def set_bd(self, gamma : float, mu : float) -> None:
         """
         Set the birth and death rates for the model
 
+        Raises:
+            BirthDeathSimError: if birth/death parameters are non-sensical
         Args:
             gamma (float): The birth rate. Must be a positive real number, and 
                            strictly greater than mu. 
             mu (float): The death rate. Must be a non-negative real number, less 
                         than gamma. 
+        Returns:
+            N/A
         """
         if gamma <= mu:
-            BirthDeathSimError("Death rate is greater than or equal to the \
+            BirthDeathSimulationError("Death rate is greater than or equal to the \
                                 birth rate!")
         if gamma <= 0:
-            raise BirthDeathSimError("Please input a positive birth rate")
+            raise BirthDeathSimulationError("Please input a positive birth rate")
         if mu < 0:
-            raise BirthDeathSimError("Please input a non-negative death rate")
+            raise BirthDeathSimulationError("Please input a non-negative death rate")
         
         # Eq 15 from (1)
         self.gamma : float = gamma / self.sample
@@ -404,54 +489,65 @@ class CBDP:
         self.pBirth = self.gamma / (self.gamma + self.mu)
         self.pDeath = self.mu / (self.gamma + self.mu)
     
-    def set_n(self, value : int) -> None:
+    def set_n(self, new_n : int) -> None:
         """
         Set the number of taxa for the simulated trees.
 
+        Raises:
+            BirthDeathSimError: if the n parameter is non-sensical
         Args:
-            value (int): An integer value >= 2
+            new_n (int): An integer value >= 2
+        Returns:
+            N/A
         """
-        if value < 2:
-            raise BirthDeathSimError("Generated trees must have 2 or more taxa")
-        self.N = value
+        if new_n < 2:
+            raise BirthDeathSimulationError("Generated trees must have 2 or \
+                                             more taxa")
+        self.N = new_n
     
-    def set_sample(self, value : float) -> None:
+    def set_sample(self, new_sampling : float) -> None:
         """
         Set the sampling rate. Must be a value in the interval (0,1].
 
-        Args:
-            value (float): a float between 0 (exclusive), and 1 (inclusive)
-
         Raises:
-            BirthDeathSimError: if the provided value is not in the right range
+            BirthDeathSimulationError: If the provided sampling rate is not 
+                                       in the right range
+        Args:
+            new_sampling (float): A float between 0 (exclusive), 
+                                  and 1 (inclusive)
+        Returns:
+            N/A
         """
         # Ensure that the sampling rate is in the correct interval
-        if 0 < value <= 1:
-            self.sample : float = value
+        if 0 < new_sampling <= 1:
+            self.sample : float = new_sampling
         else:
-            raise BirthDeathSimError("Sampling rate must be drawn from (0,1]")
+            raise BirthDeathSimulationError("Sampling rate must be drawn \
+                                             from (0,1]")
     
-    def _qinv(self, r:float) -> float:
+    def _qinv(self, r : float) -> float:
         """
         Draw a time from the Qinv distribution from (2)
 
-        r-- r[0] from the n-1 samples from [0,1]
-
-        Returns: the time t, which is the age of a new simulated tree
+        Args:
+            r (float): r[0] from the n-1 samples from [0,1]
+        Returns: 
+            float: The time t, which is the age of a new simulated tree
         """
         term1 = (1 / self.gamma - self.mu)
         term2 = 1 - ((self.mu / self.gamma) * pow(r, 1 / self.N))
         term3 = 1 - pow(r, 1 / self.N)
         return term1 * log(term2 / term3)
 
-    def _finv(self, r:float, t:float) -> float:
+    def _finv(self, r : float, t : float) -> float:
         """   
         Draw a sample speciation time from the Finv distribution from (2)
 
-        r-- r_i, from the sampled values from [0,1]
-        t-- the age of the tree determined by Qinv(r[0])
-
-        Returns: s_i from r_i
+        Args:
+            r (float): r_i, from the sampled values from [0,1]
+            t (float): The age of the tree determined by Qinv(r[0])
+        Returns: 
+            float: s_i from r_i
         """
         rate_dif = self.gamma - self.mu
         
@@ -470,9 +566,12 @@ class CBDP:
         
         Follows the algorithm laid out by (2)
 
-        Returns: A network with n taxa chosen from the proper distributions.
+        Args:
+            N/A
+        Returns: 
+            (Network) A network with n taxa chosen from the distributions.
         """
-        net = Network(nodes = NodeSet(), edges = EdgeSet())
+        net = Network()
 
         # step 1
         r = [random.random() for _ in range(self.N)]
@@ -504,7 +603,7 @@ class CBDP:
         # step 4
         for i in range(2 * self.N - 1):
             # for each node, connect it to the correct parent
-            new_edge : Edge = self._connect(i, net.get_nodes())
+            new_edge : Union[Edge, None] = self._connect(i, net.V())
             if new_edge is not None:
                 net.add_edges(new_edge)
 
@@ -514,14 +613,8 @@ class CBDP:
         return net
 
     @staticmethod
-    def _connect(index : int, nodes : list[Node]) -> Edge:
+    def _connect(index : int, nodes : list[Node]) -> Union[Edge, None]:
         """
-        nodes-- a list of nodes (list[i] is the ith node along a horizontal
-                axis that alternates between species and 
-                internal s_i nodes/speciation events)
-
-        index-- the node to connect to its parent in the tree
-
         Given the nodes and a node to connect, create a new edge.
 
         The parent node is defined to be the closest to nodes[index] in terms
@@ -529,14 +622,24 @@ class CBDP:
         the left and right candidate. Each candidate is the nearest element in 
         the list such that the time attribute is less than nodes[index]. 
         The parent is the maximum of the two candidates.
-
-        Returns: the edge from nodes[index] to its correct parent
+        
+        Args:
+            index (int): The index for a node to connect to its parent in the 
+                         tree
+            nodes (list[Node]): A list of nodes (list[i] is the ith node along 
+                                a horizontal axis that alternates between 
+                                species and internal s_i 
+                                nodes/speciation events)
+        Returns: 
+            Union[Edge, None]: The edge from nodes[index] to its correct parent,
+                               unless nodes[index] is the root in which case 
+                               None is returned.
         """
         node_t : float = nodes[index].get_time() #.attribute_value("t")
 
         # find right candidate
         right_index : int = index + 1
-        right_candidate : Node = None
+        right_candidate : Union[Node, None] = None
 
         while right_index < len(nodes):
             # search in the list to the right (ie increase the index)
@@ -549,7 +652,7 @@ class CBDP:
 
         # find left candidate
         left_index = index - 1
-        left_candidate = None
+        left_candidate : Union[Node, None] = None
         while left_index >= 0:
             # search in the left part of the list
             left_t : float = nodes[left_index].get_time() #.attribute_value("t")
@@ -567,8 +670,8 @@ class CBDP:
         elif right_candidate is None:
             selection = left_candidate
         else:
-            right_cand_t = right_candidate.get_time() #.attribute_value("t")
-            left_cand_t = left_candidate.get_time() #.attribute_value("t")
+            right_cand_t = right_candidate.get_time() 
+            left_cand_t = left_candidate.get_time() 
             
             if right_cand_t - left_cand_t <= 0:
                 selection = left_candidate
@@ -576,8 +679,9 @@ class CBDP:
                 selection = right_candidate
 
         # create new edge
-        node_T = nodes[index].get_time() #.attribute_value("t")
-        future_T = selection.get_time() #.attribute_value("t")
+        node_T = nodes[index].get_time() 
+        assert(selection is not None)
+        future_T = selection.get_time() 
         new_edge = Edge(selection, nodes[index])
 
         # set the branch length of the current node
@@ -585,12 +689,15 @@ class CBDP:
 
         return new_edge
 
-    def generate_networks(self, m : int) -> list:
+    def generate_networks(self, m : int) -> list[Network]:
         """
-        Generate m number of trees and add them to the list of generated trees
+        Generate 'm' number of trees and add them to the list of generated trees
 
-        Returns: the list of all generated trees from this run and any prior
-                 uncleared runs.
+        Args:
+            m (int): number of networks to generate
+        Returns: 
+            list[Network]: The list of all generated trees from this run and any 
+                           prior uncleared runs.
         """
         for _ in range(m):
             self.generated_networks.append(self.generate_network())
@@ -599,6 +706,11 @@ class CBDP:
 
     def clear_generated(self) -> None:
         """
-        Empty out the generated network array
+        Empty out the generated network array.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         self.generated_networks = []

@@ -1,9 +1,27 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
+
 """ 
 Author : Mark Kessler
-Last Edit : 5/14/24
+Last Edit : 3/11/25
 First Included in Version : 1.0.0
-
-TODO: Redo the node calc function
 
 Docs   - [ ]
 Tests  - [ ]
@@ -47,8 +65,6 @@ cs = False
 #cs = True
 
 ### SETUP ###
-
-#TODO : fix absolute path
 clr.AddReference('PhyNetPy/src/DLLS/PhyNetPy_DLLS.dll')
 
 from PhyNetPy_DLLS import SNPEvals
@@ -68,7 +84,6 @@ def n_to_index(n : int) -> int:
 
     Args:
         n (int): an n value (number of lineages) from an (n,r) pair
-
     Returns:
         int: starting index for that block of n values
     """
@@ -115,7 +130,9 @@ def nr_to_index(n : int, r : int) -> int:
     
     return n_to_index(n) + r
  
-def to_array(Fb_map : dict, vector_len : int, site_count : int) -> np.ndarray:
+def to_array(Fb_map : dict, 
+             vector_len : int, 
+             site_count : int) -> np.ndarray:
     """
     Takes a vpi/partial likelihood mapping, and translates it into a matrix
     such that the columns denote the site, and the row indeces correspond to 
@@ -166,7 +183,7 @@ def rn_to_rn_minus_dim(set_of_rns : dict[tuple[list[float]], float],
     the probability is stored as values.
 
     Args:
-        set_of_rns (dict): a mapping in the form of 
+        set_of_rns (dict[tuple[list[float]], float]): a mapping in the form of 
                            {(nx , rx) -> probability in R} 
                            where nx and rx are both vectors in Rn
         dim (int): the number of dimensions to reduce from Rn.
@@ -206,7 +223,7 @@ def qt_2_cs(Qt : np.ndarray) -> List[List[float]]:
         Qt (np.ndarray): SNP transition matrix
 
     Returns:
-        C# List<List<float>>: The QT matrix in C# form
+        List[List[float]]: The QT matrix in C# form
     """
     matrix = List[List[float]]()
     
@@ -246,7 +263,7 @@ class BiMarkersTransition:
     Pages 1917–1932, https://doi.org/10.1093/molbev/mss086
     """
 
-    def __init__(self, n: int, u: float, v: float, coal: float) -> None:
+    def __init__(self, n : int, u : float, v : float, coal : float) -> None:
         """
         Initialize the Q matrix
 
@@ -255,6 +272,8 @@ class BiMarkersTransition:
             u (float): probability of a lineage going from red to green
             v (float): probability of a lineage going from green to red
             coal (float): coal rate, theta.
+        Returns:
+            N/A
         """
 
         # Build Q matrix
@@ -317,6 +336,11 @@ class BiMarkersTransition:
     def cols(self) -> int:
         """
         return the dimension of the Q matrix
+        
+        Args:
+            N/A
+        Returns:
+            int: the number of columns in the Q matrix
         """
         return self.Q.shape[1]
 
@@ -324,6 +348,8 @@ class BiMarkersTransition:
         """
         Retrieve the Q matrix.
 
+        Args:
+            N/A
         Returns:
             np.ndarray: The Q matrix.
         """
@@ -348,9 +374,9 @@ def eval_Rule1(F_b : dict,
 
     Args:
         F_b (dict): F(x, x_bottom) vpi map
-        nx (list): a vector containing a 1-1 correspondence of n values to 
+        nx (list[int]): a vector containing a 1-1 correspondence of n values to 
                    population interfaces
-        rx (list): a vector containing a 1-1 correspondence of r values to 
+        rx (list[int]): a vector containing a 1-1 correspondence of r values to 
                    population interfaces
         n_xtop (int): number of lineages at x_top
         r_xtop (int): number of lineages at x_top that are "red"
@@ -551,6 +577,11 @@ class PartialLikelihoods:
     def __init__(self) -> None:
         """
         Initialize an empty PartialLikelihood obj.
+
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         # A map from a vector of population interfaces (vpi)
         # -- represented as a tuple of strings-- 
@@ -563,10 +594,12 @@ class PartialLikelihoods:
         
     def set_ploidy(self, ploidy : int) -> None:
         """
-        TODO: figure out why I need this 
-
+        Set the ploidy value for the partial likelihoods object.
+        
         Args:
             ploidyness (int): ploidy value.
+        Returns:
+            N/A
         """
         self.ploidy = ploidy
         
@@ -1074,6 +1107,14 @@ class U(Parameter):
     Parameter for the red->green lineage transition probability.
     """
     def __init__(self, value : float) -> None:
+        """
+        Initialize the U parameter with a given value.
+
+        Args:
+            value (float): The value of the U parameter.
+        Returns:
+            N/A
+        """
         super().__init__("u", value)
 
 class V(Parameter):
@@ -1081,6 +1122,14 @@ class V(Parameter):
     Parameter for the green->red lineage transition probability.
     """
     def __init__(self, value : float) -> None:
+        """
+        Initialize the V parameter with a given value.
+
+        Args:
+            value (float): The value of the V parameter.
+        Returns:
+            N/A
+        """
         super().__init__("v", value)
 
 class Coal(Parameter):
@@ -1088,6 +1137,14 @@ class Coal(Parameter):
     Coalescent rate parameter, theta.
     """
     def __init__(self, value : float) -> None:
+        """
+        Initialize the coalescent rate parameter with a given value.
+
+        Args:
+            value (float): The value of the coalescent rate parameter.
+        Returns:
+            N/A
+        """
         super().__init__("coal", value)
 
 class Samples(Parameter):
@@ -1095,6 +1152,14 @@ class Samples(Parameter):
     Parameter for the number of total samples (sequences) present.
     """
     def __init__(self, value : int) -> None:
+        """
+        Initialize the samples parameter with a given value.
+        
+        Args:
+            value (int): The number of samples.
+        Returns:
+            N/A
+        """
         super().__init__("samples", value)
 
 class SiteParameter(Parameter):
@@ -1102,6 +1167,14 @@ class SiteParameter(Parameter):
     Parameter for the number of sites (sequence length).
     """
     def __init__(self, value : int) -> None:
+        """
+        Initialize the site parameter with a given value.
+
+        Args:
+            value (int): The number of sites.
+        Returns:
+            N/A
+        """
         super(Parameter).__init__("sitect", value)
         
 class BiMarkersTransitionMatrixNode(CalculationNode):
@@ -1111,6 +1184,11 @@ class BiMarkersTransitionMatrixNode(CalculationNode):
     def __init__(self) -> None:
         """
         Initialize an empty container for the transition matrix, Q.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         super().__init__()
     
@@ -1118,6 +1196,8 @@ class BiMarkersTransitionMatrixNode(CalculationNode):
         """
         Grab the model parameters, then compute and store Q.
 
+        Args:
+            N/A
         Returns:
             BiMarkersTransition: The Q matrix that was just computed and cached.
         """
@@ -1130,6 +1210,11 @@ class BiMarkersTransitionMatrixNode(CalculationNode):
     def sim(self) -> None:
         """
         N/A
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         pass
     
@@ -1139,6 +1224,8 @@ class BiMarkersTransitionMatrixNode(CalculationNode):
         Otherwise, grabs the updated parameters and recomputes Q, caches it,
         and returns it.
 
+        Args:
+            N/A
         Returns:
             BiMarkersTransition: Up to date Q matrix.
         """
@@ -1151,6 +1238,11 @@ class BiMarkersTransitionMatrixNode(CalculationNode):
         """
         Tell nodes upstream that depend on Q that their likelihoods need to be
         recalculated.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         self.upstream()
 
@@ -1160,6 +1252,14 @@ class VPIAccumulator(Accumulator):
     vpis with their partial likelihoods.
     """
     def __init__(self) -> None:
+        """
+        Initialize the VPIAccumulator with an empty PartialLikelihood object.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
         super().__init__("VPI", PartialLikelihoods())
     
 # class BiMarkersNode(ANetworkNode):
@@ -1189,7 +1289,7 @@ class VPIAccumulator(Accumulator):
 #         """
 #         if len(self.get_children()) == 0:
 #             spec : ExtantSpecies = self.get_model_children(ExtantSpecies)[0]
-#             seqs : list[SeqRecord] = spec.get_seqs()
+#             seqs : list[DataSequence] = spec.get_seqs()
             
 #             tot = np.zeros(len(seqs[0].get_seq()))
 #             for seq_rec in seqs:
@@ -1398,7 +1498,15 @@ class BiMarkersLikelihood(CalculationNode):
     This node is also the root of the model graph.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
+        """
+        Initialize the root likelihood algorithm node.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
         super().__init__()
     
     def calc(self) -> float:
@@ -1406,6 +1514,8 @@ class BiMarkersLikelihood(CalculationNode):
         Run the root likelihood calculation and return the final MCMC bimarkers
         likelihood value for the network.
 
+        Args:
+            N/A
         Returns:
             float: a negative log likelihood, the closer to 0 the more likely
                    that the network is the true network that represents 
@@ -1449,6 +1559,8 @@ class BiMarkersLikelihood(CalculationNode):
         Gets the final log likelihood of the network.
         Calculates it, or returns the cached value.
 
+        Args:
+            N/A
         Returns:
             float: a negative log likelihood, the closer to 0 the more likely
                    that the network is the true network that represents 
@@ -1459,10 +1571,26 @@ class BiMarkersLikelihood(CalculationNode):
         else:
             return self.cached
     
-    def sim(self):
+    def sim(self) -> None:
+        """
+        N/A
+        
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
         pass
     
-    def update(self):
+    def update(self) -> None:
+        """
+        N/A
+        
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
         pass
 
 ##############################
@@ -1476,9 +1604,27 @@ class VPIComponent(ModelComponent):
     """
     
     def __init__(self, dependencies: set[type]) -> None:
+        """
+        Initialize the VPI component with a set of dependencies.
+
+        Args:
+            dependencies (set[type]): a set of types that this component
+                                       depends on.
+        Returns:
+            N/A
+        """
         super().__init__(dependencies)
         
     def build(self, model : Model) -> None:
+        """
+        Build the VPI tracker, and hook it up to the root probability calculator
+        and all network nodes.
+
+        Args:
+            model (Model): the model that the VPI tracker will be hooked up to.
+        Returns:
+            N/A
+        """
         vpi_acc = VPIAccumulator()
         
         # Hook to root probability
@@ -1497,9 +1643,28 @@ class SNPRootComponent(ModelComponent):
     of the network.
     """
     def __init__(self, dependencies: set[type]) -> None:
+        """
+        Initialize the SNP root component with a set of dependencies.
+
+        Args:
+            dependencies (set[type]): a set of types that this component depends
+                                       on.
+        Returns:
+            N/A  
+        """ 
         super().__init__(dependencies)
         
     def build(self, model : Model) -> None:
+        """
+        Build the SNP likelihood algorithm, and hook it up to the root of the
+        network.
+
+        Args:
+            model (Model): the model that the SNP likelihood algorithm will be
+                            hooked up to.
+        Returns:
+            N/A
+        """
         root_prob = BiMarkersLikelihood()
         
         # Hook to root of network as parent
@@ -1515,9 +1680,27 @@ class SNPTransitionComponent(ModelComponent):
     node and the root likelihood calculator.
     """
     def __init__(self, dependencies: set[type]) -> None:
+        """
+        Initialize the SNP transition component with a set of dependencies.
+
+        Args:
+            dependencies (set[type]): Set of types that this component depends
+                                        on.
+        Returns:
+            N/A
+        """
         super().__init__(dependencies)
     
     def build(self, model : Model) -> None:
+        """
+        Build the SNP transition matrix, Q, and hook it up to each network node
+        and the root probability calculator.
+        Args:
+            model (Model): the model that the SNP transition matrix will be
+                            hooked up to.   
+        Returns:
+            N/A
+        """
         q_node = BiMarkersTransitionMatrixNode()
         
         # Hook to root probability
@@ -1538,10 +1721,32 @@ class SNPParamComponent(ModelComponent):
     """
     
     def __init__(self, dependencies : set[type], params : dict) -> None:
+        """
+        Initialize the SNP parameter component with a set of dependencies and
+        a dictionary of parameters.
+
+        Args:
+            dependencies (set[type]): Set of types that this component depends
+                                        on.
+            params (dict): Dictionary of parameters that will be used in the
+                           model.
+        Returns:
+            N/A
+        """
         super().__init__(dependencies)  
         self.params = params
     
-    def build(self, model: Model) -> None:
+    def build(self, model : Model) -> None:
+        """
+        Build the SNP model parameters and hook them up to the SNP transition
+        matrix, Q, the root probability calculator, and the network.
+
+        Args:
+            model (Model): the model that the SNP model parameters will be
+                            hooked up to.
+        Returns:
+            N/A
+        """     
         # All parameters
         u_node = U(self.params["u"])
         v_node = V(self.params["v"])
@@ -1594,7 +1799,7 @@ def build_model(filename : str,
                              allele changing from green to red. Defaults to .5.
         coal (float, optional): Parameter for the rate of coalescence. 
                                 Defaults to 1.
-        grouping (dict, optional): TODO: Figure out an apt description. Defaults to None.
+        grouping (dict, optional): Grouping of data sequences. Defaults to None.
         auto_detect (bool, optional): Flag that, if enabled, will automatically
                                       group data sequences together based on 
                                       naming similarity. Defaults to False.
@@ -1629,10 +1834,9 @@ def build_model(filename : str,
     
     return snp_model
 
-##########################
-### METHOD ENTRY POINT ###
-##########################
-
+###########################
+### METHOD ENTRY POINTS ###
+###########################
 
 def MCMC_BIMARKERS(filename: str, 
                    u : float = .5 ,
@@ -1690,7 +1894,6 @@ def MCMC_BIMARKERS(filename: str,
 
     return {result_model.network : result_model.likelihood()}
 
-
 def SNP_LIKELIHOOD(filename : str,
                    u : float = .5 ,
                    v : float = .5, 
@@ -1710,7 +1913,7 @@ def SNP_LIKELIHOOD(filename : str,
                              allele changing from green to red. Defaults to .5.
         coal (float, optional): Parameter for the rate of coalescence. 
                                 Defaults to 1.
-        grouping (dict, optional): TODO: Figure out an apt description. Defaults to None.
+        grouping (dict, optional): Grouping of data sequences. Defaults to None.
         auto_detect (bool, optional): Flag that, if enabled, will automatically
                                       group data sequences together based on 
                                       naming similarity. Defaults to False.
@@ -1731,7 +1934,6 @@ def SNP_LIKELIHOOD(filename : str,
     
     return snp_model.likelihood()
        
-    
 def SNP_LIKELIHOOD_DATA(filename : str,
                          set_reds : dict,
                          u : float = .5 ,
@@ -1747,6 +1949,8 @@ def SNP_LIKELIHOOD_DATA(filename : str,
     Args:
         filename (str): string path destination of a nexus file that 
                         contains SNP data and a network
+        set_reds (dict): A dictionary of taxa labels and their associated 
+                         red allele data.
         u (float, optional): Parameter for the probability of an
                              allele changing from red to green. Defaults to .5.
         v (float, optional): Parameter for the probability of an
@@ -1774,7 +1978,7 @@ def SNP_LIKELIHOOD_DATA(filename : str,
     
     for taxa in snp_model.all_nodes[ExtantSpecies]:
         leaf : ExtantSpecies = taxa
-        leaf.update(SeqRecord(set_reds[leaf.get_name()], leaf.get_name()))
+        leaf.update(DataSequence(set_reds[leaf.label], leaf.label))
     
     return snp_model.likelihood()
             

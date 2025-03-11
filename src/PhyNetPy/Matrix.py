@@ -1,6 +1,25 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
 """ 
 Author : Mark Kessler
-Last Edit : 4/3/24
+Last Edit : 3/11/25
 First Included in Version : 1.0.0
 
 Docs   - [x]
@@ -9,18 +28,33 @@ Design - [ ]
 """
 
 
+
 import numpy as np
 import math
-from Alphabet import Alphabet
-from MSA import MSA
+from Alphabet import *
+from MSA import MSA, DataSequence
+import numpy.typing as npt
+
+
+###################
+#### CONSTANTS ####
+###################
+
+
 
 ##########################
 #### HELPER FUNCTIONS ####
 ##########################
 
-def list_to_string(my_list : list[str]) -> str:
+def _list_to_string(my_list : list[str]) -> str:
     """
     Turns a list of characters into a string
+    
+    Args:
+        my_list (list[str]): A list of characters/strings
+
+    Returns:
+        str: one string that is the concatentation of each element of the list
     """
     sb = ""
     for char in my_list:
@@ -31,14 +65,23 @@ def list_to_string(my_list : list[str]) -> str:
 #### EXCEPTION CLASS ####
 #########################
 
-class MatrixException(Exception):
+class MatrixError(Exception):
     """
     This exception is raised when there is an error either in parsing data
     into the matrix object, or if there is an error during any sort of 
     operation
     """
 
-    def __init__(self, message = "Matrix Error"):
+    def __init__(self, message : str = "Matrix Error") -> None:
+        """
+        Create new MatrixError with custom message.
+
+        Args:
+            message (str, optional): Custom error message. Defaults to 
+                                     "Matrix Error".
+        Returns:
+            N/A                            
+        """
         self.message = message
         super().__init__(self.message)
 
@@ -56,18 +99,25 @@ class Matrix:
     """
     
     def __init__(self, 
-                 alignment: MSA, 
-                 alphabet = Alphabet(Alphabet.DNA)) -> None:
+                 alignment : MSA, 
+                 alphabet : Alphabet = Alphabet(DNA)) -> None:
         """
         Takes one single MSA object, along with an Alphabet object,
-        represented as either DNA, RNA, PROTEIN, CODON, SNP, or BINARY. 
-        The default is DNA.              
-        """
+        represented as either DNA, RNA, PROTEIN, CODON, or USER. 
+        The default is DNA. 
 
+        Args:
+            alignment (MSA): Multiple Sequence Alignment (MSA) object.
+            alphabet (Alphabet, optional): An alphabet for mapping characters
+                                           to numerics. Defaults to
+                                           Alphabet(DNA).
+        Returns:
+            N/A
+        """
         # ith element of the array = column i's distinct site pattern index in
         # the compressed matrix
-        self.unique_sites : int = None
-        self.data : np.ndarray = None
+        self.unique_sites : int = 0
+        self.data : npt.NDArray[np.int_] = np.ndarray((0,), dtype = np.uint8)
         self.locations : list = list()
 
         # ith element of the array = count of the number of times
@@ -75,14 +125,14 @@ class Matrix:
         self.count : list = list()
         self.alphabet : Alphabet = alphabet
         self.type : str = alphabet.get_type()
-        self.taxa_to_rows = dict()
-        self.rows_to_taxa = dict()
+        self.taxa_to_rows : dict[str, int] = dict()
+        self.rows_to_taxa : dict[int, str]= dict()
 
         # the next binary state to map a new character to
         self.next_state : int = 0
 
         ##Parse the input file into a list of sequence records
-        self.seqs : list = alignment.get_records()
+        self.seqs : list[DataSequence] = alignment.get_records()
         self.aln : MSA = alignment
 
         ##turn sequence record objects into the matrix data
@@ -91,23 +141,28 @@ class Matrix:
     def populate_data(self) -> None:
         """
         Stores and simplifies the MSA data.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         
         # init the map from chars to binary
         # set the number of mappable states based on the alphabet type
         if self.type == "DNA" or self.type == "RNA":
             self.bits = math.pow(2, 8)  # 2^4?
-            self.data = np.array([], dtype=np.int8)
+            self.data = np.array([], dtype = np.int8)
         elif self.type == "SNP":
             self.bits = math.pow(2, 8)  # 2^2?
-            self.data = np.array([], dtype=np.int8)
+            self.data = np.array([], dtype = np.int8)
         elif self.type == "PROTEIN":
             # Prespecified substitution rates between aminos
             self.bits = math.pow(2, 32)
-            self.data = np.array([], dtype=np.int32)
+            self.data = np.array([], dtype = np.int32)
         else:
             self.bits = math.pow(2, 64)
-            self.data = np.array([], dtype=np.int64)
+            self.data = np.array([], dtype = np.int64)
 
         self.state_map : dict[str, int]= {}
 
@@ -115,15 +170,17 @@ class Matrix:
         index = 0
         
         for r in self.seqs:
-            self.taxa_to_rows[r.get_name()] = index
-            self.rows_to_taxa[index] = r.get_name()
-            # print("mapping " + str(r.get_name()) + \
+
+            self.taxa_to_rows[r.label] = index # type: ignore
+            self.rows_to_taxa[index] = r.label # type: ignore
+            # print("mapping " + str(r.label) + \
             #       " to row number " + str(index))
         
             for char in r.get_seq():
                 # use the alphabet to map characters to their bit states 
                 # and add to the data as a column
-                char_as_array = np.array([self.alphabet.map(char)])
+                char_array : list[int] = [self.alphabet.map(char)] # type: ignore
+                char_as_array = np.array(char_array)
                 self.data = np.append(self.data, char_as_array, axis = 0)
         
             index += 1
@@ -145,6 +202,11 @@ class Matrix:
         """
         Reduces the matrix of data by removing non-unique site patterns, 
         and records the location and count of the unique site patterns.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
 
         new_data : np.ndarray = np.empty((self.num_taxa, 0), dtype = np.int8)
@@ -155,7 +217,7 @@ class Matrix:
         for i in range(self.seq_len):
 
             col = self.get_column(i, self.data, 0)
-            col_str = list_to_string(col)
+            col_str = _list_to_string(col) # type: ignore
 
             if col_str in column_data:
                 self.locations.append(column_data[col_str])
@@ -270,6 +332,8 @@ class Matrix:
         """
         Returns the number of unique sites in the MSA/Data
 
+        Args:
+            N/A
         Returns:
             int: number of unique sites
         """
@@ -283,6 +347,8 @@ class Matrix:
         Args:
             new_data (np.ndarray): The simplified data matrix, that only has
                                    distinct column values.
+        Returns:
+            N/A
         """
         
         for i in range(self.unique_sites):
@@ -302,6 +368,8 @@ class Matrix:
         """
         Get the character matrix from the matrix of alphabet states.
 
+        Args:
+            N/A
         Returns:
             np.ndarray: the character matrix, that will have equivalent 
                         dimensionality to the state matrix.
@@ -319,6 +387,8 @@ class Matrix:
         """
         Get the number of taxa represented in this matrix.
 
+        Args:
+            N/A
         Returns:
             int: the number of taxa
         """
@@ -340,6 +410,8 @@ class Matrix:
         """
         Get the type of data of this matrix
 
+        Args:
+            N/A
         Returns:
             str: the data type
         """

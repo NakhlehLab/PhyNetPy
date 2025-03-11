@@ -1,3 +1,23 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
+
 """
 Author: Mark Kessler
 
@@ -5,34 +25,27 @@ Description: This file contains the method Infer_MP_Allop_2.0, which
 is a maximum parsimony approach to inferring phylogenetic networks that contain
 allopolyploid, polyploid, and autopolyploid species, given a set of gene trees.
 
-Last Edit: 5/10/24
+Last Edit: 3/11/25
 Included in version : 1.0.0
 
-TODO: fix bootstrapping algo, components
-Docs   - [x]
-Tests  - [ ]
-Design - [ ]
+Docs   - [ ]
+Tests  - [x]
+Design - [x]
 
 """
 from __future__ import annotations
-from cProfile import Profile
 import copy
-import io
-import math
 from Network import *
 import GraphUtils as utils
 from collections import defaultdict, deque
-import pulp as p
 import numpy as np
 from NetworkParser import NetworkParser
 from BirthDeath import Yule
-from typing import Callable
 from ModelGraph import *
 from ModelFactory import *
 from MetropolisHastings import *
 from State import *
 from NetworkMoves import *
-import pstats, io
 import random
 
 """
@@ -75,8 +88,21 @@ https://academic.oup.com/sysbio/article/71/3/706/6380964
 ###########################
 
 class InferAllopError(Exception):
-    def __init__(self, message = "Error during the execution of \
-                                  Infer_MP_Allop_2.0"):
+    """
+    Exception class for Infer_MP_Allop related operation errors.
+    """
+    def __init__(self, message : str = "Error during the execution of \
+                                        Infer_MP_Allop_2.0") -> None:
+        """
+        Initialize a new error message
+
+        Args:
+            message (str, optional): The error message. Defaults to "Error
+                                    during the execution of Infer_MP_Allop_2.0".
+        Returns:
+            N/A
+        """
+        
         self.message = message
         super().__init__(self.message)
 
@@ -84,36 +110,167 @@ class InferAllopError(Exception):
 #### HELPER FUNCTIONS ###
 #########################
 
-def dict_subtract(cur : dict[Node, int], goal : dict[Node, int]) -> dict:
+def _dict_subtract(cur : dict[Node, int],
+                   goal : dict[Node, int]) -> dict[Node, int]:
+    """
+    Subtract the current ploidy for each leaf in the network from the goal
+    ploidy (derived from the subgenome mapping), to see which leaves need to 
+    have increased ploidy.
+
+    Raises:
+        Exception: if cur and goal have unequivalent leaf sets. 
+    Args:
+        cur (dict[Node, int]): map from leaves to their ploidy levels 
+        goal (dict[Node, int]): map from leaves to their desired ploidy level.
+    Returns:
+        dict[Node, int]: a mapping of leaves to the amount of ploidy that needs
+                         to be added to achieve the goal ploidy.
+    """
     if cur.keys() == goal.keys():
         dif = {key : goal[key] - cur[key] for key in cur.keys()}
         return dif
-    raise Exception("Error subtracting unequal dicts")    
+    raise Exception("Error subtracting dicts. Key sets are not the same!")    
 
-def nodes_to_improve(net : Network, 
-                     n : Node,
-                     nti : dict[Node, int], 
-                     lti : dict[Node, int]):
+def _nodes_to_improve(net : Network, 
+                      n : Node,
+                      nti : dict[Node, int], 
+                      lti : dict[Node, int]) -> int:
+    """
+    Compute the maximum amount of ploidy that needs to be added for
+    each leaf and internal node. This number, for any node, is the minimum over
+    its set of child nodes.
 
+    Args:
+        net (Network): Network
+        n (Node): Node for which to compute the amount of ploidy needed
+        nti (dict[Node, int]): Map that accumulates results for each node.
+        lti (dict[Node, int]): Map that contains starter values for each leaf.
+
+    Returns:
+        int: The amount of ploidy needed for @n
+    """
+    #base case
     if net.out_degree(n) == 0:
         nti[n] = lti[n]
-    else:
-        nti[n] = min([nodes_to_improve(net, node, nti, lti) for node in net.get_children(n)])
-    
+    else: #recursive case
+        nti[n] = min([_nodes_to_improve(net, node, nti, lti) \
+                      for node in net.get_children(n)])
     return nti[n]
-   
-def attach(net : Network, nti : dict[Node, int]):
+
+def _valid_hyb_src(net : Network, 
+                   cluster_par : Node,
+                   ploidy : int) -> list[Edge]:
+    """
+    Gather the valid source edges for a hybrid edge to connect to an in-edge
+    of 'cluster_par'.
     
-    n : Node = random.choice([n for n in list(nti.keys()) if nti[n] != 0])
-    valid_srcs = net.edges_to_subgenome_count(n, nti[n])
-    dest_edge = random.choice(net.in_edges(n))
+    Edges are also filtered by their ploidy values, any valid edge must be <=
+    'ploidy'
+
+    Args:
+        net (Network): Network
+        cluster_par (Node): Parent node of the clade that will be given 
+                            additional ploidy via the new hybrid edge.
+        ploidy (int): Maximum amount of ploidy that can be added to the clade.
+
+    Returns:
+        list[Edge]: List of valid edges.
+    """
+    valid_edges = []
+    edges_2_ploidy = net.subgenome_ct_edges(delta = ploidy)
     
-    subct = random.choice(list(valid_srcs.keys()))
-    src_edge = random.choice(valid_srcs[subct])
+    subnet_edges = net.edges_downstream_of_node(cluster_par)
+    for edge in net.E():
+        if edge not in subnet_edges and edge in edges_2_ploidy.keys():
+            valid_edges.append(edge)
     
-    add_hybrid(net, src_edge, dest_edge)
+    return valid_edges
+                  
+def _ploidy_dif(goal : dict[Node, int], cur : dict[Node, int]) -> bool:
+    """
+    Checks if cur has achieved goal ploidy.
+
+    Args:
+        goal (dict[Node, int]): map of leaf nodes to their desired ploidy
+        cur (dict[Node, int]): map of leaf nodes to their current ploidy
+
+    Returns:
+        bool: if goal and cur are "equivalent" mappings.
+    """
+    #if even one value is different, maps are not equivalent.
+    for leaf in goal.keys():
+        if cur[leaf] != goal[leaf]:
+            return False
+    return True
     
-def resolve_ploidy(net : Network, subgenomes : dict[str, list[str]]) -> Network:
+def _attach(net : Network, nti : dict[Node, int]) -> None:
+    """
+    Given a set of nodes that need to be edited as to increase ploidy, add a 
+    hybrid edge in such a location as to increase the ploidy of a maximally 
+    sized set of nodes that need to be improved.
+    
+    Leads to a starting network with a greedily minimum amount of reticulations
+    and that groups as many leaves into one "polyploid" clade as possible.
+
+    Args:
+        net (Network): The Network.
+        nti (dict[Node, int]): A map of nodes in @net to the amount of ploidy
+                               that the node needs to gain.
+    Return:
+        N/A
+
+    """
+    
+    #Map all nodes to their current subgenome counts
+    subgenome_count_nodes = {node : net.subgenome_count(node) 
+                             for node in net.V()}
+    
+    #Get all clusters, including clusters of size 1
+    clusters : set[tuple[Node]] = utils.get_all_clusters(net, 
+                                                         include_trivial = True)
+    
+    #compute largest cluster in the set of clusters where each node in the 
+    #cluster is a node that we need to increase the ploidy
+    max_c : tuple[Node] = tuple()
+    for cluster in clusters:
+        is_valid = True
+        for node in cluster:
+            if node not in nti.keys():
+                is_valid = False
+            else:
+                if nti[node] == 0:
+                    is_valid = False
+        
+        if is_valid and len(cluster) > len(max_c):
+            max_c = cluster
+    
+    #Get MRCA of cluster, this node is the node whose in edge is the hybrid 
+    #destination, so that we can edit the ploidy for all nodes under it.
+    
+    par_of_maxc = net.mrca(set(max_c))
+
+    # We can only increase the ploidy by the minimum. IE cluster (A, B, C).
+    # If A needs 2, B needs 2, but C only needs 1, we can only add 1 ploidy 
+    # value to mrca(A, B, C).
+    min_ploidy_of_max_c = min([subgenome_count_nodes[n] for n in max_c])
+    
+    # Take a random (most likely has one edge anyways) in edge of the parent 
+    # and attach that edge to another edge.
+    hyb_dest_edge : Edge = random.choice(net.in_edges(par_of_maxc))
+    
+    # Calculate valid hybrid source edges as to 1) not make a cycle 2) add the
+    # correct amount of ploidy
+    potential_edges = _valid_hyb_src(net, par_of_maxc, min_ploidy_of_max_c)
+    
+    # Choose any of the valid sources
+    hyb_src_edge : Edge = random.choice(potential_edges)
+    
+    # Finally, add the hybrid edge. An acceptable amount of ploidy will have 
+    # been added to the network such that other leaves will remain unaffected.
+    add_hybrid(net, hyb_src_edge, hyb_dest_edge)
+     
+def _resolve_ploidy(net : Network, 
+                    subgenomes : dict[str, list[str]]) -> Network:
     """
     Given a tree and a subgenome mapping of network leaves to genes, add 
     reticulation edges such that each leaf has the desired ploidy.
@@ -122,46 +279,49 @@ def resolve_ploidy(net : Network, subgenomes : dict[str, list[str]]) -> Network:
         net (Network): A standard binary tree. Each leaf will have ploidy 1.
         subgenomes (dict[str, list[str]]): A subgenome mapping. Maps names of 
                                            subgenomes to the gene names.
-
     Returns:
         Network: A reconciled network with correct ploidy.
     """
+    
+    # Compute the current amount of ploidy, and the desired amount of ploidy
     cur_ploidy = {node : net.subgenome_count(node) 
                   for node in net.get_leaves()}
-    goal_ploidy = {node : len(subgenomes[node.get_name()]) 
+    goal_ploidy = {node : len(subgenomes[node.label]) 
                    for node in net.get_leaves()}
     
-    while cur_ploidy != goal_ploidy:
+    # Keep connecting and adding ploidy to maximally sized clusters, until
+    # each leaf has the desired ploidy.
+    while not _ploidy_dif(goal_ploidy, cur_ploidy):
         
         #Figure out all the nodes that need increases in ploidy
-        lti = dict_subtract(cur_ploidy, goal_ploidy)
+        lti = _dict_subtract(cur_ploidy, goal_ploidy)
         nti = {}
-        nodes_to_improve(net, net.root()[0], nti, lti)
-        
-        #Determine valid reticulation spots
-        attach(net, nti)
+        _nodes_to_improve(net, net.root(), nti, lti)
+    
+        #Determine valid reticulation spots and add the hybrid edge
+        _attach(net, nti)
        
         #Recalculate leaf ploidy
         cur_ploidy = {node : net.subgenome_count(node) 
                   for node in net.get_leaves()} 
-    
+
     return net
 
-def random_object(mylist : list, rng : np.random.Generator) -> object:
+def random_object(mylist : list[Any], rng : np.random.Generator) -> object:
     """
     Select a random object from a list using a default rng object from numpy
 
     Args:
-        mylist (list): any list of objects
+        mylist (list[Any]): any list of objects
         rng (np.random.Generator): numpy default rng object
 
     Returns:
-        object : could be anything that is contained in mylist
+        object: could be anything that is contained in mylist
     """
-    rand_index = rng.integers(0, len(mylist))
+    rand_index : int = rng.integers(0, len(mylist)) # type: ignore
     return mylist[rand_index]
     
-def cluster_as_name_set(cluster : set[Node]) -> set[str]:
+def cluster_as_name_set(cluster : set[Node]) -> frozenset[str]:
     """
     Convert cluster from a set of nodes to a set of strings (names).
 
@@ -169,19 +329,20 @@ def cluster_as_name_set(cluster : set[Node]) -> set[str]:
         cluster (set[Node]): One form of a "cluster"
 
     Returns:
-        set[str]: The set of node names in the cluster.
+        frozenset[str]: The set of node names in the cluster.
     """
-    return frozenset([node.get_name() for node in cluster])
+    return frozenset([node.label for node in cluster])
     
-def clusters_contains(cluster : set, set_of_clusters : set) -> bool:
+def clusters_contains(cluster : set[Node], 
+                      set_of_clusters : set[set[Node]]) -> bool:
     """
     Check if a cluster is in a set of clusters by checking names
     (the objects can be different, but two clusters are equal if their 
     names are equal).
     
     Args:
-        cluster (set): a cluster
-        set_of_clusters (set): a set of clusters
+        cluster (set[Node]): a cluster
+        set_of_clusters (set[set[Node]]): a set of clusters
 
     Returns:
         bool: True, if cluster is an element of set_of_clusters. False if not.
@@ -195,16 +356,16 @@ def clusters_contains(cluster : set, set_of_clusters : set) -> bool:
     return False
 
 def cluster_partition(cluster : frozenset[Node],
-                      processed : dict[set, Node]) -> frozenset:
+                      processed : dict[set[Node], Node]) -> frozenset:
     """
     Given a cluster such as ('A', 'B', 'C'), if a cluster such as ('A', 'B') 
     has already been processed, split the original cluster into subsets -- 
     {('A', 'B'), ('C')}.
 
     Args:
-        cluster (frozenset): A cluster.
-        processed (dict): A mapping from clusters to the Node obj that is the 
-                          root of that cluster.
+        cluster (frozenset[Node]): A cluster.
+        processed (dict[set[Node], Node]): A mapping from clusters to the Node 
+                                           obj that is the root of that cluster.
 
     Returns:
         frozenset: the partitioned cluster
@@ -238,11 +399,13 @@ def generate_tree_from_clusters(tree_clusters : set[str]) -> Network:
     Given a set of clusters (given by the taxa labels, ie {('A','B','C'), 
     ('B','C'), ('D','E','F'), ('D','E')}), reconstruct the tree it represents.
 
+    Args:
+        tree_clusters (set[str]): A set of tree clusters, as described above.
     Returns:
         Network: the MDC network.
     """
     
-    net : Network = Network( nodes = NodeSet(), edges = EdgeSet())
+    net : Network = Network()
     root : Node = Node(name = "ROOT")
     net.add_nodes(root)
     
@@ -286,7 +449,7 @@ def generate_tree_from_clusters(tree_clusters : set[str]) -> Network:
                 # Already found the cluster before
                 if type(subtree) == frozenset: 
                     #connect previous cluster to this current cluster parent
-                    new_edge = Edge(cluster_parent, processed_clusters[subtree])
+                    new_edge =Edge(cluster_parent, processed_clusters[subtree])
                     net.add_edges(new_edge)
                 else: 
                     # subtree is simply a taxa label (a string), 
@@ -309,7 +472,7 @@ def generate_tree_from_clusters(tree_clusters : set[str]) -> Network:
     return net
 
 def partition_gene_trees(gene_map : dict[str, list[str]], 
-                         rng = None) -> Network:
+                         rng : np.random.Generator = None) -> Network:
     """
     Generate a starting network given a subgenome mapping.
     
@@ -322,7 +485,10 @@ def partition_gene_trees(gene_map : dict[str, list[str]],
     ploidy 2.
 
     Args:
-        gene_map (dict[str, list[str]]): 
+        gene_map (dict[str, list[str]]): Map from gene names to a list of 
+                                         copy names.
+        rng (np.random.Generator): A random generator instance.
+                                   Defaults to None.
 
     Returns:
         Network : A bootstrapped starting network with correct ploidy values.
@@ -338,36 +504,37 @@ def partition_gene_trees(gene_map : dict[str, list[str]],
     for leaf in simple_network.get_leaves():
         simple_network.update_node_name(leaf, names[name_idx])
         name_idx += 1
-    
+            
     # Network is now a tree with the right names and right amount of leaves.
-    # Continue adding reticulations such that the ploidy values 
-    # (amount of genes for each subgenome) are correct. 
-    return resolve_ploidy(simple_network, gene_map)
+    # Now use the maxcluster-minploidy algorithm to finish building the network.
+    return _resolve_ploidy(simple_network, gene_map)
 
-def get_other_copies(gene_tree_leaf : Node, gene_map : dict) -> list[str]:
+def get_other_copies(gene_tree_leaf : Node, 
+                     gene_map : dict[str, list[str]]) -> list[str]:
     """
     Given a gene tree leaf, get all other gene copy names for the
     Taxon for which gene_tree_leaf is a value.
-
-    Args:
-        gene_tree_leaf (Node): Leaf node of a gene tree
-        gene_map (dict): a taxon map 
-
+    
     Raises:
         InferAllopError: raised if gene_tree_leaf is not listed in the taxon map 
                          as an item of any value
 
+    Args:
+        gene_tree_leaf (Node): Leaf node of a gene tree
+        gene_map (dict[str, list[str]]): a taxon map.
+        
     Returns:
         list[str]: List of other gene copy names
     """
     for copy_names in gene_map.values():
-        if gene_tree_leaf.get_name() in copy_names:
+        if gene_tree_leaf.label in copy_names:
             return copy_names
     
-    raise InferAllopError(f"Leaf name '{gene_tree_leaf.get_name()}' not found \
+    raise InferAllopError(f"Leaf name '{gene_tree_leaf.label}' not found \
                             in gene copy mapping")
           
-def allele_map_set(g : Network, gene_map : dict[str, list[str]]) -> list: 
+def allele_map_set(g : Network, 
+                   gene_map : dict[str, list[str]]) -> list[AlleleMap]: 
     """
     Let a MUL tree, T', have taxa labels drawn from the set X 
     (keys of gene_map input dict). Calculate all possible mappings from taxa 
@@ -375,12 +542,14 @@ def allele_map_set(g : Network, gene_map : dict[str, list[str]]) -> list:
     
     Args:
         g (Network): A gene tree
+        gene_map (dict[str, list]): A taxon map.
 
     Returns:
-        list: a list of functions that map labels of g to labels of a MUL tree.
+        list[AlleleMap]: a list of functions that map labels of g to 
+                         labels of a MUL tree.
     """
     
-    funcs = []
+    funcs : list[AlleleMap] = []
     funcs.append(AlleleMap())
     
     #Map each gene tree leaf to a mul tree leaf
@@ -404,247 +573,6 @@ def allele_map_set(g : Network, gene_map : dict[str, list[str]]) -> list:
             
     return funcs      
 
-
-########################
-#### MDC START TREE  ###        TODO: Approve this class
-########################
-
-class MDC_Tree:
-    
-    def __init__(self, gene_trees : list[Network]) -> None:
-        """
-        Given a set of gene trees, construct the species tree using the 
-        MDC criterion.
-
-        Args:
-            net_list (list[Network]): a list of gene trees 
-        """
-        
-        self.gene_trees = gene_trees
-        self.validate_gene_trees()
-        self.cg_edges : set = set() # Set of compatibility graph edges
-        self.cluster2index = {} # Map clusters to unique integers
-        self.index2cluster = {} # the reverse map
-        self.wv : list = [] # the function wv(A) where A is a cluster
-    
-        #Compute compatibility graph
-        self.compatibility_graph() # self.wv set in call to this function
-        
-        indices = [str(num) for num in range(len(self.wv))]
-        
-        # Each decision variable corresponds to a cluster. value = 0 if not 
-        # included in MDC tree, 1 if it is included.
-        self.x : np.array = np.array(p.LpVariable.matrix("X", 
-                                                         indices, 
-                                                         lowBound=0, 
-                                                         upBound=1, 
-                                                         cat="Integer"))
-        
-        #Now we can solve the maximization problem using the pulp library
-        self.mdc : Network = self.solve()
-        
-    
-    def compute_wv(self, cluster_set : set) -> list:
-        """
-        Compute the number of extra lineages (per gene tree) for each cluster 
-        found in the set of gene trees. Calling this function means that the 
-        index2cluster mapping has been filled out properly.
-        
-        Args:
-            cluster_set (set): A set of clusters 
-
-        Returns:
-            list: An implicit map from clusters (defined by the list index) to 
-                  their wv values defined by equation 3 in (1)
-                  
-        """
-        
-        m = 0
-        
-        #{cluster_as_name_set(cluster) : 0 for cluster in cluster_set}
-        wv_unadjusted = defaultdict(int) 
-        
-        # Each cluster has |{gene trees}| alpha(A, T) values to add up
-        for A in cluster_set:
-            for T in self.gene_trees:
-                #compute extra lineages contributed by cluster A in gene tree T
-                extra = self.eq2(T, A)
-                
-                # Compute m value. defined as the maximum extra lineages 
-                # over all clusters/gene trees
-                if extra > m:
-                    m = extra
-                    
-                wv_unadjusted[cluster_as_name_set(A)] += extra
-        
-        #adjust the wv map per eq3 for ILP reasons
-        wv_map = {key : m - wv_unadjusted[key] + 1 
-                  for key in wv_unadjusted.keys()}  
-        
-        #convert to correct list
-        wv = []
-        for index in range(len(list(wv_map.keys()))):
-            wv.append(wv_map[self.index2cluster(index)])
-        
-        return wv
-        
-    def eq2(T : Network, A : set) -> int:
-        """
-        For a cluster, A, and a gene tree T, compute the added lineages based on
-        equation 2 of (1):
-        xl = k - 1, where k is the number of maximal clades in T such that 
-        leaf_descendants(C) is a subset of A
-        
-        Args:
-            T (Network): A gene tree.
-            A (set): A cluster.
-
-        Raises:
-            Exception: if the computation fails and no maximal clades are found
-
-        Returns:
-            int: number of extra lineages for A and T.
-        """
-        
-        num_maximal_clades = 0
-        
-        # visited set. remove elements as maximal clades are found
-        cluster = set(cluster_as_name_set(A)) 
-        cur = T.root()[0]
-        q = deque()
-        
-        q.append(cur)
-        
-        # bfs - If you start at the root, you start at the largest possible leaf 
-        # set and work down
-        while len(q) != 0 or len(cluster) > 0:
-            leaf_desc : set[Node] = T.leaf_descendants(cur)
-            break_subtree = False
-            
-            # Check if the current clade in T is a maximal one, ie contains only 
-            # elements from cluster A.
-            if cluster.issuperset(set([leaf.get_name() for leaf in leaf_desc])):
-                num_maximal_clades += 1
-                break_subtree = True
-                for n in leaf_desc:
-                    cluster.remove(n.get_name())
-            
-            q.pop()
-            
-            # Don't search subtrees after finding a maximal clade
-            if not break_subtree: 
-                for child in T.get_parents(cur):
-                    q.appendleft(child) 
-        
-        if num_maximal_clades == 0:
-            raise Exception("Something went wrong computing xl for a cluster \
-                             and a gene tree")
-        
-        return num_maximal_clades - 1 
-
-    def compatibility_graph(self) -> None:
-        """
-        Computes the compatability graph described in (1)
-        
-        Also is in charge of populating the mapping wv: A -> N, where A is the 
-        set of encountered clusters, and N is the set of natural numbers.
-        """
-        #keep track of encountered clusters
-        clusters = set() 
-        
-        #map clusters to variable indeces for the ilp step
-        index = 0 
-        
-        for T in self.gene_trees:
-            
-            clusters_T = utils.get_all_clusters(T, T.root()[0])
-            
-            #convert each tuple element to a frozenset
-            clusters_T = set([frozenset(tup) for tup in clusters_T])
-            
-            #process each cluster in the gene tree
-            for A in clusters_T:
-                if clusters_contains(A, clusters):
-                    #This cluster has been seen before in another gene tree
-                    self.wv[self.cluster2index[cluster_as_name_set(A)]] += 1
-                else:
-                    #This cluster hasn't been seen before
-                    self.wv.append(1)
-                    self.cluster2index[cluster_as_name_set(A)] = index
-                    self.index2cluster[index] = cluster_as_name_set(A)
-                    clusters.add(A)
-                    index += 1
-            
-            # Add edge c1--c2 to compatability graph. 
-            # Each cluster in T gets connected to every other cluster in T.
-            for c1 in clusters_T:
-                for c2 in clusters_T:
-                    if c1 != c2:
-                        c1_names = cluster_as_name_set(c1)
-                        c2_names = cluster_as_name_set(c2)
-                        self.cg_edges.add(frozenset([c1_names, c2_names]))
-        
-        self.wv = self.compute_wv(clusters)
-        
-    def solve(self) -> Network:
-        """
-        Uses the PULP integer linear programming library to solve the 
-        optimization problem. Calculates the clique that minimizes extra 
-        lineages by solving the problem described by formulation 4 in (1)
-        
-        Then, using the selected clusters, the mdc tree is reconstructed.
-        """
-        
-        #init the model
-        find_tree_model = p.LpProblem("MDC-Tree-Construction", p.LpMaximize)
-        
-        #add the objective function to the model (4)
-        find_tree_model += p.lpSum(self.x * np.array(self.wv))
-        
-        # Add the constraints. If two clusters are not connected in the 
-        # compatability graph, then only one can appear in the mdc tree
-        # and thus x_i + x_j must not exceed 1.
-        for i in range(len(self.x)):
-            for j in range(i, len(self.x)):
-                e = frozenset([self.index2cluster[i], self.index2cluster[j]])
-                if e not in self.cg_edges and i != j:
-                    find_tree_model += p.lpSum([self.x[i], self.x[j]]) <= 1 \
-                        , "Compatibility Graph Constraints" + f'<{i},{j}>'
-
-        #solve the problem
-        find_tree_model.solve()
-        
-        #collect all clusters with value 1, they are in the mdc tree
-        tree_clusters = set()
-        for v in find_tree_model.variables():
-            try:
-                #if cluster is included in the optimal solution
-                if v.value() == 1: 
-                    cluster = self.index2cluster[int(v.name.split("_")[1])]
-                    tree_clusters.add(cluster)
-            except:
-                print("error couldnt find value")
-        
-        #reconstruct the tree and return  
-        return generate_tree_from_clusters(tree_clusters)
-    
-    def get(self) -> Network:
-        return self.mdc
-        
-    def validate_gene_trees(self) -> Network:
-        """
-        Validates that each gene tree has the same number of taxa and 
-        same taxa labels
-        """
-        taxa : list[Node] = self.gene_trees[0].get_leaves()
-        taxa_names = [t.get_name() for t in taxa]
-        for T in self.gene_trees[1:]:
-            leaves = T.get_leaves()
-            assert(len(leaves) == len(taxa))
-            leaf_names = [l.get_name() for l in leaves]
-            for name in leaf_names:
-                assert(name in taxa_names)
-        
 ##############################
 ### MUL TREE & Allele Maps ###
 ##############################
@@ -654,19 +582,22 @@ class Allop_MUL(MUL):
     A Standard MUL tree, but contains relevant methods for calculating the 
     maximum parsimony score for Infer_MP_Allop_2.0
     """
-    def extra_lineages(self, coal_event_map : dict[tuple, str], 
+    def extra_lineages(self, 
+                       coal_event_map : dict[tuple, str], 
                        f : AlleleMap) -> int:
         """
         Computes the number of extra lineages in a mapping from a gene tree T, 
         into a MUL tree, T'.
 
         Args:
-            coal_event_map (dict[tuple, str]): A mapping from edges in T' to a 
-                                              list of nodes of T that have been 
-                                              mapped into that edge. All nodes 
-                                              are by name, not object. Edges 
-                                              here are represented by tuples
-                                              with node names.
+            coal_event_map (dict[tuple[str, str], str]): A mapping from edges in 
+                                                         T' to a list of nodes 
+                                                         of T that have been 
+                                                         mapped into that edge.
+                                                         All nodes are by name, 
+                                                         not object. Edges here
+                                                         are represented by 
+                                                         tuples with node names.
             
             f (AlleleMap): An allele map. Used to ensure the correct number of 
                            lineages for each leaf branch. Some leaves may not be 
@@ -678,7 +609,7 @@ class Allop_MUL(MUL):
         # Map edges to the number of lineages present in the branch
         edge_2_xl = {}
         
-        root = self.mul.root()[0]
+        root = self.mul.root()
         
         # Populate the edge to lineage mapping by calling the xl_helper function
         # at the root (propagates through the whole network)
@@ -688,14 +619,14 @@ class Allop_MUL(MUL):
         
         # Root of g will be mapped to this edge, 
         # but doesn't count as a coal event
-        root_xl = edge_2_xl[(None, root.get_name())][0] - len(coal_event_map[(None, root.get_name())]) - 1 
+        root_xl = edge_2_xl[(None, root.label)][0] - len(coal_event_map[(None, root.label)]) - 1 
     
         extra_lin_total = 0
         mul_leaves = self.mul.get_leaves()
         
         # Process each edge in the mul tree and tabulate 
         # the extra lineage count.
-        for edge in self.mul.get_edges():
+        for edge in self.mul.E():
 
             # Code follows Lemma 1 from (1):
             # The number of extra lineages in a branch is equal to the number of 
@@ -716,8 +647,11 @@ class Allop_MUL(MUL):
         
         return extra_lin_total
     
-    def xl_helper(self, start_node : Node, edge_xl_map : dict,
-                  coal_map : dict, f : AlleleMap) -> None:
+    def xl_helper(self, 
+                  start_node : Node, 
+                  edge_xl_map : dict,
+                  coal_map : dict[tuple[str, str], str], 
+                  f : AlleleMap) -> None:
         """
         Modifies the edge_xl_map parameter. This is a recursive function that 
         processes an edge in T'. The number of extra lineages exiting a branch 
@@ -727,11 +661,16 @@ class Allop_MUL(MUL):
         Args:
             start_node (Node): Node to calculate the number of 
                                lineages exiting/entering it
-            edge_xl_map (dict): Mapping from edges to the number of 
-                                lineages exiting/entering it
-            coal_map (dict): Mapping from edges to gene tree internal nodes.
+            edge_xl_map (dict[tuple[str, str], list[int]): Mapping from edges to
+                                                           the number of 
+                                                           lineages 
+                                                           exiting/entering it
+            coal_map (dict[tuple[str, str], str]): Mapping from edges to gene 
+                                                   tree internal node names.
             f (AlleleMap): allele mapping (gene tree leaf names to mul tree leaf 
                            names -- types are strings).
+        Returns:
+            N/a
         """
         # Pull the mapping from the AlleleMap object
         fmap : dict[str, str] = f.map
@@ -740,14 +679,14 @@ class Allop_MUL(MUL):
             # should definitely not be None, and there should only be 1.
             par : Node  = self.mul.get_parents(start_node)[0]
             
-            if start_node.get_name() in fmap.values():
+            if start_node.label in fmap.values():
                 #bottom, top of branch will each be 1
-                edge_xl_map[(par.get_name(), start_node.get_name())] = [1, 1] 
+                edge_xl_map[(par.label, start_node.label)] = [1, 1] 
             else:
                 #There is no gene tree leaf mapped to this mul tree leaf :(
-                edge_xl_map[(par.get_name(), start_node.get_name())] = [0, 0] 
+                edge_xl_map[(par.label, start_node.label)] = [0, 0] 
         else:
-            if start_node == self.mul.root()[0]:
+            if start_node == self.mul.root():
                 par : Node = None
             else:
                 par : Node  = self.mul.get_parents(start_node)[0] 
@@ -757,7 +696,7 @@ class Allop_MUL(MUL):
             #Get each child's top lineage value 
             for child in self.mul.get_children(start_node):
                 self.xl_helper(child, edge_xl_map, coal_map, f)
-                e = (start_node.get_name(), child.get_name())
+                e = (start_node.label, child.label)
                 sum_of_child_tops += edge_xl_map[e][1]
             
             # Special case that start_node == root is not important since the 
@@ -765,17 +704,18 @@ class Allop_MUL(MUL):
             # par->start edge is a coal event that combines 2 lineages into 1
             par_name : str = None
             if par is not None:
-                par_name = par.get_name()
+                par_name = par.label
                 
             bottom = sum_of_child_tops
-            coal_events = len(coal_map[(par_name, start_node.get_name())])
+            coal_events = len(coal_map[(par_name, start_node.label)])
             top = sum_of_child_tops - coal_events
             
-            edge_xl_map[(par_name, start_node.get_name())] = [bottom, top]
+            edge_xl_map[(par_name, start_node.label)] = [bottom, top]
             
-            
-    def gene_tree_map(self, g : Network, leaf_map : AlleleMap, 
-                      mrca_cache: dict[frozenset[Node], Node]) -> dict:
+    def gene_tree_map(self,
+                      g : Network, 
+                      leaf_map : AlleleMap, 
+                      mrca_cache: dict[frozenset[Node], Node]) -> dict[tuple, list[str]]:
         """
         Maps a gene tree (T) into a MUL tree (T'), where each have taxa 
         from the set X.
@@ -785,6 +725,13 @@ class Allop_MUL(MUL):
             leaf_map (AlleleMap): A function f: string -> string from gene tree 
                                   leaf names to MUL tree leaf names. 
                                   An allele map.
+            mrca_cache (dict[frozenset[Node], Node]): A cache for MRCA
+                                                      computations.
+        Returns:
+            dict[tuple, list[str]]: A mapping from edges in T' to a list of nodes 
+                                    of T that have been mapped into that edge.
+                                    All nodes are by name, not object.
+
         """
         # Let v′ = MRCA_T′(C_T(v)), and let u′ be the parent node of v′. 
         # Then, v is mapped to any point pv, excluding node u′, 
@@ -796,17 +743,17 @@ class Allop_MUL(MUL):
         
         # Map each internal node of the gene tree into an edge of the MUL tree
         gene_tree_leaves = g.get_leaves()
-        mul_root = self.mul.root()[0]
+        mul_root = self.mul.root()
         
         #grab results of the prior leaf_descendants_all() call
         leaf_desc_map = g.get_item("leaf descendants")
         
-        for node in g.get_nodes():
+        for node in g.V():
             #only map internal nodes
             if node not in gene_tree_leaves: 
                 c_t_ofv = leaf_desc_map[node] 
 
-                cluster_names = [leaf_map.map[leaf.get_name()] 
+                cluster_names = [leaf_map.map[leaf.label] 
                                  for leaf in c_t_ofv]
                 cluster = frozenset(cluster_names)
                 
@@ -818,25 +765,25 @@ class Allop_MUL(MUL):
                     v_prime : Node = self.mul.mrca(cluster) 
                     mrca_cache[cluster] = v_prime 
                 
-                edge = [None, v_prime.get_name()]
+                edge = [None, v_prime.label]
                 
                 # Calculate v_prime's parent
                 if v_prime == mul_root:
                     u_prime = None
-                    e = (None, v_prime.get_name())
-                    tnode_2_edgeloc[node.get_name()] = e
+                    e = (None, v_prime.label)
+                    tnode_2_edgeloc[node.label] = e
                 else:
                     u_prime : Node = self.mul.get_parents(v_prime)[0] 
-                    edge[0] = u_prime.get_name()
-                    e = (u_prime.get_name(), v_prime.get_name())
-                    tnode_2_edgeloc[node.get_name()] = e
+                    edge[0] = u_prime.label
+                    e = (u_prime.label, v_prime.label)
+                    tnode_2_edgeloc[node.label] = e
                 
                 
                 #Add node to edge mapping
                 if tuple(edge) in edgeloc_2_tnode.keys():
-                    edgeloc_2_tnode[tuple(edge)].append(node.get_name())
+                    edgeloc_2_tnode[tuple(edge)].append(node.label)
                 else:
-                    edgeloc_2_tnode[tuple(edge)] = [node.get_name()]
+                    edgeloc_2_tnode[tuple(edge)] = [node.label]
         
         return edgeloc_2_tnode           
             
@@ -848,7 +795,8 @@ class Allop_MUL(MUL):
         
         Args:
             g (Network): A gene tree
-
+            mrca_cache (dict[frozenset[Node], Node]): A cache for MRCA
+                                                      computations.
         Returns:
             int: the minimum number of extra lineages over all 
                  possible allele maps
@@ -858,7 +806,9 @@ class Allop_MUL(MUL):
 
         return min(xl)
 
-    def XL_Allele(self, g : Network, f : AlleleMap, 
+    def XL_Allele(self, 
+                  g : Network, 
+                  f : AlleleMap, 
                   mrca_cache : dict[frozenset[Node], Node]) -> int:
         """
         Compute the extra lineages given a MUL tree T, a gene tree, g, 
@@ -867,7 +817,8 @@ class Allop_MUL(MUL):
         Args:
             g (Network): A gene tree
             f (AlleleMap): An allele map from leaves of g to leaves of T
-
+            mrca_cache (dict[frozenset[Node], Node]): A cache for MRCA
+                                                      computations. 
         Returns:
             int: number of extra lineages
         """
@@ -898,13 +849,16 @@ class AlleleMap:
     Data structure that holds a mapping from gene tree leaf names to mul tree 
     leaf names. Internally handles the mechanism for making sure gene copies 
     are not mapped to the same subgenome.
-    
-    TODO: Add in constraint flexibility
     """
     
     def __init__(self) -> None:
         """
         Initialize an empty allele mapping.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         self.map = dict()
         self.disallowed = set() 
@@ -928,7 +882,7 @@ class AlleleMap:
         
         # Otherwise, set the mapping and avoid mapping a gene tree leaf to 
         # this mul leaf in the future
-        self.map[g_leaf.get_name()] = mul_leaf
+        self.map[g_leaf.label] = mul_leaf
         self.disallowed.add(mul_leaf)
         return 1
 
@@ -944,7 +898,7 @@ class InferMPAllop:
     
     def __init__(self, 
                  network : Network, 
-                 gene_map : dict[str, str], 
+                 gene_map : dict[str, list[str]], 
                  gene_trees : list[Network], 
                  iter : int, 
                  rng : np.random.Generator) -> None:
@@ -960,6 +914,8 @@ class InferMPAllop:
             iter (int): Number of iterations to run the chain.
             rng (np.random.Generator): random number generator, for consistent 
                                        testing.
+        Returns:
+            N/A
         """
         
         for gene_tree in gene_trees:
@@ -976,19 +932,21 @@ class InferMPAllop:
         model_fac : ModelFactory = ModelFactory(mp_allop_comp)
         self.mp_allop_model : Model = model_fac.build()
         self.iter = iter
-        self.results = None
+        self.results = {}
         
     def run(self) -> float:
         """
         Computes the network with the lowest (highest likelihood) parsimony 
         score over the set of given gene trees.
 
+        Args:
+            N/A
         Returns:
-            Network : Network that maximizes the maximum parsimony score over
-                      the set of gene trees.
+            float : parsimony score of the most likely Network
         """
-        hc = HillClimbing(Infer_MP_Allop_Kernel(), None, None, 
-                          self.iter, self.mp_allop_model)
+        hc = HillClimbing(Infer_MP_Allop_Kernel(),
+                          num_iter = self.iter, 
+                          model = self.mp_allop_model)
         end_state : State = hc.run()
         self.results = hc.nets_2_scores
         return end_state.likelihood()
@@ -1000,7 +958,7 @@ class MPAllopComponent(ModelComponent):
     
     def __init__(self, 
                  network : Network, 
-                 gene_map : dict[str, str],
+                 gene_map : dict[str, list[str]],
                  gene_trees : list[Network], 
                  rng : np.random.Generator) -> None:
         """
@@ -1011,12 +969,14 @@ class MPAllopComponent(ModelComponent):
             gene_map (dict[str, str]): Subgenome mapping.
             gene_trees (list[Network]): Set of gene trees.
             rng (np.random.Generator): Random number generator.
+        Returns:
+            N/A
         """
         
         super().__init__(set())
         
         self.network : Network = network
-        self.gene_map : dict[str, str] = gene_map
+        self.gene_map : dict[str, list[str]] = gene_map
         self.gene_trees : list[Network] = gene_trees
         self.rng : np.random.Generator = rng
         
@@ -1027,6 +987,8 @@ class MPAllopComponent(ModelComponent):
 
         Args:
             model (Model): A model, under construction.
+        Returns:
+            N/A
         """
         # Add mul tree 
         mul_node : MULNode = MULNode(self.gene_map, self.rng)
@@ -1066,6 +1028,8 @@ class NetworkContainer(StateNode):
 
         Args:
             network (Network): Any Network obj.
+        Returns:
+            N/A
         """
         super().__init__()
         self.network : Network = network
@@ -1077,6 +1041,8 @@ class NetworkContainer(StateNode):
 
         Args:
             new_net (Network): The new Network obj to be stored.
+        Returns:
+            N/A
         """
         self.network = new_net
         model_parents : list[CalculationNode] = self.get_model_parents()
@@ -1087,6 +1053,8 @@ class NetworkContainer(StateNode):
         """
         Grab the network obj stored in this container.
 
+        Args:
+            N/A
         Returns:
             Network: The stored Network obj.
         """
@@ -1099,7 +1067,7 @@ class MULNode(CalculationNode):
     """
     
     def __init__(self, 
-                 gene_map : dict[str, str],
+                 gene_map : dict[str, list[str]],
                  rng : np.random.Generator) -> None:
         """
         Initialize a MUL tree and store it in this model node.
@@ -1107,11 +1075,13 @@ class MULNode(CalculationNode):
         Args:
             gene_map (dict[str, str]): A subgenome mapping.
             rng (np.random.Generator): A random number generator.
+        Returns:
+            N/A
         """
         super().__init__()
         self.multree : Allop_MUL = Allop_MUL(gene_map, rng)
         
-    def calc(self) -> Network:
+    def calc(self) -> Allop_MUL:
         """
         Regenerate the mul tree, if the underlying network has been edited.
 
@@ -1119,8 +1089,10 @@ class MULNode(CalculationNode):
             InferAllopError: If the MUL node is not correctly linked to a
                              NetworkContainer.
 
+        Args:
+            N/A
         Returns:
-            Network: The newly generated MUL tree.
+            Allop_MUL: The newly generated MUL tree.
         """
         
         model_children = self.get_model_children()
@@ -1132,26 +1104,41 @@ class MULNode(CalculationNode):
                 raise InferAllopError("Malformed MP Allop Model Graph. \
                                        Expected MUL Node to have Network \
                                        Container Child")
-        
-        return self.cache(self.multree)
+        self.cache(self.multree)
+        return self.multree
     
     def sim(self) -> None:
         """
         No implementation for a MUL node for simulations.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         pass
     
-    def update(self):
+    def update(self) -> None:
+        """
+        Flag this node and all upstream nodes as being in need of recalculation.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
         self.upstream()
     
-    def get(self) -> Network:
+    def get(self) -> Allop_MUL:
         """
         Get the MUL tree if the underlying network has not been changed 
         recently, otherwise generate a new one, cache it 
         (via the calc function), and return it.
 
+        Args:
+            N/A
         Returns:
-            Network: A MUL tree that is up to date with the underlying network.
+            Allop_MUL: A MUL tree that is up to date with the underlying network.
         """
         if self.dirty:
             return self.calc()
@@ -1169,6 +1156,8 @@ class GeneTreesNode(StateNode):
 
         Args:
             gene_tree_list (list[Network]): A list of gene trees.
+        Returns:
+            N/A
         """
         super().__init__()
         self.gene_trees : list[Network] = gene_tree_list
@@ -1182,7 +1171,8 @@ class GeneTreesNode(StateNode):
             new_tree (Network): a new gene tree to take the place of an old one.
             index (int): The index into the gene tree list that is the spot for
                          the new gene tree.
-
+        Returns:
+            N/A
         """
         self.gene_trees[index] = new_tree
         model_parents : list[CalculationNode] = self.get_model_parents()
@@ -1193,6 +1183,8 @@ class GeneTreesNode(StateNode):
         """
         Grab the list of gene trees.
 
+        Args:
+            N/A
         Returns:
             list[Network]: List of gene trees.
         """
@@ -1205,7 +1197,12 @@ class ParsimonyScore(CalculationNode):
     """
     def __init__(self) -> None:
         """
-        No parameters required.
+        Initialize the Parsimony Score node.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         super().__init__()
         
@@ -1216,7 +1213,8 @@ class ParsimonyScore(CalculationNode):
         Raises:
             InferAllopError: If there is an error in the model formation or if 
                              something went wrong computing the score. 
-
+        Args:
+            N/A
         Returns:
             float: Parsimony score.
         """
@@ -1247,12 +1245,22 @@ class ParsimonyScore(CalculationNode):
     def sim(self) -> None:
         """
         Simulations not applicable for this node.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         pass
     
     def update(self) -> None:
         """
         Flag this node as being in need of recalculation.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         self.dirty = True
     
@@ -1261,6 +1269,8 @@ class ParsimonyScore(CalculationNode):
         If nothing has changed in the model, then return the cached score.
         If something has changed, then recompute the parsimony score.
 
+        Args:
+            N/A
         Returns:
             float: The mp allop 2.0 parsimony score.
         """
@@ -1276,9 +1286,9 @@ class ParsimonyScore(CalculationNode):
 
 def INFER_MP_ALLOP_BOOTSTRAP(start_network_file : str, 
                              gene_tree_file : str,
-                             subgenome_assign : dict[str, str], 
+                             subgenome_assign : dict[str, list[str]], 
                              iter_ct : int = 500, 
-                             seed = None) -> dict:
+                             seed : int = None) -> dict[Network, float]:
     """
     Infer_MP_Allop_2.0, with a provided starting network.
     
@@ -1288,23 +1298,26 @@ def INFER_MP_ALLOP_BOOTSTRAP(start_network_file : str,
     Args:
         start_network_file (str): A nexus file that contains a starting network
         gene_tree_file (str): A nexus file that contains the gene trees
-        subgenome_assign (dict[str, str]): A mapping from genomes to the set
+        subgenome_assign (dict[str, list[str]]): A mapping from genomes to the set
                                            of genes in them.
         iter_ct (int, optional): Number of iterations to run
                                  the inference chain. Defaults to 500.
-        seed (_type_, optional): Random seed value. Defaults to None, in which
+        seed (int, optional): Random seed value. Defaults to None, in which
                                  case a random integer will be used.
 
     Returns:
-        dict: A map from a small number of Networks to their parsimony scores
+        dict[Network, float]: A map from a small number of Networks to their    
+                              parsimony scores
     """
     
     #init rng object
-    rng = np.random.default_rng(seed = seed)
+    if seed is None:
+        rng = np.random.default_rng(random.randint(0, 1000))
+    else:
+        rng = np.random.default_rng(seed = seed)
     
     #Parse gene trees and starting network from files
-    gt_parser = NetworkParser(gene_tree_file)
-    gene_tree_list : list[Network] = gt_parser.get_all_networks()
+    gene_tree_list : list[Network] = NetworkParser(gene_tree_file).get_all_networks()
     net_parser = NetworkParser(start_network_file)
     start_net = net_parser.get_all_networks()[0]
 
@@ -1322,9 +1335,9 @@ def INFER_MP_ALLOP_BOOTSTRAP(start_network_file : str,
     return mp_model.results
 
 def INFER_MP_ALLOP(gene_tree_file : str, 
-                   subgenome_assign : dict[str, str], 
+                   subgenome_assign : dict[str, list[str]] = None, 
                    iter_ct : int = 500,
-                   seed : int = None):
+                   seed : int  = None) -> dict[Network, float]:
     """
     Infer_MP_Allop_2.0.
     
@@ -1333,7 +1346,7 @@ def INFER_MP_ALLOP(gene_tree_file : str,
 
     Args:
         gene_tree_file (str): A nexus file containing the gene trees
-        subgenome_assign (dict[str, str]): a map from genomes to their genes
+        subgenome_assign (dict[str, list[str]]): a map from genomes to their genes
         iter_ct (int, optional): Number of iterations to run the inference 
                                  chain. Defaults to 500.
         seed (int, optional): Random number generator seed value. 
@@ -1341,12 +1354,21 @@ def INFER_MP_ALLOP(gene_tree_file : str,
                               will be chosen.
 
     Returns:
-        dict: a mapping from a small number of Networks to their parsimony 
-        scores.
+        dict[Network, float]: a mapping from a small number of Networks to 
+                              their parsimony scores.
     """
-    rng = np.random.default_rng(seed = seed)
+    gene_tree_list : list[Network] = NetworkParser(gene_tree_file).get_all_networks()
+    
+    if subgenome_assign is None:
+        gts = GeneTrees(gene_tree_list)
+        subgenome_assign = gts.mp_allop_map()
+    
+    if seed is None:
+        rng = np.random.default_rng(random.randint(0, 1000))
+    else:
+        rng = np.random.default_rng(seed = seed)
+        
     start_net = partition_gene_trees(subgenome_assign, rng = rng)
-    gene_tree_list : list = NetworkParser(gene_tree_file).get_all_networks()
     
     mp_model = InferMPAllop(start_net, 
                             subgenome_assign, 
@@ -1388,76 +1410,3 @@ def ALLOP_SCORE(net_filename : str,
         gene_tree.put_item("leaf descendants", gene_tree.leaf_descendants_all())
     
     return T.score(gene_trees)
-
-
-
-#################
-#### TESTING ####
-################# 
-    
-def test():
-    
-    # test_seed = random.randint(0,1000) #698
-    # print(f"TESTER SEED : {test_seed}")
-    scores = [] 
-    for dummy in range(1):
-        test_seed = random.randint(0,1000) #698 # 464 #32 913 #868
-        
-        #print(f"TESTER SEED : {test_seed}")
-        try:
-            run_dict = INFER_MP_ALLOP(
-                    '/Users/mak17/Documents/PhyNetPy/src/J_pruned_v2.nex',
-                    {'U': ['01uA', '01uB'], 'T': ['01tA', '01tB'], 
-                     'B': ['01bA'], 'F': ['01fA'], 'C': ['01cA'], 'A': ['01aA'],
-                     'D': ['01dA'], 'O': ['01oA']},
-                    seed = test_seed)
-            
-            scores.append(
-                run_dict
-            )
-            print(run_dict)
-            
-            # scores.append(
-            # '/Users/mak17/Documents/PhyloGenPy/PhyNetPy/src/PhyNetPy/D10.nex', 
-            #         {"B": ["01bA"], "A": ["01aA"], "X": ["01xA", "01xB"],
-            #          "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]},
-            #         seed = test_seed
-            #         ))
-            
-            #          '/Users/mak17/Documents/PhyNetPy/src/J_nex_n1.nex',
-            #         {'F': ['01fA'], 'T': ['01tA', '01tB'], 
-            #          'W': ['01wA', '01wB'], 'B': ['01bA'], 
-            #          'V': ['01vA', '01vB'], 'A': ['01aA'], 
-            #          'U': ['01uA', '01uB'], 'C': ['01cA'], 
-            #          'E': ['01eA'], 'X': ['01xA', '01xB'], 
-            #          'Y': ['01yA', '01yB'], 'O': ['01oA'], 
-            #          'Z': ['01zB', '01zA'], 'D': ['01dA']},
-            #         
-        except:
-            print(test_seed)
-            raise Exception("HALT")
-
-
-    
-# cp = Profile()  
-# cp.enable()
-
-#test()
-#test_start()
-
-# cp.disable()
-# cp.dump_stats("statsrun.txt")
-
-
-# stream = open('/Users/mak17/Documents/PhyloGenPy/statsrun(2).txt', 'w')
-# stats = pstats.Stats('/Users/mak17/Documents/PhyloGenPy/statsrun.txt', 
-#                       stream=stream)
-# stats.sort_stats('cumtime')
-# stats.print_stats(20)
-
-
-
-#print(ALLOP_SCORE("/Users/mak17/Documents/PhyNetPy/src/bubble_J.nex",
-# "/Users/mak17/Documents/PhyNetPy/src/J_pruned_v2.nex", 
-# {'U': ['01uA', '01uB'], 'T': ['01tA', '01tB'], 'B': ['01bA'], 'F': ['01fA'], 
-# C': ['01cA'], 'A': ['01aA'], 'D': ['01dA'], 'O': ['01oA']}))

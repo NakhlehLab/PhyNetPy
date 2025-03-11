@@ -1,6 +1,25 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
 """ 
 Author : Mark Kessler
-Last Stable Edit : 2/8/24
+Last Stable Edit : 3/11/25
 First Included in Version : 0.1.0
 """
 
@@ -12,22 +31,26 @@ from abc import ABC, abstractmethod
 from GTR import *
 from Network import Network, Edge, Node
 from ModelMove import Move
-from MSA import SeqRecord
-from typing import Callable
+from MSA import DataSequence
+from typing import Any, Callable
 
 
 ##########################
 #### HELPER FUNCTIONS ####
 ##########################
 
-def vec_bin_array(arr, m):
+def vec_bin_array(arr : np.array, m : int) -> np.array:
     """
-    Arguments:
-    arr: Numpy array of positive integers
-    m: Number of bits of each integer to retain (in the case of DNA, 4)
+    Convert an array of integers into a binary array of bits.
+    
+    Args:
+        arr (np.array): Numpy array of positive integers
+        m (int): Number of bits of each integer to retain (ie DNA, 4)
 
-    Returns a copy of arr with every element replaced with a bit vector.
-    Bits encoded as int8's, read from left to right. [1, 0, 1, 1] is 13.
+    Returns: 
+        (np.array): a copy of arr with every element replaced with a bit vector.
+                    Bits encoded as int8's, read from left to right. 
+                    [1, 0, 1, 1] is 13.
     """
     to_str_func = np.vectorize(lambda x: np.binary_repr(x).zfill(m))
     strs = to_str_func(arr)
@@ -49,7 +72,16 @@ class ModelError(Exception):
     likelihoods computations on the model.
     """
 
-    def __init__(self, message="Model is Malformed"):
+    def __init__(self, message : str = "Model is Malformed") -> None:
+        """
+        Create a custom ModelError with a message.
+
+        Args:
+            message (str, optional): A custom error message. Defaults to 
+                                     "Model is Malformed".
+        Returns:
+            N/A
+        """
         super().__init__(message)
 
 #####################
@@ -67,41 +99,22 @@ class Model:
 
     def __init__(self): 
         """
-        Initialize an empty model.
+        Initialize a model object.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
-       
-        # Maintain links to various internal structures and bookkeeping 
-        # data 
-        
-        # Access all nodes of a given type
-        self.all_nodes : dict[type, list[ModelNode]] = defaultdict(list)
-        
-        # Access the internal network
-        self.network : Network = None 
+        # Maintain links to various internal structures and bookkeeping data 
+        self.all_nodes: dict[type, list[ModelNode]] = defaultdict(list)
+        self.network: Network = None 
         self.network_container = None
-        
-        # Access all network nodes of a certain kind 
-        # (these are only explicitly defined by the in/out maps)
-        self.nodetypes = {"leaf":[], 
-                          "internal": [], 
-                          "reticulation":[], 
-                          "root":[]}
-        
-        # Maps parameter names (a string) to their parameter 
-        # node (parent class) object
-        self.parameters : dict[str, Parameter] = {} 
-        
-        # RNG object used to consistently select objects (useful mainly for 
-        # debugging purposes, by setting a consistent seed instead of a random
-        # seed).
+        self.nodetypes = {"leaf": [], "internal": [], "reticulation": [], "root": []}
+        self.parameters: dict[str, Parameter] = {} 
         self.seed = random.randint(0, 1000)
-        self.rng : np.random.Generator = np.random.default_rng(self.seed)
-        
-        # Map for the conversion between network Node objects and their 
-        # associated model node object "wrapper"
-        self.network_node_map : dict[Node, ModelNode] = {}
-        
-        #Log output
+        self.rng: np.random.Generator = np.random.default_rng(self.seed)
+        self.network_node_map: dict[Node, ModelNode] = {}
         self.summary_str = ""
 
     def change_branch(self, index: int, value: float) -> None:
@@ -109,11 +122,11 @@ class Model:
         Change a branch length in the model and update any nodes 
         upstream from the changed node.
         
-        TODO: Edit for edge update
-
-        Inputs: index - index into the heights/lengths vector
-                value - new height/length to replace the old one
-
+        Args:
+            index (int): Index into the heights/lengths vector.
+            value (float): New height/length to replace the old one.
+        Returns:
+            N/A
         """
         self.tree_heights.singular_update(index, value)
 
@@ -121,19 +134,25 @@ class Model:
         """
         Ensure that the network field and network container field
         are accessing the same network.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         if self.network_container is not None:
-            # Network container is a state node, and thus has an update method.
             self.network_container.update(self.network)
                 
-    def update_parameter(self, param_name : str, param_value : object) -> None:
+    def update_parameter(self, param_name: str, param_value: object) -> None:
         """
-        Change the parameter value of the parameter with name 'param_name'
+        Change the parameter value of the parameter with name 'param_name'.
     
         Args:
             param_name (str): The name of the parameter to update. 
             param_value (object): A value, in whatever type the given
                                   parameter takes on.
+        Returns:
+            N/A
         """
         self.parameters[param_name].update(param_value)
             
@@ -145,16 +164,16 @@ class Model:
         Delegates which likelihood based on the type of model. This method is 
         the only likelihood method that should be called outside of this 
         module!!!
-
         
+        Args:
+            N/A
         Returns: 
             float: A numerical likelihood value, the product of all root
                    vector likelihoods.
         """
-        #TODO: this will change with root probability component
         return self.nodetypes["root"][0].get()
 
-    def execute_move(self, move : Move) -> Model:
+    def execute_move(self, move: Move) -> Model:
         """
         The operator move has asked for permission to work on this model.
         Pass the move this model and get the model that is the result of the 
@@ -162,44 +181,41 @@ class Model:
 
         Args:
             move (Move): A concrete subclass instance of Move.
-        
         Returns: 
-            Model: This !same! obj. The model will have changed based on the 
+            Model: This same object. The model will have changed based on the 
                    result of the move.
         """
         return move.execute(self)
 
-    def summary(self, tree_filename : str, summary_filename : str) -> None:
+    def summary(self, tree_filename: str, summary_filename: str) -> None:
         """
         Writes summary of calculations to a file, and gets the current state of 
         the model and creates a network obj so that the newick format 
         can be output.
 
-        Inputs:
-        1) tree_filename (str): A string that is the name of the file to output
+        Args:
+            tree_filename (str): A string that is the name of the file to output
                                  a newick string to. If the filename does not 
                                  exist, a new file will be created in the 
                                  directory in which one is operating in.
-
-        2) summary_filename (str): A string that is the name of the file to 
+            summary_filename (str): A string that is the name of the file to 
                                    output logging information. If the filename 
                                    does not exist, a new file will be created 
                                    in the current directory.
-
+        Returns:
+            N/A
         """
         newick_str = self.network.newick()
 
         # Write newick string to output file
         if tree_filename is not None:
-            text_file = open(tree_filename, "w")
-            text_file.write(newick_str)
-            text_file.close()
+            with open(tree_filename, "w") as text_file:
+                text_file.write(newick_str)
 
-        # Step 2: write iter summary to a file
+        # Write iter summary to a file
         if summary_filename is not None:
-            text_file2 = open(summary_filename, "w")
-            text_file2.write(self.summary_str)
-            text_file2.close()
+            with open(summary_filename, "w") as text_file2:
+                text_file2.write(self.summary_str)
 
 
 ################################################
@@ -216,8 +232,15 @@ class ModelNode:
     def __init__(self, 
                  children : list = None, 
                  parents : list = None, 
-                 node_type : str = None):
-        
+                 node_type : str = None) -> None:
+        """
+        Initialize a ModelNode object.
+
+        Args:
+            children (list, optional): Children of this node. Defaults to None.
+            parents (list, optional): Parents of this node. Defaults to None.
+            node_type (str, optional): A string that describes the type of node.
+        """
         self.children : list[ModelNode] = children
         self.parents : list[ModelNode] = parents
         self.node_type : str = node_type
@@ -226,8 +249,10 @@ class ModelNode:
         """
         Adds a successor to this node.
 
-        Input: model_node (type ModelNode)
-
+        Args:
+            model_node (ModelNode): A ModelNode to add as a child.
+        Returns:
+            N/A
         """
         if self.children is None:
             self.children = [model_node]
@@ -238,7 +263,10 @@ class ModelNode:
         """
         Adds a predecessor to this node.
 
-        Input: model_node (type ModelNode)
+        Args:
+            model_node (ModelNode): A ModelNode to add as a parent.
+        Returns:
+            N/A
         """
         if self.parents is None:
             self.parents = [model_node]
@@ -252,35 +280,57 @@ class ModelNode:
 
         Args:
             other_node (ModelNode): A ModelNode to join this ModelNode to.
+        Returns:
+            N/A
         """
         self.add_parent(other_node)
         other_node.add_child(self)
 
     def unjoin(self, other_node : ModelNode) -> None:
+        """
+        Removes other_node as a parent, and removes this node as
+        a child of other_node.
+
+        Args:
+            other_node (ModelNode): A ModelNode to unjoin this ModelNode from.
+        Returns:
+            N/A
+        """
         self.remove_parent(other_node)
         other_node.remove_child(self)
 
-    def remove_child(self, model_node):
+    def remove_child(self, model_node : ModelNode) -> None:
         """
         Removes a successor to this node.
 
-        Input: model_node (type ModelNode)
+        Args:
+            model_node (ModelNode): A ModelNode to remove as a child.
+        Returns:
+            N/A
         """
         if model_node in self.children:
             self.children.remove(model_node)
 
-    def remove_parent(self, model_node):
+    def remove_parent(self, model_node : ModelNode) -> None:
         """
         Removes a predecessor to this node.
 
-        Input: model_node (type ModelNode)
+        Args:
+            model_node (ModelNode): A ModelNode to remove as a parent.
+        Returns:
+            N/A
         """
         if model_node in self.parents:
             self.parents.remove(model_node)
 
     def get_model_parents(self, of_type : type = None) -> list[ModelNode]:
         """
-        Returns: the list of parent nodes to this node
+        Get the parent nodes to this node, but only the ModelNodes.
+        
+        Args:
+            of_type (type, optional): A type to filter the parent nodes by.
+        Returns: 
+            list[ModelNode]: The list of parent nodes to this node
         """
         if of_type is None:
             return self.parents
@@ -289,7 +339,12 @@ class ModelNode:
 
     def get_model_children(self, of_type : type = None) -> list[ModelNode]: 
         """
-        Returns: the list of child nodes to this node
+        Get the children nodes to this node, but only the ModelNodes.
+
+        Args:
+            of_type (type, optional): A type to filter the child nodes by.
+        Returns:
+            list[ModelNode]: The list of child nodes to this node
         """
         if of_type is None:
             return self.children
@@ -300,7 +355,12 @@ class ModelNode:
         """
         Calculates the in degree of the current node (ie number of children)
 
-        If 0, this node is a leaf
+        If 0, this node is a leaf.
+        
+        Args:
+            N/A
+        Returns:
+            int: The number of parents to this node.
         """
         if self.parents is None:
             return 0
@@ -311,6 +371,11 @@ class ModelNode:
         Calculates the out degree of the current node (ie number of parents)
 
         If 0, this node is a root of the Model
+
+        Args:
+            N/A
+        Returns:
+            int: The number of children to this node.
         """
         if self.children is None:
             return 0
@@ -318,8 +383,12 @@ class ModelNode:
 
     def find_root(self) -> list[ModelNode]:
         """
-        TODO: PLS MAKE MORE EFFICIENT THIS IS DUMB
+        Find the root node of the model graph.
 
+        Args:
+            N/A
+        Returns:
+            list[ModelNode]: A list of root nodes.
         """
         if self.in_degree() == 0:
             return {self}
@@ -332,8 +401,6 @@ class ModelNode:
         
 class CalculationNode(ABC, ModelNode):
     """
-    TODO: flush out some logic and return types. 
-    
     Subclass of a ModelNode that calculates a portion of the model likelihood or
     data simulation.
     
@@ -342,6 +409,14 @@ class CalculationNode(ABC, ModelNode):
     """
 
     def __init__(self) -> None:
+        """
+        Initialize a CalculationNode object.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
         super(CalculationNode, self).__init__()
         
         # defaults to dirty since calculation hasn't been done yet
@@ -349,24 +424,31 @@ class CalculationNode(ABC, ModelNode):
         self.cached = None
         
     @abstractmethod
-    def get(self):
+    def get(self) -> Any:
         """
         Either retrieves the cached calculation or redoes the calculation for 
         this node. This is an abstract method, due to the fact that the type of
         recalculation will vary.
 
-        Returns: a vector of partial likelihoods
+        Args:
+            N/A
+        Returns: 
+            Any: a vector of partial likelihoods
         """
         pass
         
 
     @abstractmethod
-    def calc(self, *args, **kwargs):
+    def calc(self, *args, **kwargs) -> Any:
         """
         This method should be implemented in each CalculationNode subclass.
         Doing a calculation should be a unique operation depending on the type of node.
 
-        Returns: A vector of partial likelihoods.
+        Args:
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        Returns: 
+            Any: A vector of partial likelihoods.
         """
         pass
     
@@ -376,7 +458,11 @@ class CalculationNode(ABC, ModelNode):
         This method should be implemented in each CalculationNode subclass.
         Doing a calculation should be a unique operation depending on the type of node.
 
-        Returns: A vector of partial likelihoods.
+        Args:
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        Returns: 
+            N/A
         """
         pass
     
@@ -388,6 +474,12 @@ class CalculationNode(ABC, ModelNode):
         When the model graph runs its calculate routine, this update method 
         will have marked this calculation node and any calculation nodes 
         upstream as needing recalculation.
+        
+        Args:
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        Returns:   
+            N/A
         """
         self.upstream()
         
@@ -399,6 +491,11 @@ class CalculationNode(ABC, ModelNode):
 
         If all neighbors need to be recalculated, then so must every node 
         upstream of it, and so we may stop updating.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         # First update self
         self.make_dirty()
@@ -438,6 +535,11 @@ class CalculationNode(ABC, ModelNode):
 
         This method will be called when a downstream node calls its upstream() 
         method, setting this node as a node that needs to be recalculated.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         self.dirty = True
         
@@ -447,7 +549,6 @@ class CalculationNode(ABC, ModelNode):
 
         Args:
             value (object): Some simulated data or likelihood computations.
-
         Returns:
             object: The value that was just cached.
         """
@@ -459,6 +560,8 @@ class CalculationNode(ABC, ModelNode):
         """
         Retrieves any parameters that are attached to this calculation node.
 
+        Args:
+            N/A
         Returns:
             dict[str, float]: A map from parameter names to their values.
         """
@@ -467,7 +570,6 @@ class CalculationNode(ABC, ModelNode):
         
 class StateNode(ABC, ModelNode):
     """
-    TODO: Make init and update docs.
     Model leaf nodes that hold some sort of data that calculation nodes use.
     
     In probabilistic graphical modeling, these are either clamped, constant, or
@@ -475,10 +577,27 @@ class StateNode(ABC, ModelNode):
     """
 
     def __init__(self) -> None:
+        """
+        Initialize a StateNode object.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
         super().__init__()
 
     @abstractmethod
-    def update(self, *args, **kwargs):
+    def update(self, *args, **kwargs) -> None:
+        """
+        Update behaviors are defined in the subclass implementation.
+        
+        Args:
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        Returns:
+            N/A
+        """
         pass
 
 class Parameter(StateNode):
@@ -498,6 +617,8 @@ class Parameter(StateNode):
                         for SNPs.
             value (object): Value for the parameter. Ie, for "u", valid values 
                             would be numbers from 0 to 1.
+        Returns:    
+            N/A
         """
         super().__init__()
         
@@ -516,6 +637,8 @@ class Parameter(StateNode):
 
         Args:
             value (object): A new value for the parameter.
+        Returns:
+            N/A
         """
         self.value = value
         parents : list[ModelNode] = self.get_model_parents()
@@ -528,6 +651,8 @@ class Parameter(StateNode):
         """
         Get the name of the parameter.
 
+        Args:
+            N/A
         Returns:
             str: The parameter name
         """
@@ -537,6 +662,8 @@ class Parameter(StateNode):
         """
         Get the value of the parameter
 
+        Args:
+            N/A
         Returns:
             object: Some value.
         """
@@ -559,6 +686,8 @@ class Accumulator(StateNode):
         Args:
             name (str): Label for the accumulator
             data_structure (object): The data store.
+        Returns:
+            N/A
         """
         super().__init__()
         self.data = data_structure
@@ -567,6 +696,11 @@ class Accumulator(StateNode):
     def update(self) -> None:
         """
         Update behaviors are defined in the subclass implementation.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
         pass
     
@@ -574,6 +708,8 @@ class Accumulator(StateNode):
         """
         Grab the data stored in this accumulator.
 
+        Args:   
+            N/A
         Returns:
             object: The data store.
         """
@@ -581,19 +717,34 @@ class Accumulator(StateNode):
 
 #------#
 
-class NetworkNode(ABC, ModelNode):
+class NetworkNode(ABC, ModelNode, Node):
     """
     Class that handles common functionality of all network nodes
     and all the height/branch length hookups.
     """
 
-    def __init__(self, branch = None):
+    def __init__(self, branch : Any = None) -> None:
+        """
+        Initialize a NetworkNode object.
+
+        Args:
+            branch (Any, optional): A BranchNode. Defaults to None.
+        """
         super(NetworkNode, self).__init__()
         self.branches = branch
         self.network_parents : list[NetworkNode]= None
         self.network_children : list[NetworkNode] = None
 
-    def get_parent_branches(self):
+    def get_parent_branches(self) -> dict[NetworkNode, BranchNode]:
+        """
+        Get the branches that connect this node to its parents.
+
+        Args:
+            N/A
+        Returns:
+            dict[NetworkNode, BranchNode]: A dictionary of parent nodes to
+                                           incoming branches.
+        """
         if self.network_parents is None:
             return None
         else:
@@ -602,7 +753,16 @@ class NetworkNode(ABC, ModelNode):
                 par_branches[par] = [branch for branch in par.get_child_branches() if branch.dest() == self]
             return par_branches
     
-    def get_child_branches(self):
+    def get_child_branches(self) -> list[BranchNode]:
+        """
+        Get the branches that connect this node to its children.
+        
+        Args:
+            N/A
+        Returns:
+            list[BranchNode]: A list of branches that connect this node to its
+                                children.   
+        """
         if self.branches is None:
             self.branches = {}
             all_branches = [child for child in self.get_model_parents(BranchNode)]
@@ -610,11 +770,14 @@ class NetworkNode(ABC, ModelNode):
                 self.branches[branch.dest()] = branch
         return self.branches
 
-    def add_child(self, model_node):
+    def add_child(self, model_node : ModelNode) -> None:
         """
         Adds a successor to this node.
 
-        Input: model_node (type ModelNode)
+        Args:
+            model_node (ModelNode): A ModelNode to add as a child.
+        Returns:    
+            N/A
         """
         if self.children is None:
             self.children = [model_node]
@@ -627,11 +790,14 @@ class NetworkNode(ABC, ModelNode):
             else:
                 self.parents.append(model_node)
 
-    def remove_child(self, model_node):
+    def remove_child(self, model_node : ModelNode) -> None:
         """
         Removes a predecessor to this node.
 
-        Input: model_node (type ModelNode)
+        Args:
+            model_node (ModelNode): A ModelNode to remove as a child.
+        Returns:
+            N/A
         """
         if model_node in self.children:
             self.children.remove(model_node)
@@ -640,11 +806,14 @@ class NetworkNode(ABC, ModelNode):
                 if len(self.parents) == 0:
                     self.parents = None
 
-    def add_parent(self, model_node):
+    def add_parent(self, model_node: ModelNode) -> None:    
         """
         Adds a predecessor to this node.
 
-        Input: model_node (type ModelNode)
+        Args:
+            model_node (ModelNode): A ModelNode to add as a parent.
+        Returns:
+            N/A
         """
         if self.parents is None:
             self.parents = [model_node]
@@ -659,11 +828,14 @@ class NetworkNode(ABC, ModelNode):
             else:
                 self.children.append(model_node)
 
-    def remove_parent(self, model_node):
+    def remove_parent(self, model_node : ModelNode) -> None:
         """
         Removes a predecessor to this node.
 
-        Input: model_node (type ModelNode)
+        Args:
+            model_node (ModelNode): A ModelNode to remove as a parent.
+        Returns:
+            N/A
         """
         if model_node in self.parents:
             self.parents.remove(model_node)
@@ -672,10 +844,27 @@ class NetworkNode(ABC, ModelNode):
                     self.children.remove(model_node)
 
     @abstractmethod
-    def node_move_bounds(self):
+    def node_move_bounds(self) -> tuple[float, float]:
+        """
+        Get the bounds for the move on this node.
+        
+        Args:
+            N/A
+        Returns:
+            tuple[float, float]: The lower and upper bounds for the move.
+        """
         pass
 
-    def get_parent(self, return_all = False):
+    def get_parent(self, return_all = False) -> NetworkNode | list[NetworkNode]:
+        """
+        Get the parent(s) node of this node.
+
+        Args:
+            return_all (bool, optional): If True, return all parents. Defaults to False.
+
+        Returns:
+            NetworkNode | list[NetworkNode]: The parent(s).
+        """
         if return_all:
             return self.parents
         else:
@@ -684,11 +873,32 @@ class NetworkNode(ABC, ModelNode):
             else:
                 return None
 
-    def get_children(self):
+    def get_children(self) -> list[NetworkNode]:
+        """
+        Get the children of this node.
+
+        Args:
+            N/A
+        Returns:
+            list[NetworkNode]: The children of this node.
+        
+        """
         return self.children
 
 class BranchNode(ABC, ModelNode):
+    """
+    A branch node is a node that represents a branch in a phylogenetic network.
+    """
     def __init__(self, vector_index : int, branch_length : float) -> None:
+        """
+        Initialize a BranchNode object.
+    
+        Args:
+            vector_index (int): index into the TreeHeights vector
+            branch_length (float): The length of the branch
+        Returns:
+            N/A
+        """
         super().__init__()
         
         self.index : int = vector_index
@@ -697,50 +907,78 @@ class BranchNode(ABC, ModelNode):
         self.net_child : NetworkNode = None
         self.gamma : float = None
 
-    def switch_index(self, new_index:int):
+    def switch_index(self, new_index : int) -> None:
         """
         Change the lookup index of this branch in the TreeHeight node
 
         Args:
             new_index (int): a new index
+        Returns:
+            N/A
         """
         self.index = new_index
 
-    def get_index(self):
+    def get_index(self) -> int:
         """
+        Gets the index of this branch in the TreeHeight vector
+        
+        Args:
+            N/A
         Returns:
             int: The index into the TreeHeight vector
         """
         return self.index
 
-    def set_net_parent(self, parent: NetworkNode):
+    def set_net_parent(self, parent: NetworkNode) -> None:
         """
         Set the network parent 
 
         Args:
             parent (NetworkNode): the source of this branch
+        Returns:
+            N/A
         """
         self.net_parent = parent
     
-    def set_net_child(self, child: NetworkNode):
+    def set_net_child(self, child: NetworkNode) -> None:
         """
         Set the network child
 
         Args:
             child (NetworkNode): the destination of this branch
+        Returns:
+            N/A
         """
         self.net_child = child
     
-    def src(self):
+    def src(self) -> NetworkNode:
+        """
+        Get the source of this branch
+
+        Args:
+            N/A
+        Returns:
+            NetworkNode: The source of this branch
+        """
         return self.net_parent
     
-    def dest(self):
+    def dest(self) -> NetworkNode:
+        """
+        Get the destination of this branch
+
+        Args:
+            N/A
+        Returns:
+            NetworkNode: The destination of this branch
+        """
         return self.net_child
 
-    def inheritance_probability(self)->float:
+    def inheritance_probability(self) -> float:
         """
         Return the gamma rate/ inheritance probability for a branch stemming from a hybridization node
 
+        Args:
+            N/A
         Returns:
             float: A number from [0,1], -1 if no inheritance probability is attached to this branch
         """
@@ -749,7 +987,15 @@ class BranchNode(ABC, ModelNode):
             return -1
         return self.gamma
     
-    def set_inheritance_probability(self, new_gamma : float)->None:
+    def set_inheritance_probability(self, new_gamma : float) -> None:
+        """
+        Set the inheritance probability for a branch stemming from a hybridization node
+
+        Args:
+            new_gamma (float): A number from [0,1]
+        Returns:
+            N/A
+        """
         self.gamma = new_gamma
     
 class BranchLengthNode(BranchNode, CalculationNode):
@@ -758,23 +1004,54 @@ class BranchLengthNode(BranchNode, CalculationNode):
     transition matrix Pij
     """
 
-    def __init__(self, vector_index: int, branch_length: float):
+    def __init__(self, vector_index: int, branch_length: float) -> None:
+        """
+        Initialize a BranchLengthNode object.
+
+        Args:
+            vector_index (int): index into the TreeHeights vector
+            branch_length (float): The length of the branch
+        """
         super().__init__(vector_index, branch_length)
         self.as_height = True
 
-    def update(self, new_bl: float):
+    def update(self, new_bl : float) -> None:
+        """
+        Update the branch length
+
+        Args:
+            new_bl (float): The new branch length
+        Returns:
+            N/A
+        """
         # update the branch length
         self.branch_length = new_bl
         # Mark this node and any nodes upstream as needing to be recalculated
         self.upstream()
 
-    def get(self):
+    def get(self) -> float:
+        """
+        Get the branch length
+
+        Args:
+            N/A
+        Returns:
+            float: the branch length
+        """
         if self.updated:
             return self.calc()
         else:
             return self.cached
 
-    def calc(self):
+    def calc(self) -> float:
+        """
+        Calculate the branch length
+
+        Args:
+            N/A
+        Returns:
+            float: the branch length
+        """
         # mark node as having been recalculated and cache the result
         self.cached = self.branch_length
         self.updated = False
@@ -818,12 +1095,25 @@ class TreeHeights(StateNode):
     State node that holds the node heights/branch lengths
     """
 
-    def __init__(self, node_height_vec=None):
+    def __init__(self, node_height_vec : list = None) -> None:
+        """
+        Initialize a TreeHeights object.
+
+        Args:
+            node_height_vec (list, optional): A list of node heights. Defaults to None.
+        """
         super().__init__()
         self.heights = node_height_vec
 
-    def update(self, new_vector: list):
+    def update(self, new_vector : list) -> None:
+        """
+        Update the heights vector
 
+        Args:
+            new_vector (list): A new vector of heights
+        Returns:
+            N/A
+        """
         # Only update the parts of the vector that have changed
         if self.heights is None:
             self.heights = new_vector
@@ -836,25 +1126,56 @@ class TreeHeights(StateNode):
 
             self.heights = new_vector
 
-    def singular_update(self, index: int, value: float):
+    def singular_update(self, index : int, value: float) -> None:
+        """
+        Make an update to a single height/length in the vector
+
+        Args:
+            index (int): index into the heights/lengths vector
+            value (float): The new height/length to replace the old one
+        Returns:
+            N/A
+        """
         for branch_node in self.get_model_children():
             if branch_node.get_index() == index:
                 branch_node.update(value)
 
-    def get_heights(self):
+    def get_heights(self) -> list:
         return self.heights
 
 class SubstitutionModelParams(StateNode):
     """
-    TODO: Switch to multiple Param type nodes
+    A state node that holds the parameters for a substitution model.
     """
-    def __init__(self, freq: np.array, trans: np.array) -> None:
+    def __init__(self, freq : np.array, trans: np.array) -> None:
+        """
+        Initialize a SubstitutionModelParams object.
+
+        Args:
+            freq (np.array): The base frequencies for the model.
+            trans (np.array): The transition matrix for the model.
+        Returns:
+            N/A
+        """
         super().__init__()
         self.base_freqs = freq
         self.transitions = trans
 
-    def update(self, new_freqs=None, new_trans=None):
+    def update(self, new_freqs : np.array =None, new_trans : np.array =None) -> None:
+        """
+        Update the base frequencies and/or transitions with new values.
 
+        Raises:
+            ModelError: If both new
+            frequencies and new transitions are None, then this is a nonsensical
+            update.
+        Args:
+            new_freqs (np.array, optional): The new base frequencies. Defaults to None.
+            new_trans (np.array, optional): The new transition values. Defaults to None.
+        Returns:
+            N/A
+        
+        """
         # should only have the one parent
         submodel_node = self.get_model_children()[0]
 
@@ -867,10 +1188,16 @@ class SubstitutionModelParams(StateNode):
         else:
             submodel_node.update(self.new_submodel(new_trans=new_trans))
 
-    def new_submodel(self, new_freqs: np.array = None, new_trans: np.array = None):
+    def new_submodel(self, new_freqs: np.array = None, new_trans: np.array = None)-> None:
         """
         Given a change in transitions and/or base_frequencies, determines the proper subclass of GTR
-        to return
+        to return.
+        
+        Args:
+            new_freqs (np.array, optional): The new base frequencies. Defaults to None.
+            new_trans (np.array, optional): The new transition values. Defaults to None.
+        Returns:
+            GTR: A new instance of a GTR model.
         """
         if new_freqs is None:
             proposed_freqs = self.base_freqs
@@ -895,8 +1222,7 @@ class SubstitutionModelParams(StateNode):
 
 class SubstitutionModel(CalculationNode):
     """
-    TODO: Make this consistent with having the two separate 
-    transition/transversion parameters
+    Substitution model transition matrix calculation node.
     """
     def __init__(self, submodel : GTR) -> None:
         """
@@ -905,6 +1231,8 @@ class SubstitutionModel(CalculationNode):
 
         Args:
             submodel (GTR): Any time reversible substitution model.
+        Returns:
+            N/A
         """
         super().__init__()
         self.sub : GTR = submodel
@@ -918,6 +1246,8 @@ class SubstitutionModel(CalculationNode):
                                  Be careful that the associated parameters 
                                  hooked up to this node still apply! If they do
                                  not, then the get() method will fail.
+        Returns:
+            N/A
             
         """
         # Set the new parameters
@@ -929,6 +1259,8 @@ class SubstitutionModel(CalculationNode):
         """
         Based on the associated parameters, initialize a substitution model.
 
+        Args:
+            N/A
         Returns:
             GTR: The substitution model with the parameters values in the model 
                  graph.
@@ -939,6 +1271,14 @@ class SubstitutionModel(CalculationNode):
             return self.cached
 
     def calc(self) -> GTR:
+        """
+        calculate the substitution model 
+
+        Args:
+            N/A
+        Returns:
+            GTR: the substitution model
+        """
         #No longer in need of an update
         self.dirty = False
         
@@ -952,6 +1292,14 @@ class SubstitutionModel(CalculationNode):
         return self.sub
 
     def get_submodel(self) -> GTR:
+        """
+        Get the substitution model
+
+        Args:
+            N/A
+        Returns:
+            GTR: the substitution model 
+        """
         return self.sub
 
 class ExtantSpecies(StateNode):
@@ -960,20 +1308,31 @@ class ExtantSpecies(StateNode):
     category of observed data.
     """
 
-    def __init__(self, name : str, sequences: list[SeqRecord]) -> None:
+    def __init__(self, name : str, sequences: list[DataSequence]) -> None:
         """
         Link a taxon name to its set of data sequences.
 
         Args:
             name (str): Taxon label.
-            sequence (list[SeqRecord]): list of data sequences associated with 
+            sequence (list[DataSequence]): list of data sequences associated with 
                                         this taxa.
+        Returns:
+            N/A
         """
         super().__init__()
         self.name : str = name
-        self.seqs : list[SeqRecord]= sequences
+        self.seqs : list[DataSequence]= sequences
 
-    def update(self, new_sequence: list, new_name: str):
+    def update(self, new_sequence: list, new_name: str) -> None:
+        """
+        Update the extant species node with new data.
+
+        Args:
+            new_sequence (list): list of data sequences associated with this taxa.
+            new_name (str): name of the taxa.
+        Returns:
+            N/A
+        """
         # should only have a single leaf calc node as the parent
         self.seq = new_sequence
         self.name = new_name
@@ -983,18 +1342,22 @@ class ExtantSpecies(StateNode):
         """
         Get the sequence length of all sequences associated with this taxon.
 
+        Args:
+            N/A
         Returns:
             int: Length of data sequence.
         """
         return len(self.seqs[0].get_seq())
         
 
-    def get_seqs(self) -> list[SeqRecord]:
+    def get_seqs(self) -> list[DataSequence]:
         """
         Get the list of sequence records associated with this taxon.
 
+        Args:
+            N/A
         Returns:
-            list[SeqRecord]: List of sequence records.
+            list[DataSequence]: List of sequence records.
         """
         return self.seqs
 
@@ -1002,6 +1365,8 @@ class ExtantSpecies(StateNode):
         """
         Get the taxon label.
 
+        Args:
+            N/A
         Returns:
             str: Taxon label.
         """
