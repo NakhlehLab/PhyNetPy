@@ -1,3 +1,22 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --                                                              
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
 import io
 import re
 import traceback
@@ -20,7 +39,7 @@ def generate_branch_lengths(network : Network) -> None:
         Exception: If a node is encountered that does not have a "t" 
                    value defined in its attribute dictionary
     """
-    root = network.root()[0]
+    root = network.root()
     root.add_length(0, None)
     
     # stack for dfs
@@ -63,7 +82,7 @@ def add_parallel_edge(network : Network, parent: Node, child: Node) -> None:
     #Double check to make sure the passed parameters are actually in the network
     if [parent, child] not in network.edges:
         raise NetworkError(
-            f"Edge {parent.get_name()}->{child.get_name()} does not exist \
+            f"Edge {parent.label}->{child.label} does not exist \
                 in network {network.print_adjacency()}")
     
     #Create new nodes that are required to make the parallel edge
@@ -83,7 +102,7 @@ def add_parallel_edge(network : Network, parent: Node, child: Node) -> None:
 
 
 def bfs(network: Network):
-    q = [network.root()[0]]
+    q = [network.root()]
     visited = set()
     while q:
         cur = q.pop()
@@ -96,13 +115,13 @@ def bfs(network: Network):
 
 
 def get_leaf_name_set(network: Network):
-    return set([node.get_name() for node in network.get_leaves()])
+    return set([node.label for node in network.get_leaves()])
 
 def convert_to_networkx(network: Network):
     G = nx.DiGraph()
     edges = []
-    for edge in network.get_edges():
-        edges.append((edge[0].get_name(), edge[1].get_name()))
+    for edge in network.E():
+        edges.append((edge[0].label, edge[1].label))
     G.add_edges_from(edges)
     return G
 
@@ -119,7 +138,7 @@ def remove_binary_nodes(net: Network):
     """Modified based on DAG.prune_excess_nodes()"""
 
     def prune(net: Network) -> bool:
-        root = net.root()[0]
+        root = net.root()
         q = deque([root])
         net_updated = False
 
@@ -137,7 +156,7 @@ def remove_binary_nodes(net: Network):
 
                     previous_node = current_node
                     temp = net.get_children(current_node)[0]
-                    net.remove_node(current_node)
+                    net.remove_nodes(current_node)
                     current_node = temp
                     node_removed = True
 
@@ -166,7 +185,7 @@ def print_topology_newick(net: Network):
 
 def is_tree(graph: Network):
     visited = set()
-    stack = [graph.root()[0]]   
+    stack = [graph.root()]   
     while stack:
         node = stack.pop()
         if node in visited:
@@ -202,7 +221,7 @@ def preorder_traversal(tree: Network):
     return result
 
 def postorder_traversal(net: Network):
-    root = net.root()[0]
+    root = net.root()
     stack = [root]
     searched_nodes = []
     node2index = {root: 0}
@@ -226,9 +245,6 @@ def postorder_traversal(net: Network):
     return searched_nodes
 
 
-
-
-
 def init_node_heights(graph: Network):
     nodes = postorder_traversal(graph)
     for node in nodes:
@@ -241,31 +257,6 @@ def init_node_heights(graph: Network):
                 par.add_attribute('t', branch_length + node.attribute_value('t'))
 
 
-
-
-
-def has_cycle(network: Network):
-    def dfs(node, visited, stacked):
-        if node in stacked:
-            return True
-        if node in visited:
-            return False
-
-        visited.add(node)
-        stacked.add(node)
-
-        for child in network.get_children(node):
-            if dfs(child, visited, stacked):
-                return True
-
-        stacked.remove(node)
-        return False
-
-    visited_nodes = set()
-    stacked_nodes = set()
-    root_node = network.root()[0]
-
-    return dfs(root_node, visited_nodes, stacked_nodes)
 
 
 

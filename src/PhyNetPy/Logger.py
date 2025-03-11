@@ -1,20 +1,32 @@
-"""
-Author : Mark Kessler
-Last Edit : 6/26/24
-First Included in Version : 1.0.0
-Docs   - [ ]
-Tests  - [ ] 
-Design - [ ] 
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
 
-This file is a module that allows for easy debugging of various network
-related operations. At each step during a method, a developer may call
-.log(network) on the logger object to save the state of the network at the given
-point in time.
+##############################################################################
+##  -- PhyNetPy --
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
 
-Then, at the end, an html document is generated that contains each network
-displayed visually with a comment on which step of the operation the network 
-is related to.
 """
+Module that contains classes and functions that assist developers while using
+PhyNetPy.
+
+Release Version: 2.0.0
+
+Author: Mark Kessler
+"""
+
+from __future__ import annotations
 import base64
 from io import BytesIO
 from Network import *
@@ -25,6 +37,7 @@ from pyvis.network import Network as pyvisn
 from lxml.html import builder as E
 import lxml
 import matplotlib.pyplot as plt
+from networkx import Graph as xGraph
 
 
 
@@ -38,15 +51,45 @@ class Logger:
     """
     
     def __init__(self, id : int) -> None:
-        self.networkx_objs : list = []
+        """
+        Initialize a logger instance with an integer ID value (on user to make
+        it unique).
+
+        Args:
+            id (int): A unique id for this logger instance.
+        Returns:    
+            N/A
+        """
+        self.networkx_objs : list[xGraph] = []
         self.comments : list[str] = []
-        self.id = id
+        self.id : int = id
         
-    def log(self, net : Network, comment : str = None) -> None:
+    def log(self, net : Network, comment : str = "") -> None:
+        """
+        Log a network, and optionally attach a comment to it (such as iteration
+        number, a network move that was applied to it, etc.)
+
+        Args:
+            net (Network): A Network
+            comment (str, optional): An optional comment that
+                                     assists to give program state context for
+                                     the given Network. Defaults to "".
+        Returns:
+            N/A
+        """
         self.networkx_objs.append(net.to_networkx())  
         self.comments.append(comment)
     
     def to_html(self) -> None:
+        """
+        Generate an html document containing all logged networks as viewables, 
+        for viewing in a browser window.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
         
         # to open/create a new html file in the write mode 
         f = open(f'PhyNetPy/src/PhyNetPy/Log-Output/logout{self.id}.html', 'w') 
@@ -92,14 +135,14 @@ class Logger:
                   ),
                   E.BODY(
                     E.P("Starting Logs:", style="font-size: 30pt;"),
-                    lxml.html.fromstring(html_str),
+                    lxml.html.fromstring(html_str), # type: ignore
                     E.P("----------End Log Output----------", 
                         style="font-size: 30pt;")
                   )
                 )   
                
         # writing the code into the file 
-        f.write(str(lxml.html.tostring(html)))
+        f.write(str(lxml.html.tostring(html))) # type: ignore
         
         # close the file 
         f.close() 

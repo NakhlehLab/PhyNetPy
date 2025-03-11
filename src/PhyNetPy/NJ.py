@@ -1,3 +1,22 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --                                                              
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
 """
 File with classes and functions that implement the Neighbor Joining algorithm
 for trees.
@@ -5,7 +24,7 @@ for trees.
 Source : https://en.wikipedia.org/wiki/Neighbor_joining
 
 Author: Mark Kessler
-Date Last Edited: 8/2/24
+Date Last Edited: 3/11/25
 Ready for Release:
     Docs    - [ X ]
     Design  - [ X ]
@@ -18,7 +37,7 @@ from collections import deque
 from NetworkParser import *
 import numpy as np
 from MSA import *
-from helpers import *
+
 
 class NJException(Exception):
     """
@@ -27,7 +46,15 @@ class NJException(Exception):
     operation
     """
 
-    def __init__(self, message = "NJ Error"):
+    def __init__(self, message : str = "NJ Error") -> None:
+        """
+        Initialize the error with a message
+
+        Args:
+            message (str, optional): The error message. Defaults to "NJ Error".
+        Returns:
+            N/A
+        """
         self.message = message
         super().__init__(self.message)
 
@@ -37,6 +64,9 @@ def _find_distance_seq(aln : MSA,
     Compute the distance between two leaves in a network based on the sequence
     similarity.
 
+    Raises:
+        NJException -- if the Network and MSA are not associated or linked 
+                       properly
     Args:
         aln (MSA): A sequence alignment for a network.
         leaves (list[Node]): The leaf nodes of a network that is associated with
@@ -45,33 +75,29 @@ def _find_distance_seq(aln : MSA,
     Returns:
         dict[tuple[Node], float]: "hamming"-esque distances for each pair of 
                                   leaves
-    
-    Raises:
-        NJException -- if the Network and MSA are not associated or linked 
-                       properly
     """
     D = dict()
     
-    reqs : list[SeqRecord] = aln.get_records()
+    reqs : list[DataSequence] = aln.get_records()
     
-    # Compute the pairwise distances between SeqRecord objects
-    d : dict[tuple[SeqRecord], float] = aln.distance_matrix()
+    # Compute the pairwise distances between DataSequence objects
+    d : dict[tuple[DataSequence], float] = aln.distance_matrix()
     
     # Map nodes to the index in the reqs index for which the node's seqrecord 
     # is located
     index_to_leaf: dict[int, Node] = dict()
     for leaf in leaves:
         if leaf.get_seq() is None:
-            raise NJException(f"Leaf {leaf.get_seq()} does not have a SeqRecord \
+            raise NJException(f"Leaf {leaf.get_seq()} does not have a DataSequence \
                                associated with it")
         try:
             index = reqs.index(leaf.get_seq())
             index_to_leaf[index] = leaf
         except ValueError:
             raise NJException(f"Sequence associated with the leaf \
-                              {leaf.get_name()} is not in the given MSA!")
+                              {leaf.label} is not in the given MSA!")
      
-    # Translate aln distance matrix. Change SeqRecord tuple to the equivalent
+    # Translate aln distance matrix. Change DataSequence tuple to the equivalent
     # Node tuple.
     for seqtup, val in d.items():
         n1 : Node = index_to_leaf[reqs.index(seqtup[0])]
@@ -129,11 +155,12 @@ def _create_matrix(N : Network, aln : MSA = None) -> dict[tuple[Node], float]:
     distances.
 
     Args:
-        N (Network): _description_
-        aln (MSA, optional): _description_. Defaults to None.
+        N (Network): A network.
+        aln (MSA, optional): An MSA. Defaults to None.
 
     Returns:
-        dict[tuple[Node], float]: _description_
+        dict[tuple[Node], float]: A mapping from all pairs of leaves to their
+                                  distances.
     """
     leaves = N.get_leaves()
     D = dict()
@@ -226,7 +253,40 @@ def _new_dist(i : Node,
     term2 =  (sum1 - sum2) / (2 * num_nodes - 4)
     
     return term1 + term2
+
+def _minmaxkey(mapping : dict[object, Union[int, float]],
+               mini : bool = True) -> object:
+    """
+    Return the object in a mapping with the minimum or maximum value associated
+    with it.
+
+    Args:
+        mapping (dict[object, int  |  float]): A mapping from objects to 
+                                               numerical values
+        mini (bool, optional): If True, return the object with the minimum
+                               value. If False, return the object with the
+                               maximum value. Defaults to True.
+    Returns:
+        object: The object with the minimimum or maximum value.
+    """
+
+    cur = math.inf
+    cur_key = None
+    if not mini:
+        cur = cur * -1
+        
+    for key, value in mapping.items():
+        if mini:
+            if value < cur:
+                cur = value
+                cur_key = key
+        else:
+            if value > cur:
+                cur = value
+                cur_key = key
     
+    return cur_key
+
 def _nj_help(leaves : list[Node], d : dict[tuple[Node], float]) -> Graph:
     """
     Run the Neighbor Joining Algorithm on a set of leaves and a mapping from 
@@ -235,7 +295,6 @@ def _nj_help(leaves : list[Node], d : dict[tuple[Node], float]) -> Graph:
     Args:
         leaves (list[Node]): List of leaves of a network.
         d (dict[tuple[Node], float]): Pairwise distances from leaf to leaf
-
     Returns:
         Graph: The inferred/joined network
     """
@@ -252,7 +311,7 @@ def _nj_help(leaves : list[Node], d : dict[tuple[Node], float]) -> Graph:
         Q = _compute_q(cur_d, cur_nodes)
         
         #get i,j of nodes that have minimum distance 
-        (n_i, n_j) = minmaxkey(Q)
+        (n_i, n_j) = _minmaxkey(Q)
         
         #compute distance to new connecting node
         d_ik = _new_dist(n_i, n_j, cur_d, cur_nodes)
@@ -260,9 +319,9 @@ def _nj_help(leaves : list[Node], d : dict[tuple[Node], float]) -> Graph:
 
         #Make network connections
         new_node = nj_net.add_uid_node()
-        e1 = UnDiEdge(new_node, n_i)
+        e1 = Edge(new_node, n_i)
         e1.set_length(d_ik)
-        e2 = UnDiEdge(new_node, n_j)
+        e2 = Edge(new_node, n_j)
         e2.set_length(d_jk)
         nj_net.add_edges([e1, e2])
         
@@ -298,9 +357,9 @@ def _nj_help(leaves : list[Node], d : dict[tuple[Node], float]) -> Graph:
     d : Node = cur_nodes[1]
     e : Node = cur_nodes[2]
     
-    edge_v = UnDiEdge(v, w)
-    edge_d = UnDiEdge(d, w)
-    edge_e = UnDiEdge(e, w)
+    edge_v = Edge(v, w)
+    edge_d = Edge(d, w)
+    edge_e = Edge(e, w)
     
     #calculate edge lengths
     v_w = _new_dist(v, d, cur_d, cur_nodes)
@@ -342,7 +401,7 @@ def NJ(net : Network,
         Graph: The inferred unrooted and undirected NJ graph.
     """
     
-    netleaves_to_leaves = {leaf : leaf.duplicate() for leaf in net.get_leaves()}
+    netleaves_to_leaves = {leaf : leaf.copy() for leaf in net.get_leaves()}
     
     if aln is None and d is not None:
         d_network = d
@@ -357,49 +416,3 @@ def NJ(net : Network,
     new_leaves = list(netleaves_to_leaves.values())
     
     return _nj_help(new_leaves, d)
-
-def _test():
-    """
-    Testing function
-    """
-    a : Node = Node("a")
-    b : Node = Node("b")
-    c : Node = Node("c")
-    d : Node = Node("d")
-    e : Node = Node("e")
-    
-    root = Node("Root")
-    i1 = Node("AB_par")
-    i2 = Node("CD_par")
-    i3 = Node("i1i2_par")
-    
-    
-    nodes = [a, b, c, d, e, root, i1, i2, i3]
-    edges = [DiEdge(i1, a), DiEdge(i1, b), DiEdge(i2, c), DiEdge(i2, d), 
-             DiEdge(i3, i2), DiEdge(i3, i1), DiEdge(root, i3), DiEdge(root, e)]
-    
-    sample_net = Network()
-    sample_net.add_nodes(nodes)
-    sample_net.add_edges(edges)
-
-    
-    d = {(a, b) : 5, (a, c) : 9, (a, d) : 9, (a, e) : 8,
-         (b, a) : 5, (b, c) : 10, (b, d) : 10, (b, e) : 9,
-         (c, a) : 9, (c, b) : 10, (c, d) : 8, (c, e) : 7,
-         (d, a) : 9, (d, b) : 10, (d, c) : 8, (d, e) : 3,
-         (e, a) : 8, (e, b) : 9, (e, c) : 7, (e, d) : 3}
-
-    
-    G = NJ(sample_net, None, d)
-    
-    pretty_print_edges(G)
-    
-    print("----------------------")
-    for edge in G.get_edges():
-        print("         ")
-        print(edge.to_names())
-        print(edge.length)
-        print("         ")
-    
-    
-# _test()

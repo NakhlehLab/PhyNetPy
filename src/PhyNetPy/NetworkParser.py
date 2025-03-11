@@ -1,6 +1,25 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --                                                              
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
 """ 
 Author : Mark Kessler
-Last Stable Edit : 3/28/24
+Last Stable Edit : 3/11/25
 First Included in Version : 1.0.0
 Approved for Release : Most Likely. Further Testing Needed. Fully Documented
 """
@@ -11,6 +30,7 @@ from Bio import Phylo
 from io import StringIO
 from Network import *
 from warnings import warn
+from typing import Any
 
 
 #####################
@@ -22,8 +42,15 @@ class NetworkParserError(Exception):
     Error that is raised whenever an input file or newick string contains
     issues that disallow a proper parse of a network.
     """
-    def __init__(self, message = "Something went wrong \
-                                  parsing a network") -> None:
+    def __init__(self, message : str = "Something went wrong \
+                                        parsing a network") -> None:
+        """
+        Initialize the error with a message.
+
+        Args:
+            message (str, optional): Custom error message. Defaults to 
+                                     "Something went wrong parsing a network".
+        """
         self.message = message
         super().__init__(self.message)
 
@@ -31,9 +58,14 @@ class NetworkParserError(Exception):
 #### Helper Function ####
 #########################
 
-def merge_attributes(inheritances : dict[str], parsed_node : Node, 
-                     attr1 : dict, attr2 : dict) -> dict:
+def merge_attributes(inheritances : dict[str],
+                     parsed_node : Node, 
+                     attr1 : dict, 
+                     attr2 : dict) -> dict:
     """
+    Given two attribute dictionaries, combine them into one, taking the
+    union of the two. 
+    
     Args:
         inheritances (dict[str, dict]): a mapping from node names to their 
                                         gamma entries. 
@@ -59,7 +91,7 @@ def merge_attributes(inheritances : dict[str], parsed_node : Node,
     
     #Sort out inheritance probabilities and branches
     
-    final_attr["gamma"] = inheritances[parsed_node.get_name()]
+    final_attr["gamma"] = inheritances[parsed_node.label]
     return final_attr
     
                     
@@ -73,6 +105,16 @@ class NetworkParser:
     """
     
     def __init__(self, filename : str) -> None:
+        """
+        Initialize the parser with a nexus file.
+
+        Raises:
+            NetworkParserError: If the NexusReader library cannot parse the file.
+        Args:
+            filename (str): the path to the nexus file to be parsed.
+        Returns:
+            N/A
+        """
         try:
             self.reader = NexusReader.from_file(filename)
         except Exception as err:
@@ -94,11 +136,16 @@ class NetworkParser:
         # Finally, parse the file.
         self.parse()
 
-    def parse(self):
+    def parse(self) -> None:
         """
         Using the reader object, iterate through each of the trees 
         defined in the file and store them as Network objects into the 
         networks array.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
         """
 
         if self.reader.trees is None:
@@ -121,15 +168,14 @@ class NetworkParser:
             #reset the inheritance map for the next network
             self.inheritance = {}
             
-    def parse_tree_block(self, tree) -> Network:
+    def parse_tree_block(self, tree : Any) -> Network:
         """
         Given a biopython Tree object (with nested clade objects)
         walk through the tree and build a network/ultrametric network
         from the nodes
 
         Args:
-            tree (biopython tree): the biopython library tree 
-                                   data structure
+            tree (Any): the biopython library tree data structure
 
         Returns:
             Network : A phynetpy Network obj that has the same topology 
@@ -143,10 +189,12 @@ class NetworkParser:
                 parents[child] = clade
 
         # create new empty directed acyclic graph
-        net = Network(edges = EdgeSet(), nodes = NodeSet())
+        net = Network()
 
         # populate said graph with nodes and their attributes
         for node, par in parents.items():
+            # print(node.name)
+            # print(par.name)
             parent_node = self.parse_parent(par, net)
             child_node = self.parse_child(node, net, parent_node)
         
@@ -160,14 +208,12 @@ class NetworkParser:
         IE: H1 returns "Hybridization", 1
         IE: LGT21 returns "Lateral Gene Transfer", 21
 
-        Args:
-            attr_str (str): A node name, but one that carries 
-                           information about the type of node.
-
         Raises:
             NodeError: if the node label does not match any sort of 
                        extended newick rules
-
+        Args:
+            attr_str (str): A node name, but one that carries 
+                           information about the type of node.
         Returns:
             list: a list of two items, the first being a string describing the 
                   node type, the second an integer that gives an index
@@ -203,16 +249,15 @@ class NetworkParser:
         except:
             raise NodeError("Invalid label format string (number error)")
 
-    def parse_child(self, node, network : Network, parent : Node) -> Node:
+    def parse_child(self, node : Any, network : Network, parent : Node) -> Node:
         """
         Process a child found in the Biopython tree.
         
         Args:
-            node (a biopython node obj): a node from the biopython tree
+            node (Any): a node from the biopython tree
             network (Network): The partially built PhyNetPy Network
             parent (Node): the parent node of node, which should already exist  
                            as a PhyNetPy object.
-
         Returns:
             Node : 'node' translated to a PhyNetPy Node object. 
         """
@@ -221,10 +266,10 @@ class NetworkParser:
         if parsed_node is not None:
             more_attr = self.parse_comment(node, parent)
             
-            parsed_node.attributes = merge_attributes(self.inheritance, 
+            parsed_node.set_attributes(merge_attributes(self.inheritance, 
                                                       parsed_node,
                                                       more_attr, 
-                                                      parsed_node.attributes)    
+                                                      parsed_node.get_attributes())) 
         else:
             if node.name is None:
                 new_internal = "Internal" + str(self.internal_count)
@@ -244,13 +289,13 @@ class NetworkParser:
                 parsed_node.set_time(parent.get_time() + 1)
                 
             # Get additional information
-            parsed_node.attributes = self.parse_comment(node, parent)
+            parsed_node.set_attributes(self.parse_comment(node, parent))
             
             # Add to network
             network.add_nodes(parsed_node) 
             
         # Add edge from the parent to child
-        new_edge : Edge = DiEdge(parent, parsed_node)
+        new_edge : Edge = Edge(parent, parsed_node)
         
         # Add branch length
         if node.branch_length is not None:
@@ -259,27 +304,31 @@ class NetworkParser:
             new_edge.set_length(1)
         
         # Add inheritance probability (gamma) if applicable
-        inheritance_prob : float = parsed_node.attribute_value("gamma")
+        inheritance_prob : dict = parsed_node.attribute_value("gamma")
+        
         if inheritance_prob is not None:
-            new_edge.set_gamma(inheritance_prob)
+            #print(inheritance_prob)
+            gamma_value = inheritance_prob[parent.label][0]
+            new_edge.set_gamma(gamma_value)
             
         # Add edge to network
         network.add_edges(new_edge)
             
         return parsed_node
     
-    def parse_parent(self, node, network : Network, 
+    def parse_parent(self, 
+                     node : Any, 
+                     network : Network, 
                      parent : Node = None) -> Node:
         """
         Process a node that is the parent of the other node due to be processed
         next.
         
         Args:
-            node (biopython node): a biopython node
+            node (Any): a biopython node
             network (Network): the partially built Network obj.
             parent (Node, optional): The parent of the biopython node, if
                                      available. Defaults to None.
-
         Returns:
             Node: The PhyNetPy node version of the biopython node
         """
@@ -319,14 +368,16 @@ class NetworkParser:
                 parsed_node.set_is_reticulation(True)
                 
             # Add any relevant attributes
-            parsed_node.attributes = self.parse_comment(node, parent)
+            if parent is not None:
+                #Not sure that this ever happens...
+                parsed_node.set_attributes(self.parse_comment(node, parent))
             
             # Add to the network
             network.add_nodes(parsed_node)
             
         return parsed_node
 
-    def parse_comment(self, node, parent : Node):
+    def parse_comment(self, node : Any, parent : Node) -> dict:
         """
         Each time a node block is processed, given its parent node (that should 
         have already been processed) look at the comment block if one exists 
@@ -341,14 +392,12 @@ class NetworkParser:
         
         where gamma1 and gamma2 sum to 1.
         
-        Args:
-            node (nexus.node): a node block from the nexus library
-            parent (Node): a phynetpy Node obj that is the node block's 
-                           parent in the network
-
         Raises:
             NetworkParserError: if two gamma values for a node do not sum to 1.
-
+        Args:
+            node (Any): a node block from the nexus library
+            parent (Node): a phynetpy Node obj that is the node block's 
+                           parent in the network
         Returns:
            dict: an attribute dictionary for the newly processed node block.
         """
@@ -365,7 +414,7 @@ class NetworkParser:
                     gamma = float(node.comment.split("=")[1])
                     
                     # Set attribute key and value.
-                    attr["gamma"] = {parent.get_name() : 
+                    attr["gamma"] = {parent.label : 
                                     [gamma, node.branch_length]}
                     
                     if node.name in self.inheritance:
@@ -373,7 +422,7 @@ class NetworkParser:
                             if info[0] == -1:
                                 old_info = [1 - gamma, info[1]]
                                 
-                                par_2 = parent.get_name()
+                                par_2 = parent.label
                                 info_2 = [gamma, node.branch_length]
                                 self.inheritance[node.name] = {par: old_info, 
                                                                par_2 : info_2}
@@ -385,12 +434,12 @@ class NetworkParser:
                                                               not add to 1")
                         
                                 info_2 = [gamma, node.branch_length]
-                                par_2 = parent.get_name()
+                                par_2 = parent.label
                                 self.inheritance[node.name] = {par: info, 
                                                                 par_2 : info_2}
                             break
                     else:
-                        par = parent.get_name()
+                        par = parent.label
                         info = [gamma, node.branch_length]
                         self.inheritance[node.name] = {par : info}
                 else:
@@ -406,11 +455,11 @@ class NetworkParser:
                             branch_length = node.branch_length #may be None
                             
                             gammas = {par : [.5, info[1]],
-                                     parent.get_name() : [.5, branch_length]}
+                                     parent.label : [.5, branch_length]}
                             
                             self.inheritance[node.name] = gammas
                         else:
-                            new_par = parent.get_name()
+                            new_par = parent.label
                             new_info = [1 - info[0], node.branch_length]
                             
                             self.inheritance[node.name] = {par : info,
@@ -420,7 +469,7 @@ class NetworkParser:
                     #No entry yet, and no information found.
                     # Initially set to -1 to indicate non-existence.
                     
-                    par = parent.get_name()
+                    par = parent.label
                     info = [-1, node.branch_length]
                     self.inheritance[node.name] = {par : info}  
         else:
@@ -445,6 +494,8 @@ class NetworkParser:
         """
         Retrieves the network array field
 
+        Args:
+            N/A
         Returns:
             list[Network] : the set of parsed networks
         """
@@ -456,10 +507,11 @@ class NetworkParser:
 
         Args:
             network (Network): a network parsed from this NetworkParser
-
         Returns:
             str: Network label, as appears in the nexus file.
         """
         return self.name_2_net[network]
-    
+
+
+
 

@@ -1,14 +1,33 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
 """ 
 Author : Mark Kessler
-Last Edit : 3/28/24
-First Included in Version : 1.0.0
+Last Edit : 3/11/25
+First Included in Version : 2.0.0
 
 Docs   - [x]
 Tests  - [ ]
-Design - [ ]
+Design - [x]
 """
 
-from typing import Callable
+from typing import Any, Callable
 from Network import Network
 
 #########################
@@ -16,8 +35,8 @@ from Network import Network
 #########################   
     
 class GeneTreeError(Exception):
-    def __init__(self, message = "Gene Tree Module Error") -> None:
-        super().__init__(message = message)
+    def __init__(self, message : str = "Gene Tree Module Error") -> None:
+        super().__init__(message)
         self.message = message
         
 ##########################
@@ -56,8 +75,9 @@ class GeneTrees:
     gene tree.
     """
     
-    def __init__(self, gene_tree_list : list[Network] = None, 
-                 naming_rule : Callable = phynetpy_naming) -> None:
+    def __init__(self, 
+                 gene_tree_list : list[Network] | None = None, 
+                 naming_rule : Callable[..., Any] = phynetpy_naming) -> None:
         """
         Wrapper class for a set of networks that represent gene trees
 
@@ -65,19 +85,21 @@ class GeneTrees:
             gene_tree_list (list[Network], optional): A list of networks, 
                                                       of the binary tree 
                                                       variety. Defaults to None.
-            naming_rule (Callable, optional): a function f : str -> str. 
-                                              Defaults to phynetpy_naming.
+            naming_rule (Callable[..., Any], optional): A function 
+                                                        f : str -> str. 
+                                                        Defaults to 
+                                                        phynetpy_naming.
         """
         
         self.trees : set[Network] = set()
-        self.taxa_names : set[str]= set()
-        self.naming_rule : Callable = naming_rule
+        self.taxa_names : set[str] = set()
+        self.naming_rule : Callable[..., Any] = naming_rule
         
         if gene_tree_list is not None:
             for tree in gene_tree_list:
                 self.add(tree)
         
-    def add(self, tree : Network):
+    def add(self, tree : Network) -> None:
         """
         Add a gene tree to the collection. Any new gene labels that belong to
         this tree will also be added to the collection of all 
@@ -90,17 +112,17 @@ class GeneTrees:
         self.trees.add(tree)
         
         for leaf in tree.get_leaves():
-            self.taxa_names.add(leaf.get_name())
+            self.taxa_names.add(leaf.label)
         
-    def mp_sugar_map(self) -> dict[str, list[str]]:
+    def mp_allop_map(self) -> dict[str, list[str]]:
         """
         Create a subgenome mapping from the stored set of gene trees
 
         Returns:
             dict[str, list[str]]: subgenome mapping
         """
-        subgenome_map = {}
-        if self.naming_rule is not None and len(self.taxa_names) != 0:
+        subgenome_map : dict[str, list[str]] = {}
+        if len(self.taxa_names) != 0:
             for taxa_name in self.taxa_names:
                 key = self.naming_rule(taxa_name)
                 if key in subgenome_map.keys(): 

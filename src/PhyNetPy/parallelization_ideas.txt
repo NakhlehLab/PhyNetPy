@@ -1,4 +1,0 @@
-1) use futures for node likelihood calculations. If all subtrees of a node have been calculated, 
-then the calculation on the current node may be computed asynchronously.
-
-2)
