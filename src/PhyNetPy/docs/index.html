@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <h1>PhyNetPy API Reference</h1>
+                
+                <p>Welcome to the PhyNetPy documentation. PhyNetPy is a comprehensive Python library 
+                for phylogenetic network analysis, providing tools for network construction, manipulation, 
+                simulation, and inference.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Version:</dt>
+                        <dd>2.0.0</dd>
+                        <dt>Authors:</dt>
+                        <dd>Mark Kessler, Luay Nakhleh</dd>
+                        <dt>Copyright:</dt>
+                        <dd>2025</dd>
+                    </dl>
+                </div>
+                
+                <h2>Module Index</h2>
+                
+                <table class="module-index">
+                    <thead>
+                        <tr>
+                            <th>Module</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><a href="Alphabet.html">Alphabet</a></td>
+                            <td>Character-to-state mapping for biological sequence data (DNA, RNA, Protein, Codon, SNP)</td>
+                        </tr>
+                        <tr>
+                            <td><a href="BirthDeath.html">BirthDeath</a></td>
+                            <td>Birth-death process network simulators (Yule and CBDP models)</td>
+                        </tr>
+                        <tr>
+                            <td><a href="GeneTrees.html">GeneTrees</a></td>
+                            <td>Gene tree container and analysis utilities including consensus tree construction</td>
+                        </tr>
+                        <tr>
+                            <td><a href="GraphUtils.html">GraphUtils</a></td>
+                            <td>Graph and network utility functions for topology analysis and manipulation</td>
+                        </tr>
+                        <tr>
+                            <td><a href="GTR.html">GTR</a></td>
+                            <td>Substitution models (GTR, K80, F81, JC, HKY, K81, SYM, TN93)</td>
+                        </tr>
+                        <tr>
+                            <td><a href="Matrix.html">Matrix</a></td>
+                            <td>Data matrix storage and reduction for sequence alignments</td>
+                        </tr>
+                        <tr>
+                            <td><a href="MSA.html">MSA</a></td>
+                            <td>Multiple Sequence Alignment parsing, storage, and analysis</td>
+                        </tr>
+                        <tr>
+                            <td><a href="Network.html">Network</a></td>
+                            <td>Core phylogenetic network data structures (Node, Edge, Graph, Network classes)</td>
+                        </tr>
+                        <tr>
+                            <td><a href="NetworkMoves.html">NetworkMoves</a></td>
+                            <td>Network topology modification operations (add/remove hybrid, NNI)</td>
+                        </tr>
+                        <tr>
+                            <td><a href="NetworkParser.html">NetworkParser</a></td>
+                            <td>Nexus file and Newick string parsing utilities</td>
+                        </tr>
+                        <tr>
+                            <td><a href="Newick.html">Newick</a></td>
+                            <td>Newick format handling and Nexus file generation</td>
+                        </tr>
+                        <tr>
+                            <td><a href="PhyloNet.html">PhyloNet</a></td>
+                            <td>PhyloNet Java wrapper for external phylogenetic analysis</td>
+                        </tr>
+                        <tr>
+                            <td><a href="Validation.html">Validation</a></td>
+                            <td>Comprehensive file format validation for phylogenetic data files</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h2>Getting Started</h2>
+                
+                <h3>Installation</h3>
+                <pre><code>pip install phynetpy</code></pre>
+                
+                <h3>Quick Example</h3>
+                <pre><code>from PhyNetPy.Network import Network, Node, Edge
+from PhyNetPy.NetworkParser import NetworkParser
+
+# Parse a network from a Nexus file
+parser = NetworkParser("my_network.nex")
+network = parser.get_network(0)
+
+# Access network properties
+print(f"Number of nodes: {len(network.V())}")
+print(f"Number of edges: {len(network.E())}")
+print(f"Leaves: {[leaf.label for leaf in network.get_leaves()]}")</code></pre>
+                
+                <h2>Module Categories</h2>
+                
+                <h3>Core Data Structures</h3>
+                <ul class="method-list">
+                    <li><a href="Network.html">Network</a> - Node, Edge, Graph, and Network classes</li>
+                    <li><a href="MSA.html">MSA</a> - Multiple sequence alignment handling</li>
+                    <li><a href="Matrix.html">Matrix</a> - Compressed data matrix representation</li>
+                </ul>
+                
+                <h3>Simulation</h3>
+                <ul class="method-list">
+                    <li><a href="BirthDeath.html">BirthDeath</a> - Yule and CBDP network simulators</li>
+                </ul>
+                
+                <h3>Substitution Models</h3>
+                <ul class="method-list">
+                    <li><a href="GTR.html">GTR</a> - Time-reversible substitution models</li>
+                    <li><a href="Alphabet.html">Alphabet</a> - Character state mappings</li>
+                </ul>
+                
+                <h3>Analysis and Utilities</h3>
+                <ul class="method-list">
+                    <li><a href="GeneTrees.html">GeneTrees</a> - Gene tree analysis and consensus</li>
+                    <li><a href="GraphUtils.html">GraphUtils</a> - Network topology utilities</li>
+                    <li><a href="NetworkMoves.html">NetworkMoves</a> - Topology modification operations</li>
+                </ul>
+                
+                <h3>I/O and Parsing</h3>
+                <ul class="method-list">
+                    <li><a href="NetworkParser.html">NetworkParser</a> - Nexus file parsing</li>
+                    <li><a href="Newick.html">Newick</a> - Newick string handling</li>
+                    <li><a href="Validation.html">Validation</a> - File format validation</li>
+                    <li><a href="PhyloNet.html">PhyloNet</a> - PhyloNet Java integration</li>
+                </ul>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html" class="current">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetworkMoves - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; NetworkMoves
+                </div>
+                
+                <h1>NetworkMoves Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The NetworkMoves module provides functions for modifying phylogenetic networks, 
+                including adding/removing reticulations, performing NNI operations, and changing 
+                node heights. These are the core operations used in network search algorithms.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>NetworkMoves.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#add_hybrid">add_hybrid</a></li>
+                        <li><a href="#remove_hybrid">remove_hybrid</a></li>
+                        <li><a href="#nni">nni</a></li>
+                        <li><a href="#node_height_change">node_height_change</a></li>
+                    </ul>
+                </div>
+                
+                <h2>Overview</h2>
+                
+                <p>The four network moves implemented are:</p>
+                
+                <ol>
+                    <li><strong>Add reticulation</strong> - Increase network level; can introduce genome duplications (bubbles)</li>
+                    <li><strong>Remove reticulation</strong> - Decrease network level</li>
+                    <li><strong>NNI</strong> - Change topologies within a given network level</li>
+                    <li><strong>Node height change</strong> - Adjust speciation times</li>
+                </ol>
+                
+                <h2 id="add_hybrid">add_hybrid</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">add_hybrid</span>(<span class="params">net: Network, source: Edge, destination: Edge, t_src: float = None, t_dest: float = None</span>) <span class="keyword">-&gt;</span> None
+                    </div>
+                    <div class="function-body">
+                        <p>Add a hybrid (reticulation) edge from source to destination. Modifies the 
+                        network in place.</p>
+                        
+                        <pre><code>Before:                     After:
+src:          dest:         src:          dest:
+a             x             a             x
+|             |             |             |
+|             |             |             |
+v             v             v             v
+b             y             n1- - - - - ->n2
+                            |             |
+                            v             v
+                            b             y</code></pre>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">net</span></td>
+                                <td><span class="param-type">Network</span></td>
+                                <td>Network to modify</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">source</span></td>
+                                <td><span class="param-type">Edge</span></td>
+                                <td>Origin edge for hybrid</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">destination</span></td>
+                                <td><span class="param-type">Edge</span></td>
+                                <td>Target edge for hybrid</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">t_src</span></td>
+                                <td><span class="param-type">float</span></td>
+                                <td>Speciation time at n1 (optional)</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">t_dest</span></td>
+                                <td><span class="param-type">float</span></td>
+                                <td>Speciation time at n2 (optional)</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="note">
+                            <div class="note-title">Note</div>
+                            <p>If source == destination, a bubble edge (parallel edges) will be created 
+                            with gamma=0.5 on both edges.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="remove_hybrid">remove_hybrid</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">remove_hybrid</span>(<span class="params">net: Network, hybrid_edge: Edge</span>) <span class="keyword">-&gt;</span> None
+                    </div>
+                    <div class="function-body">
+                        <p>Remove a hybrid edge from the network. Modifies the network in place.</p>
+                        
+                        <pre><code>Before:                     After:
+src:          dest:         src:          dest:
+a             x             a             x
+|             |             |             |
+v             v             v             v
+n1- - - - - ->n2            b             y
+|             |
+v             v
+b             y</code></pre>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">net</span></td>
+                                <td><span class="param-type">Network</span></td>
+                                <td>Network to modify</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">hybrid_edge</span></td>
+                                <td><span class="param-type">Edge</span></td>
+                                <td>Edge whose dest is a reticulation node</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="raises">
+                            <span class="raises-label">Raises:</span>
+                            <code>Exception</code> - If edge destination is not a reticulation, or if 
+                            edge source is a reticulation
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="nni">nni</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">nni</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> None
+                    </div>
+                    <div class="function-body">
+                        <p>Perform a Nearest Neighbor Interchange (NNI) on the network. Selects a random 
+                        internal edge and swaps subtrees. Modifies the network in place.</p>
+                        
+                        <pre><code>Before:           After (one option):
+    a                    a
+   / \                  / \
+  c   b                d   b
+     / \                  / \
+    d   e                c   e</code></pre>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">net</span></td>
+                                <td><span class="param-type">Network</span></td>
+                                <td>Network to modify</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="raises">
+                            <span class="raises-label">Raises:</span>
+                            <code>Exception</code> - If no internal edges available or not enough 
+                            neighbors for NNI
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="node_height_change">node_height_change</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">node_height_change</span>(<span class="params">n: Node, net: Network, height: float, extend: bool = False</span>) <span class="keyword">-&gt;</span> None
+                    </div>
+                    <div class="function-body">
+                        <p>Change the height (speciation time) of a node without altering surrounding 
+                        node heights. Modifies the network in place.</p>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">n</span></td>
+                                <td><span class="param-type">Node</span></td>
+                                <td>Node to modify</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">net</span></td>
+                                <td><span class="param-type">Network</span></td>
+                                <td>Network containing the node</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">height</span></td>
+                                <td><span class="param-type">float</span></td>
+                                <td>New height for the node</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">extend</span></td>
+                                <td><span class="param-type">bool</span></td>
+                                <td>If True, retain subtree branch lengths</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="note">
+                            <div class="note-title">Constraints</div>
+                            <p>The new height must satisfy: min(child heights) &lt; new_height &lt; max(parent heights)</p>
+                        </div>
+                        
+                        <div class="raises">
+                            <span class="raises-label">Raises:</span>
+                            <code>NetworkError</code> - If new height is out of bounds or node lacks 
+                            parents/children
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.NetworkMoves import add_hybrid, remove_hybrid, nni, node_height_change
+from PhyNetPy.NetworkParser import NetworkParser
+
+# Load a network
+parser = NetworkParser("tree.nex")
+net = parser.get_network(0)
+
+# Add a hybrid edge between two edges
+edges = list(net.E())
+source_edge = edges[0]
+dest_edge = edges[2]
+add_hybrid(net, source_edge, dest_edge)
+
+# Remove a hybrid edge
+hybrid_edges = [e for e in net.E() if e.dest.is_reticulation()]
+if hybrid_edges:
+    remove_hybrid(net, hybrid_edges[0])
+
+# Perform NNI
+try:
+    nni(net)
+except Exception as e:
+    print(f"NNI failed: {e}")
+
+# Change node height
+internal_nodes = [n for n in net.V() if n not in net.get_leaves() and n != net.root()]
+if internal_nodes:
+    node = internal_nodes[0]
+    current_height = node.get_time()
+    new_height = current_height + 0.1
+    try:
+        node_height_change(node, net, new_height)
+    except Exception as e:
+        print(f"Height change failed: {e}")
+
+# Create a bubble (genome duplication)
+edge = edges[0]
+add_hybrid(net, edge, edge)  # Same edge = bubble</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="Network.html">Network</a> - Core network data structures</li>
+                        <li><a href="GraphUtils.html">GraphUtils</a> - Network analysis utilities</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html" class="current">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#add_hybrid">add_hybrid</a></li>
+                <li><a href="#remove_hybrid">remove_hybrid</a></li>
+                <li><a href="#nni">nni</a></li>
+                <li><a href="#node_height_change">node_height_change</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

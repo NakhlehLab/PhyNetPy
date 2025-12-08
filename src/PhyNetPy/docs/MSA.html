@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSA - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; MSA
+                </div>
+                
+                <h1>MSA Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The MSA module provides classes for handling Multiple Sequence Alignments, 
+                including file I/O from Nexus files, sequence grouping, and distance matrix computation.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>MSA.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#datasequence">DataSequence Class</a></li>
+                        <li><a href="#msa-class">MSA Class</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="datasequence">DataSequence Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">DataSequence</span>
+                    </div>
+                    <div class="class-body">
+                        <p>An individual sequence record defined by the data sequence, a name/identifier, 
+                        and optionally a group ID.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, sequence: list, name: str, gid: int = -1</span>)
+                            </div>
+                            <div class="function-body">
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sequence</span></td>
+                                        <td><span class="param-type">list</span></td>
+                                        <td>Sequence of biological data</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Sequence label/name</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gid</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Group ID (-1 means no group)</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_name</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Get the sequence name/label.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_seq</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[object]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the sequence data (typically list of characters).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_numerical_seq</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[int]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the sequence as hexadecimal integers (for SNP data).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_gid</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the group ID.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_ploidy</span>(<span class="params">self, ploidyness: int</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the ploidy level (for bimarker data).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ploidy</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the ploidy level.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">distance</span>(<span class="params">self, seq2: DataSequence</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Calculate pairwise distance to another sequence (count of differences).</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="msa-class">MSA Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">MSA</span>(<span class="params">Iterable[DataSequence]</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Class for managing Multiple Sequence Alignments. Handles file I/O from Nexus 
+                        files, sequence grouping, and provides iteration over sequences.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, filename: str = None, data: list[DataSequence] = None, grouping: dict = None, grouping_auto_detect: bool = False</span>)
+                            </div>
+                            <div class="function-body">
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filename</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to Nexus file with matrix block</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type">list[DataSequence]</span></td>
+                                        <td>Alternative: provide sequences directly</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">grouping</span></td>
+                                        <td><span class="param-type">dict</span></td>
+                                        <td>Map from group names to sequence names</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">grouping_auto_detect</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Auto-group by name similarity</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <h4>Sequence Access</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_records</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[DataSequence]
+                            </div>
+                            <div class="function-body">
+                                <p>Retrieve all sequences in the alignment.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">seq_by_name</span>(<span class="params">self, name: str</span>) <span class="keyword">-&gt;</span> DataSequence
+                            </div>
+                            <div class="function-body">
+                                <p>Get a sequence by its exact name.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_data</span>(<span class="params">self, data_seq: DataSequence</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add a sequence to the MSA.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>Grouping Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">num_groups</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the number of groups in the MSA.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">group_given_id</span>(<span class="params">self, gid: int</span>) <span class="keyword">-&gt;</span> list[DataSequence]
+                            </div>
+                            <div class="function-body">
+                                <p>Get all sequences with a given group ID.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_category</span>(<span class="params">self, name: str</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the group ID for a sequence name.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">group_auto_detect</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> dict
+                            </div>
+                            <div class="function-body">
+                                <p>Group sequences by name similarity.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">retroactive_group</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Assign group IDs to ungrouped sequences using auto-detection.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>SNP/Ploidy Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_sequence_ploidy</span>(<span class="params">self, sequence_ploidy: list[int] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set ploidy for each group. If not provided, ploidy is auto-detected 
+                                from max SNP value.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">total_samples</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Total number of allele samples across all sequences.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">samples_given_group</span>(<span class="params">self, gid: int</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Total samples within a specific group.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>Info Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">dim</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> tuple[int, int]
+                            </div>
+                            <div class="function-body">
+                                <p>Return (num_sequences, sequence_length) dimensions.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">distance_matrix</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> dict[tuple, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Compute pairwise distances between all sequence pairs.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.MSA import MSA, DataSequence
+
+# Load MSA from Nexus file
+msa = MSA(filename="alignment.nex")
+
+# Get dimensions
+rows, cols = msa.dim()
+print(f"Alignment: {rows} taxa, {cols} sites")
+
+# Iterate over sequences
+for seq in msa:
+    print(f"{seq.get_name()}: {len(seq)} bp")
+
+# Get specific sequence
+human = msa.seq_by_name("Human")
+print(human.get_seq()[:10])
+
+# Get all records
+all_seqs = msa.get_records()
+
+# Create MSA from DataSequence objects
+seq1 = DataSequence(['A','C','G','T'], "Species1", gid=0)
+seq2 = DataSequence(['A','C','T','T'], "Species2", gid=0)
+seq3 = DataSequence(['A','T','G','T'], "Species3", gid=1)
+
+custom_msa = MSA(data=[seq1, seq2, seq3])
+
+# Compute pairwise distances
+D = msa.distance_matrix()
+for (s1, s2), dist in D.items():
+    print(f"{s1.get_name()} - {s2.get_name()}: {dist}")
+
+# Auto-detect grouping by name similarity
+msa_grouped = MSA(filename="data.nex", grouping_auto_detect=True)
+print(f"Found {msa_grouped.num_groups()} groups")
+
+# Set ploidy for SNP data
+msa.set_sequence_ploidy([2, 2, 2])  # All diploid
+# Or auto-detect from max SNP values
+msa.set_sequence_ploidy()</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="Matrix.html">Matrix</a> - Compressed MSA storage</li>
+                        <li><a href="Alphabet.html">Alphabet</a> - Character-state mappings</li>
+                        <li><a href="NetworkParser.html">NetworkParser</a> - Parse Nexus files</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html" class="current">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#datasequence">DataSequence</a></li>
+                <li><a href="#msa-class">MSA Class</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

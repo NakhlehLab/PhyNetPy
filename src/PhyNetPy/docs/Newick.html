@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Newick - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; Newick
+                </div>
+                
+                <h1>Newick Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The Newick module provides utilities for handling Newick format strings and 
+                generating Nexus files from networks and gene trees.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>Newick.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#functions">Helper Functions</a></li>
+                        <li><a href="#nexustemplate">NexusTemplate Class</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="exceptions">Exceptions</h2>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">NewickParserError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when there are errors parsing a Newick string into a Network object.</p>
+                    </div>
+                </div>
+                
+                <h2 id="functions">Helper Functions</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">get_labels</span>(<span class="params">newick_str: str</span>) <span class="keyword">-&gt;</span> set[str]
+                    </div>
+                    <div class="function-body">
+                        <p>Extract all unique taxa labels from a Newick string.</p>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">newick_str</span></td>
+                                <td><span class="param-type">str</span></td>
+                                <td>A Newick format string</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="returns">
+                            <span class="returns-label">Returns:</span>
+                            <span class="param-type">set[str]</span> - Set of unique taxa labels
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="nexustemplate">NexusTemplate Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">NexusTemplate</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Class for generating Nexus files from tree/network data. Automatically manages 
+                        taxa blocks and can include PhyloNet commands.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a blank Nexus template.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add</span>(<span class="params">self, newick_str: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add a network (as Newick string) to the TREES block. Taxa labels are 
+                                automatically extracted and added to the TAXA block.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">newick_str</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Network in Newick format</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_phylonet_cmd</span>(<span class="params">self, cmd: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add a PhyloNet command to be included in the PHYLONET block.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">cmd</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A PhyloNet command string</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">load_gene_trees</span>(<span class="params">self, filename: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Load gene trees from a file and add them to the template.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filename</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to file containing gene trees</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">generate</span>(<span class="params">self, loc: Union[Path, str], end_name: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Generate a Nexus file at the specified location.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">loc</span></td>
+                                        <td><span class="param-type">Path | str</span></td>
+                                        <td>Directory to save the file</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">end_name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Filename (must include .nex extension)</td>
+                                    </tr>
+                                </table>
+                                
+                                <div class="raises">
+                                    <span class="raises-label">Raises:</span>
+                                    <code>NewickParserError</code> - If file already exists
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Generated Nexus Format</h2>
+                
+                <p>The NexusTemplate generates files with the following structure:</p>
+                
+                <pre><code>#NEXUS
+
+BEGIN TAXA;
+DIMENSIONS NTAX=n;
+TAXALABELS
+taxon1
+taxon2
+...
+;
+END;
+
+BEGIN TREES;
+Tree net1 = (newick_string1);
+Tree net2 = (newick_string2);
+...
+END;
+
+BEGIN PHYLONET;
+command1;
+command2;
+...
+END;</code></pre>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.Newick import NexusTemplate, get_labels
+
+# Extract labels from a Newick string
+newick = "((A:1,B:1)C:1,(D:1,E:1)F:1)root;"
+labels = get_labels(newick)
+print(f"Taxa: {labels}")  # {'A', 'B', 'C', 'D', 'E', 'F', 'root'}
+
+# Create a Nexus file from networks
+template = NexusTemplate()
+
+# Add networks
+template.add("((A:1,B:1):1,(C:1,D:1):1);")
+template.add("((A:1,C:1):1,(B:1,D:1):1);")
+
+# Add PhyloNet commands
+template.add_phylonet_cmd("InferNetwork_MPL (all) 1;")
+
+# Generate the file
+template.generate("/path/to/output", "networks.nex")
+
+# Load gene trees and create Nexus
+template2 = NexusTemplate()
+template2.load_gene_trees("gene_trees.nex")
+template2.add_phylonet_cmd("InferNetwork_ML (all) 2 -bl;")
+template2.generate("/path/to/output", "inference_input.nex")</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="NetworkParser.html">NetworkParser</a> - Parse Nexus files</li>
+                        <li><a href="GeneTrees.html">GeneTrees</a> - Gene tree handling</li>
+                        <li><a href="PhyloNet.html">PhyloNet</a> - PhyloNet integration</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html" class="current">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#functions">Functions</a></li>
+                <li><a href="#nexustemplate">NexusTemplate</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+
