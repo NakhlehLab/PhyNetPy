@@ -37,10 +37,12 @@ import numpy as np
 import sys
 import networkx as nx
 from functools import singledispatchmethod
-from MSA import DataSequence
-from PhyloNet import run
-from Newick import *
+from .MSA import DataSequence
+from .PhyloNet import run
+#from .Newick import *
 import tempfile
+from itertools import combinations
+from typing import Set, Tuple
  
 
 sys.setrecursionlimit(300)
@@ -279,8 +281,7 @@ class Node:
         if new_t >= 0:
             self.__t = new_t 
         else:
-            raise NodeError("Please set speciation time, t, to a non-negative\
-                             number!")
+            raise NodeError("Please set speciation time, t, to a non-negative number!")
 
     def __str__(self) -> str:
         """
@@ -292,6 +293,111 @@ class Node:
             str: A string representation of the node.
         """
         return self.__name
+    
+    def _get_comparison_key(self) -> tuple[float, str]:
+        """
+        Get the comparison key for this node.
+        
+        For biological meaningfulness, nodes are ordered by:
+        1. Primary: Time from root (t attribute) - closer to root (smaller t) comes first
+        2. Fallback: Node name for deterministic ordering when times unavailable
+        
+        Note: For edge count fallback, use network.set_node_times_from_root() to establish
+        times based on distances before comparison.
+        
+        Returns:
+            tuple[float, str]: (time_or_inf, name) for comparison
+        """
+        if self.__t is not None:
+            # Use actual time - closer to root (smaller time) sorts first
+            return (self.__t, self.__name)
+        else:
+            # If no time is set, use infinity to sort after all timed nodes
+            # Then use name for deterministic ordering among untimed nodes
+            return (float('inf'), self.__name)
+    
+    def __lt__(self, other) -> bool:
+        """
+        Less than comparison for Node objects.
+        Used by heapq and other sorting algorithms.
+        
+        Compares nodes by biological distance from root:
+        1. Primary: Time from root (t attribute) - closer to root comes first
+        2. Fallback: Node name for deterministic ordering when times unavailable
+        
+        Args:
+            other: Another Node object to compare against
+        Returns:
+            bool: True if this node is closer to root than other node
+        """
+        if not isinstance(other, Node):
+            return NotImplemented
+        return self._get_comparison_key() < other._get_comparison_key()
+    
+    def __le__(self, other) -> bool:
+        """
+        Less than or equal comparison for Node objects.
+        
+        Args:
+            other: Another Node object to compare against
+        Returns:
+            bool: True if this node is closer to or equal distance from root
+        """
+        if not isinstance(other, Node):
+            return NotImplemented
+        return self._get_comparison_key() <= other._get_comparison_key()
+    
+    def __gt__(self, other) -> bool:
+        """
+        Greater than comparison for Node objects.
+        
+        Args:
+            other: Another Node object to compare against
+        Returns:
+            bool: True if this node is farther from root than other node
+        """
+        if not isinstance(other, Node):
+            return NotImplemented
+        return self._get_comparison_key() > other._get_comparison_key()
+    
+    def __ge__(self, other) -> bool:
+        """
+        Greater than or equal comparison for Node objects.
+        
+        Args:
+            other: Another Node object to compare against
+        Returns:
+            bool: True if this node is farther from or equal distance from root
+        """
+        if not isinstance(other, Node):
+            return NotImplemented
+        return self._get_comparison_key() >= other._get_comparison_key()
+    
+    def __eq__(self, other) -> bool:
+        """
+        Equality comparison for Node objects.
+        Two nodes are equal if they have the same name (identity).
+        
+        Note: This is based on node identity, not biological distance.
+        
+        Args:
+            other: Another object to compare against
+        Returns:
+            bool: True if both are Node objects with the same name
+        """
+        if not isinstance(other, Node):
+            return NotImplemented
+        return self.__name == other.__name
+    
+    def __hash__(self) -> int:
+        """
+        Hash function for Node objects.
+        Uses the node name for hashing to maintain consistency with equality.
+        
+        Returns:
+            int: Hash value based on the node name
+        """
+        return hash(self.__name)
     
     def to_string(self) -> str:
         """
@@ -511,6 +617,8 @@ class NodeSet:
             if type(node) is Node:
                 if node not in self.__nodes:
                     self.__nodes.add(node)
+                    if node.label in self.__node_names.keys():
+                        raise NodeError(f"Node {node.label} already exists in NodeSet")
                     self.__node_names[node.label] = node
     
     def ready(self, edge : Union[Edge, UEdge]) -> bool:
@@ -666,6 +774,7 @@ class NodeSet:
         Returns:
             N/A
         """
+        
         if node in self.__nodes:
             self.__nodes.remove(node)
             del self.__in_degree[node]
@@ -679,7 +788,7 @@ class NodeSet:
                 del self.__out_map[node]
             if node in self.__in_map.keys():
                 del self.__in_map[node] 
-                 
+            
             del self.__node_names[node.label] 
     
     def update(self, node : Node, new_name : str) -> None:
@@ -704,22 +813,50 @@ class NodeSet:
                             {node.label}, node could not be found in this \
                             NodeSet.")
         
-        if node.label in self.__node_names.keys():
+        # Since Node's __hash__ and __eq__ are based on name, we must remove the
+        # node from all hash-based collections BEFORE changing its name, then
+        # re-add it after. Otherwise the node ends up in the wrong hash bucket.
+        
+        # Save degree information before removing
+        in_deg = self.__in_degree.get(node, 0)
+        out_deg = self.__out_degree.get(node, 0)
+        in_edges = self.__in_map.get(node, []).copy()
+        out_edges = self.__out_map.get(node, []).copy()
+        
+        # Remove node from all hash-based collections
+        self.__nodes.discard(node)
+        if node in self.__in_degree:
+            del self.__in_degree[node]
+        if node in self.__out_degree:
+            del self.__out_degree[node]
+        if node in self.__in_map:
+            del self.__in_map[node]
+        if node in self.__out_map:
+            del self.__out_map[node]
+        if node.label in self.__node_names:
             del self.__node_names[node.label]
             
+        # Now change the node's name (this changes its hash)
         node.set_name(new_name)
+        
+        # Re-add node to all collections with new hash
+        self.__nodes.add(node)
+        self.__in_degree[node] = in_deg
+        self.__out_degree[node] = out_deg
+        self.__in_map[node] = in_edges
+        self.__out_map[node] = out_edges
         self.__node_names[new_name] = node
     
-    def get(self, name : str) -> Node | None:
+    def get(self, name : str) -> Union[Node, None]:
         """
-        Retrieve a node from the node set by its name.
+        Get a node by name.
 
         Args:
-            name (str): The name of the node to retrieve.
+            name (str): The name of the node to get.
 
         Returns:
-            Node | None: The node with the given name, or None if the node
-                         does not exist in the network.
+            Union[Node, None]: The node with the given name, or None if the node
+                               does not exist.
         """
         if name in self.__node_names.keys():
             return self.__node_names[name]
@@ -1484,8 +1621,7 @@ class EdgeSet:
             n1 : Node, 
             n2 : Node, 
             gamma : float | None = None,
-            tag : str | None = None
-            ) -> Union[Edge, UEdge]:
+            tag : str | None = None) -> Union[Edge, UEdge]:
         """
         Given the nodes that make up the edge and an inheritance probability,
         get the edge in E that matches the data. Inheritance probability is only
@@ -1716,7 +1852,7 @@ class Graph:
         for n in nodes: # type: ignore
             self._nodes.add(n) # type: ignore
                          
-    def add_uid_node(self, node : Node | None = None) -> Node:
+    def add_uid_node(self, node : Union[Node, None] = None) -> Node:
         """
         Ensure a node has a unique name that hasn't been used before/is 
         not currently in use for this graph.
@@ -1942,7 +2078,7 @@ class Graph:
         """
         self._nodes.update(node, name)
     
-    def has_node_named(self, name : str) -> Node | None:
+    def has_node_named(self, name : str) -> Union[Node, None]:
         """
         Check whether the graph has a node with a certain name.
         Strings must be exactly equal (same white space, capitalization, etc.)
@@ -2093,14 +2229,222 @@ class Network(Graph):
         self.__roots : list[Node] = [node for node in list(self._nodes.get_set()) 
                         if self._nodes.in_deg(node) == 0]
     
-    # @classmethod
-    # def from_newick(cls, newick : str):
-    #     return cls(newick)
-    
-    # @classmethod
-    # def from_nexus(cls, filename : str, index : int = 0):
-    #     return cls(filename)
-    
+    @classmethod
+    def from_newick(cls, newick : str) -> Network:
+        """
+        Construct a Network object by passing in a newick string and parsing out
+        the topology from there.
+
+        Args:
+            newick (str): An extended newick string.
+        Returns:
+            Network: An initialized network object
+        """
+        def parse_newick_string(newick_str: str) -> Network:
+            """
+            Parse a Newick string directly into a Network object.
+            
+            This function handles:
+            - Standard Newick format: (A,B)C;
+            - Branch lengths: (A:0.1,B:0.2)C:0.0;
+            - Internal node labels: (A,B)Internal1;
+            - Reticulation nodes marked with #: ((A,#H1)B,(C,#H1)D)E;
+            - Inheritance probabilities: #H1[&gamma=0.7]
+            
+            Args:
+                newick_str (str): A Newick-formatted string representing a phylogenetic network
+                
+            Returns:
+                Network: A Network object representing the parsed structure
+                
+            Raises:
+                NewickParserError: If the Newick string is malformed
+            """
+            
+            class NewickNode:
+                """Helper class to represent nodes during parsing"""
+                def __init__(self, name=None, length=None, children=None):
+                    self.name = name
+                    self.length = length if length is not None else 1.0
+                    self.children = children if children is not None else []
+                    self.comment = None
+                    self.gamma = None
+                    
+            def tokenize(s):
+                """Tokenize the Newick string"""
+                tokens = []
+                i = 0
+                while i < len(s):
+                    if s[i] in '(),;':
+                        tokens.append(s[i])
+                        i += 1
+                    elif s[i] == ':':
+                        # Branch length follows
+                        tokens.append(':')
+                        i += 1
+                        j = i
+                        while j < len(s) and s[j] not in '(),;:[':
+                            j += 1
+                        tokens.append(s[i:j])
+                        i = j
+                    elif s[i] == '[':
+                        # Comment block
+                        j = s.find(']', i)
+                        if j == -1:
+                            raise NewickParserError("Unclosed comment block")
+                        tokens.append(s[i:j+1])
+                        i = j + 1
+                    elif s[i].isspace():
+                        i += 1
+                    else:
+                        # Node name
+                        j = i
+                        while j < len(s) and s[j] not in '(),;:[]' and not s[j].isspace():
+                            j += 1
+                        if i < j:
+                            tokens.append(s[i:j])
+                        i = j
+                return tokens
+            
+            def parse_comment(comment_str):
+                """Parse comment block for gamma values"""
+                if comment_str.startswith('[') and comment_str.endswith(']'):
+                    content = comment_str[1:-1]
+                    if content.startswith('&gamma='):
+                        try:
+                            gamma = float(content[7:])
+                            return gamma
+                        except ValueError:
+                            pass
+                return None
+            
+            def parse_tokens(tokens, idx=0):
+                """Recursively parse tokenized Newick string"""
+                if idx >= len(tokens):
+                    raise NewickParserError("Unexpected end of string")
+                    
+                node = NewickNode()
+                
+                if tokens[idx] == '(':
+                    # Internal node with children
+                    idx += 1
+                    children = []
+                    
+                    while True:
+                        child, idx = parse_tokens(tokens, idx)
+                        children.append(child)
+                        
+                        if idx >= len(tokens):
+                            raise NewickParserError("Unexpected end of string")
+                            
+                        if tokens[idx] == ',':
+                            idx += 1
+                        elif tokens[idx] == ')':
+                            idx += 1
+                            break
+                        else:
+                            raise NewickParserError(f"Unexpected token: {tokens[idx]}")
+                    
+                    node.children = children
+                    
+                    # Parse internal node label if present
+                    if idx < len(tokens) and tokens[idx] not in ':,);[':
+                        node.name = tokens[idx]
+                        idx += 1
+                else:
+                    # Leaf node
+                    if tokens[idx] not in ':,);[':
+                        node.name = tokens[idx]
+                        idx += 1
+                
+                # Parse comment if present
+                if idx < len(tokens) and tokens[idx].startswith('['):
+                    node.gamma = parse_comment(tokens[idx])
+                    node.comment = tokens[idx]
+                    idx += 1
+                
+                # Parse branch length if present
+                if idx < len(tokens) and tokens[idx] == ':':
+                    idx += 1
+                    if idx >= len(tokens):
+                        raise NewickParserError("Expected branch length after ':'")
+                    try:
+                        node.length = float(tokens[idx])
+                    except ValueError:
+                        raise NewickParserError(f"Invalid branch length: {tokens[idx]}")
+                    idx += 1
+                    
+                # Parse comment after branch length if present
+                if idx < len(tokens) and tokens[idx].startswith('['):
+                    if node.gamma is None:
+                        node.gamma = parse_comment(tokens[idx])
+                    node.comment = tokens[idx]
+                    idx += 1
+                
+                return node, idx
+            
+            def build_network(newick_node, parent_phynet_node=None, network=None, node_map=None, time=0.0):
+                """Convert parsed Newick structure to Network"""
+                if network is None:
+                    network = Network()
+                    node_map = {}
+                
+                # Create or retrieve PhyNet node
+                node_name = newick_node.name if newick_node.name else f"Internal{len(node_map)}"
+                
+                # Check if this is a reticulation node (already exists in map)
+                if node_name in node_map:
+                    phynet_node = node_map[node_name]
+                else:
+                    is_retic = node_name.startswith('#')
+                    phynet_node = Node(name=node_name, is_reticulation=is_retic)
+                    phynet_node.set_time(time)
+                    network.add_nodes(phynet_node)
+                    node_map[node_name] = phynet_node
+                
+                # Add edge from parent if exists
+                if parent_phynet_node is not None:
+                    edge = Edge(parent_phynet_node, phynet_node, length=newick_node.length)
+                    if newick_node.gamma is not None:
+                        edge.set_gamma(newick_node.gamma)
+                    network.add_edges(edge)
+                
+                # Process children
+                for child in newick_node.children:
+                    build_network(child, phynet_node, network, node_map, time + child.length)
+                
+                return network
+            
+            # Main parsing logic
+            try:
+                # Clean the string
+                newick_str = newick_str.strip()
+                if not newick_str.endswith(';'):
+                    raise NewickParserError("Newick string must end with semicolon")
+                newick_str = newick_str[:-1]  # Remove semicolon
+                
+                # Tokenize and parse
+                tokens = tokenize(newick_str)
+                if not tokens:
+                    raise NewickParserError("Empty Newick string")
+                    
+                root, _ = parse_tokens(tokens)
+                
+                # Build network
+                network = build_network(root)
+                
+                # Clean up the network
+                network.clean([True, True, True])
+                
+                return network
+                
+            except Exception as e:
+                if isinstance(e, NewickParserError):
+                    raise
+                else:
+                    raise NewickParserError(f"Failed to parse Newick string: {str(e)}")
+        #parse nodes and edges from topology
+        return parse_newick_string(newick)
     
     def add_edges(self, edges : Union[Edge, list[Edge]]) -> None:
         """
@@ -2349,7 +2693,6 @@ class Network(Graph):
         return [leaf for leaf in self.__leaves 
                if self._nodes.in_deg(leaf) != 0]
         
-
     def get_parents(self, node : Node) -> list[Node]:
         """
         Returns a list of the parents of a node. 
@@ -2439,83 +2782,6 @@ class Network(Graph):
                 spacers = [n for n in self.V() if self.in_degree(n) == 1 and \
                            self.out_degree(n) == 1]
 
-    # def mrca(self, *nodes : Union[Node, str]) -> Node:
-    #     """
-    #     Given a number of Nodes or Node labels (can be used interchangeably), 
-    #     compute the most recent common ancestor.
-        
-    #     Returns:
-    #         Node: the MRCA of the set of given nodes.
-    #     """
-    #     format_set : set[Node] = set()
-    #     for item in nodes:
-    #         if type(item) is str:
-    #             node_version = self.has_node_named(item)
-    #             if node_version is None:
-    #                 raise NetworkError("A node in 'set_of_nodes' is not \
-    #                                   in the graph")
-    #             else:
-    #                 format_set.add(node_version)
-    #         elif type(item) is Node:
-    #             if item in self.V():
-    #                 format_set.add(item)
-    #             else:
-    #                 raise NetworkError("A node in 'set_of_nodes' is not \
-    #                                   in the graph")
-    #         else:
-    #             raise NetworkError(f"Wrong type for parameter set_of_nodes. \
-    #                               Expected set[Node] or set[str].")
-        
-    #     set_of_nodes = format_set
-                
-    #     # mapping from each node in set_of_nodes to 
-    #     # a mapping from ancestors to dist from node.
-    #     leaf_2_parents = {} 
-
-    #     for leaf in set_of_nodes:
-    #         #Run bfs upward from each node 
-    #         node_2_lvl : dict = {}
-            
-    #         # queue for bfs
-    #         q = deque()
-    #         q.append(leaf)
-    #         visited = set()
-    #         node_2_lvl[leaf] = 0
-
-    #         while len(q) != 0:
-    #             cur = q.popleft()
-
-    #             #Seach cur's parents
-    #             for neighbor in self.get_parents(cur):
-    #                 if neighbor not in visited:
-    #                     node_2_lvl[neighbor] = node_2_lvl[cur] + 1
-    #                     q.append(neighbor)
-    #                     visited.add(neighbor)
-            
-    #         leaf_2_parents[leaf] = node_2_lvl
-        
-        
-    #     #Compare each leaf's parents
-    #     intersection = self._nodes.get_set()
-    #     for leaf, par_level in leaf_2_parents.items():
-    #         intersection = intersection.intersection(set(par_level.keys()))
-        
-    #     # Map potential LCA's to cumulative distance from all the nodes
-    #     additive_level = {} 
-        
-    #     for node in intersection: # A LCA has to be in each node's ancestor set
-    #         lvl = 0
-    #         for leaf in set_of_nodes:
-    #             try:
-    #                 lvl += leaf_2_parents[leaf][node]
-    #             except KeyError:
-    #                 continue
-            
-    #         additive_level[node] = lvl
-        
-    #     #The LCA is the node that minimizes cumulative distance
-    #     return min(additive_level, key = additive_level.get)
-        
     def mrca(self, set_of_nodes: set[Node] | set[str]) -> Node:
         """
         Computes the Least Common Ancestor of a set of graph nodes
@@ -2739,9 +3005,9 @@ class Network(Graph):
         return edges
     
     def subgenome_ct_edges(self, 
-                           downstream_node : Node | None= None, 
+                           downstream_node : Union[Node, None]= None, 
                            delta : float = math.inf, 
-                           start_node : Node | None = None) \
+                           start_node : Union[Node, None] = None) \
                            -> dict[Edge, int]:
         """
         Maps edges to their subgenome counts.
@@ -2774,9 +3040,9 @@ class Network(Graph):
         return rev_map
                 
     def edges_to_subgenome_count(self, 
-                                 downstream_node : Node | None= None, 
+                                 downstream_node : Union[Node, None]= None, 
                                  delta : float = math.inf, 
-                                 start_node : Node | None = None) \
+                                 start_node : Union[Node, None] = None) \
                                  -> dict[int, list[Edge]]:
         """
         Maps edges to their subgenome counts.
@@ -2944,7 +3210,7 @@ class Network(Graph):
         Returns:
             str: The newick representation of the network.
         """
-        return self.__newick_help(self.root(), set()) + ";"
+        return self.__newick_help(self.root(), set[Node]()) + ";"
     
     def _is_cyclic_util(self, 
                         v : Node,
@@ -2992,13 +3258,13 @@ class Network(Graph):
         #Call recursive dfs on each root node / each connected component
         for node in self.roots():
             if not visited[node]:
-                if self.is_cyclic_util(node, visited, rec_stack):
+                if self._is_cyclic_util(node, visited, rec_stack):
                     return False
 
         return True
     
     def bfs_dfs(self, 
-                start_node : Node | None = None,
+                start_node : Union[Node, None] = None,
                 dfs : bool = False, 
                 is_connected : bool = False, 
                 accumulator : Callable[..., None] | None = None, 
@@ -3096,12 +3362,13 @@ class Network(Graph):
         Returns:
             Network: A subnetwork of the DAG being operated on
         """
-    
+        UID_suffix = 0
         q : deque[Node] = deque()
         q.appendleft(retic_node)
         net_copy = Network()
         
-        new_node = Node(name = retic_node.label + "_copy")
+        new_node = Node(name = retic_node.label + "_copy" + str(UID_suffix))
+        UID_suffix += 1
         net_copy.add_nodes(new_node)
         net_2_mul = {retic_node : new_node}
         
@@ -3110,7 +3377,8 @@ class Network(Graph):
             cur = q.pop() #pop right for bfs
 
             for neighbor in self.get_children(cur):
-                new_node = Node(name = neighbor.label + "_copy")
+                new_node = Node(name = neighbor.label + "_copy" + str(UID_suffix))
+                UID_suffix += 1
                 net_copy.add_nodes(new_node)
                 net_2_mul[neighbor] = new_node
                 net_copy.add_edges(Edge(net_2_mul[cur], new_node))
@@ -3228,57 +3496,135 @@ class Network(Graph):
         
         return 0.0
     
-    def nakhleh_distance(self, other : Network) -> float:
+    def is_isomorphic(self, other: Network) -> bool:
         """
-        Computes the Luay Nakhleh distance measure compared to another 
-        Network.
-
+        Check if this network is topologically isomorphic to another network.
+        
+        Two networks are isomorphic if they have the same topology, regardless of
+        node labels or branch lengths. This method calls the GraphUtils.is_isomorphic
+        function.
+        
         Args:
             other (Network): The other network to compare against.
-        Returns:
-            float: The Nakhleh distance measure.
         
+        Returns:
+            bool: True if the networks are topologically isomorphic, False otherwise.
         """
-        def get_triplets(network: Network) -> set[tuple[str, str, str]]:
+        from PhyNetPy.GraphUtils import is_isomorphic
+        return is_isomorphic(self, other)
+    
+    def nakhleh_distance(self, other: Network) -> float:
+        """
+        Computes the rooted triplet distance (Nakhleh distance) between two networks.
+        
+        This distance measure compares the topological relationships between all
+        triplets of leaves in both networks.
+        
+        Args:
+            other (Network): The other network to compare against.
+        
+        Returns:
+            float: The Nakhleh distance (0 = identical topology, 1 = completely different).
+        """
+        
+        def get_rooted_triplets(network: Network) -> Set[Tuple[str, str, str]]:
             """
-            Helper function to get all triplets in a network.
-
+            Extract all rooted triplets from a network, encoding their topology.
+            
+            For each triplet of leaves {x, y, z}, determines which pair are siblings
+            (share the most recent common ancestor) and encodes this relationship.
+            
             Args:
                 network (Network): The network to extract triplets from.
+            
             Returns:
-                set[tuple[str, str, str]]: A set of triplets.
+                Set[Tuple[str, str, str]]: Set of rooted triplets in format
+                                        ((sibling1, sibling2), other)
             """
             triplets = set()
             leaves = network.get_leaves()
-            for i in range(len(leaves)):
-                for j in range(i + 1, len(leaves)):
-                    for k in range(j + 1, len(leaves)):
-                        triplet = tuple(sorted([leaves[i].label, 
-                                                leaves[j].label, 
-                                                leaves[k].label]))
-                        triplets.add(triplet)
+            
+            # Get all combinations of 3 leaves
+            for x, y, z in combinations(leaves, 3):
+                # Get leaf labels for comparison
+                x_label = x.label
+                y_label = y.label
+                z_label = z.label
+                
+                try:
+                    # Find the MRCA for each pair
+                    mrca_xy = network.mrca({x, y})
+                    mrca_xz = network.mrca({x, z})
+                    mrca_yz = network.mrca({y, z})
+                    
+                    # Calculate distances from root to each MRCA
+                    # (Further from root = more recent = lower in tree)
+                    dist_xy = network.dist_from_root(mrca_xy)
+                    dist_xz = network.dist_from_root(mrca_xz)
+                    dist_yz = network.dist_from_root(mrca_yz)
+                    
+                    # The pair with the highest distance (furthest from root) are siblings
+                    if dist_xy >= dist_xz and dist_xy >= dist_yz:
+                        # x and y are siblings
+                        triplet = tuple(sorted([
+                            tuple(sorted([x_label, y_label])),
+                            z_label
+                        ], key=str))
+                    elif dist_xz >= dist_xy and dist_xz >= dist_yz:
+                        # x and z are siblings
+                        triplet = tuple(sorted([
+                            tuple(sorted([x_label, z_label])),
+                            y_label
+                        ], key=str))
+                    else:
+                        # y and z are siblings
+                        triplet = tuple(sorted([
+                            tuple(sorted([y_label, z_label])),
+                            x_label
+                        ], key=str))
+                    
+                    triplets.add(triplet)
+                    
+                except Exception as e:
+                    # If MRCA computation fails (shouldn't happen in valid networks),
+                    # we could either skip this triplet or handle it differently
+                    print(f"Warning: Could not compute MRCA for triplet {x_label}, {y_label}, {z_label}: {e}")
+                    continue
+            
             return triplets
-
-        def triplet_distance(triplets1 : set[tuple[str, str, str]], 
-                             triplets2: set[tuple[str, str, str]]) -> float:
+        
+        def triplet_distance(triplets1: Set[Tuple], triplets2: Set[Tuple]) -> float:
             """
-            Helper function to compute the triplet distance between 
-            two sets of triplets.
-
+            Compute normalized distance between two sets of rooted triplets.
+            
             Args:
-                triplets1 (set[tuple[str, str, str]]): The first set of 
-                                                       triplets.
-                triplets2 (set[tuple[str, str, str]]): The second set of 
-                                                       triplets.
+                triplets1: First set of rooted triplets
+                triplets2: Second set of rooted triplets
+            
             Returns:
-                float: The triplet distance.
+                float: Normalized distance (0 = identical, 1 = completely different)
             """
+            if not triplets1 and not triplets2:
+                return 0.0
+            
+            if not triplets1 or not triplets2:
+                return 1.0
+            
+            # Calculate symmetric difference
             common_triplets = triplets1.intersection(triplets2)
             total_triplets = triplets1.union(triplets2)
-            return 1 - (len(common_triplets) / len(total_triplets))
-
-        triplets_self = get_triplets(self)
-        triplets_other = get_triplets(other)
+            
+            if len(total_triplets) == 0:
+                return 0.0
+            
+            # Return normalized distance
+            return 1.0 - (len(common_triplets) / len(total_triplets))
+        
+        # Extract rooted triplets from both networks
+        triplets_self = get_rooted_triplets(self)
+        triplets_other = get_rooted_triplets(other)
+        
+        # Compute and return the distance
         return triplet_distance(triplets_self, triplets_other)
 
     def get_subtree_at(self, node: Node) -> set[Node]:
@@ -3299,6 +3645,151 @@ class Network(Graph):
             for child in self.get_children(current):
                 q.append(child)
         return subtree_nodes
+
+    def dist_from_root(self, node : Node) -> int:
+        """
+        Get the distance from the root to the given node.
+        """
+        return self.bfs_dfs()[0][node]
+    
+    def topological_order(self) -> list[Node]:
+        """
+        Compute a topological order of nodes in an acyclic network.
+
+        Args:
+            net (Network): A network object.
+
+        Raises:
+            NetworkError: If the network contains a directed cycle.
+
+        Returns:
+            list[Node]: Nodes in topological order from roots to leaves.
+        """
+        indeg : dict[Node, int] = {n: self.in_degree(n) for n in self.V()}
+        q : deque[Node] = deque([n for n, d in indeg.items() if d == 0])
+        
+        order: list[Node] = []
+        while q:
+            u = q.popleft()
+            order.append(u)
+            for e in self.out_edges(u):
+                v = e.dest
+                indeg[v] -= 1
+                if indeg[v] == 0:
+                    q.append(v)
+        
+        if len(order) != len(self.V()):
+            raise NetworkError("Graph has cycles; no topological order exists")
+        return order
+    
+    def distance_from_root(self, node: Node, use_time: bool = True) -> float:
+        """
+        Compute distance from root to a given node.
+        
+        Args:
+            node (Node): The target node
+            use_time (bool): If True, use branch lengths/times. If False, use edge count.
+            
+        Returns:
+            float: Distance from root (time units or edge count)
+            
+        Raises:
+            NetworkError: If node is not in the network or no path to root exists
+        """
+        if node not in self.V():
+            raise NetworkError("Node not found in network")
+        
+        if use_time and node.get_time() is not None:
+            try:
+                root_time = self.root().get_time()
+                if root_time is not None:
+                    return node.get_time() - root_time
+            except (NetworkError, Exception):
+                pass  # Fall through to BFS approach
+        
+        # BFS to find distance from root (edge count or branch length sum)
+        root = self.root()
+        if root == node:
+            return 0.0
+            
+        visited = set()
+        queue = deque([(root, 0.0)])
+        visited.add(root)
+        
+        while queue:
+            current, dist = queue.popleft()
+            
+            for child in self.get_children(current):
+                if child == node:
+                    if use_time:
+                        edge = self.get_edge(current, child)
+                        return dist + edge.get_length()
+                    else:
+                        return dist + 1.0
+                        
+                if child not in visited:
+                    visited.add(child)
+                    if use_time:
+                        edge = self.get_edge(current, child)
+                        new_dist = dist + edge.get_length()
+                    else:
+                        new_dist = dist + 1.0
+                    queue.append((child, new_dist))
+        
+        raise NetworkError(f"No path found from root to node {node.label}")
+    
+    def set_node_times_from_root(self) -> None:
+        """
+        Set time attributes for all nodes based on their distance from root.
+        Uses cumulative branch lengths from root. Useful for enabling 
+        biologically meaningful node comparisons.
+        """
+        try:
+            root = self.root()
+        except NetworkError:
+            return  # No root available
+            
+        # BFS to set times based on cumulative branch lengths
+        root.set_time(0.0)
+        visited : set[Node] = {root}
+        queue : deque[tuple[Node, float]] = deque([(root, 0.0)])
+        
+        while queue:
+            current, current_time = queue.popleft()
+            
+            for child in self.get_children(current):
+                if child not in visited:
+                    visited.add(child)
+                    edge = self.get_edge(current, child)
+                    child_time = current_time + edge.get_length()
+                    child.set_time(child_time)
+                    queue.append((child, child_time))
+    
+    def set_node_times_by_edge_count(self) -> None:
+        """
+        Set time attributes for all nodes based on their edge count from root.
+        This provides biologically meaningful comparison when actual times are not available.
+        Edge counts are converted to time values for comparison purposes.
+        """
+        try:
+            root = self.root()
+        except NetworkError:
+            return  # No root available
+            
+        # BFS to set times based on edge count from root
+        root.set_time(0.0)
+        visited : set[Node] = {root}
+        queue : deque[tuple[Node, float]] = deque([(root, 0.0)])
+        
+        while queue:
+            current, current_time = queue.popleft()
+            
+            for child in self.get_children(current):
+                if child not in visited:
+                    visited.add(child)
+                    child_time = current_time + 1.0  # Increment by 1 for each edge
+                    child.set_time(child_time)
+                    queue.append((child, child_time))
 
 class MUL(Network):
     """
@@ -3323,7 +3814,116 @@ class MUL(Network):
         self.mul : Network | None = None
         self.gene_map : dict[str, list[str]] = gene_map
         self.rng : np.random.Generator = rng
-                        
+     
+   
+    def network_to_mul_recursive(net: Network) -> Network:
+        """
+        Recursively expand reticulations, handling nested reticulations correctly.
+        """
+        
+        def expand_at_reticulation(network : Network, retic_node : Node) -> Network:
+            """Expand network at a single reticulation, return modified network"""
+            if network.in_degree(retic_node) <= 1:
+                return network
+            
+            parents = network.get_parents(retic_node)
+            
+            # For each parent after the first, duplicate entire subnetwork
+            for i, parent in enumerate(parents[1:], 1):
+                # Get subnetwork rooted at retic_node
+                subnet = network.subnet(retic_node)
+                
+                # Recursively expand any reticulations in the subnetwork
+                subnet = remove_all_reticulations(subnet)
+                
+                # Add expanded subnetwork to main network
+                network.remove_edge(parent, retic_node)
+                network.add_nodes(subnet.V())
+                network.add_edges(subnet.E())
+                network.add_edge(Edge(parent, subnet.root()))
+            
+            return network
+        
+        def remove_all_reticulations(network : Network) -> Network:
+            """Remove all reticulations from network"""
+            while True:
+                retics = [n for n in network.V() if network.in_degree(n) >= 2]
+                if not retics:
+                    break
+                
+                # Process deepest reticulation first (furthest from root)
+                deepest = max(retics, key=lambda n: network.distance_from_root(n))
+                network = expand_at_reticulation(network, deepest)
+            
+            return network
+        
+        mul = net.copy()
+        mul = remove_all_reticulations(mul)
+        mul.clean()
+        
+        return mul
+                
+    # def to_mul(self, net : Network) -> Network:
+    #     """
+    #     Convert binary network to MUL tree. Works for level-k binary networks.
+
+    #     Args:
+    #         N/A
+    #     Returns:
+    #         Network: A MUL tree.
+    #     Raises:
+    #         NetworkError: If the network is malformed in any way/with regards to 
+    #                       the given gene map.
+    #     """
+        
+    #     def expand_binary_reticulation(network : Network, retic : Node) -> Network:
+    #         """For binary network: retic has exactly 2 parents"""
+    #         if network.in_degree(retic) != 2:
+    #             return network  # Not a reticulation
+            
+    #         parents = network.get_parents(retic)
+    #         parent1 = parents[0]
+    #         parent2 = parents[1]
+            
+    #         # Keep edge from parent1, duplicate for parent2
+    #         subnet = network.subnet(retic)
+    #         print(subnet.newick())
+    #         subnet = remove_all_reticulations(subnet)  # Recursive!
+            
+    #         network.remove_edge([parent2, retic])
+    #         network.add_nodes(subnet.V())
+    #         network.add_edges(subnet.E())
+    #         network.add_edges(Edge(parent2, subnet.root()))
+            
+    #         return network
+        
+    #     def remove_all_reticulations(network : Network) -> Network:
+    #         """
+    #         Use topological sort to ensure bottom-up processing
+    #         """
+    #         # Get topological order (root first, leaves last)
+    #         topo_order = network.topological_order()
+            
+    #         # Process in REVERSE topological order (leaves to root)
+    #         for node in reversed(topo_order):
+    #             if network.in_degree(node) == 2:  # Is reticulation
+    #                 network = expand_binary_reticulation(network, node)
+            
+    #         return network
+                
+    #     base_mul = remove_all_reticulations(net.copy()[0]) 
+    #     copy_gene_map = copy.deepcopy(self.gene_map)
+        
+    #     base_mul.clean([False, False, True])
+        
+    #     #Rename tips based on gene mapping
+    #     for leaf in base_mul.get_leaves():
+    #         new_name : str = copy_gene_map[leaf.label.split("_")[0]].pop()
+    #         base_mul.update_node_name(leaf, new_name)
+
+    #     self.mul = base_mul 
+    #     return self.mul
+        
     def to_mul(self, net : Network) -> Network:
         """
         Creates a (MU)lti-(L)abeled Species Tree from a network
@@ -3358,7 +3958,6 @@ class MUL(Network):
             new_edge : Edge = edge.copy(network_2_mul[edge.src],
                                         network_2_mul[edge.dest])
             mul_tree.add_edges(new_edge)
-        
         
         
         # Bottom-Up traversal starting at leaves. Algorithm from STEP 1 in (2)
@@ -3398,7 +3997,7 @@ class MUL(Network):
         
         #Get rid of excess connection nodes
         
-        mul_tree.clean([False, False, True])
+        mul_tree.clean([True, True, True])
         
         #Rename tips based on gene mapping
         
@@ -3410,3 +4009,6 @@ class MUL(Network):
         self.mul = mul_tree 
      
         return mul_tree  
+
+
+

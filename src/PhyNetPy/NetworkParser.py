@@ -25,12 +25,15 @@ Approved for Release : Most Likely. Further Testing Needed. Fully Documented
 """
 
 import traceback
+from networkx.readwrite.json_graph import adjacency
 from nexus import NexusReader
+import newick as nw
 from Bio import Phylo
 from io import StringIO
-from Network import *
+from .Network import Node, Network, Edge
 from warnings import warn
 from typing import Any
+from .Validation import NexusValidator, ValidationSummary
 
 
 #####################
@@ -77,34 +80,38 @@ def merge_attributes(inheritances : dict[str],
     Returns:
         dict: a combined attribute dictionary.
     """
-    final_attr = dict()
+    final_attr = dict[Any, Any]()
     if "eventType" in attr1:
         final_attr["eventType"] = attr1["eventType"]
     if "index" in attr1:
         final_attr["index"] = attr1["index"]
         
-    comment_set = set()
+    comment_set = set[Any]()
     if "comment" in attr1:
         comment_set.add(attr1["comment"])
     if "comment" in attr2:
         comment_set.add(attr2["comment"])
     
-    #Sort out inheritance probabilities and branches
-    
-    final_attr["gamma"] = inheritances[parsed_node.label]
+    # Sort out inheritance probabilities and branches
+    if parsed_node.label in inheritances:
+        final_attr["gamma"] = inheritances[parsed_node.label]
     return final_attr
     
                     
-################
-#### Parser ####
-################
+###########################
+#### Nexus File Parser ####
+###########################
     
 class NetworkParser:
     """
     Class that parses networks that are from nexus files.
+    Now includes pre-parsing validation for better error reporting.
     """
     
-    def __init__(self, filename : str) -> None:
+    def __init__(self, 
+                 filename : str, 
+                 validate_input : bool = True, 
+                 print_validation_summary : bool = True) -> None:
         """
         Initialize the parser with a nexus file.
 
@@ -112,9 +119,29 @@ class NetworkParser:
             NetworkParserError: If the NexusReader library cannot parse the file.
         Args:
             filename (str): the path to the nexus file to be parsed.
+            validate_input (bool): whether to validate the input file before parsing
+            print_validation_summary (bool): whether to print validation summary
         Returns:
             N/A
         """
+        self.filename = filename
+        self.validation_summary : ValidationSummary = None
+        
+        # Validate input file if requested
+        if validate_input:
+            validator = NexusValidator()
+            self.validation_summary = validator.validate(filename)
+            
+            if print_validation_summary:
+                print(self.validation_summary)
+                
+            # Check if validation found critical errors
+            if not self.validation_summary.is_valid:
+                critical_errors = [error for error in self.validation_summary.errors 
+                                 if "required" in error.lower() or "not found" in error.lower()]
+                if critical_errors:
+                    raise NetworkParserError(f"Critical validation errors found: {'; '.join(critical_errors)}")
+        
         try:
             self.reader = NexusReader.from_file(filename)
         except Exception as err:
@@ -511,7 +538,46 @@ class NetworkParser:
             str: Network label, as appears in the nexus file.
         """
         return self.name_2_net[network]
+    
+    def get_validation_summary(self) -> ValidationSummary:
+        """
+        Get the validation summary from the input file validation.
+        
+        Returns:
+            ValidationSummary: The validation results, or None if validation was skipped
+        """
+        return self.validation_summary
 
 
+
+class NewickStringParser:
+    
+    def __init__(self, newick_str : str) -> None:
+        self.newick_str = newick_str
+        self.intermediate = nw.loads(self.newick_str)
+
+    def parse(self) -> None:
+        """
+        Using the reader object, iterate through each of the trees 
+        defined in the file and store them as Network objects into the 
+        networks array.
+        
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
+
+        edges = EdgeSet()
+        nodes = NodeSet()
+        adjacency = {} # dict from nodes to their children
+        
+        cur_node = self.intermediate[0]
+        
+        while len(cur_node.descendants) != 0:
+            adjacency[cur_node.name] = "hi"
+            
+        
+        return Network(edges, nodes)
 
 

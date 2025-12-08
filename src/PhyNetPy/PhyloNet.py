@@ -46,15 +46,26 @@ def jarWrapper(*args) -> list[str]:
     
     while process.poll() is None:
         line = process.stdout.readline()
+        if not line:
+            continue
+        # Decode bytes to string if needed
+        if isinstance(line, bytes):
+            line = line.decode('utf-8')
         if line != '' and line.endswith('\n'):
             ret.append(line[:-1])
-            
+    
     stdout, stderr = process.communicate()
+    # Decode if needed
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode('utf-8')
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode('utf-8')
     
     ret += stdout.split('\n')
     if stderr != '':
         ret += stderr.split('\n')
-    ret.remove('')
+    # Remove empty strings
+    ret = [line for line in ret if line.strip() != '']
     
     return ret
 
@@ -67,4 +78,4 @@ def run(nex_file_loc : str) -> list[str]:
     Returns:
         list[str]: List of lines of output from PhyloNet.
     """
-    return jarWrapper("PhyloNetv3_8_2.jar", nex_file_loc)
+    return jarWrapper("PhyNetPy/src/PhyNetPy/PhyloNetv3_8_2.jar", nex_file_loc)

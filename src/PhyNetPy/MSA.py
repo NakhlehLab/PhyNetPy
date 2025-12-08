@@ -35,7 +35,7 @@ from Bio.Nexus.Nexus import NexusError
 from Bio import AlignIO
 from nexus import NexusReader
 from Bio.AlignIO import MultipleSeqAlignment
-from Bio.Align import SeqRecord
+from Bio.SeqRecord import SeqRecord
 
 
 
@@ -233,6 +233,30 @@ class DataSequence:
             int: _description_
         """
         return len(self.seq)
+    
+    def distance(self, seq2: DataSequence) -> float:
+        """
+        Calculate the distance between two DataSequence objects. 
+        The distance is calculated by the number of differences between the
+        two sequences. If the sequences are of different lengths, the distance
+        is the difference in length plus the number of differences in the 
+        shorter sequence compared to the longer sequence for the length of the
+        shorter sequence.
+
+        Args:
+            seq2 (DataSequence): The second sequence to compare.
+        Returns:
+            float: The distance between the two sequences.
+        """
+        len1, len2 = len(self), len(seq2)
+        min_len = min(len1, len2)
+        distance = abs(len1 - len2)
+        
+        for i in range(min_len):
+            if self.get_seq()[i] != seq2.get_seq()[i]:
+                distance += 1
+        
+        return float(distance)
 
 class MSA(Iterable[DataSequence]):
     
@@ -542,7 +566,7 @@ class MSA(Iterable[DataSequence]):
             dict[int, str]: a grouping map from gid's to sequence names
         """
         reader = NexusReader.from_file(self.filename)
-        data = list()
+        data = list[Any]()
         for taxa, chars in reader.data:
             data.append(taxa)
         
@@ -568,7 +592,7 @@ class MSA(Iterable[DataSequence]):
             DataSequence: the sequence with the label 'name'
         """
         for record in self.records:
-            if record.label == name:
+            if record.name == name:
                 return record
     
     def total_samples(self) -> int:
@@ -647,30 +671,7 @@ class MSA(Iterable[DataSequence]):
         else:
             return (0,0)
     
-    def distance(self, seq1: DataSequence, seq2: DataSequence) -> float:
-        """
-        Calculate the distance between two DataSequence objects. 
-        The distance is calculated by the number of differences between the
-        two sequences. If the sequences are of different lengths, the distance
-        is the difference in length plus the number of differences in the 
-        shorter sequence compared to the longer sequence for the length of the
-        shorter sequence.
-
-        Args:
-            seq1 (DataSequence): The first sequence to compare.
-            seq2 (DataSequence): The second sequence to compare.
-        Returns:
-            float: The distance between the two sequences.
-        """
-        len1, len2 = len(seq1), len(seq2)
-        min_len = min(len1, len2)
-        distance = abs(len1 - len2)
-        
-        for i in range(min_len):
-            if seq1.get_seq()[i] != seq2.get_seq()[i]:
-                distance += 1
-        
-        return float(distance)
+    
 
     def distance_matrix(self) -> dict[tuple[DataSequence, DataSequence], float]:
         """
@@ -683,12 +684,12 @@ class MSA(Iterable[DataSequence]):
             dict[tuple[DataSequence, DataSequence], float]: Map from DataSequence pairs to the
                                            distance between them.
         """
-        D = dict()
+        D = dict[tuple[DataSequence, DataSequence], float]()
         
         for i, seqr in enumerate(self.records):
             for j, seqr2 in enumerate(self.records):
                 if i < j:  # Avoid duplicate calculations
-                    D[(seqr, seqr2)] = self.distance(seqr, seqr2)
+                    D[(seqr, seqr2)] = seqr.distance(seqr2)
                     
         return D
 

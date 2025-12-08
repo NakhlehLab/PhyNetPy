@@ -79,7 +79,7 @@ class SubstitutionModelError(Exception):
         self.message = message
         super().__init__(self.message)
         
-def _disable_for_subclass(method) -> function:
+def _disable_for_subclass(method):
     """
     A decorator to disable a method for subclasses by raising a 
     NotImplementedError.
@@ -425,11 +425,12 @@ class F81(GTR):
             N/A
         """
         trans = np.ones((6, 1))
+        super().__init__(bases, list(trans))
         if len(self.freqs) != 4 or sum(self.freqs) != 1:
                 raise SubstitutionModelError("F81 is only defined for 4 states\
                                              or your frequencies do not \
                                              sum to 1")
-        super().__init__(bases, list(trans))
+        
     
     @_disable_for_subclass
     def set_hyperparams(self, params : dict[str, list[float]]) -> None:
@@ -485,7 +486,7 @@ class F81(GTR):
 
     #     return self.Qt
 
-class JC(F81):
+class JC(GTR):
     """
     For DNA only (4 states, 6 transitions).
     
@@ -506,7 +507,7 @@ class JC(F81):
             N/A
         """
         bases = np.ones((4, 1)) * .25 
-        super().__init__(list(bases))
+        super().__init__(list(bases), np.ones((6, 1)))
                
 class HKY(GTR):
     """
