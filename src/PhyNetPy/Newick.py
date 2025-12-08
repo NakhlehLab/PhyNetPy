@@ -28,6 +28,9 @@ import os
 from pathlib import Path
 from typing import Union
 
+from .GeneTrees import GeneTrees
+from .NetworkParser import NetworkParser
+
 #########################
 #### EXCEPTION CLASS ####
 #########################
@@ -47,8 +50,8 @@ class NewickParserError(Exception):
         Returns:
             N/A
         """
-        super().__init__(message = message)
         self.message = message
+        super().__init__(self.message)
 
 ##########################
 #### HELPER FUNCTIONS ####
@@ -87,68 +90,82 @@ def get_labels(newick_str : str) -> set[str]:
 #### NEWICK PARSER AND NEXUS GENERATOR ####
 ###########################################
 
-class NewickParser:
-    """
-    Class that handles the parsing of newick strings
-    """
-    
-    def __init__(self, filename : str) -> None:
-        """
-        Initialize a parser based on a filename that points to a commonly
-        accepted file type that contains newick strings.
 
-        Args:
-            filename (str): path to a file containing newick strings
-        Returns:
-            N/A
-        """
-        self.filename = filename
+
+# class NewickParser:
+#     """
+#     Class that handles the parsing of newick strings
+#     """
+    
+#     def __init__(self, filename : str) -> None:
+#         """
+#         Initialize a parser based on a filename that points to a commonly
+#         accepted file type that contains newick strings.
+
+#         Args:
+#             filename (str): path to a file containing newick strings
+#         Returns:
+#             N/A
+#         """
+#         self.filename = filename
+    
+#     # @classmethod
+#     # def from_string(cls, newick_str : str):
+#     #     """
+        
+
+#     #     Args:
+#     #         newick_str (str): _description_
+#     #     """
+#     #     pass
+
+#     # def get_networks(self) -> set[Network]:
         
     
-    def parse_networks(self, 
-                       new_filename : str, 
-                       file_loc : str = None,
-                       phylonet_cmd : str = None) -> None:
-        """
-        Assuming the newick strings are separated by newline chars, generate a
-        nexus file that gives each newick string a label and value
-        in the "TREES" block.
+#     def parse_networks(self, 
+#                        new_filename : str, 
+#                        file_loc : str = None,
+#                        phylonet_cmd : str = None) -> None:
+#         """
+#         Assuming the newick strings are separated by newline chars, generate a
+#         nexus file that gives each newick string a label and value
+#         in the "TREES" block.
 
-        Args:
-            new_filename (str): A name for the nexus file that will be created
-            file_loc (str, optional): The save folder of the newly created 
-                                      nexus file. Defaults to None, in which
-                                      case the nexus file will be saved to 
-                                      the same folder that the original file
-                                      that contained the trees came from.
-            phylonet_cmd (str, optional): A phylonet command to be added to the
-                                          nexus file. Defaults to None.
-        Returns:
-            N/A
-        """
-        if file_loc is None:
-            file_location = Path(self.filename).parent
-        else:
-            file_location = Path(file_loc)
+#         Args:
+#             new_filename (str): A name for the nexus file that will be created
+#             file_loc (str, optional): The save folder of the newly created 
+#                                       nexus file. Defaults to None, in which
+#                                       case the nexus file will be saved to 
+#                                       the same folder that the original file
+#                                       that contained the trees came from.
+#             phylonet_cmd (str, optional): A phylonet command to be added to the
+#                                           nexus file. Defaults to None.
+#         Returns:
+#             N/A
+#         """
+#         if file_loc is None:
+#             file_location = Path(self.filename).parent
+#         else:
+#             file_location = Path(file_loc)
             
         
-        nf = NexusTemplate()
+#         nf = NexusTemplate()
         
-        with open(self.filename, "r", encoding = "utf8") as file:
-            # Get a list of newick strings, assuming the newick strings
-            # are separated by newline chars
-            strings : list[str] = [line for line in file.readlines() \
-                                   if line != "\n"]
+#         with open(self.filename, "r", encoding = "utf8") as file:
+#             # Get a list of newick strings, assuming the newick strings
+#             # are separated by newline chars
+#             strings : list[str] = [line for line in file.readlines() \
+#                                    if line != "\n"]
             
-        #place each newick string into the nexus template object
-        for newick in strings:
-            nf.add(newick)
+#         #place each newick string into the nexus template object
+#         for newick in strings:
+#             nf.add(newick)
         
-        if phylonet_cmd is not None:
-            nf.add_phylonet_cmd(phylonet_cmd)
+#         if phylonet_cmd is not None:
+#             nf.add_phylonet_cmd(phylonet_cmd)
         
-        #Generate a nexus file with a certain filename and folder destination
-        nf.generate(file_location, new_filename)
+#         #Generate a nexus file with a certain filename and folder destination
+#         nf.generate(file_location, new_filename)
 
 class NexusTemplate:
     """
@@ -166,16 +183,16 @@ class NexusTemplate:
         """
         # A list of strings that represent one singular line in a "TREE" block
         # ie: "tree t1 = (A, B)C;"
-        self.networks : list[str] = list()
+        self.networks : list[str] = list[str]()
         
         # Set of taxa labels that are present across all trees 
         # in the "TREE" block
-        self.tax : set[str] = set()
+        self.taxa : set[str] = set[str]()
         
         #Counter for tree indeces
         self.net_index : int = 1
         
-        self.phylonet_cmds : list[str] = list()
+        self.phylonet_cmds : list[str] = list[str]()
     
     def add(self, newick_str : str) -> None:
         """
@@ -195,7 +212,7 @@ class NexusTemplate:
         self.net_index += 1
         
         # Add all labels in this tree to the set of all taxa labels
-        self.tax = self.tax.union(labels)
+        self.taxa = self.taxa.union(labels)
         
     def add_phylonet_cmd(self, cmd : str) -> None:
         """
@@ -208,7 +225,20 @@ class NexusTemplate:
         """
         self.phylonet_cmds.append(cmd)
         
-    def generate(self, loc : Path | str, end_name : str) -> None:
+    def load_gene_trees(self, filename : str) -> None:
+        """
+        Load a set of gene trees from a file into the nexus template.
+        
+        Args:
+            filename (str): The path to the file containing the gene trees.
+        Returns:
+            N/A
+        """
+        gene_trees = GeneTrees(NetworkParser(filename).get_all_networks())
+        for tree in gene_trees.trees:
+            self.add(tree.newick())
+        
+    def generate(self, loc: Union[Path, str], end_name: str) -> None:
         """
         Create a nexus file at "<loc>/<end_name>", end_name should include .nex
         extension.
@@ -217,25 +247,20 @@ class NexusTemplate:
             NewickParserError: If the file location already exists or cannot be
                                found.
         Args:
-            loc (Path | str): Directory location to save the file to. Can either 
+            loc (Union[Path, str]): Directory location to save the file to. Can either 
                               be a python Path obj or simply a string.
             end_name (str): The new file name. Must include .nex extension.
         Returns:    
             N/A
         """
-        
         start_block= ["#NEXUS\n", "\n", "BEGIN TAXA;\n", 
-                      f"DIMENSIONS NTAX={len(self.tax)};\n", 
+                      f"DIMENSIONS NTAX={len(self.taxa)};\n", 
                       "TAXALABELS\n"]
-        
         middle_block = [";\n", "END;\n", "BEGIN TREES;\n"]
-        
         phylonet_block = ["BEGIN PHYLONET; \n", "END;\n"]
-    
-        end = "END;\n"
-        
+
         #CHECK VALIDITY OF ENDNAME
-        if type(loc) is Path:
+        if isinstance(loc, Path):
             new_file_path = loc.absolute() / end_name 
         else:
             new_file_path = Path(loc).absolute() / end_name
@@ -245,28 +270,21 @@ class NexusTemplate:
         else:
             # create a file
             with open(new_file_path, 'w') as fp:
-                # uncomment if you want empty file
                 for line in start_block:
                     fp.write(line)
-                
-                for taxa in self.tax:
+                for taxa in self.taxa:
                     fp.write(f"{taxa}\n")
-                    
                 for line in middle_block:
                     fp.write(line)
-                
                 for net in self.networks:
                     fp.write(net)
-                
-                fp.write(end)
-                
+                fp.write("END;\n")  # End of TREES block
                 if self.phylonet_cmds != []:
                     fp.write(phylonet_block[0])
                     for cmd in self.phylonet_cmds:
                         fp.write(cmd + "\n")
                     fp.write(phylonet_block[1])
-                
-                fp.write(end)
+                # Do NOT write a final END; here!
                 fp.close()
         
 

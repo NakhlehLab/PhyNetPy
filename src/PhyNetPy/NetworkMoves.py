@@ -17,9 +17,10 @@
 ##
 ##############################################################################
 
-from Network import NetworkError, Node, Network, Edge
+from .Network import *
 import random
-from GeneTrees import *
+from .GeneTrees import *
+import warnings
 
 """
 For now, the four moves I have chosen to implement for network editing are as
@@ -43,97 +44,144 @@ follows:
 #########################
 
 def add_hybrid(net : Network,
-               source : Edge = None, 
-               destination : Edge = None, 
+               source : Edge, 
+               destination : Edge, 
                t_src : float = None, 
                t_dest : float = None) -> None:
-    """
-    Adds a hybrid edge from src to dest. If no source or destination edge is 
-    provided, edges will be chosen at random. Edges are connected at the midway
-    point, unless times are given.
-    
-    src:                dest:
-    a                   x
-    |                   |
-    |                   |
-    |                   |
-    v                   v
-    n1- - - - - - - - ->n2
-    |                   |
-    |                   |
-    v                   v
-    b                   y
-    
-    Args:
-        net (Network): A network.
-        source (Edge, optional): A source edge, the origin of the hybrid edge.
-                                 Defaults to None.
-        destination (Edge, optional): A destination edge. Defaults to None.
-        t_src (float, optional): From the diagram, the speciation time at n1.
-                                 Defaults to None.
-        t_dest (float, optional): From the diagram, the speciation time at n2. 
-                                  Defaults to None.
-    Returns:
-        N/A
-    """
-    src : Edge
-    dest : Edge
-    a : Node
-    b : Node
-    x : Node
-    y : Node
-    n1 : Node
-    n2 : Node
-    
-    if source is None or destination is None:
-        src : Edge = random.choice(net.E())
-        a = src.src
-        b = src.dest
-        valid_dests = [edge for edge in net.E()
-                       if edge not in net.edges_downstream_of_node(b)]
-        dest = random.choice(valid_dests)
-        x = dest.src
-        y = dest.dest
-    else:
-        src = source
-        dest = destination
 
-        a = src.src
-        b = src.dest
-        x = dest.src
-        y = dest.dest
-
-        if src in net.edges_downstream_of_node(y):
-            raise Exception("Destination for hybrid edge is upstream of \
-                            selected Source!")
-    
-    n1 : Node = net.add_uid_node()
-    n2 : Node = net.add_uid_node() #This is the reticulation node
-    n2.set_is_reticulation(True)
-    
-    #Rewire edges
-    net.remove_edge(src)
-    net.remove_edge(dest)
-
-    # Set times
-    if t_src is not None and a.get_time() < t_src < b.get_time():
-        n1.set_time(t_src)
-    else:
-        n1.set_time((a.get_time() + b.get_time()) / 2.0)
-
-    if t_dest is not None and x.get_time() < t_src < y.get_time():
-        n2.set_time(t_dest)
-    else:
-        n2.set_time((x.get_time() + y.get_time()) / 2.0)  
+    if source == destination:
+        warnings.warn("Source and destination edges are the same. Bubble edge will be created.")
         
-    # Add back new edges 
-    edges : list[Edge] = [Edge(a, n1), 
-                          Edge(n1, b), 
-                          Edge(x, n2), #x to n2 is a hybrid edge
-                          Edge(n2, y), 
-                          Edge(n1, n2)] #n1 to n2 is a hybrid edge
+        n1 : Node = source.src #top
+        n2: Node = source.dest # bottom
+        n3 : Node = net.add_uid_node() # middle
+        n4: Node = net.add_uid_node() # middle
+        
+        net.remove_edge(source)
+        
+        bubble_edge1 : Edge = Edge(n3, n4, gamma = .5, tag = 'right')
+        bubble_edge2 : Edge = Edge(n3, n4, gamma = .5, tag = 'left')
+        top_2_b1 : Edge = Edge(n1, n3)
+        b2_2_bot : Edge = Edge(n4, n2)
+        
+        net.add_nodes(n3, n4)
+        net.add_edges([bubble_edge1, bubble_edge2, top_2_b1, b2_2_bot])
+    else:
+        a : Node = source.src
+        b : Node = source.dest
+        x : Node = destination.src
+        y : Node = destination.dest
+        n1 : Node = net.add_uid_node()
+        n2 : Node = net.add_uid_node()
+        n2.set_is_reticulation(True)
+        
+        net.remove_edge(source)
+        net.remove_edge(destination)
+        
+        net.add_edges([Edge(a, n1),
+                       Edge(n1, b), 
+                       Edge(x, n2), 
+                       Edge(n2, y),
+                       Edge(n1, n2)])
+        
+        
+        
+        
+        
+        
     
-    net.add_edges(edges)
+# def add_hybrid(net : Network,
+#                source : Edge = None, 
+#                destination : Edge = None, 
+#                t_src : float = None, 
+#                t_dest : float = None) -> None:
+#     """
+#     Adds a hybrid edge from src to dest. If no source or destination edge is 
+#     provided, edges will be chosen at random. Edges are connected at the midway
+#     point, unless times are given.
+    
+#     src:                dest:
+#     a                   x
+#     |                   |
+#     |                   |
+#     |                   |
+#     v                   v
+#     n1- - - - - - - - ->n2
+#     |                   |
+#     |                   |
+#     v                   v
+#     b                   y
+    
+#     Args:
+#         net (Network): A network.
+#         source (Edge, optional): A source edge, the origin of the hybrid edge.
+#                                  Defaults to None.
+#         destination (Edge, optional): A destination edge. Defaults to None.
+#         t_src (float, optional): From the diagram, the speciation time at n1.
+#                                  Defaults to None.
+#         t_dest (float, optional): From the diagram, the speciation time at n2. 
+#                                   Defaults to None.
+#     Returns:
+#         N/A
+#     """
+#     src : Edge
+#     dest : Edge
+#     a : Node
+#     b : Node
+#     x : Node
+#     y : Node
+#     n1 : Node
+#     n2 : Node
+    
+#     if source is None or destination is None:
+#         src : Edge = random.choice(net.E())
+#         a = src.src
+#         b = src.dest
+#         valid_dests = [edge for edge in net.E()
+#                        if edge not in net.edges_downstream_of_node(b)]
+#         dest = random.choice(valid_dests)
+#         x = dest.src
+#         y = dest.dest
+#     else:
+#         src = source
+#         dest = destination
+
+#         a = src.src
+#         b = src.dest
+#         x = dest.src
+#         y = dest.dest
+
+#         if src in net.edges_downstream_of_node(y):
+#             raise Exception("Destination for hybrid edge is upstream of \
+#                             selected Source!")
+    
+#     n1 : Node = net.add_uid_node()
+#     n2 : Node = net.add_uid_node() #This is the reticulation node
+#     n2.set_is_reticulation(True)
+    
+#     #Rewire edges
+#     net.remove_edge(src)
+#     net.remove_edge(dest)
+
+#     # Set times
+#     if t_src is not None and a.get_time() < t_src < b.get_time():
+#         n1.set_time(t_src)
+#     else:
+#         n1.set_time((a.get_time() + b.get_time()) / 2.0)
+
+#     if t_dest is not None and x.get_time() < t_src < y.get_time():
+#         n2.set_time(t_dest)
+#     else:
+#         n2.set_time((x.get_time() + y.get_time()) / 2.0)  
+        
+#     # Add back new edges 
+#     edges : list[Edge] = [Edge(a, n1), 
+#                           Edge(n1, b), 
+#                           Edge(x, n2), #x to n2 is a hybrid edge
+#                           Edge(n2, y), 
+#                           Edge(n1, n2)] #n1 to n2 is a hybrid edge
+    
+#     net.add_edges(edges)
         
 def remove_hybrid(net : Network, 
                   hybrid_edge : Edge) -> None:

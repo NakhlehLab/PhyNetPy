@@ -1,0 +1,364 @@
+<?xml version="1.0" standalone="yes"?>
+<!--  Simulated data for allopolyploids made by seqgen and R code.  -->
+<!--  Model for arbitrary numbers of diploids, tetraploids, hybridizations.  -->
+<beast>
+<!--  Taxa. Each taxon is a sequence (labelled A,B,...) from  -->
+<!--  an individual (01,02,03,...) in a species (a,b,c...).  -->
+	<taxa id="taxa">
+		<taxon id="01aA"/>
+		<taxon id="01bA"/>
+		<taxon id="01xA"/>
+		<taxon id="01xB"/>
+		<taxon id="01yA"/>
+		<taxon id="01yB"/>
+		<taxon id="01zA"/>
+		<taxon id="01zB"/>
+	</taxa>
+<!--  Simulated alignment for gene 1 of 1 genes.  -->
+	<alignment id="alignment1" dataType="nucleotide">
+		<sequence>
+			<taxon idref="01bA" />
+GTTATTCTAAAGAATATGGCTCCTTAAACAATACAAAAAGATCTTGAAGTTTGTCCGAACCGATATCCCCTTGGAAATTCTATGGCAAATGTGTCTCAGCCGGTTGCAGGCTTCGCTGGTACATAGGAGATACGCAAGTCGGTGGAACTAGGGTTTACATCGAGGTTCTTACTTATTTGTTACTTTTGTTGCTATGGTTCGTACCCACTTGCAACATATGTAAGTTGACGGCTTAATGAGCATCACATACGTCAATACGCGTCCATTGTCTACCAACAGCTTGAACGATAGGGCATTATACAACATGCTTTGTAGTCGTGTCATACAATATGGGTAATACCAATTACATACTTAGAGGACGACGTAGCTACCTACTTGATCGTCCCTAAGGTTTTGTAAAGCGAACACAGTATATGCAGGCATCCACACCTTAAATTTCCAGATGGATATTCTTGCAGGCGCGCGTGCAACGATGGCATTCCAGCAGCACAGTAAGCCTT
+		</sequence>
+		<sequence>
+			<taxon idref="01zB" />
+GTTATTCTAAAGAATATGGCTCCTTAAACAATACAAAAAGATCTTGAAGTTTGTCTGAACCGATATCCCCTTGGAAATTCTATGGCAAATGTGTCTCAGCTGGTTGCAGGCTTCGCTGGTACATAGGAGATACGCAAGTCGGTGGAACTGGGGTTTACATCGAGGTTCTTACTTATTTGTTACTTTTGTTGCTATGGTTGGTACCGACTTGCAACATATGTAAGTTGACGGCTTAATGAGCATCACATATGTCAATACGCGTCCATTGTCTACCAACAGCTTGAACGATAAGGCATTATACAACATGCTTTGTAGTCGTGTCATACAATATGGGTAATACTAATTACATACTTAGAGGACGACGTAGCTACCTACTTGATCGTCCCTAAGGTTCTGTAAAGCGAACACAGTATATGCAGGCATCCACACCTTAAATTTCCAGATGGATATTCTTGCAGGCGCGCGTGCAACGATGGCATTCCAGCAGCATAGTAAGCCTT
+		</sequence>
+		<sequence>
+			<taxon idref="01yB" />
+GTTATTCTAAAGAATATGGCTCCTTAAACAATACAAAAAGATCTTGAAGTTTGTCTGAACCGATATCCCCTTGGAAATTCTATGGCAAATGTGTCTCAGCTGGTTGCAGGCTTCGCTGGTACATAGGAGATACGCAAGTCGGTGGAACTGGGGTTTACATCGAGGTTTTTACTTATTTGTTACTTTTGTTGCTATGGTTGGTACCCACTTGCAACATATGTAAGTTGACGGCTTAATGAGCATCACATACGTCAATACGCGTCCATTGTCTACCAACAGCTTGAACGATAGGGCATTATACAACATGCTTTGTAGTCGTGTCATACAATATGGGTAATACTAATTACATACTTAGAGGACGACGTAGCTACCTACTTGATCGTCCCTAAGGTTCTGTAAAGCGAACACAGTATATGCAGGCATCCACACCTTAAATTTCCAGATGGATATTCTTGCAGGCGCGCGTGCAACGATGGCATTCCAGCAGCATAGTAAGCCTT
+		</sequence>
+		<sequence>
+			<taxon idref="01xB" />
+GTTATTCTAAAGAATATGGCTCCTTAAACAATACAAAAAGATCTTGAAGTTTGTCTGAACCGATATCCCCTTGGAAATTCTATGGCAAATGTGTCTCAGCTGGTTGCAGGCTTCGCTGGTACATAGGAGATACGCAAGTCGGTGGAACTGGGGTTTACATCGAGGTTCTTACTTATTTGCTACTTTTGTTGCTATGGTTGGTACCCACTTGCAACATATGTAAGTTGACGGCTTAATGAGCATCACATACGTCAATACGCGTCCATTGTCTACCAACAGCTTGAACGACAGGGCATTATACAACATGCTTTGTAGTCGTGTCATACAATATGGGTAATACTAATTACATACTTAGAGGACGACGTAGCTACCTACTTGATCGTCCTTAAGGTTCTGTAAAGCGAACACAGTATATGCAGGCATCCGCACCTTAAATTTCCAGATGGATATTCTTGCAGGCGCGCGTGCGACGATGGCATTCCAGCAGCATAGTAAGCCTT
+		</sequence>
+		<sequence>
+			<taxon idref="01aA" />
+GTTATTCTAAAGAATATGGCTCCTTAAACAATACAAAAAGATCTTGAAGTTTGTCTGAACCGATATCCCCTTGGAAATTCTATGGCAAATGTGTCTCAGCCGGTTGCAGGCTTCGCTGGTACATAGGAGATACGCAAGTCGGTGGAACTGGGGTTTACATCGAGGTTCTTACTTATTTGTTACTTTTGTTGTTATGGTTGGTACCCACTTGCAACATATGTAAGTTGACGGCTTAATGAGCATCACATACGTCAATACGAGTCCATTGTCTACCAACAGCTTGCATGATAGGGCATTATACAACATGCTTTGTAGTCGTGTCATACAATATGGGTAATCCCAATTACATACTTAGAGAACGACGTAGCTACCTACTTGATCATCCCTAAGGTTCTGTAAAGCGAACACAGTATATGCAGGCATCCACACCTTAAATTTCCAGATGGATATTCTTGCAGGCGCGCGTGCAACGATGGCATTCCAGCAGCATAGTAAGCCTT
+		</sequence>
+		<sequence>
+			<taxon idref="01xA" />
+GTTATTCTAAAGAATATGGCCCCTTAAACAATACAAAAAGATCTTGAAGTTTGTCTGAACCGATATCCCCTTGGAAATTCTATGGCAAATGTGTCTCAGCCGGTTGGAGGCTTCGCTGGTACATAGGAGATACGCAAGTCGGTGGAACTGGGGTTTACATCGAGGTTCTTACTTATTTGTTACTTTTGTTGCTATGGTTGGTACCCACTTGCAACATATGTAAGTGGACGGCTTAATGAGCATCACATACGTCAATACGAGTCCATTGTCTACCAACAGCTTGAATGATAGGGCATTATACAACATGCTTTGTAGTCGTGTCATACAATATGGGTAATACCAATTACATACTTAGAGGACGACGTAGCTACCTACTTGATCGTCCCTAAGGTTCTGTAAAGCGAACACAGTATATGCAGGCATCCACACCTTAAATTTCCAGATGGATATTCTTGCAGGCGCGCGTGCAACGATGGCATTCCAGCAGCATAGTAAGCCTT
+		</sequence>
+		<sequence>
+			<taxon idref="01zA" />
+GTTATTCTAAAGAATATGGCTCCTTAAACAATACAAAAAGATCTTGAAGTTTGTCTGAACCGATATCCCCTTGGAAATTCTATGGCAAATGTGTCTCAGCCGGTTGCAGGCTTCGCTGGTACATAGGAGATACGCAAGTCGGTGGAACTGGGGTTTACATCGAGGTTCTTACTTATTTGTTACTTTTGTTGCTATGGTTGGTACCCACTTGCAACATATGTAAGTTGACGGCTTAATGAGCATCACATACGTCAATACGAGTCCATTGTCTACCAACAGCTTGAATGATAGGGCATTATACAACATGCTTTGTAGTCGTGTCATACAATATGGGTAATACGAATTACATACCTAGAGGACGACGTAGCTACCTACTTGATCGTCCCTAAGGTTCTGTAAAGCGAACACAGTATATGCAGGCATCCACACCTTAAATTTCCAGATGGATATTCTTGCAGGCGCGCGTGCAACGATGGCATTCCAGCAGCATAGTAAGCCTT
+		</sequence>
+		<sequence>
+			<taxon idref="01yA" />
+GTTATTCTAAAGAATATGGCTCCTTAAACAATACAAAAAGATCTTGAAGTTTGTCTGAACCGATATCCCCTTGGAAATTCTATGGCAAATGTGTCTCAGCCGGTTGCAGGCTTCGCTGGTACATAGGAGATACGCAAGTCGGTGGAACTGGGGTTTACATCGAGGTTCTTACTTATTTGTTACTTTTGTTGCTATGGTTGGTACCCACTTGCAACATATGTAAGTTGACGGCTTAATGAGCATCACATACGTCAATACGAGTCCATTGTCTACCAACAGCTTGAATGATAGGGCATTATACAACATGCTTTGTAGTCGTGTCATACAATATGGGTAGTACGAATTACATACCTAGAGGAAGACGTAGCTACCTACTTGATCGTCCCTAAGGTTCTGTAAAGCGAACACAGTATATGCAGGCATCCACACCTTAAATTTCCAGATGGATATTCTTGCAGGCGCGCGTGCAACGATGGCATTCCAGCAGCATAGTAAGCCTT
+		</sequence>
+	</alignment>
+<!--  Patterns  -->
+	 <patterns id="1.patterns" from="1" > 
+		 <alignment idref="alignment1" /> 
+	 </patterns> 
+<!--  Constant size population parameter used to generate starting trees.  -->
+	 <constantSize id="constant" units="substitutions" > 
+		 <populationSize> 
+			 <parameter id="constant.popSize" value="0.016" lower="0" upper="Infinity" /> 
+		 </populationSize> 
+	 </constantSize> 
+<!--  Randomly generated starting trees for genes.  -->
+	 <coalescentTree  id="1.startingTree" rootHeight="0.2" > 
+		 <taxa idref="taxa" /> 
+		 <constantSize idref="constant" /> 
+	 </coalescentTree> 
+<!--  Tree models for gene trees.  -->
+	 <treeModel id="1.treeModel" > 
+		 <coalescentTree idref="1.startingTree" /> 
+		 <rootHeight> 
+			 <parameter id="1.treeModel.rootHeight" /> 
+		 </rootHeight> 
+		 <nodeHeights internalNodes="true" > 
+			 <parameter id="1.treeModel.internalNodeHeights" /> 
+		 </nodeHeights> 
+		 <nodeHeights internalNodes="true" rootNode="true" > 
+			 <parameter id="1.treeModel.allInternalNodeHeights" /> 
+		 </nodeHeights> 
+	 </treeModel> 
+<!--  Branch models for gene trees.  -->
+	 <strictClockBranchRates id="1.branchRates" > 
+		 <rate> 
+			 <parameter id="1.clock.rate" value="1" lower="0" upper="Infinity" /> 
+		 </rate> 
+	 </strictClockBranchRates> 
+<!--  HKY substitution models for gene trees.  -->
+	 <HKYModel id="1.hky" > 
+		 <frequencies> 
+			 <frequencyModel dataType="nucleotide" > 
+				 <frequencies> 
+					 <parameter id="1.frequencies" value="0.25 0.25 0.25 0.25" /> 
+				 </frequencies> 
+			 </frequencyModel> 
+		 </frequencies> 
+		 <kappa> 
+			 <parameter id="1.kappa" value="2" lower="0" upper="Infinity" /> 
+		 </kappa> 
+	 </HKYModel> 
+<!--  Site models for gene trees.  -->
+	 <siteModel id="1.siteModel" > 
+		 <substitutionModel> 
+			 <HKYModel idref="1.hky" /> 
+		 </substitutionModel> 
+	 </siteModel> 
+<!--  Likelihoods for gene trees.  -->
+	 <treeLikelihood id="1.treeLikelihood" useAmbiguities="false" > 
+		 <patterns idref="1.patterns" /> 
+		 <treeModel idref="1.treeModel" /> 
+		 <siteModel idref="1.siteModel" /> 
+		 <strictClockBranchRates idref="1.branchRates" /> 
+	 </treeLikelihood> 
+<!--  Species network model.  -->
+<!--  Assignments of sequences to individuals and individuals to species.  -->
+	 <alloppSpecies id="alloppSpecies" minGeneNodeHeight="0.2" > 
+		 <apsp id="a" ploidylevel="2" > 
+			 <individual id="01a" > 
+				 <taxon idref="01aA" /> 
+			 </individual> 
+		 </apsp> 
+		 <apsp id="z" ploidylevel="4" > 
+			 <individual id="01z" > 
+				 <taxon idref="01zA" /> 
+				 <taxon idref="01zB" /> 
+			 </individual> 
+		 </apsp> 
+		 <apsp id="y" ploidylevel="4" > 
+			 <individual id="01y" > 
+				 <taxon idref="01yA" /> 
+				 <taxon idref="01yB" /> 
+			 </individual> 
+		 </apsp> 
+		 <apsp id="x" ploidylevel="4" > 
+			 <individual id="01x" > 
+				 <taxon idref="01xA" /> 
+				 <taxon idref="01xB" /> 
+			 </individual> 
+		 </apsp> 
+		 <apsp id="b" ploidylevel="2" > 
+			 <individual id="01b" > 
+				 <taxon idref="01bA" /> 
+			 </individual> 
+		 </apsp> 
+		 <geneTrees id="geneTrees" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </geneTrees> 
+	 </alloppSpecies> 
+<!--  Species network, like species tree in *BEAST  -->
+	 <alloppSpeciesNetwork id="apspnetwork" oneHybridization="false" diploidRootIsRoot="true" > 
+		 <alloppSpecies idref="alloppSpecies" /> 
+		 <tipPopulations value="0.2" > 
+			 <parameter id="apspnetwork.tipPopSizes" /> 
+		 </tipPopulations> 
+		 <rootPopulations value="0.2" > 
+			 <parameter id="apspnetwork.rootPopSizes" /> 
+		 </rootPopulations> 
+<!--  hybridPopulations is not a normal parameter, since it changes dimension.  -->
+<!--  It can be logged (unused values are set to 0). It needs special operators.  -->
+		 <hybridPopulations value="0.2" > 
+			 <parameter id="apspnetwork.hybridPopSizes" /> 
+		 </hybridPopulations> 
+	 </alloppSpeciesNetwork> 
+<!--  Statistic for the number of hybridizations  -->
+	 <alloppNumHybsStatistic id="allopp.numHybs" > 
+		 <apspNetwork> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </apspNetwork> 
+	 </alloppNumHybsStatistic> 
+<!--  Prior model for species network (Yule-like model with one parameter, population prior)  -->
+	 <alloppNetworkPriorModel id="network.prior.model" units="substitutions" > 
+		 <eventRate> 
+			 <parameter id="apspnetwork.prior.eventRate" value="100" lower="0" upper="Infinity" /> 
+		 </eventRate> 
+		 <populationScalingFactor> 
+			 <parameter id="population.scaling.factor" value="0.2" lower="0" upper="Infinity" /> 
+		 </populationScalingFactor> 
+		 <tipPopulationDistribution> 
+			 <gammaDistributionModel> 
+				 <shape> 
+					 4 
+				 </shape> 
+				 <scale> 
+					 <parameter idref="population.scaling.factor" /> 
+				 </scale> 
+			 </gammaDistributionModel> 
+		 </tipPopulationDistribution> 
+		 <rootPopulationDistribution> 
+			 <gammaDistributionModel> 
+				 <shape> 
+					 2 
+				 </shape> 
+				 <scale> 
+					 <parameter idref="population.scaling.factor" /> 
+				 </scale> 
+			 </gammaDistributionModel> 
+		 </rootPopulationDistribution> 
+		 <hybridPopulationDistribution> 
+			 <gammaDistributionModel> 
+				 <shape> 
+					 1 
+				 </shape> 
+				 <scale> 
+					 <parameter idref="population.scaling.factor" /> 
+				 </scale> 
+			 </gammaDistributionModel> 
+		 </hybridPopulationDistribution> 
+	 </alloppNetworkPriorModel> 
+<!--  Prior probability for species network  -->
+	 <apspNetworkPrior id="apspnetwork.prior" > 
+		 <model> 
+			 <alloppNetworkPriorModel idref="network.prior.model" /> 
+		 </model> 
+		 <apspNetwork> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </apspNetwork> 
+	 </apspNetworkPrior> 
+<!--  Coalescent for species network: probability that gene trees fit  -->
+<!--  into the network.  -->
+	 <apspCoalescent id="apsp.coalescent" > 
+		 <alloppSpecies idref="alloppSpecies" /> 
+		 <alloppSpeciesNetwork idref="apspnetwork" /> 
+	 </apspCoalescent> 
+<!--  Operators for gene trees.  -->
+	 <operators id="operators" > 
+		 <scaleOperator scaleFactor="0.75" weight="1" > 
+			 <parameter idref="1.kappa" /> 
+		 </scaleOperator> 
+		 <deltaExchange delta="0.01" weight="1" > 
+			 <parameter idref="1.frequencies" /> 
+		 </deltaExchange> 
+		 <subtreeSlide size="0.002" gaussian="true" weight="16" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </subtreeSlide> 
+		 <narrowExchange weight="16" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </narrowExchange> 
+		 <wideExchange weight="3" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </wideExchange> 
+		 <wilsonBalding weight="3" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </wilsonBalding> 
+		 <scaleOperator scaleFactor="0.75" weight="3" > 
+			 <parameter idref="1.treeModel.rootHeight" /> 
+		 </scaleOperator> 
+		 <uniformOperator weight="33" > 
+			 <parameter idref="1.treeModel.internalNodeHeights" /> 
+		 </uniformOperator> 
+		 <upDownOperator scaleFactor="0.75" weight="33" > 
+			 <up> 
+			 </up> 
+			 <down> 
+				 <parameter idref="1.treeModel.allInternalNodeHeights" /> 
+			 </down> 
+		 </upDownOperator> 
+<!--  Operator for both network and gene trees,stretches/squeezes everything.  -->
+		 <upDownOperator scaleFactor="0.75" weight="30" > 
+			 <up> 
+				 <parameter idref="apspnetwork.prior.eventRate" /> 
+			 </up> 
+			 <down> 
+				 <alloppSpeciesNetwork idref="apspnetwork" /> 
+				 <parameter idref="population.scaling.factor" /> 
+				 <parameter idref="1.treeModel.allInternalNodeHeights" /> 
+			 </down> 
+		 </upDownOperator> 
+<!--  Operators for network.  -->
+		 <scaleOperator scaleFactor="0.9" weight="6" > 
+			 <parameter idref="population.scaling.factor" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.5" weight="12" > 
+			 <parameter idref="apspnetwork.tipPopSizes" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.5" weight="12" > 
+			 <parameter idref="apspnetwork.rootPopSizes" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.5" weight="30" > 
+			 <parameter idref="apspnetwork.prior.eventRate" /> 
+		 </scaleOperator> 
+		 <hybPopSizesScaleOperator scaleFactor="0.5" weight="12" > 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </hybPopSizesScaleOperator> 
+		 <networkNodeReHeight weight="45" > 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </networkNodeReHeight> 
+		 <sequenceReassignment weight="60" > 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </sequenceReassignment> 
+		 <changeNumHybridizations weight="45" > 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </changeNumHybridizations> 
+	 </operators> 
+	 <mcmc id="mcmc" chainLength="30000000" autoOptimize="true" > 
+		 <posterior id="posterior" threads="1" > 
+			 <prior id="prior" > 
+				 <apspCoalescent idref="apsp.coalescent" /> 
+				 <apspNetworkPrior idref="apspnetwork.prior" /> 
+				 <logNormalPrior mean="1" stdev="1.25" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="1.kappa" /> 
+				 </logNormalPrior> 
+				 <logNormalPrior mean="-9" stdev="1" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="population.scaling.factor" /> 
+				 </logNormalPrior> 
+				 <logNormalPrior mean="4.6" stdev="2" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="apspnetwork.prior.eventRate" /> 
+				 </logNormalPrior> 
+			 </prior> 
+			 <likelihood id="likelihood" > 
+				 <treeLikelihood idref="1.treeLikelihood" /> 
+			 </likelihood> 
+		 </posterior> 
+		 <operators idref="operators" /> 
+<!--  Log to screen.  -->
+		 <log id="screenLog" logEvery="100000" > 
+			 <column label="Posterior" dp="4" width="12" > 
+			 <posterior idref="posterior" /> 
+			 </column> 
+			 <column label="Prior" dp="4" width="12" > 
+			 <prior idref="prior" /> 
+			 </column> 
+			 <column label="Likelihood" dp="4" width="12" > 
+			 <likelihood idref="likelihood" /> 
+			 </column> 
+			 <column label="PopSF" sf="6" width="12" > 
+			 <parameter idref="population.scaling.factor" /> 
+			 </column> 
+		 </log> 
+<!--  Main log to file.  -->
+		 <log id="fileLog" logEvery="5000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg1n1t4/D4LOGg1n1t4r2.txt" > 
+			 <posterior idref="posterior" /> 
+			 <prior idref="prior" /> 
+			 <likelihood idref="likelihood" /> 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <apspCoalescent idref="apsp.coalescent" /> 
+			 <apspNetworkPrior idref="apspnetwork.prior" /> 
+			 <alloppNumHybsStatistic idref="allopp.numHybs" /> 
+			 <parameter idref="population.scaling.factor" /> 
+			 <parameter idref="apspnetwork.tipPopSizes" /> 
+			 <parameter idref="apspnetwork.rootPopSizes" /> 
+			 <parameter idref="apspnetwork.hybridPopSizes" /> 
+			 <parameter idref="apspnetwork.prior.eventRate" /> 
+			 <parameter idref="1.treeModel.rootHeight" /> 
+			 <parameter idref="1.kappa" /> 
+			 <parameter idref="1.frequencies" /> 
+			 <parameter idref="1.clock.rate" /> 
+			 <treeLikelihood idref="1.treeLikelihood" /> 
+		 </log> 
+<!--  Gene tree log files.  -->
+		 <logTree id="1.treeFileLog" logEvery="50000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg1n1t4/D4GTSg1n1t4r2-1.txt" sortTranslationTable="true" nexusFormat="true" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </logTree> 
+<!--  MUL-tree log file.  -->
+		 <logTree id="multreeFileLog" logEvery="5000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg1n1t4/D4MTSg1n1t4r2.txt" sortTranslationTable="true" nexusFormat="true" > 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </logTree> 
+<!--  Debugging and tuning log.  -->
+		 <log id="alloppDBUGTUNE" logEvery="1000000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg1n1t4/D9DBUGTUNEg1n1t4r2.txt" > 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </log> 
+	 </mcmc> 
+</beast>

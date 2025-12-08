@@ -1,0 +1,634 @@
+<?xml version="1.0" standalone="yes"?>
+<!--  Simulated data for allopolyploids made by seqgen and R code.  -->
+<!--  Model for arbitrary numbers of diploids, tetraploids, hybridizations.  -->
+<beast>
+<!--  Taxa. Each taxon is a sequence (labelled A,B,...) from  -->
+<!--  an individual (01,02,03,...) in a species (a,b,c...).  -->
+	<taxa id="taxa">
+		<taxon id="01aA"/>
+		<taxon id="01bA"/>
+		<taxon id="01xA"/>
+		<taxon id="01xB"/>
+		<taxon id="01yA"/>
+		<taxon id="01yB"/>
+		<taxon id="01zA"/>
+		<taxon id="01zB"/>
+	</taxa>
+<!--  Simulated alignment for gene 1 of 3 genes.  -->
+	<alignment id="alignment1" dataType="nucleotide">
+		<sequence>
+			<taxon idref="01xB" />
+TGTCGTTGCTGATAGATATACAATATGTAGTAAGTTTGTATAGGGACCTAGTCGGTGGAGTTGCGGTTGACCAGGTTTTAATTAATTTACGTACATTTTCCATATTGTTTGTGTACTATTCCCCGCATATCTCGTGAAAGCAGTGTTGTGATACATAAACTCACGGGGTTGTTTCCCTTGGTAATTTAATTTTACCTCTGTAATTCAGAATTTAGAAAGTACAAAATCTTCAATATCGTAGGCTAAAGCACTGACCGGGCCATTGGTTTGTAACAACACACGACGCGAACTAAAGTAAATTCTAGATACTGAATTTTAAATGCATTAACACTACTTAAGATCAGTATATAGTATAGGAGATGAAGTTCCTCTCTATCTTCATTAATTCATCGAAATATTACTCCATCCGAAAACACTATGGTACCTTACTCTACCAAGAATCAGATGATACCACATGATTATTGTTGCGTCTACAGATATTTTGGGTATAGTTCTTCTTC
+		</sequence>
+		<sequence>
+			<taxon idref="01zB" />
+TGTCGTTGCTGATTGATATACAATATGTAGTAAGTTTGTATAGGGACCTAGTCGGTGGAGTTGCGGTTGACCAGGTTTTAATCAATTTACGTACATTTTCCATATTGTTTGTGTACTATTCCCCGCATGTCTCGTGAAAGCAGTGTCGTGATACATAAACTCACGGGGTTGTTTCCCTTGGTAATTTAATTTTACCTCTGTAATTCAGAATTTAGAAATTACAAAATCTTCAATATCGTAGGCTAAAGCACTGACCGGGCCATTGGTTTGTAACAACACACGACGCGAACTAAAGTAAATTCTAGATACTGAATTTTAAATGCATTAACACTACTTAAGATCAGTATATAGTATAGGAGATGAAGTTCCTCTCTATCTTCATTAATTCATCGAAATATTACTCCATCCGAAAACACTATGGTACCTTACTCTACCAAGAATCGGATGATACCACATGATTATTGTTGCGTCTTCAGATACTTTGGGTATAGTTCTTCTTC
+		</sequence>
+		<sequence>
+			<taxon idref="01yB" />
+TGTCGTTGCTGATTGATATACAATATGTAGTAAGTTTGTATAGGGACCTAGTCGGTGGAGTTGCGGTTGACCAGGTTTTAATCAATTTACGTACATTTTCCATATTGTTTGTGTACTATTCCCCGCATGTCTCGTGAAAGCAGTGTCGTGATACATAAACTCACGGGGTTGTTTCCCTTGGTAATTTAATTTTACCTCTGTAATTCAGAATTTAGAAAGTACAAAATCTTCAATATCGTAGGCTAAAGCACTGACCGGGCCATTGGTTTGTAACAACACACGACGCGAACTAAAGTAAATTCTAGATACTGAATTTTAAATGCATTAACACTACTTAAGATCAGTATATAGTGTAGGAGATGAAGTTCCTCTCTATCTTCATTAATTCATCGAAATATTACTCCATCCGAAAACACTGTGGTACCTTACTCTACCAAGAATCGGATGATACCACATGATTATTGTTGCGTCTTCAGATATTTTGGGTATAGTTCTTCTTC
+		</sequence>
+		<sequence>
+			<taxon idref="01bA" />
+TGTCGTTGCTGATAGATATACAATATGTAGTAAGTTTGTATAGGGACCTAGTCGGTGGAGTTGCGGTTGACCAGGTTTCAATCAATTTACGTACATTTTCCATATTGTTTGTGTACTATTCCCCGCATGTCTCGTGAAAGCAGTGTTGTGATACATCAACTCACGGGGTTGTTTCCCTTGGTAATTTAATTTTACCTCTGTAATTCAGAATTTAGAAAGTACAAAATCTTCAATATCGTAGGCTAAAGCACTGACCGGGCCACTGGTTTGTAACAACACACGACGCGAACTAAAGTAAATTTTAGATACTGAATTTTAAATGCATTAACACTACTTAAGGTCAGTATATAGTATAGGAGATGAAGTTCCTCTCTATCTTCATTAATTCATCGAAATATTACTCCATCCGAAAACGCTATGGTACCTTCCTCTACCAAGAATCGGATGATACCACATGATTATTGTTGCGTCTACAGATATTTTGGGTATAGTTCTTCTTC
+		</sequence>
+		<sequence>
+			<taxon idref="01xA" />
+TGTCGTTGCTGATAGATATACAATATGTAGTAAGTTTGTATAGGGACCTAGTCGGCGGAGTTGCGGTTGACCAGGTTTTAATTAATTTACGTACATTTTCCATATTGTTTGTGCACTATTCCCCGCATGTCTCGTGAAAGCAGTGTTGTGATACATAAACTCACGGGGTTGTTTCGCTTGGGAATTTAATTTTACCTCTGTAATTCAGAATTTAGAAAGTACAAAATCTTCAATATCGTAGGCTAAAGCGCTGATCGGACCACTGGTTTGTAACAACACACGACGCGATCTAAAGTAAATTCTAGATACTGAATTTTAAATGCATTAACACTACTTAAGATCAGTATATAGTATAGGAGATGGAGTTCCTCTCTATCTTCATTAATTCATCGAAATATTACTCCATCCGAAAACACTATGGTGCTTTACTCTACCAAGAATCGGATGATACCACATGATTATTGTTGCGTCTACAGATATTTTGGGTATAGCTCTTCTTC
+		</sequence>
+		<sequence>
+			<taxon idref="01yA" />
+TGTCGTTGCTGATAGAAATACAATATGTAGTAAGTTTGTATAGGGACCTAGTCGGCGGAGTTGCGGTTGACCAGGTTTTAATCAATTTACGTACATTTTCCATATTGTTTGTGTACTATTCCCCGCATGTCTCGTGAAAGCAGTGTTGTGATACATAAACTCACGGGGTTGTTTCCCTTGGGAATTTAATTTTACCTCTGTAATTCAGAATTTAGAAAGTACAAAATCTTCAATATCGTAGGCTAAAGCACTGATCGGACCACTGGTTTGTAACAACACACGACGCGAACTAAAGTAAATTCTAGATACTGAATTTTAAATGCATTAACACTACTTAAGATCAGTATATAGTATAGGAGATGGAGTTCCTCTCTATCTTCATTAATTCATCGAAATATTACTCCATCCGAAAACACTATGGTACCTTACTCTACCAAGAATCGGATGATACCACATGATTATTGTTGCGTCTACAGATATTTTGGGTATAGTTCTTCTTC
+		</sequence>
+		<sequence>
+			<taxon idref="01zA" />
+TGTCGTTGCTGATAGAAATACAATATGTAGTAAGTTTGTATAGGGACCTAGTCGGCGGAGTTGCGGTTGACCAGGTTTTAATCAATTTACGTACATTTTCCATATTGTTTGTGTACTATTCCCCGCATGTCTCGTGAAAGCAGTGTTGTGATACATAAACTCACGGGGTTGTTTCCCTTGGGAATTTAATTTTACCTCTGTAATTCAGAATTTAGAAAGTACAAAATCTTCAATATCGTAGGCTAAAGCACTGATCGGACCACTGGTTTGTAACAACACACGACGCGAACTAAAGTAAATTCTAGATACTGAATTTTAAATGCATTAACACTACTTAAGATCAGTATATGGTATAGGAGATGGAGTTCCTCTCTATCTTCATTAATTCATCGAAATATTACTCCATCCGAAAACACTATGGTACCTTACTCTACCAAGAATCGGATGATACCACATGATTATTGTTGCGTCTACAGATATTTTGGGTATAGTTCTTCTTC
+		</sequence>
+		<sequence>
+			<taxon idref="01aA" />
+TGTCGTTGCTGATAGATATACAATATGTAGTAAGTTTGTATAGGGACCTAGTCGGCGGAGTTGCGGTTGACCAGGTTTTAATCAATTTACGTACATTTCCCATATTGTTTGTGTACTATTCCCCGCATGTCTCGTGAAAGCAGTGTTGTGATACATAAAATCACGGGGTTGTTTCCCTTGGTAATTTAATTTTACCTCTGTAATTCAGAATTTAGAAAGTACAAAATCTTCAATATCGTAGGCTAAAGCACTGATCGGGCCACTGGTTTGTAACAACACACGACGCGAACTAAAGTAAATTCTAGATACTGAATTTTAAATGCATTAACACTACTTAAGATCAGTATATGGTATAGGAGATGGAGGTCCTCTCTATCTTCATTAATTCATCGAAATATTACTCCATCCGAAAACACTATGGTACCTTACTCTACCAAGAATCGGATGATACCACATGATTATTGTTGCGTCTACAGATATTTTGGGTATAGTTCTTCTTC
+		</sequence>
+	</alignment>
+<!--  Simulated alignment for gene 2 of 3 genes.  -->
+	<alignment id="alignment2" dataType="nucleotide">
+		<sequence>
+			<taxon idref="01aA" />
+CGTACTCGATATGAATTAAGATATAGATTTTACGCTTTTTATGTATGGCTCAGTCCTTAGCGTTATGTTTCACGGCTCATGGTGGTTAATGGTGATGCTGTTCAGAAACCCCGCAACTAATCGGATGACCTGCCTTAGTTAGCGCCCCCCTTATTGAGTAGTCGAAGATTATTCAACAACTATCAGGGATCAGTTATGATAAGAATAGTAACTTCAAGCCGCCGTGATCTCGCAACATTCAAAGTGGGTTACGGGCATACAACTTCGTATTTGCTGCAGCGAACTGGACATCTACGTTCCCTAACAAATCAAACAAACGTGTTTACTAATTTATGTGTCCTAGGGCTGGTCGTCACGGACGTCGTCTGAACGGCATATGCCACCATGCTGTGTTTCATTTAATATACACGATATCAAGTGGTAACATTTCTTCAAGTTAATGGGGGTTTGATGCTTAATATGTGTTGGCACGGATTGCTGGTGTTAATTACCCTTCGGGA
+		</sequence>
+		<sequence>
+			<taxon idref="01yA" />
+CGTACTTGATATGAATTAAGATATAGATTTTACGCTTTTTATGTATGGCTCAGGCCTTAGCGTTATGTTTCACGGCTCATAGTGGTTAATTGTAATGCTGTTCAGAAACCCCGCAACTAATCGGATGACCTGCCTTAGTTAGCGCCCCCCTTATTGAGTAGTCGAAGATCATTCAACAACTATCAGGGATCAGTTATGATAAGAATAGTAACTTCAAGCCGCCGTGATCTCGCAACATTCAAAGTGGGTTACGGGCATACAACTTCGTATTTGCTGCAGCGAACTGGATATCTACGTTCTCTAACAAATCAAACAAACGTGTTTACTAATTTATGTGTCCTAGGGCTGGTCGTCGCGGACGTCGTCTGAACGGCATATGCCACCATGCTGTGTTTCATTTAATATACACGATATCAAGTGGTAACATCTCTTCAAGTTAATGGGGGTTTGATGCTTAACATGTGATGGCACGGATTGTTGGTGTTAATTACCCTTCAGGA
+		</sequence>
+		<sequence>
+			<taxon idref="01zA" />
+CGTACTTGATATGAATTAAGATATAGATTTTACGCTTTTTATGTATGGCTCAGGCCTTAGCGCTATGTTTCACGGCTCATAGTGGTTAATTGTAATGCTGTTCAGAAACCCCGCAACTAATCGGATGACCTGCCTTAGTTAGCGCCCCCCTTATTGAGTAGTCGAAGATTATTCAACAACTATCAGGGATCAGTTATGATAAGAATAGTAACTTCAAGCCGCCGTGATCTCGCAACATTCAAAGTGGGTTACGGGCATACAACTTCGTATTTGCTGCAGCGAACTGGATATCTACGTTCTCTAACAAATCAAACAAACGTGTTTACTAATTTATGTGTCCTAGGGCTGGTCGTCGCGGACGTCGTCTGAACGGCATATGCCACCATGCTGTGTTTCATTTAATATACACGATATCAAGTGGTAACATTTCTTCAAGTTAATGGGGGTTTGATGCTTAACATGTGATGGCACGGATTGTTGGTGTTAATTACCCTTCAGGA
+		</sequence>
+		<sequence>
+			<taxon idref="01xA" />
+CGTACTCGATATGAATTAAGATATAGATTTTACGCTTTTGATGTATGGCTCAGGCCTTAGCGTTATGTTTCACGGCTCATAGTGGTTAATTGTAATGCTGTTCAGAAACTCCGCAACTAATCGGATGACCTGCCTTAGTTAGCGCCCCCCTTATTGAGTAGTCGAAGATTATTCAACAACTATCAGGGATCAGTTATGATAAGAATAGTAACTTCAAGCCGCCGTGATCTCGCAACATTTAAAGTGGGTTACGGGCATACAACTTCGTATTTGCTGCAGCGAACTGGATATCTACGTTCTCTAACAAATCAAAGAAACGTGTTTACTAATTTATGTGTCCTAGGGCTGGTCGTCGCGGACGTCGTCTGAACGGCATATGCCACCATGCTGTGTTTCATTTAATATACACGATATCAAGTGGTAACATTTCTTCAAGTTAATGGGGGTTTGATGCTTAACATGTGATGGCACGGATTGCTGGTGTTAATTACCCTTCAGGA
+		</sequence>
+		<sequence>
+			<taxon idref="01zB" />
+CGCACTCGATATGAATTAAGATATGGATTTTACGCTTTTTATGTATGGCTCAGGCCTTAGCGTTATGTTTCACGGCTCGTAGTGGTTAATGGTAATGCTGTTCAGAAACCCCGCAACTAATCGGATGACCTGCCTTAGTTAGCGCCCCCCTTATTGAGTAGTCGAAGATTATCCAACAACTATCAGGGATCAGTTATGATAAGGATAGTAACTTCAAGCCGCCGTGATCTCGCAACATTCAAAGTGGGTTACGGGCATACAACTTCGTATTTGCTGCAGCGAACTGGATATCTACGTTCTCTAACAAATCAAACAAACGTGTTTGCTAATTTATGTGTCCTAGGGCTGGTCGTCACGGACGTCGTCTGAACGGCATATGCCACCATGCTGTGTTTCATTTGATATACACGATATCAAGTGGTAACATTTCTTCAAGTTAATGGGGGTTTGATGCTTAACATGTGATGGCACGGATTGCTGGTGTTAATTACCCTTCAGGA
+		</sequence>
+		<sequence>
+			<taxon idref="01yB" />
+CGCACTCGATATGAATTAAGATATGGATTTTACGCTTTTTATGTATGGCTCAGGCCTTAGCGTTATGTTTCACGGCTCATAGTGGTTAATGGTAATGCTGTTCAGAAACCCCGCAACTAATCGGATGACCTGCCTTAGTTAGCGCCCCCCTTATTGAGTAGTCGAAGATTATCCAACAACTATCAGGGATCAGTTATGATAAGGATAGTAACTTCAAGCCGCCGTGATCTCGCAACATTCAAAGTGGGTTACGGGCATACAACTTCGTATTTGCTGCAGCCAACTGGATATCTACGTTCTCTAACAAATCAAACAAACGTGTTTGCTAATTTATGTGTCCTAGGGCTGGTCGTCACGGACGTCGTCTGAACGGCATATGCCACCATGCTGTGTTTCATTTAATATACACGATATCAAGTGGTAACATTTCTTCAAGTTAATGGGGGTTTGATGCTTAACATGTGATGGCACGGATTGCTGGTGTTAATTACCCTTCAGGA
+		</sequence>
+		<sequence>
+			<taxon idref="01xB" />
+CGCACTCGATATGAATTAAGATATGGATTTTACGCTTTTTATGTATGGCTCAGGCCTTAGCGTTATGTTTCACGGCTCATAGTGGTTAATGGTAATGCTGTTCAGAAACCCCGCAACTAATCGGATGACCTGCCTTAGTTAGCGCCCCCCCTATTGAGTAGTCGAAGATTATCCAACAACTATCAGGGATCAGTTATGATAAGAATAGTAACTTCAAGCCGCCGTGATCTCGCAACATTCAAAGTGGGTTACGGGCATACAACTTCGTATTTGCTGCAGCGAACTGGATATCTACGTTCTCTAACAAATTAAACAAACGTGTGTACTAATTTATGTGTCCTAGGGCTGGTCGTCACGGACGTCGTCTGAACGGCATATGCCACCATGCTGTGTTTCATTTAATATACACGATATCAAGTGGTAACATTTCTTCAAGTTAATGGGGGTTTGATGCTTAACATGTGATGGCACGGATTGCTGGTGTTAATTACCCTTCAGGA
+		</sequence>
+		<sequence>
+			<taxon idref="01bA" />
+CGCACTCGATATGAATTAAGATATAGATTTTACGCTTTTTATGTATGGCTCAGGCCTTAGCGTTATGCTTCACGGCTCATAGTGGTTAATGGTAATCCTGTTCAGAAACCCCGCAACTAATCGGATGACCTGCCTTAGTTAGCGCCCCCCTTATTGAGTAGTCGAAGATTATTCAACAACTGTCAGGGATCAGTTATGATAAGAATAGTAACTTCAAGCCGCCGTGATCTCGCAGCATTCAAAGTGGGTTACGGGCATACAATTTCGTATTTGCTGCAACGAACTGGATTTCTACGTTCTCTAACAAATCAAACAAACGTGTTTACTAATTTATGTGTCCTAGGGCTGCTCGTCACGGACGTCGTCTGAACGGCATATGCCACCATGCTGTGTTTCATTTAATATACACGATAGCAAATGGTAACATTTCTTCAAGTTAATGGGGGTTTGATGCTTAACATGTGATGGCACGGATTGCTGGTGTTAATTACCCTTCAGGA
+		</sequence>
+	</alignment>
+<!--  Simulated alignment for gene 3 of 3 genes.  -->
+	<alignment id="alignment3" dataType="nucleotide">
+		<sequence>
+			<taxon idref="01yB" />
+ATACTCGTCAAACTGATATATTGAGTGGACAGGAGACTGTTCACGGGACGAGTCAACGAGCTTAAAGTTCGATTCTTGCCAAAAGAACCGAACTGTCGCAAGTCCTTCAGTTTTTATAAGAGAAGTGACGGCCAAATTAGGCAGTACAATAGGTTGCTTATATAAAGAGTATGTTCAAGCACAGGTTCTTAACGATCGGTTAGATTTTTACATTTCTGGAACGAATTCGGGGGTGTTTCTTCTGCCTTGCTACGTGCTTGTCTGTAGCAAGTCATTATAAATCTGCATATCTAGGGTTAGTGAATTTTTCTATTCTAAAATCGATTATTGGCAAAGAAACCGATCCACCATGTATGAGTAGATTGAGGATAATTCAGACCTTAGAAATTTGGGTGGGTCAATCGGTGAACTACAAAAGTACTCTTTGATAGCACGGAGGCTTGACTCACATAAATCAACCTTTCAAACTTAAAGTTAACATTTTTCCCTCTTGTTCCTCT
+		</sequence>
+		<sequence>
+			<taxon idref="01zB" />
+ATACTCGTCAAACTGATATATTGAGTGGACAGGAGACTGTTCACGAGACGAGTCAACGAGCTTAAAGTTCGATTCTTGCCAAAAGAACCGAACTGTCGCAAGTCCTTCAGTTTTTATAAGAGAAGTGACGGCCAAATTAGGCAGTACAATAGGTTGCTTATATAAAGAATATGTTCAAGCACAGGTTCTAACCGATCGGTTAGATTTTTACATTTCTGGAACGAATTCGGGGGTGTTTCTTCTGCCTTGCTACGTGCTTGTCTGTAGCAAGTCATTATAAATCTGCATATCTAGGGTTAGTGAATTTTTCTATTCTAAAATCGATTATTGGCAAAGAAACCGATCCACCATGTATGAGTAGATTGAGGATAATTCAGACCTTAGAAATTTGGGTGGGTCAATCGGTGAACTACAAAAGTACTCTTTGATAGCACGGAGGCTTGACTCACATAAATCAACCTTTCAAACTTAAAGTTAACATTTTTCCCTCTTGTTCCTCT
+		</sequence>
+		<sequence>
+			<taxon idref="01xB" />
+ATACTCGTCAAACTGATATATTGAGTGGACAGGAGACTGTTCACGAGACGAGTCAACGATCTTAAAGTTCGATTCTTGCCAAAAGAACCGAACTGTCGCAAGTCCTTCAGTTTTTATAAGAGAAGTGACGGCCAAATTAGGCAGTACAATAGGTTGCTTATATAAAGAATATGTTCAAGCACAGGTTCTTACCGATCGGTTAGATTTTTACATTTCTGGAACGAATTCGGGGGTGTTTCTTCTGCCTTGCTACGTGCTTGTCTGTAGCAAGTCATTATAAATCTGCATATCTAGGGTTAGTGAATTTTTCTATTCTAAAATCGATTATTGGCAAAGAAACCGATCCACCATGTATGAGTAGATTGAGGATAATTCAGACCTTAGAAATTTGGGTGGGTCAATCGGTGAACTACAAAAGTACTCTTCGATAGCACGGAGGCTTGACTCACATAAATTAACCTTTCAAACTTAAAGTTGACATTTTCCCCTCTTGTTCCTCT
+		</sequence>
+		<sequence>
+			<taxon idref="01bA" />
+ATACTCGTCAAACTGATATATTGAGTGGACAGGAGACTGTTCACGAGACGAGTCAACGATCTTAAAGTTCGATTCTTGCCAAAAGAACCGAACTGTCGCAAGTCCTTCAGTTTTTATAAGAGAAGTGACGGCCAAATTAGGCAGTACAATAGGTTGCCTATATAAAGAATATGTTCAAGCACAGGTTCTTACCGATCGGTTAAATTTTTACATTTCTGGAACGAATTCGGGGGTGTTTCTTCTGCCTTGCTACGTGCTTGTCTGTAGCAAGTCATTGTAAATCTGCATATCTAGTGTTAGTGAATTTTTCTATTCTAAAATCGATTATTGGCAAAGAAACCGATCCACCATGTATGAGTAGATTGAGGATAATTCAGACCTTAGAAGTTTGGGTGGGTCGATCGGTGAACTAAAAAAGTACTCTTCGATAGCACGGAGGCTTGACTCACATAAATCAACCTTTCAAACTTAAAGTTAACATTTTCCCCTCTTGTTCCTCT
+		</sequence>
+		<sequence>
+			<taxon idref="01xA" />
+ATACTCGTCAAACTGATATATTGAGTGGACAGGAGACTGTTCACGAGACGAGTCAACGATCTTAAAGTTCGATTCTTGCCAAAAGAACCGAACTGTCGCAAGTCCTTCAGTTTTTATAAGAGAAATGACGGCCAAATTAGGCAGGACAATAGGTTGCCTATATAAAGAATATGTTTAAGCACAGGTTCTTACCGATCGGTTAAATTTTTACGTTTCTGGAACGAATTCGGGGGTGTTTCTTCTGCCTTGCTACGTGCTTGTTTGTAGCAAGTCATTGAAAATCTGTATATCTAGGGTTGGTGAATTTTTCTATTCTAAAATCGATTATTGGCAAAGAAACCGATCCACCATGTATGAGTAGATTGAGGATAATTCAGACCTTAGAAATTTGGGTGGGTCAATCGGTGAACTAAAAAAGTACTCTTCGATAGCACGGAGGCTCGACTCACATAAATCAACCTTTCAAACTTAAAGTTAACACTTTCCCCTCTTGTTCCTCT
+		</sequence>
+		<sequence>
+			<taxon idref="01zA" />
+ATACTCGTCAAACTGATATATTGAGTGGACAGGAGACTGTTCACGAGACGAGTCAACGATCTTAAAGTTCGATTCTTGCCAAAAGAACCGAACTGTCGCAAGTCCTTCAGTTTTTATAAGAGAAGTGACGGCCAAATTAGGCAGTACAATAGGTTGCCTATATAAAGAATATGTTTAAGCACAGGTTCTTACCGATCGGGTAAATTTTTACATTTCTGGAACGAATTCGGGGGTGTTTCTTCTGCCTTGCTACGTGCTTGTCTGTAGCAAGTCATTGAAAATCTGTATATTTAGGGTTAGTGAATTTTTCTATTCTAAAATCGATTATTGGCAAAGAAACCGATCCACCATGTATGAGTAGATTGAGGATAATTCAGACCTTAGAAATTTGGGTGGGTCAATCGGTGAACTAAAAAAGTACTCTTCGATAGCACGGAGGCTTGACTCACATAAATCAACCTTTCAAACTTAAAGTTAACACTTTCCCCTCTTGTTCCTCT
+		</sequence>
+		<sequence>
+			<taxon idref="01yA" />
+ATACTCGTCAAACTGATATATTGAGTGGACAGGAGACTGTTCACGAGACGAGTCAACGATCTTAAAGTTCGATTCTTGCCAAAAGAACCGAACTGTCGCAAGTCCTTCAGTTTTTATAAGAGAAGTGACGGCCAAATTAGGCAGTACAATAGGTTGCCTATATAAAGAATATGTTTAAGCACAGGTTCTTACCGATCGGTTAAATTTTTACATTTCTGGAACGAATTCGGGAGTGTTTCTTCTGCCTTGCTACGTGCTTGTCTGTAGCAAGTCATTGAAAATCTGTATATCTAGGGTTAGTGAATTTTTCTACTCTAAAATCGATTATTGGCAAAGAAACCGATCCACCATGTATGAGTAGATTGAGGATAATTCAGACCTTAGAAATTTGGGTGGGTCAATCGGTGAACTAAAAAAGTACTCTTCGATAGCACGGAGGCTTGACTCACATAAATCAACCTTTCAAACTTAAAGTTAACACTTTCCCCTCTTGTTCCTCT
+		</sequence>
+		<sequence>
+			<taxon idref="01aA" />
+ATACTCGTCAAACTGATATATTGAGTGGACAGGAGACTGTTCACGAGACGAGTCAACGATCTTAAAGTTCGATTCTTGCCAAAAGAACCGAACTGTCGCAAGTCCTTCAGTTTTTATAAGAGAAGTGACGGCCAAATTAGGCAGTACAATAGGTTGCCTATATAAAGAATATGTTTAAGCACGGGTTCTTACCGATCGGTTAAATTTTTACATTTCTGGAACGAATTCGGGGGTGTTTCTTCTGCCTTGCTACGTGCTTGTCAGTAGCAAGTCATTGAAAATCTGTATATCTAGGGTTAGTGAATTTTTCTATTCTAAAATCGATTATTGGCAAAGAAACCGATCCACCATGTATGAGTAGATTGAGGATAATTCAGACCTTAGAAATTTGGGTGGGTCAATCGGTGAACTAAAAAAGTACTCTTCGATAGCACGGAGGCTTGACTCACATAAATCAACCCTTCAAACTTAAAGTTAACACTTTCCCCTCTTGTTCCTCT
+		</sequence>
+	</alignment>
+<!--  Patterns  -->
+	 <patterns id="1.patterns" from="1" > 
+		 <alignment idref="alignment1" /> 
+	 </patterns> 
+	 <patterns id="2.patterns" from="1" > 
+		 <alignment idref="alignment2" /> 
+	 </patterns> 
+	 <patterns id="3.patterns" from="1" > 
+		 <alignment idref="alignment3" /> 
+	 </patterns> 
+<!--  Constant size population parameter used to generate starting trees.  -->
+	 <constantSize id="constant" units="substitutions" > 
+		 <populationSize> 
+			 <parameter id="constant.popSize" value="0.016" lower="0" upper="Infinity" /> 
+		 </populationSize> 
+	 </constantSize> 
+<!--  Randomly generated starting trees for genes.  -->
+	 <coalescentTree  id="1.startingTree" rootHeight="0.2" > 
+		 <taxa idref="taxa" /> 
+		 <constantSize idref="constant" /> 
+	 </coalescentTree> 
+	 <coalescentTree  id="2.startingTree" rootHeight="0.2" > 
+		 <taxa idref="taxa" /> 
+		 <constantSize idref="constant" /> 
+	 </coalescentTree> 
+	 <coalescentTree  id="3.startingTree" rootHeight="0.2" > 
+		 <taxa idref="taxa" /> 
+		 <constantSize idref="constant" /> 
+	 </coalescentTree> 
+<!--  Tree models for gene trees.  -->
+	 <treeModel id="1.treeModel" > 
+		 <coalescentTree idref="1.startingTree" /> 
+		 <rootHeight> 
+			 <parameter id="1.treeModel.rootHeight" /> 
+		 </rootHeight> 
+		 <nodeHeights internalNodes="true" > 
+			 <parameter id="1.treeModel.internalNodeHeights" /> 
+		 </nodeHeights> 
+		 <nodeHeights internalNodes="true" rootNode="true" > 
+			 <parameter id="1.treeModel.allInternalNodeHeights" /> 
+		 </nodeHeights> 
+	 </treeModel> 
+	 <treeModel id="2.treeModel" > 
+		 <coalescentTree idref="2.startingTree" /> 
+		 <rootHeight> 
+			 <parameter id="2.treeModel.rootHeight" /> 
+		 </rootHeight> 
+		 <nodeHeights internalNodes="true" > 
+			 <parameter id="2.treeModel.internalNodeHeights" /> 
+		 </nodeHeights> 
+		 <nodeHeights internalNodes="true" rootNode="true" > 
+			 <parameter id="2.treeModel.allInternalNodeHeights" /> 
+		 </nodeHeights> 
+	 </treeModel> 
+	 <treeModel id="3.treeModel" > 
+		 <coalescentTree idref="3.startingTree" /> 
+		 <rootHeight> 
+			 <parameter id="3.treeModel.rootHeight" /> 
+		 </rootHeight> 
+		 <nodeHeights internalNodes="true" > 
+			 <parameter id="3.treeModel.internalNodeHeights" /> 
+		 </nodeHeights> 
+		 <nodeHeights internalNodes="true" rootNode="true" > 
+			 <parameter id="3.treeModel.allInternalNodeHeights" /> 
+		 </nodeHeights> 
+	 </treeModel> 
+<!--  Branch models for gene trees.  -->
+	 <strictClockBranchRates id="1.branchRates" > 
+		 <rate> 
+			 <parameter id="1.clock.rate" value="1" lower="0" upper="Infinity" /> 
+		 </rate> 
+	 </strictClockBranchRates> 
+	 <strictClockBranchRates id="2.branchRates" > 
+		 <rate> 
+			 <parameter id="2.clock.rate" value="1" lower="0" upper="Infinity" /> 
+		 </rate> 
+	 </strictClockBranchRates> 
+	 <strictClockBranchRates id="3.branchRates" > 
+		 <rate> 
+			 <parameter id="3.clock.rate" value="1" lower="0" upper="Infinity" /> 
+		 </rate> 
+	 </strictClockBranchRates> 
+<!--  HKY substitution models for gene trees.  -->
+	 <HKYModel id="1.hky" > 
+		 <frequencies> 
+			 <frequencyModel dataType="nucleotide" > 
+				 <frequencies> 
+					 <parameter id="1.frequencies" value="0.25 0.25 0.25 0.25" /> 
+				 </frequencies> 
+			 </frequencyModel> 
+		 </frequencies> 
+		 <kappa> 
+			 <parameter id="1.kappa" value="2" lower="0" upper="Infinity" /> 
+		 </kappa> 
+	 </HKYModel> 
+	 <HKYModel id="2.hky" > 
+		 <frequencies> 
+			 <frequencyModel dataType="nucleotide" > 
+				 <frequencies> 
+					 <parameter id="2.frequencies" value="0.25 0.25 0.25 0.25" /> 
+				 </frequencies> 
+			 </frequencyModel> 
+		 </frequencies> 
+		 <kappa> 
+			 <parameter id="2.kappa" value="2" lower="0" upper="Infinity" /> 
+		 </kappa> 
+	 </HKYModel> 
+	 <HKYModel id="3.hky" > 
+		 <frequencies> 
+			 <frequencyModel dataType="nucleotide" > 
+				 <frequencies> 
+					 <parameter id="3.frequencies" value="0.25 0.25 0.25 0.25" /> 
+				 </frequencies> 
+			 </frequencyModel> 
+		 </frequencies> 
+		 <kappa> 
+			 <parameter id="3.kappa" value="2" lower="0" upper="Infinity" /> 
+		 </kappa> 
+	 </HKYModel> 
+<!--  Site models for gene trees.  -->
+	 <siteModel id="1.siteModel" > 
+		 <substitutionModel> 
+			 <HKYModel idref="1.hky" /> 
+		 </substitutionModel> 
+	 </siteModel> 
+	 <siteModel id="2.siteModel" > 
+		 <substitutionModel> 
+			 <HKYModel idref="2.hky" /> 
+		 </substitutionModel> 
+	 </siteModel> 
+	 <siteModel id="3.siteModel" > 
+		 <substitutionModel> 
+			 <HKYModel idref="3.hky" /> 
+		 </substitutionModel> 
+	 </siteModel> 
+<!--  Likelihoods for gene trees.  -->
+	 <treeLikelihood id="1.treeLikelihood" useAmbiguities="false" > 
+		 <patterns idref="1.patterns" /> 
+		 <treeModel idref="1.treeModel" /> 
+		 <siteModel idref="1.siteModel" /> 
+		 <strictClockBranchRates idref="1.branchRates" /> 
+	 </treeLikelihood> 
+	 <treeLikelihood id="2.treeLikelihood" useAmbiguities="false" > 
+		 <patterns idref="2.patterns" /> 
+		 <treeModel idref="2.treeModel" /> 
+		 <siteModel idref="2.siteModel" /> 
+		 <strictClockBranchRates idref="2.branchRates" /> 
+	 </treeLikelihood> 
+	 <treeLikelihood id="3.treeLikelihood" useAmbiguities="false" > 
+		 <patterns idref="3.patterns" /> 
+		 <treeModel idref="3.treeModel" /> 
+		 <siteModel idref="3.siteModel" /> 
+		 <strictClockBranchRates idref="3.branchRates" /> 
+	 </treeLikelihood> 
+<!--  Species network model.  -->
+<!--  Assignments of sequences to individuals and individuals to species.  -->
+	 <alloppSpecies id="alloppSpecies" minGeneNodeHeight="0.2" > 
+		 <apsp id="a" ploidylevel="2" > 
+			 <individual id="01a" > 
+				 <taxon idref="01aA" /> 
+			 </individual> 
+		 </apsp> 
+		 <apsp id="z" ploidylevel="4" > 
+			 <individual id="01z" > 
+				 <taxon idref="01zA" /> 
+				 <taxon idref="01zB" /> 
+			 </individual> 
+		 </apsp> 
+		 <apsp id="y" ploidylevel="4" > 
+			 <individual id="01y" > 
+				 <taxon idref="01yA" /> 
+				 <taxon idref="01yB" /> 
+			 </individual> 
+		 </apsp> 
+		 <apsp id="x" ploidylevel="4" > 
+			 <individual id="01x" > 
+				 <taxon idref="01xA" /> 
+				 <taxon idref="01xB" /> 
+			 </individual> 
+		 </apsp> 
+		 <apsp id="b" ploidylevel="2" > 
+			 <individual id="01b" > 
+				 <taxon idref="01bA" /> 
+			 </individual> 
+		 </apsp> 
+		 <geneTrees id="geneTrees" > 
+			 <treeModel idref="1.treeModel" /> 
+			 <treeModel idref="2.treeModel" /> 
+			 <treeModel idref="3.treeModel" /> 
+		 </geneTrees> 
+	 </alloppSpecies> 
+<!--  Species network, like species tree in *BEAST  -->
+	 <alloppSpeciesNetwork id="apspnetwork" oneHybridization="false" diploidRootIsRoot="true" > 
+		 <alloppSpecies idref="alloppSpecies" /> 
+		 <tipPopulations value="0.2" > 
+			 <parameter id="apspnetwork.tipPopSizes" /> 
+		 </tipPopulations> 
+		 <rootPopulations value="0.2" > 
+			 <parameter id="apspnetwork.rootPopSizes" /> 
+		 </rootPopulations> 
+<!--  hybridPopulations is not a normal parameter, since it changes dimension.  -->
+<!--  It can be logged (unused values are set to 0). It needs special operators.  -->
+		 <hybridPopulations value="0.2" > 
+			 <parameter id="apspnetwork.hybridPopSizes" /> 
+		 </hybridPopulations> 
+	 </alloppSpeciesNetwork> 
+<!--  Statistic for the number of hybridizations  -->
+	 <alloppNumHybsStatistic id="allopp.numHybs" > 
+		 <apspNetwork> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </apspNetwork> 
+	 </alloppNumHybsStatistic> 
+<!--  Prior model for species network (Yule-like model with one parameter, population prior)  -->
+	 <alloppNetworkPriorModel id="network.prior.model" units="substitutions" > 
+		 <eventRate> 
+			 <parameter id="apspnetwork.prior.eventRate" value="100" lower="0" upper="Infinity" /> 
+		 </eventRate> 
+		 <populationScalingFactor> 
+			 <parameter id="population.scaling.factor" value="0.2" lower="0" upper="Infinity" /> 
+		 </populationScalingFactor> 
+		 <tipPopulationDistribution> 
+			 <gammaDistributionModel> 
+				 <shape> 
+					 4 
+				 </shape> 
+				 <scale> 
+					 <parameter idref="population.scaling.factor" /> 
+				 </scale> 
+			 </gammaDistributionModel> 
+		 </tipPopulationDistribution> 
+		 <rootPopulationDistribution> 
+			 <gammaDistributionModel> 
+				 <shape> 
+					 2 
+				 </shape> 
+				 <scale> 
+					 <parameter idref="population.scaling.factor" /> 
+				 </scale> 
+			 </gammaDistributionModel> 
+		 </rootPopulationDistribution> 
+		 <hybridPopulationDistribution> 
+			 <gammaDistributionModel> 
+				 <shape> 
+					 1 
+				 </shape> 
+				 <scale> 
+					 <parameter idref="population.scaling.factor" /> 
+				 </scale> 
+			 </gammaDistributionModel> 
+		 </hybridPopulationDistribution> 
+	 </alloppNetworkPriorModel> 
+<!--  Prior probability for species network  -->
+	 <apspNetworkPrior id="apspnetwork.prior" > 
+		 <model> 
+			 <alloppNetworkPriorModel idref="network.prior.model" /> 
+		 </model> 
+		 <apspNetwork> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </apspNetwork> 
+	 </apspNetworkPrior> 
+<!--  Coalescent for species network: probability that gene trees fit  -->
+<!--  into the network.  -->
+	 <apspCoalescent id="apsp.coalescent" > 
+		 <alloppSpecies idref="alloppSpecies" /> 
+		 <alloppSpeciesNetwork idref="apspnetwork" /> 
+	 </apspCoalescent> 
+<!--  Operators for gene trees.  -->
+	 <operators id="operators" > 
+		 <scaleOperator scaleFactor="0.75" weight="1" > 
+			 <parameter idref="1.kappa" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.75" weight="1" > 
+			 <parameter idref="2.kappa" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.75" weight="1" > 
+			 <parameter idref="3.kappa" /> 
+		 </scaleOperator> 
+		 <deltaExchange delta="0.01" weight="1" > 
+			 <parameter idref="1.frequencies" /> 
+		 </deltaExchange> 
+		 <deltaExchange delta="0.01" weight="1" > 
+			 <parameter idref="2.frequencies" /> 
+		 </deltaExchange> 
+		 <deltaExchange delta="0.01" weight="1" > 
+			 <parameter idref="3.frequencies" /> 
+		 </deltaExchange> 
+		 <scaleOperator scaleFactor="0.75" weight="1" > 
+			 <parameter idref="2.clock.rate" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.75" weight="1" > 
+			 <parameter idref="3.clock.rate" /> 
+		 </scaleOperator> 
+		 <subtreeSlide size="0.002" gaussian="true" weight="16" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </subtreeSlide> 
+		 <subtreeSlide size="0.002" gaussian="true" weight="16" > 
+			 <treeModel idref="2.treeModel" /> 
+		 </subtreeSlide> 
+		 <subtreeSlide size="0.002" gaussian="true" weight="16" > 
+			 <treeModel idref="3.treeModel" /> 
+		 </subtreeSlide> 
+		 <narrowExchange weight="16" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </narrowExchange> 
+		 <narrowExchange weight="16" > 
+			 <treeModel idref="2.treeModel" /> 
+		 </narrowExchange> 
+		 <narrowExchange weight="16" > 
+			 <treeModel idref="3.treeModel" /> 
+		 </narrowExchange> 
+		 <wideExchange weight="3" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </wideExchange> 
+		 <wideExchange weight="3" > 
+			 <treeModel idref="2.treeModel" /> 
+		 </wideExchange> 
+		 <wideExchange weight="3" > 
+			 <treeModel idref="3.treeModel" /> 
+		 </wideExchange> 
+		 <wilsonBalding weight="3" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </wilsonBalding> 
+		 <wilsonBalding weight="3" > 
+			 <treeModel idref="2.treeModel" /> 
+		 </wilsonBalding> 
+		 <wilsonBalding weight="3" > 
+			 <treeModel idref="3.treeModel" /> 
+		 </wilsonBalding> 
+		 <scaleOperator scaleFactor="0.75" weight="3" > 
+			 <parameter idref="1.treeModel.rootHeight" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.75" weight="3" > 
+			 <parameter idref="2.treeModel.rootHeight" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.75" weight="3" > 
+			 <parameter idref="3.treeModel.rootHeight" /> 
+		 </scaleOperator> 
+		 <uniformOperator weight="33" > 
+			 <parameter idref="1.treeModel.internalNodeHeights" /> 
+		 </uniformOperator> 
+		 <uniformOperator weight="33" > 
+			 <parameter idref="2.treeModel.internalNodeHeights" /> 
+		 </uniformOperator> 
+		 <uniformOperator weight="33" > 
+			 <parameter idref="3.treeModel.internalNodeHeights" /> 
+		 </uniformOperator> 
+		 <upDownOperator scaleFactor="0.75" weight="33" > 
+			 <up> 
+			 </up> 
+			 <down> 
+				 <parameter idref="1.treeModel.allInternalNodeHeights" /> 
+			 </down> 
+		 </upDownOperator> 
+		 <upDownOperator scaleFactor="0.75" weight="33" > 
+			 <up> 
+				 <parameter idref="2.clock.rate" /> 
+			 </up> 
+			 <down> 
+				 <parameter idref="2.treeModel.allInternalNodeHeights" /> 
+			 </down> 
+		 </upDownOperator> 
+		 <upDownOperator scaleFactor="0.75" weight="33" > 
+			 <up> 
+				 <parameter idref="3.clock.rate" /> 
+			 </up> 
+			 <down> 
+				 <parameter idref="3.treeModel.allInternalNodeHeights" /> 
+			 </down> 
+		 </upDownOperator> 
+<!--  Operator for both network and gene trees,stretches/squeezes everything.  -->
+		 <upDownOperator scaleFactor="0.75" weight="30" > 
+			 <up> 
+				 <parameter idref="2.clock.rate" /> 
+				 <parameter idref="3.clock.rate" /> 
+				 <parameter idref="apspnetwork.prior.eventRate" /> 
+			 </up> 
+			 <down> 
+				 <alloppSpeciesNetwork idref="apspnetwork" /> 
+				 <parameter idref="population.scaling.factor" /> 
+				 <parameter idref="1.treeModel.allInternalNodeHeights" /> 
+				 <parameter idref="2.treeModel.allInternalNodeHeights" /> 
+				 <parameter idref="3.treeModel.allInternalNodeHeights" /> 
+			 </down> 
+		 </upDownOperator> 
+<!--  Operators for network.  -->
+		 <scaleOperator scaleFactor="0.9" weight="8" > 
+			 <parameter idref="population.scaling.factor" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.5" weight="16" > 
+			 <parameter idref="apspnetwork.tipPopSizes" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.5" weight="16" > 
+			 <parameter idref="apspnetwork.rootPopSizes" /> 
+		 </scaleOperator> 
+		 <scaleOperator scaleFactor="0.5" weight="30" > 
+			 <parameter idref="apspnetwork.prior.eventRate" /> 
+		 </scaleOperator> 
+		 <hybPopSizesScaleOperator scaleFactor="0.5" weight="16" > 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </hybPopSizesScaleOperator> 
+		 <networkNodeReHeight weight="75" > 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </networkNodeReHeight> 
+		 <sequenceReassignment weight="120" > 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </sequenceReassignment> 
+		 <changeNumHybridizations weight="75" > 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </changeNumHybridizations> 
+	 </operators> 
+	 <mcmc id="mcmc" chainLength="30000000" autoOptimize="true" > 
+		 <posterior id="posterior" threads="1" > 
+			 <prior id="prior" > 
+				 <apspCoalescent idref="apsp.coalescent" /> 
+				 <apspNetworkPrior idref="apspnetwork.prior" /> 
+				 <logNormalPrior mean="1" stdev="1.25" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="1.kappa" /> 
+				 </logNormalPrior> 
+				 <logNormalPrior mean="1" stdev="1.25" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="2.kappa" /> 
+				 </logNormalPrior> 
+				 <logNormalPrior mean="1" stdev="1.25" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="3.kappa" /> 
+				 </logNormalPrior> 
+				 <logNormalPrior mean="-9" stdev="1" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="population.scaling.factor" /> 
+				 </logNormalPrior> 
+				 <logNormalPrior mean="4.6" stdev="2" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="apspnetwork.prior.eventRate" /> 
+				 </logNormalPrior> 
+				 <logNormalPrior mean="0" stdev="1" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="2.clock.rate" /> 
+				 </logNormalPrior> 
+				 <logNormalPrior mean="0" stdev="1" offset="0" meanInRealSpace="false" > 
+					 <parameter idref="3.clock.rate" /> 
+				 </logNormalPrior> 
+			 </prior> 
+			 <likelihood id="likelihood" > 
+				 <treeLikelihood idref="1.treeLikelihood" /> 
+				 <treeLikelihood idref="2.treeLikelihood" /> 
+				 <treeLikelihood idref="3.treeLikelihood" /> 
+			 </likelihood> 
+		 </posterior> 
+		 <operators idref="operators" /> 
+<!--  Log to screen.  -->
+		 <log id="screenLog" logEvery="100000" > 
+			 <column label="Posterior" dp="4" width="12" > 
+			 <posterior idref="posterior" /> 
+			 </column> 
+			 <column label="Prior" dp="4" width="12" > 
+			 <prior idref="prior" /> 
+			 </column> 
+			 <column label="Likelihood" dp="4" width="12" > 
+			 <likelihood idref="likelihood" /> 
+			 </column> 
+			 <column label="PopSF" sf="6" width="12" > 
+			 <parameter idref="population.scaling.factor" /> 
+			 </column> 
+		 </log> 
+<!--  Main log to file.  -->
+		 <log id="fileLog" logEvery="5000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg3n1t4/D4LOGg3n1t4r6.txt" > 
+			 <posterior idref="posterior" /> 
+			 <prior idref="prior" /> 
+			 <likelihood idref="likelihood" /> 
+			 <alloppSpecies idref="alloppSpecies" /> 
+			 <apspCoalescent idref="apsp.coalescent" /> 
+			 <apspNetworkPrior idref="apspnetwork.prior" /> 
+			 <alloppNumHybsStatistic idref="allopp.numHybs" /> 
+			 <parameter idref="population.scaling.factor" /> 
+			 <parameter idref="apspnetwork.tipPopSizes" /> 
+			 <parameter idref="apspnetwork.rootPopSizes" /> 
+			 <parameter idref="apspnetwork.hybridPopSizes" /> 
+			 <parameter idref="apspnetwork.prior.eventRate" /> 
+			 <parameter idref="1.treeModel.rootHeight" /> 
+			 <parameter idref="2.treeModel.rootHeight" /> 
+			 <parameter idref="3.treeModel.rootHeight" /> 
+			 <parameter idref="1.kappa" /> 
+			 <parameter idref="2.kappa" /> 
+			 <parameter idref="3.kappa" /> 
+			 <parameter idref="1.frequencies" /> 
+			 <parameter idref="2.frequencies" /> 
+			 <parameter idref="3.frequencies" /> 
+			 <parameter idref="1.clock.rate" /> 
+			 <parameter idref="2.clock.rate" /> 
+			 <parameter idref="3.clock.rate" /> 
+			 <treeLikelihood idref="1.treeLikelihood" /> 
+			 <treeLikelihood idref="2.treeLikelihood" /> 
+			 <treeLikelihood idref="3.treeLikelihood" /> 
+		 </log> 
+<!--  Gene tree log files.  -->
+		 <logTree id="1.treeFileLog" logEvery="50000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg3n1t4/D4GTSg3n1t4r6-1.txt" sortTranslationTable="true" nexusFormat="true" > 
+			 <treeModel idref="1.treeModel" /> 
+		 </logTree> 
+		 <logTree id="2.treeFileLog" logEvery="50000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg3n1t4/D4GTSg3n1t4r6-2.txt" sortTranslationTable="true" nexusFormat="true" > 
+			 <treeModel idref="2.treeModel" /> 
+		 </logTree> 
+		 <logTree id="3.treeFileLog" logEvery="50000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg3n1t4/D4GTSg3n1t4r6-3.txt" sortTranslationTable="true" nexusFormat="true" > 
+			 <treeModel idref="3.treeModel" /> 
+		 </logTree> 
+<!--  MUL-tree log file.  -->
+		 <logTree id="multreeFileLog" logEvery="5000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg3n1t4/D4MTSg3n1t4r6.txt" sortTranslationTable="true" nexusFormat="true" > 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </logTree> 
+<!--  Debugging and tuning log.  -->
+		 <log id="alloppDBUGTUNE" logEvery="1000000" fileName="/Users/zhiyan/Documents/research/polyploid/data/experiments/original/10Genes/withOG/D/Dg3n1t4/D9DBUGTUNEg3n1t4r6.txt" > 
+			 <alloppSpeciesNetwork idref="apspnetwork" /> 
+		 </log> 
+	 </mcmc> 
+</beast>
