@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetworkParser - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; NetworkParser
+                </div>
+                
+                <h1>NetworkParser Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The NetworkParser module provides classes for parsing phylogenetic networks from 
+                Nexus files and Newick strings. Includes pre-parsing validation for better error reporting.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>NetworkParser.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#networkparser">NetworkParser Class</a></li>
+                        <li><a href="#newickstringparser">NewickStringParser Class</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="exceptions">Exceptions</h2>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">NetworkParserError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when an input file or Newick string contains issues that prevent proper parsing.</p>
+                    </div>
+                </div>
+                
+                <h2 id="networkparser">NetworkParser Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">NetworkParser</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Class that parses networks from Nexus files. Supports extended Newick format with 
+                        reticulation nodes and inheritance probabilities. Includes optional pre-parsing validation.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, filename: str, validate_input: bool = True, print_validation_summary: bool = True</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize the parser with a Nexus file.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filename</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to the Nexus file</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">validate_input</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Whether to validate before parsing (default: True)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">print_validation_summary</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Whether to print validation results (default: True)</td>
+                                    </tr>
+                                </table>
+                                
+                                <div class="raises">
+                                    <span class="raises-label">Raises:</span>
+                                    <code>NetworkParserError</code> - If file cannot be parsed or has critical validation errors
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">parse</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Parse all trees/networks from the file. Called automatically by constructor.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_network</span>(<span class="params">self, index: int</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Get the network at a specific index.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">index</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Index of the network to retrieve</td>
+                                    </tr>
+                                </table>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">Network</span> - The parsed network
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_all_networks</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[Network]
+                            </div>
+                            <div class="function-body">
+                                <p>Get all parsed networks.</p>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">list[Network]</span> - List of all parsed networks
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">name_of_network</span>(<span class="params">self, network: Network</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Get the label for a parsed network (as it appears in the Nexus file).</p>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">str</span> - Network label
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_validation_summary</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> ValidationSummary
+                            </div>
+                            <div class="function-body">
+                                <p>Get the validation summary from input file validation.</p>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">ValidationSummary</span> - Validation results (or None if skipped)
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">parse_attributes</span>(<span class="params">self, attr_str: str</span>) <span class="keyword">-&gt;</span> list
+                            </div>
+                            <div class="function-body">
+                                <p>Parse extended Newick formatting string (e.g., "H1" -> ["Hybridization", 1]).</p>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">list</span> - [event_type, index]
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="newickstringparser">NewickStringParser Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">NewickStringParser</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Parser for Newick strings directly (without a file).</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, newick_str: str</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize with a Newick string.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">newick_str</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A Newick format string</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">parse</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Parse the Newick string into a Network object.</p>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">Network</span> - The parsed network
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Extended Newick Format</h2>
+                
+                <p>The parser supports extended Newick format for phylogenetic networks:</p>
+                
+                <ul>
+                    <li><strong>Reticulation nodes</strong>: Marked with # prefix (e.g., #H1, #LGT2)</li>
+                    <li><strong>Event types</strong>: H = Hybridization, R = Recombination, LGT = Lateral Gene Transfer</li>
+                    <li><strong>Inheritance probabilities</strong>: Specified in comments [&amp;gamma=0.4]</li>
+                </ul>
+                
+                <pre><code># Example extended Newick:
+((A:1.0,#H1:0.5::0.4):0.5,(B:0.5,#H1:0.5::0.6):1.0)root;</code></pre>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.NetworkParser import NetworkParser, NewickStringParser
+
+# Parse from a Nexus file
+parser = NetworkParser("network.nex")
+
+# Get all networks
+networks = parser.get_all_networks()
+print(f"Found {len(networks)} networks")
+
+# Get a specific network
+net = parser.get_network(0)
+print(f"Network has {len(net.V())} nodes")
+
+# Get network name
+name = parser.name_of_network(net)
+print(f"Network name: {name}")
+
+# Parse without validation (faster)
+parser_fast = NetworkParser("network.nex", validate_input=False)
+
+# Check validation results
+summary = parser.get_validation_summary()
+if summary and summary.errors:
+    print("Validation errors:", summary.errors)
+
+# Parse a Newick string directly
+newick = "((A:1,B:1)C:1,(D:1,E:1)F:1)root;"
+string_parser = NewickStringParser(newick)
+tree = string_parser.parse()</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="Network.html">Network</a> - Network data structures</li>
+                        <li><a href="Validation.html">Validation</a> - File validation utilities</li>
+                        <li><a href="Newick.html">Newick</a> - Newick file generation</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html" class="current">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#networkparser">NetworkParser</a></li>
+                <li><a href="#newickstringparser">NewickStringParser</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GTR - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; GTR
+                </div>
+                
+                <h1>GTR Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The GTR module implements the Generalized Time Reversible (GTR) substitution model 
+                and its special-case subclasses (JC, K80, F81, HKY, K81, SYM, TN93) for phylogenetic 
+                analysis.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>GTR.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#gtr-class">GTR Class</a></li>
+                        <li><a href="#subclasses">Subclasses</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="exceptions">Exceptions</h2>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">SubstitutionModelError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when there is an error in the formulation of a substitution model, 
+                        whether from invalid inputs or computation issues.</p>
+                    </div>
+                </div>
+                
+                <h2 id="gtr-class">GTR Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">GTR</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Generalized Time Reversible model. Superclass for all time-reversible 
+                        substitution models. Implements eigenvalue decomposition for computing 
+                        matrix exponential e^(Q*t).</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, base_freqs: list[float], transitions: list[float], states: int = 4</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create a GTR substitution model.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">base_freqs</span></td>
+                                        <td><span class="param-type">list[float]</span></td>
+                                        <td>Array of state frequencies (must sum to 1)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">transitions</span></td>
+                                        <td><span class="param-type">list[float]</span></td>
+                                        <td>Array of transition rates ((states^2 - states) / 2 long)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">states</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Number of states (default 4 for DNA)</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">getQ</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Get the Q (instantaneous rate) matrix.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">buildQ</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Populate and normalize the Q matrix.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expt</span>(<span class="params">self, t: float</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Compute matrix exponential e^(Q*t) using eigenvalue decomposition.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Time (typically in coalescent units)</td>
+                                    </tr>
+                                </table>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">np.ndarray</span> - The transition probability matrix
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_hyperparams</span>(<span class="params">self, params: dict</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Change parameters and recompute Q. Keys: "states", "base frequencies", 
+                                "transitions".</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_hyperparams</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> tuple
+                            </div>
+                            <div class="function-body">
+                                <p>Get (base_freqs, transitions) tuple.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">state_count</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get number of states.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="subclasses">Subclasses</h2>
+                
+                <h3>JC (Jukes-Cantor 1969)</h3>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">JC</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Simplest model. All base frequencies and transition rates are equal.</p>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>No arguments needed - Q matrix is fixed.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>K80 (Kimura 1980)</h3>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">K80</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Two-parameter model. Equal base frequencies, distinct transition and 
+                        transversion rates.</p>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, alpha: float, beta: float</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize with transversion (alpha) and transition (beta) parameters. 
+                                Must sum to 1. Has closed-form solution for e^(Q*t).</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>F81 (Felsenstein 1981)</h3>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">F81</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Free base frequencies, equal transition rates.</p>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, bases: list[float]</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize with 4 base frequencies summing to 1.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>HKY (Hasegawa et al. 1985)</h3>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">HKY</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Free base frequencies. Transversions equal, transitions equal (pattern 
+                        [a, b, a, a, b, a]).</p>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, base_freqs: list[float], transitions: list[float]</span>)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>K81 (Kimura 1981)</h3>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">K81</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Equal base frequencies. Transition rates follow pattern [a, b, c, c, b, a].</p>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, transitions: list[float]</span>)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>SYM (Zharkikh 1994)</h3>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SYM</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Equal base frequencies, all 6 transition rates free.</p>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, transitions: list[float]</span>)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>TN93 (Tamura and Nei 1993)</h3>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">TN93</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Free base frequencies. Two different transition parameters (pattern 
+                        [a, b, a, a, c, a]).</p>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, base_freqs: list[float], transitions: list[float]</span>)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Model Comparison</h2>
+                
+                <table class="param-table">
+                    <tr>
+                        <th>Model</th>
+                        <th>Free Base Freqs</th>
+                        <th>Transition Pattern</th>
+                        <th>Parameters</th>
+                    </tr>
+                    <tr>
+                        <td>JC</td>
+                        <td>No (0.25 each)</td>
+                        <td>All equal</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td>K80</td>
+                        <td>No (0.25 each)</td>
+                        <td>Ts = Tv</td>
+                        <td>1</td>
+                    </tr>
+                    <tr>
+                        <td>F81</td>
+                        <td>Yes (4)</td>
+                        <td>All equal</td>
+                        <td>3</td>
+                    </tr>
+                    <tr>
+                        <td>HKY</td>
+                        <td>Yes (4)</td>
+                        <td>Ts = Tv</td>
+                        <td>4</td>
+                    </tr>
+                    <tr>
+                        <td>K81</td>
+                        <td>No (0.25 each)</td>
+                        <td>[a,b,c,c,b,a]</td>
+                        <td>2</td>
+                    </tr>
+                    <tr>
+                        <td>SYM</td>
+                        <td>No (0.25 each)</td>
+                        <td>All free</td>
+                        <td>5</td>
+                    </tr>
+                    <tr>
+                        <td>TN93</td>
+                        <td>Yes (4)</td>
+                        <td>[a,b,a,a,c,a]</td>
+                        <td>5</td>
+                    </tr>
+                    <tr>
+                        <td>GTR</td>
+                        <td>Yes (4)</td>
+                        <td>All free</td>
+                        <td>8</td>
+                    </tr>
+                </table>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.GTR import GTR, JC, K80, HKY, TN93
+import numpy as np
+
+# Jukes-Cantor (simplest)
+jc = JC()
+P = jc.expt(0.1)  # Transition prob matrix at t=0.1
+
+# Kimura 2-parameter
+k80 = K80(alpha=0.7, beta=0.3)
+P = k80.expt(0.5)
+
+# HKY model
+freqs = [0.3, 0.2, 0.2, 0.3]  # Must sum to 1
+trans = [1.0, 2.0, 1.0, 1.0, 2.0, 1.0]  # [a,b,a,a,b,a] pattern
+hky = HKY(freqs, trans)
+
+# Get the Q matrix
+Q = hky.getQ()
+print(Q)
+
+# Update parameters
+hky.set_hyperparams({"base frequencies": [0.25, 0.25, 0.25, 0.25]})
+
+# Full GTR
+gtr = GTR(
+    base_freqs=[0.25, 0.25, 0.25, 0.25],
+    transitions=[1.0, 2.0, 1.0, 1.0, 2.0, 1.0]
+)
+P = gtr.expt(1.0)</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="Matrix.html">Matrix</a> - MSA data storage</li>
+                        <li><a href="Alphabet.html">Alphabet</a> - Character state mappings</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html" class="current">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#gtr-class">GTR Class</a></li>
+                <li><a href="#subclasses">Subclasses</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; Network
+                </div>
+                
+                <h1>Network Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The Network module provides core data structures for representing phylogenetic 
+                networks, including Node, Edge, and Network classes. This is the foundational 
+                module used throughout PhyNetPy.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>Network.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#node-class">Node Class</a></li>
+                        <li><a href="#edge-class">Edge Class</a></li>
+                        <li><a href="#network-class">Network Class</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="exceptions">Exceptions</h2>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">NetworkError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when a network is malformed or a network operation fails.</p>
+                    </div>
+                </div>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">NodeError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when a Node operation fails.</p>
+                    </div>
+                </div>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">EdgeError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when an Edge operation fails.</p>
+                    </div>
+                </div>
+                
+                <h2 id="node-class">Node Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Node</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Node class providing support for network constructs like reticulation nodes 
+                        and phylogenetic attributes.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, name: str, is_reticulation: bool = False, attr: dict = {}, seq: DataSequence = None, t: float = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Node label</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">is_reticulation</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Mark as reticulation node</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">attr</span></td>
+                                        <td><span class="param-type">dict</span></td>
+                                        <td>User-defined attributes</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">seq</span></td>
+                                        <td><span class="param-type">DataSequence</span></td>
+                                        <td>Associated sequence data</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Speciation time</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <h4>Core Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">label</span> <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the name of the node.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_name</span>(<span class="params">self, new_name: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set a new node label.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_time</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Get speciation time (0 = root, larger = present).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_time</span>(<span class="params">self, new_t: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set speciation time (must be non-negative).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">is_reticulation</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Check if node is a reticulation (hybrid) node.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_is_reticulation</span>(<span class="params">self, new_is_retic: bool</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the reticulation flag.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>Attribute Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_attributes</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> dict
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_attributes</span>(<span class="params">self, new_attr: dict</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_attribute</span>(<span class="params">self, key, value, append: bool = False</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">attribute_value</span>(<span class="params">self, key</span>) <span class="keyword">-&gt;</span> object
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="edge-class">Edge Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Edge</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Edge class representing directed connections between nodes with associated 
+                        attributes like branch length and inheritance probability.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, src: Node, dest: Node, length: float = 0, gamma: float = 1.0, weight: float = 1.0, tag: str = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">src</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>Source (parent) node</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">dest</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>Destination (child) node</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">length</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Branch length</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Inheritance probability (default 1.0)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">weight</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Edge weight (for support values)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tag</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Optional label (e.g., "left", "right")</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <h4>Attributes</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">src</span> <span class="keyword">attribute</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Source node of the edge.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">dest</span> <span class="keyword">attribute</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Destination node of the edge.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_length</span>(<span class="params">self</span>) / <span class="name">set_length</span>(<span class="params">self, length: float</span>)
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_gamma</span>(<span class="params">self</span>) / <span class="name">set_gamma</span>(<span class="params">self, gamma: float</span>)
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_weight</span>(<span class="params">self</span>) / <span class="name">set_weight</span>(<span class="params">self, weight: float</span>)
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_tag</span>(<span class="params">self</span>) / <span class="name">set_tag</span>(<span class="params">self, tag: str</span>)
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">copy</span>(<span class="params">self, new_src: Node = None, new_dest: Node = None</span>) <span class="keyword">-&gt;</span> Edge
+                            </div>
+                            <div class="function-body">
+                                <p>Create a copy of the edge (optionally with new endpoints).</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="network-class">Network Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Network</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Main class for representing phylogenetic networks as directed graphs with 
+                        support for reticulation nodes, branch lengths, and inheritance probabilities.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create an empty network.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>Node/Edge Access</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">V</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Get all nodes in the network.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">E</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[Edge]
+                            </div>
+                            <div class="function-body">
+                                <p>Get all edges in the network.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_nodes</span>(<span class="params">self, *nodes</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_edges</span>(<span class="params">self, *edges</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove_nodes</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove_edge</span>(<span class="params">self, edge</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        
+                        <h4>Traversal</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">root</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> Node
+                            </div>
+                            <div class="function-body">
+                                <p>Get the root node (indegree 0).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_leaves</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Get all leaf nodes (outdegree 0).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_parents</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_children</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">leaf_descendants</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> set[Node]
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mrca</span>(<span class="params">self, taxa: set</span>) <span class="keyword">-&gt;</span> Node
+                            </div>
+                            <div class="function-body">
+                                <p>Find most recent common ancestor of a set of taxa.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>Degree Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">in_degree</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">out_degree</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">in_edges</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> list[Edge]
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">out_edges</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> list[Edge]
+                            </div>
+                        </div>
+                        
+                        <h4>Graph Properties</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">is_acyclic</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_edge</span>(<span class="params">self, src, dest</span>) <span class="keyword">-&gt;</span> Edge
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">has_node_named</span>(<span class="params">self, name</span>) <span class="keyword">-&gt;</span> Node | None
+                            </div>
+                        </div>
+                        
+                        <h4>Modification</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">copy</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> tuple[Network, dict]
+                            </div>
+                            <div class="function-body">
+                                <p>Deep copy. Returns (new_network, old_to_new_node_map).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clean</span>(<span class="params">self, flags: list[bool] = [True, True, True]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Clean up network: remove isolated nodes, degree-1 chains, etc.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">newick</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Generate Newick string representation.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.Network import Network, Node, Edge
+
+# Create a simple tree
+net = Network()
+
+# Add nodes
+root = Node("root", t=0)
+a = Node("A", t=1)
+b = Node("B", t=1)
+
+net.add_nodes(root, a, b)
+
+# Add edges
+net.add_edges(Edge(root, a, length=1.0), Edge(root, b, length=1.0))
+
+# Query structure
+print(f"Root: {net.root().label}")
+print(f"Leaves: {[n.label for n in net.get_leaves()]}")
+
+# Create reticulation network
+c = Node("C", t=1)
+hybrid = Node("H", is_reticulation=True, t=0.5)
+net.add_nodes(c, hybrid)
+
+# Hybrid edges with inheritance probabilities
+net.add_edges(
+    Edge(root, hybrid, gamma=0.4),
+    Edge(c, hybrid, gamma=0.6),
+    Edge(hybrid, a)
+)
+
+# Check acyclicity
+print(f"Acyclic: {net.is_acyclic()}")
+
+# Generate Newick
+print(net.newick())
+
+# Copy network
+new_net, node_map = net.copy()
+
+# Find MRCA
+mrca_node = net.mrca({"A", "B"})
+print(f"MRCA of A,B: {mrca_node.label}")</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="NetworkParser.html">NetworkParser</a> - Parse networks from files</li>
+                        <li><a href="NetworkMoves.html">NetworkMoves</a> - Network modification operations</li>
+                        <li><a href="GraphUtils.html">GraphUtils</a> - Network analysis utilities</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html" class="current">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#node-class">Node</a></li>
+                <li><a href="#edge-class">Edge</a></li>
+                <li><a href="#network-class">Network</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

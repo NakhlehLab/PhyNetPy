@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhyloNet - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; PhyloNet
+                </div>
+                
+                <h1>PhyloNet Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The PhyloNet module provides a Python wrapper for the PhyloNet Java software, 
+                enabling seamless integration of PhyloNet's network inference algorithms within 
+                Python workflows.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>PhyloNet.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="note">
+                    <div class="note-title">Requirements</div>
+                    <p>This module requires Java to be installed and the PhyloNet JAR file to be 
+                    accessible. The JAR file path is hardcoded to <code>PhyNetPy/src/PhyNetPy/PhyloNetv3_8_2.jar</code>.</p>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#jarWrapper">jarWrapper</a></li>
+                        <li><a href="#run">run</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="jarWrapper">jarWrapper</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">jarWrapper</span>(<span class="params">*args</span>) <span class="keyword">-&gt;</span> list[str]
+                    </div>
+                    <div class="function-body">
+                        <p>Wrapper function for running Java JAR files from within Python. Captures 
+                        both stdout and stderr.</p>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">*args</span></td>
+                                <td><span class="param-type">tuple</span></td>
+                                <td>Arguments to pass to the Java command (JAR path, input file, etc.)</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="returns">
+                            <span class="returns-label">Returns:</span>
+                            <span class="param-type">list[str]</span> - List of output lines from PhyloNet
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="run">run</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">run</span>(<span class="params">nex_file_loc: str</span>) <span class="keyword">-&gt;</span> list[str]
+                    </div>
+                    <div class="function-body">
+                        <p>Run PhyloNet on a Nexus file containing trees and PhyloNet commands.</p>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">nex_file_loc</span></td>
+                                <td><span class="param-type">str</span></td>
+                                <td>Path to the Nexus file with PhyloNet commands</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="returns">
+                            <span class="returns-label">Returns:</span>
+                            <span class="param-type">list[str]</span> - Lines of output from PhyloNet execution
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>PhyloNet Commands</h2>
+                
+                <p>PhyloNet supports various network inference commands. Common ones include:</p>
+                
+                <table class="param-table">
+                    <tr>
+                        <th>Command</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td><code>InferNetwork_MPL</code></td>
+                        <td>Maximum pseudo-likelihood network inference</td>
+                    </tr>
+                    <tr>
+                        <td><code>InferNetwork_ML</code></td>
+                        <td>Maximum likelihood network inference</td>
+                    </tr>
+                    <tr>
+                        <td><code>InferNetwork_MP</code></td>
+                        <td>Maximum parsimony network inference</td>
+                    </tr>
+                    <tr>
+                        <td><code>CalGTProb</code></td>
+                        <td>Calculate gene tree probabilities</td>
+                    </tr>
+                    <tr>
+                        <td><code>DeepCoalCount</code></td>
+                        <td>Count deep coalescence events</td>
+                    </tr>
+                </table>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.PhyloNet import run
+from PhyNetPy.Newick import NexusTemplate
+
+# Create a Nexus file with PhyloNet commands
+template = NexusTemplate()
+template.add("((A:1,B:1):1,(C:1,D:1):1);")
+template.add("((A:1,C:1):1,(B:1,D:1):1);")
+template.add("((A:1,D:1):1,(B:1,C:1):1);")
+template.add_phylonet_cmd("InferNetwork_MPL (all) 1 -bl;")
+template.generate("/tmp", "analysis.nex")
+
+# Run PhyloNet
+output = run("/tmp/analysis.nex")
+
+# Process output
+for line in output:
+    if "Network" in line:
+        print(line)
+
+# Example Nexus file format for PhyloNet:
+nexus_content = """
+#NEXUS
+
+BEGIN TAXA;
+DIMENSIONS NTAX=4;
+TAXLABELS A B C D;
+END;
+
+BEGIN TREES;
+Tree gt1 = ((A:1,B:1):1,(C:1,D:1):1);
+Tree gt2 = ((A:1,C:1):1,(B:1,D:1):1);
+Tree gt3 = ((A:1,D:1):1,(B:1,C:1):1);
+END;
+
+BEGIN PHYLONET;
+InferNetwork_MPL (all) 1 -bl;
+END;
+"""</code></pre>
+                
+                <div class="warning">
+                    <div class="warning-title">Warning</div>
+                    <p>Ensure Java is installed and accessible from the command line. The PhyloNet JAR 
+                    file must be present at the expected location relative to the PhyNetPy installation.</p>
+                </div>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="Newick.html">Newick</a> - Create Nexus files with PhyloNet commands</li>
+                        <li><a href="NetworkParser.html">NetworkParser</a> - Parse PhyloNet output</li>
+                        <li><a href="https://phylogenomics.rice.edu/software/phylonet.html" target="_blank">PhyloNet Documentation</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html" class="current">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#jarWrapper">jarWrapper</a></li>
+                <li><a href="#run">run</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+

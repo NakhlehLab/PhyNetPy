@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validation - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; Validation
+                </div>
+                
+                <h1>Validation Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The Validation module provides comprehensive file format validation for common 
+                phylogenetic data formats including Newick, Nexus, FASTA, PHYLIP, Clustal, XML, and GenBank.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>Validation.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#validationsummary">ValidationSummary</a></li>
+                        <li><a href="#validators">Validators</a></li>
+                        <li><a href="#convenience">Convenience Functions</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="exceptions">Exceptions</h2>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">ValidationError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Base exception for validation errors.</p>
+                    </div>
+                </div>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">FileFormatError</span>(<span class="params">ValidationError</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when file format is invalid or corrupted.</p>
+                    </div>
+                </div>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">DataIntegrityError</span>(<span class="params">ValidationError</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when data integrity checks fail.</p>
+                    </div>
+                </div>
+                
+                <h2 id="validationsummary">ValidationSummary Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ValidationSummary</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Container for validation results and summary information.</p>
+                        
+                        <h4>Attributes</h4>
+                        <table class="param-table">
+                            <tr>
+                                <th>Attribute</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">file_path</span></td>
+                                <td><span class="param-type">str</span></td>
+                                <td>Path to validated file</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">file_format</span></td>
+                                <td><span class="param-type">str</span></td>
+                                <td>Detected file format</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">is_valid</span></td>
+                                <td><span class="param-type">bool</span></td>
+                                <td>Overall validation status</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">errors</span></td>
+                                <td><span class="param-type">List[str]</span></td>
+                                <td>List of error messages</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">warnings</span></td>
+                                <td><span class="param-type">List[str]</span></td>
+                                <td>List of warning messages</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">summary_stats</span></td>
+                                <td><span class="param-type">Dict</span></td>
+                                <td>Summary statistics</td>
+                            </tr>
+                        </table>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_error</span>(<span class="params">self, error: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add an error message and mark validation as failed.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_warning</span>(<span class="params">self, warning: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add a warning message (does not affect is_valid).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_stat</span>(<span class="params">self, key: str, value: Any</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add a summary statistic.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="validators">Validators</h2>
+                
+                <h3>PhylogeneticValidator</h3>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">PhylogeneticValidator</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Main validator class that handles multiple file formats automatically.</p>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">validate_file</span>(<span class="params">self, file_path: str, format_hint: str = None</span>) <span class="keyword">-&gt;</span> ValidationSummary
+                            </div>
+                            <div class="function-body">
+                                <p>Validate a single file. Format is auto-detected from extension.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">validate_directory</span>(<span class="params">self, directory_path: str, recursive: bool = False</span>) <span class="keyword">-&gt;</span> List[ValidationSummary]
+                            </div>
+                            <div class="function-body">
+                                <p>Validate all supported files in a directory.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_supported_formats</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> Dict[str, List[str]]
+                            </div>
+                            <div class="function-body">
+                                <p>Get dictionary of supported formats and their extensions.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>Format-Specific Validators</h3>
+                
+                <table class="param-table">
+                    <tr>
+                        <th>Validator</th>
+                        <th>Extensions</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td><code>NewickValidator</code></td>
+                        <td>.nwk, .newick, .tre, .tree</td>
+                        <td>Validates Newick tree files</td>
+                    </tr>
+                    <tr>
+                        <td><code>NexusValidator</code></td>
+                        <td>.nex, .nexus</td>
+                        <td>Validates Nexus files (taxa, trees, data blocks)</td>
+                    </tr>
+                    <tr>
+                        <td><code>FastaValidator</code></td>
+                        <td>.fasta, .fas, .fa, .fna, .ffn, .faa</td>
+                        <td>Validates FASTA sequence files</td>
+                    </tr>
+                    <tr>
+                        <td><code>PhylipValidator</code></td>
+                        <td>.phy, .phylip</td>
+                        <td>Validates PHYLIP alignment files</td>
+                    </tr>
+                    <tr>
+                        <td><code>ClustalValidator</code></td>
+                        <td>.aln, .clustal</td>
+                        <td>Validates Clustal alignment files</td>
+                    </tr>
+                    <tr>
+                        <td><code>XMLValidator</code></td>
+                        <td>.xml</td>
+                        <td>Validates XML files</td>
+                    </tr>
+                    <tr>
+                        <td><code>GenBankValidator</code></td>
+                        <td>.gb, .gbk, .genbank</td>
+                        <td>Validates GenBank files</td>
+                    </tr>
+                </table>
+                
+                <h2 id="convenience">Convenience Functions</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">validate_file</span>(<span class="params">file_path: str, format_hint: str = None, print_summary: bool = True</span>) <span class="keyword">-&gt;</span> ValidationSummary
+                    </div>
+                    <div class="function-body">
+                        <p>Convenience function to validate a single file.</p>
+                    </div>
+                </div>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">validate_directory</span>(<span class="params">directory_path: str, recursive: bool = False, print_summaries: bool = True</span>) <span class="keyword">-&gt;</span> List[ValidationSummary]
+                    </div>
+                    <div class="function-body">
+                        <p>Convenience function to validate all files in a directory.</p>
+                    </div>
+                </div>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">get_supported_formats</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> Dict[str, List[str]]
+                    </div>
+                    <div class="function-body">
+                        <p>Get dictionary of all supported formats and extensions.</p>
+                    </div>
+                </div>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.Validation import validate_file, validate_directory, get_supported_formats
+
+# Validate a single file
+summary = validate_file("network.nex")
+print(summary)
+
+# Check results programmatically
+if summary.is_valid:
+    print("File is valid!")
+else:
+    print("Errors found:", summary.errors)
+
+# Access statistics
+print(f"Number of taxa: {summary.summary_stats.get('Number of Taxa')}")
+
+# Validate without printing
+summary = validate_file("data.fasta", print_summary=False)
+
+# Validate a directory
+summaries = validate_directory("/path/to/data/", recursive=True)
+valid_count = sum(1 for s in summaries if s.is_valid)
+print(f"{valid_count}/{len(summaries)} files are valid")
+
+# Get supported formats
+formats = get_supported_formats()
+for fmt, exts in formats.items():
+    print(f"{fmt}: {', '.join(exts)}")
+
+# Use specific validator
+from PhyNetPy.Validation import NexusValidator
+
+validator = NexusValidator()
+summary = validator.validate("network.nex")
+
+# Output example:
+# ============================================================
+# VALIDATION SUMMARY: network.nex
+# ============================================================
+# Format: Nexus
+# Status: VALID
+#
+# SUMMARY STATISTICS:
+# --------------------
+#   File Size (bytes): 1234
+#   Has Taxa Block: True
+#   Has Trees Block: True
+#   Number of Trees/Networks: 3
+#
+# WARNINGS:
+# ----------
+#   Trees contain taxa not in taxa block: ['X']
+#
+# ============================================================</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="NetworkParser.html">NetworkParser</a> - Uses validation before parsing</li>
+                        <li><a href="MSA.html">MSA</a> - Sequence alignment handling</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html" class="current">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#validationsummary">ValidationSummary</a></li>
+                <li><a href="#validators">Validators</a></li>
+                <li><a href="#convenience">Convenience Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+

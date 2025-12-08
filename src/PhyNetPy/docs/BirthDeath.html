@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BirthDeath - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; BirthDeath
+                </div>
+                
+                <h1>BirthDeath Module <span class="version-badge">v2.0.0</span></h1>
+                
+                <p>The BirthDeath module implements Yule (pure birth) and Constant Rate Birth-Death 
+                Process (CBDP) models for simulating phylogenetic networks with specified numbers 
+                of taxa or time horizons.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>11/10/25</dd>
+                        <dt>Source:</dt>
+                        <dd>BirthDeath.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#helper-functions">Helper Functions</a></li>
+                        <li><a href="#yule">Yule Class</a></li>
+                        <li><a href="#cbdp">CBDP Class</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="exceptions">Exceptions</h2>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">BirthDeathSimulationError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when something irrecoverably wrong happens during network generation 
+                        within the Yule or CBDP algorithm.</p>
+                    </div>
+                </div>
+                
+                <h2 id="helper-functions">Helper Functions</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">estimate_expected_tips</span>(<span class="params">gamma: float, time: float</span>) <span class="keyword">-&gt;</span> float
+                    </div>
+                    <div class="function-body">
+                        <p>Estimate the expected number of taxa produced by a Yule process.</p>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">gamma</span></td>
+                                <td><span class="param-type">float</span></td>
+                                <td>Birth rate parameter (must be > 0)</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">time</span></td>
+                                <td><span class="param-type">float</span></td>
+                                <td>Target time horizon (must be >= 0)</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="returns">
+                            <span class="returns-label">Returns:</span>
+                            <span class="param-type">float</span> - Expected number of taxa at the provided time
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">random_species_selection</span>(<span class="params">nodes: list[Node], rng: np.random.Generator</span>) <span class="keyword">-&gt;</span> Node
+                    </div>
+                    <div class="function-body">
+                        <p>Returns a random live Node from a list. The node returned will be operated 
+                        on during a birth or death event.</p>
+                    </div>
+                </div>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">live_species</span>(<span class="params">nodes: list[Node]</span>) <span class="keyword">-&gt;</span> list[Node]
+                    </div>
+                    <div class="function-body">
+                        <p>Returns the subset of nodes that represent live lineages (have attribute 
+                        "live" set to True).</p>
+                    </div>
+                </div>
+                
+                <h2 id="yule">Yule Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Yule</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Pure birth model for simulating phylogenetic networks. Can condition on 
+                        either a fixed number of extant taxa (n) or a time horizon.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, gamma: float, n: int = None, time: float = None, rng: np.random.Generator = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create a Yule process simulator.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Birth rate (must be > 0). Higher rates produce shorter branches.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Number of extant taxa at end of simulation (>= 2)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">time</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Alternative: age of the tree to simulate</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rng</span></td>
+                                        <td><span class="param-type">np.random.Generator</span></td>
+                                        <td>Random number generator for reproducibility</td>
+                                    </tr>
+                                </table>
+                                
+                                <div class="raises">
+                                    <span class="raises-label">Raises:</span>
+                                    <code>BirthDeathSimulationError</code> - If parameters are invalid
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_gamma</span>(<span class="params">self, new_gamma: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the birth rate parameter.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_taxa</span>(<span class="params">self, value: int</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the target number of taxa (>= 2).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_time</span>(<span class="params">self, value: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the target tree age (> 0).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">generate_network</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Simulate one network starting with 2 lineages and running speciation 
+                                events until the goal is reached.</p>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">Network</span> - The simulated tree
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">generate_networks</span>(<span class="params">self, num_networks: int</span>) <span class="keyword">-&gt;</span> list[Network]
+                            </div>
+                            <div class="function-body">
+                                <p>Generate multiple networks under the same model parameters.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clear_generated</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Clear the list of previously generated networks.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="cbdp">CBDP Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">CBDP</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Constant Rate Birth-Death Process for network simulation. Unlike Yule, 
+                        this model includes extinction events, so networks may have more leaves than 
+                        live lineages.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, gamma: float, mu: float, n: int, sample: float = 1</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create a Constant Rate Birth-Death simulator.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Birth rate (must be > mu)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mu</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Death rate (must be >= 0 and < gamma)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Number of LIVE taxa in simulated network (>= 2)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sample</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Sampling rate in (0, 1]. Default is 1.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_bd</span>(<span class="params">self, gamma: float, mu: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the birth and death rate parameters.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_n</span>(<span class="params">self, new_n: int</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the target number of live taxa.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_sample</span>(<span class="params">self, new_sampling: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the sampling rate (must be in (0, 1]).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">generate_network</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Simulate a single network under the CBDP model.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">generate_networks</span>(<span class="params">self, m: int</span>) <span class="keyword">-&gt;</span> list[Network]
+                            </div>
+                            <div class="function-body">
+                                <p>Generate m networks under the same model parameters.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.BirthDeath import Yule, CBDP
+import numpy as np
+
+# Yule model - condition on number of taxa
+yule = Yule(gamma=0.5, n=10)
+tree = yule.generate_network()
+print(f"Generated tree with {len(tree.get_leaves())} leaves")
+
+# Yule model - condition on time
+yule_time = Yule(gamma=0.5, time=5.0)
+tree = yule_time.generate_network()
+
+# Yule with reproducible RNG
+rng = np.random.default_rng(seed=42)
+yule_seeded = Yule(gamma=0.5, n=10, rng=rng)
+trees = yule_seeded.generate_networks(100)
+
+# Constant Rate Birth-Death Process
+cbdp = CBDP(gamma=1.0, mu=0.3, n=10, sample=0.8)
+tree = cbdp.generate_network()
+
+# Live species vs total leaves
+live = live_species(tree.V())
+print(f"Live lineages: {len(live)}")
+print(f"Total leaves: {len(tree.get_leaves())}")</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="Network.html">Network</a> - Network data structures</li>
+                        <li><a href="GraphUtils.html">GraphUtils</a> - Network manipulation utilities</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html" class="current">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#helper-functions">Functions</a></li>
+                <li><a href="#yule">Yule</a></li>
+                <li><a href="#cbdp">CBDP</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

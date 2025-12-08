@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alphabet - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; Alphabet
+                </div>
+                
+                <h1>Alphabet Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The Alphabet module provides character-to-state mappings for phylogenetic data types 
+                including DNA, RNA, Protein, and Codon sequences. Uses generalized one-hot encoding 
+                based on binary conversions.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>11/6/25</dd>
+                        <dt>Source:</dt>
+                        <dd>Alphabet.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#constants">Module Constants</a></li>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#helper-functions">Helper Functions</a></li>
+                        <li><a href="#alphabet-class">Alphabet Class</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="constants">Module Constants</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">@dataclass</span> <span class="name">AlphabetMapping</span>
+                    </div>
+                    <div class="class-body">
+                        <p>A frozen dataclass that stores a name and mapping dictionary.</p>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Attribute</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">name</span></td>
+                                <td><span class="param-type">str</span></td>
+                                <td>Name of the alphabet mapping</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">mapping</span></td>
+                                <td><span class="param-type">dict[str, int]</span></td>
+                                <td>Character to state mapping</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <h3>Predefined Alphabets</h3>
+                
+                <table class="param-table">
+                    <tr>
+                        <th>Constant</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td><code>DNA</code></td>
+                        <td>AlphabetMapping</td>
+                        <td>DNA nucleotide mapping (A, C, G, T, ambiguity codes)</td>
+                    </tr>
+                    <tr>
+                        <td><code>RNA</code></td>
+                        <td>AlphabetMapping</td>
+                        <td>RNA nucleotide mapping (A, C, G, U, ambiguity codes)</td>
+                    </tr>
+                    <tr>
+                        <td><code>PROTEIN</code></td>
+                        <td>AlphabetMapping</td>
+                        <td>Amino acid mapping (20+ amino acids)</td>
+                    </tr>
+                    <tr>
+                        <td><code>CODON</code></td>
+                        <td>AlphabetMapping</td>
+                        <td>Codon mapping for coding sequences</td>
+                    </tr>
+                </table>
+                
+                <h3>DNA Mapping Information</h3>
+                
+                <p>The DNA alphabet uses a generalized one-hot encoding scheme based on base-10 to binary 
+                conversions. IUPAC ambiguity codes are supported:</p>
+                
+                <ul>
+                    <li><strong>A</strong> (Adenine) = 1 [1,0,0,0]</li>
+                    <li><strong>C</strong> (Cytosine) = 2 [0,1,0,0]</li>
+                    <li><strong>G</strong> (Guanine) = 4 [0,0,1,0]</li>
+                    <li><strong>T/U</strong> (Thymine/Uracil) = 8 [0,0,0,1]</li>
+                    <li><strong>M</strong> (Amino: A or C) = 3</li>
+                    <li><strong>R</strong> (Purine: A or G) = 5</li>
+                    <li><strong>W</strong> (Weak: A or T) = 9</li>
+                    <li><strong>S</strong> (Strong: C or G) = 6</li>
+                    <li><strong>Y</strong> (Pyrimidine: C or T) = 10</li>
+                    <li><strong>K</strong> (Keto: G or T) = 12</li>
+                    <li><strong>X</strong> (Any) = 15 [1,1,1,1]</li>
+                </ul>
+                
+                <h2 id="exceptions">Exceptions</h2>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">AlphabetError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Error class for all errors relating to alphabet mappings.</p>
+                    </div>
+                </div>
+                
+                <h2 id="helper-functions">Helper Functions</h2>
+                
+                <div class="function-def">
+                    <div class="function-header">
+                        <span class="keyword">def</span> <span class="name">snp_alphabet</span>(<span class="params">ploidy: int</span>) <span class="keyword">-&gt;</span> AlphabetMapping
+                    </div>
+                    <div class="function-body">
+                        <p>Generate an SNP alphabet mapping for a given ploidy level.</p>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">ploidy</span></td>
+                                <td><span class="param-type">int</span></td>
+                                <td>Maximum ploidy value (e.g., 2 for diploid organisms)</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="returns">
+                            <span class="returns-label">Returns:</span>
+                            <span class="param-type">AlphabetMapping</span> - SNP alphabet mapping
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 id="alphabet-class">Alphabet Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Alphabet</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Class that handles mapping from characters to state values with partial 
+                        likelihood values associated with them.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, mapping: AlphabetMapping</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize with a predefined or custom alphabet mapping.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mapping</span></td>
+                                        <td><span class="param-type">AlphabetMapping</span></td>
+                                        <td>One of {DNA, RNA, PROTEIN, CODON} or a custom mapping</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <h4>Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">map</span>(<span class="params">self, char: str</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Return the integer state mapping for a character.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">char</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A character from sequence data</td>
+                                    </tr>
+                                </table>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">int</span> - The integer state corresponding to the character
+                                </div>
+                                
+                                <div class="raises">
+                                    <span class="raises-label">Raises:</span>
+                                    <code>AlphabetError</code> - If the character is undefined for this alphabet
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reverse_map</span>(<span class="params">self, state: int</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Get the character that maps to a given state.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">state</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>A state value in the alphabet</td>
+                                    </tr>
+                                </table>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">str</span> - The character mapped to the state
+                                </div>
+                                
+                                <div class="raises">
+                                    <span class="raises-label">Raises:</span>
+                                    <code>AlphabetError</code> - If the state is undefined for this alphabet
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_type</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the name of the alphabet type (e.g., "DNA", "PROTEIN").</p>
+                                
+                                <div class="returns">
+                                    <span class="returns-label">Returns:</span>
+                                    <span class="param-type">str</span> - The alphabet type name
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.Alphabet import Alphabet, DNA, RNA, PROTEIN, snp_alphabet
+
+# Create a DNA alphabet
+dna_alpha = Alphabet(DNA)
+
+# Map characters to states
+state_a = dna_alpha.map('A')  # Returns 1
+state_t = dna_alpha.map('T')  # Returns 8
+state_x = dna_alpha.map('X')  # Returns 15 (any nucleotide)
+
+# Reverse mapping
+char = dna_alpha.reverse_map(1)  # Returns 'A'
+
+# Get alphabet type
+print(dna_alpha.get_type())  # "DNA"
+
+# Create SNP alphabet for diploid organisms
+snp_alpha = snp_alphabet(ploidy=2)
+snp = Alphabet(snp_alpha)
+
+# Map SNP values
+snp.map('0')  # 0
+snp.map('1')  # 1
+snp.map('2')  # 2
+snp.map('-')  # 3 (missing data)</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="Matrix.html">Matrix</a> - Uses Alphabet for MSA data storage</li>
+                        <li><a href="MSA.html">MSA</a> - Multiple sequence alignment handling</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html" class="current">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#constants">Constants</a></li>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#helper-functions">Functions</a></li>
+                <li><a href="#alphabet-class">Alphabet Class</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

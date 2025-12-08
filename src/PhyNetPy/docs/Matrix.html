@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; Matrix
+                </div>
+                
+                <h1>Matrix Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>The Matrix module provides a class for storing and reducing Multiple Sequence 
+                Alignment (MSA) data. Supports site pattern compression for DNA data to improve 
+                computational efficiency.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>Matrix.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#matrix-class">Matrix Class</a></li>
+                    </ul>
+                </div>
+                
+                <h2 id="exceptions">Exceptions</h2>
+                
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">MatrixError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when there is an error parsing data into the matrix or during 
+                        matrix operations.</p>
+                    </div>
+                </div>
+                
+                <h2 id="matrix-class">Matrix Class</h2>
+                
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Matrix</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Class that stores and reduces MSA data to only unique site patterns. 
+                        Compression is currently implemented for DNA data only. Accepts any data 
+                        type defined by the Alphabet class.</p>
+                        
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">self, alignment: MSA, alphabet: Alphabet = Alphabet(DNA)</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create a Matrix from an MSA object.</p>
+                                
+                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alignment</span></td>
+                                        <td><span class="param-type">MSA</span></td>
+                                        <td>Multiple Sequence Alignment object</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alphabet</span></td>
+                                        <td><span class="param-type">Alphabet</span></td>
+                                        <td>Alphabet for character mapping (default DNA)</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <h4>Attributes</h4>
+                        
+                        <table class="param-table">
+                            <tr>
+                                <th>Attribute</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">unique_sites</span></td>
+                                <td><span class="param-type">int</span></td>
+                                <td>Number of distinct site patterns</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">data</span></td>
+                                <td><span class="param-type">np.ndarray</span></td>
+                                <td>Compressed matrix of state values</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">locations</span></td>
+                                <td><span class="param-type">list</span></td>
+                                <td>Maps original column index to unique pattern index</td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-name">count</span></td>
+                                <td><span class="param-type">list</span></td>
+                                <td>Count of each unique site pattern</td>
+                            </tr>
+                        </table>
+                        
+                        <h4>Data Access Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_ij</span>(<span class="params">self, i: int, j: int</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the data point (state value) at row i, column j.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_ij_char</span>(<span class="params">self, i: int, j: int</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Get the character at row i, column j in the character matrix.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_column_at</span>(<span class="params">self, i: int</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the ith column of the data matrix.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_seq</span>(<span class="params">self, label: str</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Get the character array for a given taxon.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_number_seq</span>(<span class="params">self, label: str</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Get the numerical data for a given taxon.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>Lookup Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">row_given_name</span>(<span class="params">self, label: str</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the row index for a taxon with the given name.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">name_given_row</span>(<span class="params">self, index: int</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Get the taxon name associated with a row index.</p>
+                            </div>
+                        </div>
+                        
+                        <h4>Info Methods</h4>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">site_count</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the number of unique sites in the data.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_num_taxa</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the number of taxa in the matrix.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_type</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Get the data type (e.g., "DNA", "PROTEIN").</p>
+                            </div>
+                        </div>
+                        
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">char_matrix</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Get the character matrix from the state matrix using reverse mapping.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Site Pattern Compression</h2>
+                
+                <p>For DNA data, the Matrix class automatically compresses redundant site patterns:</p>
+                
+                <ul>
+                    <li>Identical columns are stored only once</li>
+                    <li><code>count</code> tracks how many times each unique pattern appears</li>
+                    <li><code>locations</code> maps original positions to compressed indices</li>
+                    <li>This can significantly reduce memory and computation for large alignments</li>
+                </ul>
+                
+                <h2>Usage Examples</h2>
+                
+                <pre><code>from PhyNetPy.Matrix import Matrix
+from PhyNetPy.MSA import MSA
+from PhyNetPy.Alphabet import Alphabet, DNA, PROTEIN
+
+# Create MSA from file
+msa = MSA(filename="alignment.nex")
+
+# Create Matrix with DNA alphabet (default)
+matrix = Matrix(msa)
+
+# Get data info
+print(f"Taxa: {matrix.get_num_taxa()}")
+print(f"Original sites: {matrix.seq_len}")
+print(f"Unique sites: {matrix.site_count()}")
+print(f"Data type: {matrix.get_type()}")
+
+# Access data
+state = matrix.get_ij(0, 0)  # State value at row 0, col 0
+char = matrix.get_ij_char(0, 0)  # Character at row 0, col 0
+
+# Get sequence for a taxon
+seq = matrix.get_seq("Human")
+num_seq = matrix.get_number_seq("Human")
+
+# Get column data
+col = matrix.get_column_at(0)
+
+# Lookup by name
+row_idx = matrix.row_given_name("Chimp")
+name = matrix.name_given_row(0)
+
+# Get site pattern counts (useful for likelihood calculations)
+for i in range(matrix.site_count()):
+    pattern = matrix.get_column_at(i)
+    count = matrix.count[i]
+    print(f"Pattern {i}: appears {count} times")
+
+# Use protein alphabet
+protein_matrix = Matrix(msa, alphabet=Alphabet(PROTEIN))</code></pre>
+                
+                <div class="see-also">
+                    <h4>See Also</h4>
+                    <ul>
+                        <li><a href="MSA.html">MSA</a> - Multiple sequence alignment input</li>
+                        <li><a href="Alphabet.html">Alphabet</a> - Character-state mappings</li>
+                        <li><a href="GTR.html">GTR</a> - Substitution models for likelihood</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="Matrix.html" class="current">Matrix</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="NetworkParser.html">NetworkParser</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#matrix-class">Matrix Class</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
