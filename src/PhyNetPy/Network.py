@@ -47,6 +47,34 @@ from typing import Set, Tuple
 
 sys.setrecursionlimit(300)
 
+##########################           
+#### CYTHON ACCELERATION #
+##########################
+
+# Try to use Cython-accelerated NodeSet if available (2-5x faster)
+_USING_CYTHON = False
+_CNodeSet = None
+
+try:
+    from PhyNetPy.graph_core_cy import CNodeSet as _CNodeSet
+    _USING_CYTHON = True
+except ImportError:
+    pass  # Fall back to pure Python NodeSet defined below
+
+def using_cython() -> bool:
+    """Check if Cython acceleration is enabled."""
+    return _USING_CYTHON
+
+def _make_nodeset(directed: bool = True):
+    """
+    Factory function that returns the fastest available NodeSet implementation.
+    Uses Cython CNodeSet if compiled, otherwise pure Python NodeSet.
+    """
+    if _USING_CYTHON and _CNodeSet is not None:
+        return _CNodeSet(directed=directed)
+    # NodeSet is defined below in this file
+    return NodeSet(directed=directed)
+
 
 ### add_edge + reclassify
 
@@ -191,6 +219,8 @@ class Node:
     Node class that provides support for managing network constructs like 
     reticulation nodes and other phylogenetic attributes.
     """
+    __slots__ = ('_Node__attributes', '_Node__is_retic', '_Node__name', 
+                 '_Node__seq', '_Node__t', '_Node__is_dirty')
 
     def __init__(self, 
                  name : str, 
@@ -580,10 +610,8 @@ class NodeSet:
             N/A
         """
         self.__nodes : set[Node] = set()
-        self.__in_degree : dict[Node, int] = defaultdict(int)
-        self.__out_degree : dict[Node, int] = defaultdict(int)
-        self.__in_map : dict[Node, list[Any]] = defaultdict(list)
-        self.__out_map : dict[Node, list[Any]] = defaultdict(list)
+        self.__in_map : dict[Node, set[Any]] = defaultdict(set)
+        self.__out_map : dict[Node, set[Any]] = defaultdict(set)
         self.__node_names : dict[str, Node] = {}
         self.__directed : bool = directed
     
@@ -657,7 +685,7 @@ class NodeSet:
         Returns:
             int: the in degree of the node
         """
-        return self.__in_degree[node]
+        return len(self.__in_map[node])
 
     def out_deg(self, node : Node) -> int:
         """
@@ -671,33 +699,39 @@ class NodeSet:
         Returns:
             int: the out degree of the node
         """
-        return self.__out_degree[node]
+        return len(self.__out_map[node])
     
-    def in_edges(self, node : Node) -> list[Any]:
+    def in_edges(self, node : Node) -> set[Any]:
         """
         Gets the in edges of a node in this set.
-        Returns an empty list if the node has no in edges, or if the node 
-        is not in the node set.It is up to the user to make sure the parameter
+        Returns an empty set if the node has no in edges, or if the node 
+        is not in the node set. It is up to the user to make sure the parameter
         node is in the node set.
+        
+        Note: Returns a reference to the internal set. Copy before iterating
+        if you plan to modify the graph during iteration.
 
         Args:
             node (Node): any Node obj
         Returns:
-            list[Any]: the in edges of the node
+            set[Any]: the in edges of the node
         """
         return self.__in_map[node]
     
-    def out_edges(self, node : Node) -> list[Any]:
+    def out_edges(self, node : Node) -> set[Any]:
         """
         Gets the out edges of a node in this set.
-        Returns an empty list if the node has no out edges, or if the node 
+        Returns an empty set if the node has no out edges, or if the node 
         is not in the node set. It is up to the user to make sure the parameter
         node is in the node set.
+        
+        Note: Returns a reference to the internal set. Copy before iterating
+        if you plan to modify the graph during iteration.
 
         Args:
             node (Node): any Node obj
         Returns:
-            list[Any]: the out edges of the node
+            set[Any]: the out edges of the node
         """
         return self.__out_map[node]
     
@@ -729,26 +763,18 @@ class NodeSet:
             
         if self.ready(edge):
             if not removal:
-                self.__out_degree[n1] += 1
-                self.__in_degree[n2] += 1
-                self.__out_map[n1].append(edge)
-                self.__in_map[n2].append(edge)
+                self.__out_map[n1].add(edge)
+                self.__in_map[n2].add(edge)
                 if not self.__directed:
-                    self.__out_degree[n2] += 1
-                    self.__in_degree[n1] += 1
-                    self.__out_map[n2].append(edge)
-                    self.__in_map[n1].append(edge)
+                    self.__out_map[n2].add(edge)
+                    self.__in_map[n1].add(edge)
             else:
-                self.__out_degree[n1] -= 1
-                self.__in_degree[n2] -= 1
-                self.__out_map[n1].remove(edge)
-                self.__in_map[n2].remove(edge)
+                self.__out_map[n1].discard(edge)
+                self.__in_map[n2].discard(edge)
                 
                 if not self.__directed:
-                    self.__out_degree[n2] -= 1
-                    self.__in_degree[n1] -= 1
-                    self.__out_map[n2].remove(edge)
-                    self.__in_map[n1].remove(edge)
+                    self.__out_map[n2].discard(edge)
+                    self.__in_map[n1].discard(edge)
         else:
             raise EdgeError("Tried to add edge to the network, and the edge \
                              contains a node that is not part of the network. \
@@ -777,8 +803,6 @@ class NodeSet:
         
         if node in self.__nodes:
             self.__nodes.remove(node)
-            del self.__in_degree[node]
-            del self.__out_degree[node]
             
             # There is a world where a node may not ever be a key in either one 
             # of these maps. Ie, a leaf node that is subsequently detached from
@@ -818,17 +842,11 @@ class NodeSet:
         # re-add it after. Otherwise the node ends up in the wrong hash bucket.
         
         # Save degree information before removing
-        in_deg = self.__in_degree.get(node, 0)
-        out_deg = self.__out_degree.get(node, 0)
-        in_edges = self.__in_map.get(node, []).copy()
-        out_edges = self.__out_map.get(node, []).copy()
+        in_edges = self.__in_map.get(node, set()).copy()
+        out_edges = self.__out_map.get(node, set()).copy()
         
         # Remove node from all hash-based collections
         self.__nodes.discard(node)
-        if node in self.__in_degree:
-            del self.__in_degree[node]
-        if node in self.__out_degree:
-            del self.__out_degree[node]
         if node in self.__in_map:
             del self.__in_map[node]
         if node in self.__out_map:
@@ -841,8 +859,6 @@ class NodeSet:
         
         # Re-add node to all collections with new hash
         self.__nodes.add(node)
-        self.__in_degree[node] = in_deg
-        self.__out_degree[node] = out_deg
         self.__in_map[node] = in_edges
         self.__out_map[node] = out_edges
         self.__node_names[new_name] = node
@@ -911,6 +927,8 @@ class UEdge:
     Undirected dge class that is essentially a wrapper class for a set
     {a, b} where a and b are Node objects. There is no ordering/direction.
     """
+    
+    __slots__ = ('_n1', '_n2', '_UEdge__length', '_UEdge__weight')
     
     def __init__(self, 
                  n1 : Node,
@@ -1140,6 +1158,9 @@ class Edge:
     now the direction is encoded in the ordering (where a is the source, and b 
     the destination).
     """
+    
+    __slots__ = ('_src', '_dest', '_Edge__length', '_Edge__gamma', 
+                 '_Edge__weight', '_Edge__tag')
     
     def __init__(self,
                  source : Node, 
@@ -1779,8 +1800,8 @@ class Graph:
         for edge in list(self._edges.get_set()):
             self._nodes.process(edge)
         
-        self.__leaves : list[Node] = [node for node in self.V()
-                                      if self._nodes.out_deg(node) == 0]
+        self.__leaves : set[Node] = {node for node in self.V()
+                                      if self._nodes.out_deg(node) == 0}
     
     def __contains__(self, obj : Union[Node, UEdge, Edge]) -> bool:
         """
@@ -1818,12 +1839,10 @@ class Graph:
         # and is not anymore
         if self._nodes.out_deg(node) == 2 or \
             self._nodes.out_deg(node) == 0:
-            if node in self.__leaves:
-                self.__leaves.remove(node)
+            self.__leaves.discard(node)
             
         if self._nodes.out_deg(node) == 1:
-            if node not in self.__leaves:
-                self.__leaves.append(node)            
+            self.__leaves.add(node)            
     
     @singledispatchmethod
     def add_nodes(self, *nodes : Node) -> None:
@@ -1960,8 +1979,8 @@ class Graph:
         for node in nodes:
             if node in self._nodes:
                 #in_edges are the same as outedges in the undirected context
-        
-                for edge in self._nodes.in_edges(node):
+                # Copy the edge set to avoid modifying during iteration
+                for edge in self._nodes.in_edges(node).copy():
                     self.remove_edge(edge)
         
                 self._nodes.remove(node)
@@ -2190,8 +2209,8 @@ class Network(Graph):
     """
 
     def __init__(self,
-                 edges : EdgeSet | None = None, 
-                 nodes : NodeSet | None = None) -> None:
+                 edges : EdgeSet | set[Edge] = None, 
+                 nodes : NodeSet | set[Node] = None) -> None:
         """
         Initialize a Network object.
         You may initialize with any combination of edges/nodes,
@@ -2208,13 +2227,25 @@ class Network(Graph):
         Returns:
             N/A
         """
+        if type(edges) is set[Edge]:
+            edges_set = EdgeSet()
+            for edge in edges:
+                edges_set.add(edge)
+            edges = edges_set
+        
+        if type(nodes) is set[Node]:
+            nodes_set = NodeSet()
+            for node in nodes:
+                nodes_set.add(node)
+            nodes = nodes_set
         
         if edges is not None and nodes is not None:
             super().__init__(edges, nodes)
         elif edges is None and nodes is not None:
             super().__init__(EdgeSet(), nodes)
         elif edges is not None and nodes is None:
-            ns : NodeSet = NodeSet()
+            # Use Cython-accelerated NodeSet if available
+            ns = _make_nodeset(directed=True)
             for e in edges.get_set():
                 if type(e) is not Edge:
                      raise TypeError("Network objects takeEdge objects. \
@@ -2222,12 +2253,13 @@ class Network(Graph):
                 ns.add(e.src, e.dest)
             super().__init__(edges, ns)
         else:
-            super().__init__(EdgeSet(), NodeSet())
+            # Use Cython-accelerated NodeSet if available
+            super().__init__(EdgeSet(), _make_nodeset(directed=True))
         
-        self.__leaves : list[Node] = [node for node in list(self._nodes.get_set())
-                        if self._nodes.out_deg(node) == 0]
-        self.__roots : list[Node] = [node for node in list(self._nodes.get_set()) 
-                        if self._nodes.in_deg(node) == 0]
+        self.__leaves : set[Node] = {node for node in self._nodes.get_set()
+                        if self._nodes.out_deg(node) == 0}
+        self.__roots : set[Node] = {node for node in self._nodes.get_set() 
+                        if self._nodes.in_deg(node) == 0}
     
     @classmethod
     def from_newick(cls, newick : str) -> Network:
@@ -2502,8 +2534,9 @@ class Network(Graph):
         """
         
         if node in self._nodes:
-            in_edges = self._nodes.in_edges(node)
-            out_edges = self._nodes.out_edges(node)
+            # Copy the edge sets to avoid modifying during iteration
+            in_edges = self._nodes.in_edges(node).copy()
+            out_edges = self._nodes.out_edges(node).copy()
             
             for edge in in_edges:
                 self.remove_edge(edge)
@@ -2601,29 +2634,25 @@ class Network(Graph):
                 # If out degree now = 1, then the node was previously a leaf, 
                 # and is not anymore
                 if self._nodes.out_deg(node) == 1:
-                    if node in self.__leaves:
-                        self.__leaves.remove(node)
+                    self.__leaves.discard(node)
                 if self._nodes.in_deg(node) == 0:
-                    if node not in self.__roots:
-                        self.__roots.append(node)
+                    self.__roots.add(node)
             else:
                 # If in_degree now = 1, then the node was previously a root,
                 # and is not anymore
                 if self._nodes.in_deg(node) == 1:
-                    if node in self.__roots:
-                        self.__roots.remove(node)
+                    self.__roots.discard(node)
                 if self._nodes.out_deg(node) == 0:
-                    if node not in self.__leaves:
-                        self.__leaves.append(node)                
+                    self.__leaves.add(node)
         else:
             if is_par:
                 # if out degree is now = 0, then the node is now a leaf
                 if self._nodes.out_deg(node) == 0:
-                    self.__leaves.append(node)     
+                    self.__leaves.add(node)
             else:
                 # if in degree is now = 0, the node is now a root
                 if self._nodes.in_deg(node) == 0:
-                    self.__roots.append(node)
+                    self.__roots.add(node)
                 
     def root(self) -> Node:
         """
