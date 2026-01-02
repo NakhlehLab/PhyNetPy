@@ -1,11 +1,50 @@
 # Always prefer setuptools over distutils
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 import pathlib
+import os
 
 here = pathlib.Path(__file__).parent.resolve()
 
 # Get the long description from the README file
 long_description = (here / "README.md").read_text(encoding="utf-8")
+
+# =============================================================================
+# CYTHON EXTENSION SETUP (Optional but recommended for performance)
+# =============================================================================
+# Try to use Cython if available, otherwise skip C extensions
+ext_modules = []
+USE_CYTHON = os.environ.get("USE_CYTHON", "1") != "0"
+
+if USE_CYTHON:
+    try:
+        from Cython.Build import cythonize
+        
+        # Define Cython extensions
+        cython_extensions = [
+            Extension(
+                "phynetpy.graph_core_cy",
+                ["src/PhyNetPy/graph_core_cy.pyx"],
+                extra_compile_args=["-O3"] if os.name != 'nt' else [],
+            ),
+        ]
+        
+        ext_modules = cythonize(
+            cython_extensions,
+            compiler_directives={
+                'language_level': "3",
+                'boundscheck': False,
+                'wraparound': False,
+                'cdivision': True,
+            },
+            quiet=True,
+        )
+        print("Cython extensions enabled for optimized performance")
+    except ImportError:
+        print("Cython not found - installing pure Python version")
+        print("For better performance, install Cython: pip install cython")
+    except Exception as e:
+        print(f"Cython compilation failed: {e}")
+        print("Installing pure Python version (still fully functional)")
 
 # Arguments marked as "Required" below must be included for upload to PyPI.
 # Fields marked as "Optional" may be commented out.
@@ -108,6 +147,7 @@ setup(
     #   py_modules=["my_module"],
     #
     packages= ["phynetpy"], #find_packages(where="src"),  # Required
+    ext_modules=ext_modules,  # Cython extensions (empty list if Cython unavailable)
     # Specify which Python versions you support. In contrast to the
     # 'Programming Language' classifiers above, 'pip install' will check this
     # and refuse to install the project if the version does not match. See
@@ -139,8 +179,9 @@ setup(
     # Similar to `install_requires` above, these must be valid existing
     # projects.
     extras_require={  # Optional
-        "dev": ["check-manifest"],
+        "dev": ["check-manifest", "cython>=0.29"],
         "test": ["coverage"],
+        "fast": ["cython>=0.29"],  # For Cython-optimized graph operations
     },
     # If there are data files included in your packages that need to be
     # installed, specify them here.

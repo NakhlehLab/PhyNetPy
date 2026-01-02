@@ -1,0 +1,54 @@
+---
+description: PhyNetPy phylogenetic network analysis patterns
+globs:
+  - "**/*.py"
+  - "**/phylo*.py"
+alwaysApply: true
+---
+
+# PhyNetPy Development Rules
+
+## Core Imports Pattern
+Always use this import structure:
+```python
+from .Network import Network, Node, DiEdge
+from .MSA import MSA, SeqRecord
+from .Graph import Graph
+```
+
+## Network Creation Pattern
+When creating phylogenetic networks, follow this structure:
+```python
+# Create nodes first
+root = Node("Root")
+internal1 = Node("I1")
+leaf_a = Node("A")
+leaf_b = Node("B")
+
+# Create directed edges
+edges = [
+    Edge(root, internal1),
+    Edge(internal1, leaf_a),
+    Edge(internal1, leaf_b)
+]
+
+# Build network
+network = Network(root, edges)
+```
+
+## Reticulation Nodes
+For hybridization/reticulation events:
+```python
+hybrid = Node("#H0", is_reticulation=True)
+```
+
+## Naming Conventions
+- Leaf nodes: Use species/taxon names (e.g., "Homo_sapiens")
+- Internal nodes: Use "I" prefix (e.g., "I1", "I2")
+- Reticulation nodes: Use "#H" prefix (e.g., "#H0", "#H1")
+- Root: Always named "Root"
+
+## Always Include
+- Type hints for function parameters
+- Docstrings explaining phylogenetic context
+- Error handling for network topology validation
