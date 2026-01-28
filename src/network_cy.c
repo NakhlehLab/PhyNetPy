@@ -5,7 +5,7 @@
     "distutils": {
         "name": "PhyNetPy.network_cy",
         "sources": [
-            "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/PhyNetPy/network_cy.pyx"
+            "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/network_cy.pyx"
         ]
     },
     "module_name": "PhyNetPy.network_cy"

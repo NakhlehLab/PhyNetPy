@@ -172,6 +172,15 @@ class DataSequence:
         Returns:
             list[int]: an integer data sequence, in hexadecimal.
         """
+        # Handle case where seq is already an integer (single value)
+        if isinstance(self.seq, (int, float)):
+            return [int(self.seq)]
+        
+        # Handle case where seq is already a list of integers
+        if isinstance(self.seq, list) and all(isinstance(x, (int, float)) for x in self.seq):
+            return [int(x) for x in self.seq]
+        
+        # Original behavior: convert string/character sequence to integers
         num_seq : list[int] = [int(char, 16) for char in self.seq 
                                if char.isdigit() 
                                or char in set(["A", "B", "C", "D", "E", "F"])]
@@ -319,6 +328,9 @@ class MSA(Iterable[DataSequence]):
                 self.grouping = self.group_auto_detect()
 
             self.records : list[DataSequence] = self.parse()
+            
+            # Auto-detect ploidy from max value in each sequence
+            self.set_sequence_ploidy()
         
             # Either the number of records (1 taxa / group) or the number of groups
             if self.grouping is None:
@@ -337,6 +349,9 @@ class MSA(Iterable[DataSequence]):
                
                 for data_seq in self.records: 
                     self.add_data(data_seq)
+                    
+                # Auto-detect ploidy from max value in each sequence
+                self.set_sequence_ploidy()
             else:
                 self.records : list[DataSequence] = []
         
@@ -489,8 +504,8 @@ class MSA(Iterable[DataSequence]):
                     recs.append(new_record)
                     self.hash[new_record.get_gid()].append(new_record)
                     index += 1         
-        finally:  
-            return recs
+          
+        return recs
 
     def num_groups(self) -> int:
         """
@@ -594,11 +609,12 @@ class MSA(Iterable[DataSequence]):
         for record in self.records:
             if record.name == name:
                 return record
+        raise ValueError("Sequence with name " + name + " not found in MSA")
     
     def total_samples(self) -> int:
         """
         For each record, accumulate the ploidyness to gather the total number 
-        of samples of alleles
+        of samples of alleles. If ploidy is not set (-1), treats as 1 sample.
         
         Args:
             N/A
