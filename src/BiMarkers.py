@@ -342,9 +342,10 @@ def MCMC_BIMARKERS(filename: str,
     return {result_model.network : result_model.likelihood()}
 
 def SNP_LIKELIHOOD(filename : str,
-                   u : float = .5 ,
-                   v : float = .5, 
-                   coal : float = 1,
+                   u : float,
+                   v : float, 
+                   coal : float,
+                   samples : dict[str, int],
                    max_workers: int = 8,
                    sequential: bool = True,
                    executor: Executor = None) -> float:
@@ -377,8 +378,6 @@ def SNP_LIKELIHOOD(filename : str,
     net = NetworkParser(filename).get_network(0)
     
     aln = MSA(filename)
-    for seq in aln.records:
-        seq.set_ploidy(2)
     
     snp_model = build_model(filename, 
                             net,
@@ -386,9 +385,9 @@ def SNP_LIKELIHOOD(filename : str,
                             v, 
                             coal)
     
-    q = BiMarkersTransition(aln.total_samples(), u, v, coal)
+    q = BiMarkersTransition(sum(samples.values()), u, v, coal)
     
-    strategy = SNPStrategy(q, u, v, coal, aln.dim()[1], aln.total_samples())
+    strategy = SNPStrategy(q, u, v, coal, aln.dim()[1], sum(samples.values()))
     
     visitor = SNPModelVisitor(strategy)
     
@@ -667,7 +666,7 @@ class SNPStrategy(Strategy):
         
         return self._rule1(base_likelihoods, n.branch().length)
          
-    def compute_at_internal(self, n: InternalNode) -> None:
+    def compute_at_internal(self, n: InternalNode, samples : int) -> None:
         """
         Compute the partial likelihoods at an internal node.
         """
@@ -681,7 +680,7 @@ class SNPStrategy(Strategy):
         return self.rule1(partial_likelihoods, len(n.branch))
         
     
-    def compute_at_reticulation(self, n: ReticulationNode) -> None:
+    def compute_at_reticulation(self, n: ReticulationNode, samples : int) -> None:
         """
         Compute the partial likelihoods at a reticulation node.
         """
@@ -694,7 +693,7 @@ class SNPStrategy(Strategy):
         print("Computing at reticulation", n.get_name())
         return 1
 
-    def compute_at_root(self, n: RootNode) -> None:
+    def compute_at_root(self, n: RootNode, samples : int) -> None:
         """
         Compute the partial likelihoods at an internal node.
         """
@@ -724,21 +723,24 @@ class SNPModelVisitor(Visitor):
     Visitor for the SNP model.
     """
     def __init__(self, strategy: SNPStrategy) -> None:
-        
+        self.samples : dict[ModelNode, int] = {}
         self.strategy : SNPStrategy = strategy
     
     def visit_leaf(self, n: LeafNode) -> None:
         self.strategy.compute_at_leaf(n)
+        self.samples[n] = n.samples
     
     def visit_internal(self, n: InternalNode) -> None:
-        
-        self.strategy.compute_at_internal(n)
+        self.samples[n] = sum([self.samples[child] for child in n.get_model_children()])
+        self.strategy.compute_at_internal(n, self.samples[n])
         
     def visit_reticulation(self, n: ReticulationNode) -> None:
-        self.strategy.compute_at_reticulation(n)
+        self.samples[n] = sum([self.samples[child] for child in n.get_model_children()])
+        self.strategy.compute_at_reticulation(n, self.samples[n])
     
     def visit_root(self, n: RootNode) -> None:
-        self.strategy.compute_at_root(n)
+        self.samples[n] = sum([self.samples[child] for child in n.get_model_children()])
+        self.strategy.compute_at_root(n, self.samples[n])
     
     def visit_aggregator(self, n: RootAggregatorNode) -> None:
         self.strategy.compute_at_aggregator(n)

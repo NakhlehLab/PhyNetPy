@@ -139,7 +139,8 @@ def snp_3():
     result = SNP_LIKELIHOOD(str(nexus_path.absolute()),
                             u = 1,
                             v = 1,
-                            coal = .005)
+                            coal = .005,
+                            samples = {"A" : 2, "B" : 2, "C" : 2})
 
     print(result)
     return 1
