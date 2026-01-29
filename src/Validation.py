@@ -151,7 +151,7 @@ class ValidationSummary:
             lines.append("ERRORS:")
             lines.append("-" * 8)
             for error in self.errors:
-                lines.append(f"  ✗ {error}")
+                lines.append(f"  [X] {error}")
             lines.append("")
             
         lines.append("=" * 60)
@@ -474,8 +474,10 @@ class NexusValidator(BaseValidator):
                             if clade.is_terminal() and clade.name:
                                 # Clean up reticulation node names
                                 clean_name = clade.name.split('#')[0] if '#' in clade.name else clade.name
-                                tree_taxa.add(clean_name)
-                                all_tree_taxa.add(clean_name)
+                                # Skip empty names (from pure reticulation references like #H0)
+                                if clean_name:
+                                    tree_taxa.add(clean_name)
+                                    all_tree_taxa.add(clean_name)
                     except:
                         # If BioPython fails, try simple regex extraction
                         taxa_matches = re.findall(r'([A-Za-z_][A-Za-z0-9_]*)', newick_part)

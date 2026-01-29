@@ -37,6 +37,8 @@ import numpy as np
 import sys
 import networkx as nx
 from functools import singledispatchmethod
+
+from .Phylo import Branch
 from .MSA import DataSequence
 from .PhyloNet import run
 #from .Newick import *
@@ -878,50 +880,7 @@ class NodeSet:
             return self.__node_names[name]
         return None
 
-# class AEdge(ABC):
-#     """
-#     Abstract class that defines standard behavior for any Edge object, whether
-#     it be directed or undirected.
-    
-#     Should not ever be instantiated directly!
-#     """
-    
-#     def __init__(self) -> None:
-#         super().__init__()
-        
-    
-#     @abstractmethod
-#     def __contains__(self, n : Node) -> bool:
-#         pass
-    
-#     @abstractmethod
-#     def get_length(self) -> float:
-#         pass
-    
-#     @abstractmethod
-#     def set_length(self, 
-#                    branch_length : float, 
-#                    enforce_times : bool = True) -> None:
-#         pass
-    
-#     @abstractmethod
-#     def get_weight(self) -> float:
-#         pass
-    
-#     @abstractmethod
-#     def set_weight(self, weight : float) -> None:
-#         pass
-        
-#     @abstractmethod
-#     def copy(self,
-#              new_n1 : Node | None = None,
-#              new_n2 : Node | None = None) -> Union[Edge, UEdge]:
-#         pass
-    
-#     @abstractmethod
-#     def to_names(self) -> tuple[str, str]:
-#         pass
-          
+
 class UEdge:
     """
     Undirected dge class that is essentially a wrapper class for a set
@@ -1428,6 +1387,18 @@ class Edge:
             tuple[str, str]: A tuple of the names of the nodes in this edge.
         """
         return (self._src.label, self._dest.label)
+    
+    def __len__(self) -> float:
+        """
+        Get the length of this edge.
+        """
+        return self.__length
+    
+    def to_branch(self) -> Branch:
+        """
+        Convert this edge to a branch.
+        """
+        return Branch(self.__length, self.__gamma, self.src.label)
     
 class EdgeSet:
     """
@@ -2753,7 +2724,23 @@ class Network(Graph):
         except:
             raise NetworkError("Attempted to calculate children of a node that \
                 is not in the graph.")
-            
+    
+    def get_branches(self, node : Node) -> dict[str, Any]:
+        """
+        Returns a dictionary of branches connected to the node.
+        
+        Args:
+            node (Node): a node in the graph.
+        Returns:
+            dict[str, Any]: a dictionary of branches connected to the node.
+                            The keys are "parent_branches" and "child_branches".
+                            The values are lists of branches.
+        """
+        return {
+            "parent_branches": [edge.to_branch() for edge in self._nodes.in_edges(node)],
+            "child_branches": [edge.to_branch()for edge in self._nodes.out_edges(node)]
+        }
+
     def clean(self, options : list[bool] = [True, True, True]) -> None:
         """
         All the various ways that the graph can be cleaned up and streamlined

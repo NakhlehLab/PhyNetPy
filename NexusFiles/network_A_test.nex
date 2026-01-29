@@ -9,12 +9,19 @@ BEGIN DATA;
   Dimensions nchar=1;
   Format datatype=snp missing=? gap=- matchchar=.;
   Matrix
-    A   0
-    B   0
-    C   0         
+    A   000
+    B   000
+    C   000
   ;
 END;
 
 BEGIN TREES;
 Tree net = ((C:.1, (B:.05)#H0[&gamma=.7]:.05)I1:.1, (A:.1, #H0:.05)I2:.1)I3;
 END;
+
+BEGIN PHYNETPY;
+[Network A from SnappNet/MCMC_BiMarkers paper]
+[Charles Rabier reference values use: u=1, v=1, coal=0.005]
+[Each taxon has 3 samples (ploidy=3) for red allele counts 0-3]
+END;
+

@@ -23,7 +23,7 @@ if USE_CYTHON:
         cython_extensions = [
             Extension(
                 "phynetpy.graph_core_cy",
-                ["src/PhyNetPy/graph_core_cy.pyx"],
+                ["src/graph_core_cy.pyx"],
                 extra_compile_args=["-O3"] if os.name != 'nt' else [],
             ),
         ]
@@ -136,7 +136,7 @@ setup(
     keywords="phylogenetics, networks, data, biology, graphical modeling, development, methods, statistics, bayesian, python",  # Optional
     # When your source code is in a subdirectory under the project root, e.g.
     # `src/`, it is necessary to specify the `package_dir` argument.
-    package_dir={"phynetpy": "src/PhyNetPy"},  # Optional
+    package_dir={"phynetpy": "src"},  # Optional
     # You can just specify package directories manually here if your project is
     # simple. Or you can use find_packages().
     #
@@ -182,6 +182,7 @@ setup(
         "dev": ["check-manifest", "cython>=0.29"],
         "test": ["coverage"],
         "fast": ["cython>=0.29"],  # For Cython-optimized graph operations
+        "cuda": ["cupy-cuda12x>=13.0", "numba>=0.59"],  # For CUDA-accelerated BiMarkers
     },
     # If there are data files included in your packages that need to be
     # installed, specify them here.
