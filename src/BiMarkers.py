@@ -633,12 +633,7 @@ class SNPStrategy(Strategy):
         Returns:
             np.ndarray: vpi tensor F_top
         """
-
-        #Explanation of einsum:
-        #s...j...m... -> sum over all dimensions except the last one
-        #ji -> matrix multiplication of the last two dimensions
-        #s...i... -> result is shape [S, d1, d2, ...]
-        return np.einsum("s...j...m...,ji->s...i...", F, self.q.expt(branch_len))
+        return F @ self.q.expt(branch_len)
     
     def _rule2(self, F_x : np.ndarray, F_y : np.ndarray, m_x : int, m_y : int) -> np.ndarray:
 
@@ -652,7 +647,7 @@ class SNPStrategy(Strategy):
     def _rule3(self, F, mx, gammax) -> np.ndarray:
         #Explanation of einsum:
         
-        return np.einsum('s...i...,ijk->s...jk...', F, build_split_tensor(mx, gammax))
+        return np.einsum('...i,ijk->...jk', F, build_split_tensor(mx, gammax))
     
     def _rule4(self, F, mx, my) -> np.ndarray:
         return np.einsum('s...i...j...,ijk->s...k...', F, build_merge_tensor(mx, my))  
@@ -670,33 +665,36 @@ class SNPStrategy(Strategy):
         assert len(n.data) == 1, "Leaf node must have exactly one data sequence"
         reds : list[int] = n.data[0].get_numerical_seq()
         
-        base_likelihoods : np.ndarray = np.zeros((self.sites, dim(n.samples)), dtype=np.float64)
+        F : np.ndarray = np.zeros((self.sites, state_dim(n.samples)), dtype=np.float64)
         
         for site in range(self.sites):
-            base_likelihoods[site, nr_to_index(n.samples, reds[site])] = 1.0
+            F[site, nr_to_index(n.samples, reds[site])] = 1.0
         
-        top = self._rule1(base_likelihoods, n.branch().length)
-        n.vpi = NodeVPI(top, [f"{n.get_name()}_top"], [n.samples])
+        F = self._rule1(F, n.branch().length)
+        n.vpi = NodeVPI(F, [f"{n.get_name()}_top"], [n.samples])
 
          
     def compute_at_internal(self, n: InternalNode, x : NodeVPI, y: NodeVPI) -> None:
         """
         Compute the partial likelihoods at an internal node.
         """
-        
-        #TODO: I don't yet understand the max_lineages structure to the vpi tracking... this isn't right 
-        # because I'm passing a list[int] and not an int.
         rule2 = _disjoint_subnets(n)
+        mx = x.max_lineages[-1]
+        my = y.max_lineages[-1]
+        
         if rule2:
-            partials = self._rule2(x.tensor, y.tensor, x.max_lineages, y.max_lineages)
+            F = self._rule2(x.tensor, y.tensor, mx, my)
+            interfaces = x.interfaces[:-1] + y.interfaces[:-1] + [f"{n.get_name()}_top"] 
+            max_lin = x.max_lineages[:-1] + y.max_lineages[:-1] + [mx+my]
         else:
-            partials = self._rule4(x.tensor, x.max_lineages, y.max_lineages)
+            F = self._rule4(x.tensor, x.max_lineages[-1], y.max_lineages[-1])
+            interfaces = x.interfaces[:-2] + [f"{n.get_name()}_top"] 
+            max_lin = x.max_lineages[:-2] + [mx + my]
         
-        top = self._rule1(partials, len(n.branch))    
-        n.vpi = NodeVPI(top, "WHAT TO PUT HERE?", "WHAT TO PUT HERE?")
+        F = self._rule1(F, len(n.branch))  
+           
+        n.vpi = NodeVPI(F, interfaces, max_lin)
         
-        
-    
     def compute_at_reticulation(self, n : ReticulationNode, x : NodeVPI) -> None:
         """
         Compute the partial likelihoods at a reticulation node.
@@ -705,10 +703,19 @@ class SNPStrategy(Strategy):
         # And because of that there would be two vpis?? I'm not sure. pls assist here!
         branches : tuple[Branch, Branch]= n.branch_info
         gamma = branches[0].inheritance_probability
+        m = x.max_lineages[-1]
         
-        partials = self._rule3(x.tensor, x.max_lineages, gamma)
-        top = self._rule1(partials, branches[0].length)
-        n.vpi = NodeVPI(top, "??", "??")
+        F = self._rule3(x.tensor, x.max_lineages[-1], gamma)
+        F = np.moveaxis(F, -2, -1)
+        F = self._rule1(F, branches[0].length)
+        F = np.moveaxis(F, -1, -2)
+        F = self._rule1(F, branches[1].length)
+        
+        #Book keep the interfaces and lineages
+        interfaces = x.interfaces[:-1] + [f"{n.get_name()}_left_bot", f"{n.get_name()}_right_bot"]  
+        max_lin = x.max_lineages[:-1] + [m, m] 
+        
+        n.vpi = NodeVPI(F, interfaces, max_lin)
         
 
     def compute_at_root(self, n: RootNode, x : NodeVPI, y : NodeVPI) -> None:
@@ -717,11 +724,11 @@ class SNPStrategy(Strategy):
         """
         rule2 = _disjoint_subnets(n)
         if rule2:
-            partials = self._rule2(x.tensor, y.tensor, x.max_lineages, y.max_lineages)
+            partials = self._rule2(x.tensor, y.tensor, x.max_lineages[-1], y.max_lineages[-1])
         else:
-            partials = self._rule4(x.tensor, x.max_lineages, y.max_lineages)
+            partials = self._rule4(x.tensor, x.max_lineages[-1], y.max_lineages[-1])
         
-        n.vpi = NodeVPI(partials, [f"{n.get_name()}_bottom"], x.max_lineages + y.max_lineages)
+        n.vpi = NodeVPI(partials, [f"{n.get_name()}_bottom"], x.max_lineages[-1] + y.max_lineages[-1])
         
 
     def compute_at_aggregator(self, n: RootAggregatorNode, root : NodeVPI) -> None:
@@ -734,6 +741,7 @@ class SNPStrategy(Strategy):
 
         #Compute log likelihood 
         self.L = np.log(np.dot(root.tensor, x))
+        
         
 
 class SNPModelVisitor(Visitor):
@@ -759,7 +767,8 @@ class SNPModelVisitor(Visitor):
         self.strategy.compute_at_root(n, child_vpis[0], child_vpis[1])
     
     def visit_aggregator(self, n: RootAggregatorNode) -> None:
-        self.strategy.compute_at_aggregator(n)
+        child_vpi = n.get_model_children()[0].vpi
+        self.strategy.compute_at_aggregator(n, child_vpi)
     
     def visit(self, n: ModelNode) -> None:
         """
