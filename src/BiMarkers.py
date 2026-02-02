@@ -38,7 +38,7 @@ import numpy as np
 import scipy
 from scipy.linalg import expm
 import math
-
+from dataclasses import dataclass
 
 # CUDA imports - with graceful fallback
 # Numba CUDA requires CUDA Toolkit 12.x (tested with CUDA 12.2)
@@ -206,91 +206,106 @@ def nr_to_index(n : int, r : int) -> int:
 
 def dim(n : int) -> int:
     return nr_to_index(n, n)
- 
-def to_array(Fb_map : dict, 
-             vector_len : int, 
-             site_count : int) -> np.ndarray:
+
+@dataclass
+class NodeVPI:
+    tensor: np.ndarray       # shape [S, d1, d2, ...]                  
+    interfaces: list[str]    # ["α", "β", ...] length = tensor.ndim-1 
+    max_lineages: list[int]  # [m_α, m_β, ...] per interface 
+
+
+def state_dim(m: int) -> int:
+    return nr_to_index(m, m) + 1
+
+def build_split_tensor(m: int, gamma: float) -> np.ndarray:
     """
-    Takes a vpi/partial likelihood mapping, and translates it into a matrix
-    such that the columns denote the site, and the row indeces correspond to 
-    (n,r) pairs.
+    Build the split coefficient tensor S for a reticulation node
+    with max lineages m and inheritance probability gamma.
+
+    S[i, j, k] = C(n, n_b) * C(r, r_b) * gamma^{n_b} * (1-gamma)^{n_d}
+
+    where i ↔ (n, r), j ↔ (n_b, r_b), k ↔ (n_d, r_d)
+    and n = n_b + n_d, r = r_b + r_d (zero otherwise).
+
+    Shape: [dim(m), dim(m), dim(m)]
+    """
+    d = state_dim(m)
+    S = np.zeros((d, d, d))
+
+    for n in range(1, m + 1):
+        for r in range(n + 1):
+            i = nr_to_index(n, r)
+            for nb in range(1, n + 1):
+                nd = n - nb
+                if nd < 1:
+                    continue
+                for rb in range(min(r, nb) + 1):
+                    rd = r - rb
+                    if rd < 0 or rd > nd:
+                        continue
+
+                    j = nr_to_index(nb, rb)
+                    k = nr_to_index(nd, rd)
+
+                    S[i, j, k] = (comb(n, nb) * comb(r, rb)
+                                  * (gamma ** nb) * ((1 - gamma) ** nd))
+
+    return S
+
+def build_merge_tensor(mx: int, my: int) -> np.ndarray:
+    """
+    Build the merge coefficient tensor M for combining two interfaces
+    with max lineages mx and my.
+
+    M[i, j, k] = C(rz, rx) * C(nz-rz, nx-rx) / C(nz, nx)
     
-    This function serves the purpose of formatting the likelihoods at the root 
-    for easy computation.
+    where i ↔ (nx, rx), j ↔ (ny, ry), k ↔ (nz, rz)
+    and nz = nx + ny, rz = rx + ry (zero otherwise).
 
-    Args:
-        Fb_map (dict): vpi/partial likelihood mapping of a single dimension 
-                       (ie, may not be downstream of a reticulation node, 
-                       without it having been resolved)
-        vector_len (int): rows of resulting matrix
-        site_count (int): columns of resulting matrix
+    Used by both Rule 2 (disjoint merge) and Rule 4 (overlapping merge).
 
-    Returns:
-        np.ndarray: Matrix of dimension vector_len by site_count, 
-                    containing floats
+    Shape: [dim(mx), dim(my), dim(mx + my)]
+    """
+    mz = mx + my
+    M = np.zeros((state_dim(mx), state_dim(my), state_dim(mz)))
+
+    for nx in range(1, mx + 1):
+        for rx in range(nx + 1):
+            i = nr_to_index(nx, rx)
+            for ny in range(1, my + 1):
+                for ry in range(ny + 1):
+                    j = nr_to_index(ny, ry)
+                    
+                    nz = nx + ny
+                    rz = rx + ry
+                    k = nr_to_index(nz, rz)
+
+                    M[i, j, k] = (comb(rz, rx) * comb(nz - rz, nx - rx) 
+                                  / comb(nz, nx))
+
+    return M
+
+def _disjoint_subnets(n: InternalNode) -> bool:
+    """
+    Determine if the left and right subnets of an internal node are disjoint.
     """
     
-    F_b = np.zeros((vector_len, site_count))  
+    lr = n.get_model_children()
+    assert len(lr) == 2, "Internal node must have exactly two children"
+    subnets : tuple[set[ModelNode], set[ModelNode]] = ({}, {})
+    i = 0
     
-    if not cs:
-        for site in range(site_count):
-            for nr_pair, prob in Fb_map[site].items():
-                #nr_pair should be of the form ((n),(r))
-                F_b[int(nr_to_index(nr_pair[0][0], nr_pair[1][0]))][site] = prob
-    else:
-        for site in range(site_count):
-            for nr_key in Fb_map[site].Keys:
-                n = nr_key.NX[0]
-                r = nr_key.RX[0]
-                prob = Fb_map[site][nr_key]
-                F_b[nr_to_index(n, r)][site] = prob
+    for child in lr:
+        q = deque(child)
+        while len(q) != 0:
+            cur = q.popleft()
+            for kin in cur.get_model_children():
+                subnets[i].add(kin)
+                q.append(kin)
+        i += 1
     
-    return F_b
+    return subnets[0].isdisjoint(subnets[1])
 
-def rn_to_rn_minus_dim(set_of_rns : dict[tuple[list[float]], float], 
-                       dim : int) -> dict[tuple[list[float]], set[tuple]]:
-    """
-    This is a function defined as
-    
-    f: Rn;Rn -> Rn-dim;Rn-dim.
-    
-    This function takes set_of_rns and turns it into a mapping 
-    {(nx[:-dim] , rx[:-dim]) : set((nx[-dim:] , rx[-dim:], probability))} 
-    where the keys are vectors in Rn-dim, and their popped last elements and 
-    the probability is stored as values.
-
-    Args:
-        set_of_rns (dict[tuple[list[float]], float]): a mapping in the form of 
-                           {(nx , rx) -> probability in R} 
-                           where nx and rx are both vectors in Rn
-        dim (int): the number of dimensions to reduce from Rn.
-
-    Returns:
-        dict[tuple[list[float]], set[tuple]]: map in the form -- 
-        {(nx[:-dim] , rx[:-dim]) : set((nx[-dim:] , rx[-dim:], probability))}
-    """
-    
-    rn_minus_dim = {}
-    
-    for vectors, prob in set_of_rns.items():
-        nx = vectors[0]
-        rx = vectors[1]
-        
-        #keep track of the remaining elements and the probability
-        new_value = (nx[-dim:], rx[-dim:], prob)
-        
-        #Reduce vectors dimension by grabbing the first n-dim elements
-        new_key = (nx[:-dim], rx[:-dim])
-        
-        #Take care of duplicates
-        if new_key in rn_minus_dim.keys():
-            rn_minus_dim[new_key].add(new_value)
-        else:
-            init_value = set()
-            init_value.add(new_value)
-            rn_minus_dim[new_key] = init_value
-
-    return rn_minus_dim
 
 #####################
 # Method Signatures #
@@ -415,7 +430,7 @@ def SNP_LIKELIHOOD(filename : str,
                 print("Visiting node", node.get_name())
                 visitor.visit(node)
             
-        return snp_model.get_root().result
+        return strategy.L
 
     
     def likelihood_parallel(root: ModelNode) -> float:
@@ -442,52 +457,14 @@ def SNP_LIKELIHOOD(filename : str,
             else:
                 with ThreadPoolExecutor(max_workers=max_workers) as pool:
                     pool.map(visitor.visit, nodes)
+        
+        return strategy.L
     
     if sequential:
         return likelihood_sequential(snp_model.get_root())
     else:
         return likelihood_parallel(snp_model.get_root())
 
-    
-       
-def SNP_LIKELIHOOD_TEST(filename : str,
-                         table : dict,
-                         u : float = .5 ,
-                         v : float = .5, 
-                         coal : float = 1) -> dict:
-    """
-    THIS FUNCTION IS ONLY FOR TESTING PURPOSES
-    Given a set of taxa with SNP data and a phylogenetic network, calculate the 
-    likelihood of the network given the data using the SNP likelihood algorithm.
-
-    Args:
-        filename (str): string path destination of a nexus file that 
-                        contains SNP data and a network
-        table (dict): A dictionary of A/B/C or A/B/C/D lineage counts to probability values.
-        u (float, optional): Parameter for the probability of an
-                             allele changing from red to green. Defaults to .5.
-        v (float, optional): Parameter for the probability of an
-                             allele changing from green to red. Defaults to .5.
-        coal (float, optional): Parameter for the rate of coalescence. 
-                                Defaults to 1.
-        
-    Returns:
-        dict: map from lineage counts (tuples of A/B/C or A/B/C/D) to non log probability values.
-    """
-    
-    net = NetworkParser(filename).get_network(0)
-        
-    snp_model = build_model(filename, 
-                            net,
-                            u, 
-                            v, 
-                            coal)
-    
-    for taxa in snp_model.all_nodes[ExtantSpecies]:
-        leaf : ExtantSpecies = taxa
-        leaf.update([DataSequence(set_reds[leaf.label], leaf.label)])
-    
-    return snp_model.likelihood()
 
 ##################
 # Model Building #
@@ -642,8 +619,8 @@ class SNPStrategy(Strategy):
         self.v : float = v
         self.coal : float = coal
         self.sites : int = sites
-        
         self.vector_len : int = state_dim(max_samples)
+        self.L : np.ndarray 
     
     def _rule1(self, F : np.ndarray, branch_len : float) -> np.ndarray:
         """
@@ -665,16 +642,20 @@ class SNPStrategy(Strategy):
     
     def _rule2(self, F_x : np.ndarray, F_y : np.ndarray, m_x : int, m_y : int) -> np.ndarray:
 
-        def generate_M()-> np.ndarray:
-            pass
-
-
         #Explanation of einsum:
         #s...i -> sum over the last dimension
         #s...j -> sum over the last dimension
         #ijk -> matrix multiplication of the last three dimensions
         #s...k -> result is shape [S, d1, d2, ...]
-        return np.einsum("s...i, s...j, ijk->s...k", F_x, F_y, generate_M())
+        return np.einsum("s...i, s...j, ijk->s...k", F_x, F_y, build_merge_tensor(m_x, m_y))
+    
+    def _rule3(self, F, mx, gammax) -> np.ndarray:
+        #Explanation of einsum:
+        
+        return np.einsum('s...i...,ijk->s...jk...', F, build_split_tensor(mx, gammax))
+    
+    def _rule4(self, F, mx, my) -> np.ndarray:
+        return np.einsum('s...i...j...,ijk->s...k...', F, build_merge_tensor(mx, my))  
         
     def compute_at_leaf(self, n: LeafNode) -> None:
         """
@@ -698,47 +679,52 @@ class SNPStrategy(Strategy):
         n.vpi = NodeVPI(top, [f"{n.get_name()}_top"], [n.samples])
 
          
-    def compute_at_internal(self, n: InternalNode) -> None:
+    def compute_at_internal(self, n: InternalNode, x : NodeVPI, y: NodeVPI) -> None:
         """
         Compute the partial likelihoods at an internal node.
         """
+        
+        #TODO: I don't yet understand the max_lineages structure to the vpi tracking... this isn't right 
+        # because I'm passing a list[int] and not an int.
         rule2 = _disjoint_subnets(n)
         if rule2:
-            # Use Rule 2
-            pass
+            partials = self._rule2(x.tensor, y.tensor, x.max_lineages, y.max_lineages)
         else:
-            # Use Rule 4
-            pass
-        return self.rule1(partial_likelihoods, len(n.branch))
+            partials = self._rule4(x.tensor, x.max_lineages, y.max_lineages)
+        
+        top = self._rule1(partials, len(n.branch))    
+        n.vpi = NodeVPI(top, "WHAT TO PUT HERE?", "WHAT TO PUT HERE?")
+        
         
     
-    def compute_at_reticulation(self, n: ReticulationNode) -> None:
+    def compute_at_reticulation(self, n : ReticulationNode, x : NodeVPI) -> None:
         """
         Compute the partial likelihoods at a reticulation node.
         """
-        # # Use Rule 3
-        # branch1, branch2 = n.branches()
+        #TODO: Unsure of how to deal with this scenario. There are two branches, of course.
+        # And because of that there would be two vpis?? I'm not sure. pls assist here!
+        branches : tuple[Branch, Branch]= n.branch_info
+        gamma = branches[0].inheritance_probability
+        
+        partials = self._rule3(x.tensor, x.max_lineages, gamma)
+        top = self._rule1(partials, branches[0].length)
+        n.vpi = NodeVPI(top, "??", "??")
+        
 
-        # partials1 : np.array
-        # partials2 : np.array
-        # return self._rule1(partials1, branch1.length), self._rule1(partials2, branch2.length)
-        print("Computing at reticulation", n.get_name())
-        return 1
-
-    def compute_at_root(self, n: RootNode, samples : int) -> None:
+    def compute_at_root(self, n: RootNode, x : NodeVPI, y : NodeVPI) -> None:
         """
         Compute the partial likelihoods at an internal node.
         """
         rule2 = _disjoint_subnets(n)
         if rule2:
-            # Use Rule 2
-            pass
+            partials = self._rule2(x.tensor, y.tensor, x.max_lineages, y.max_lineages)
         else:
-            # Use Rule 4
-            pass
-        return 
+            partials = self._rule4(x.tensor, x.max_lineages, y.max_lineages)
+        
+        n.vpi = NodeVPI(partials, [f"{n.get_name()}_bottom"], x.max_lineages + y.max_lineages)
+        
 
-    def compute_at_aggregator(self, n: RootAggregatorNode, root_partials : np.ndarray) -> None:
+    def compute_at_aggregator(self, n: RootAggregatorNode, root : NodeVPI) -> None:
         """
         Compute the partial likelihoods at a root aggregator node.
         """
@@ -747,8 +733,8 @@ class SNPStrategy(Strategy):
         x = q_null_space / (q_null_space[0] + q_null_space[1])
 
         #Compute log likelihood 
-        L = np.log(np.dot(root_partials, x))
-        return L
+        self.L = np.log(np.dot(root.tensor, x))
+        
 
 class SNPModelVisitor(Visitor):
     """
@@ -761,13 +747,16 @@ class SNPModelVisitor(Visitor):
         self.strategy.compute_at_leaf(n)
         
     def visit_internal(self, n: InternalNode) -> None:
-        self.strategy.compute_at_internal(n)
+        child_vpis : list[NodeVPI]= [child.vpi for child in n.get_model_children()]
+        self.strategy.compute_at_internal(n, child_vpis[0], child_vpis[1])
         
     def visit_reticulation(self, n: ReticulationNode) -> None:
-        self.strategy.compute_at_reticulation(n)
+        child_vpi : NodeVPI= [child.vpi for child in n.get_model_children()][0]
+        self.strategy.compute_at_reticulation(n, child_vpi)
     
     def visit_root(self, n: RootNode) -> None:
-        self.strategy.compute_at_root(n)
+        child_vpis : list[NodeVPI]= [child.vpi for child in n.get_model_children()]
+        self.strategy.compute_at_root(n, child_vpis[0], child_vpis[1])
     
     def visit_aggregator(self, n: RootAggregatorNode) -> None:
         self.strategy.compute_at_aggregator(n)
@@ -787,500 +776,3 @@ class SNPModelVisitor(Visitor):
         return dispatch[n.get_node_type()](n)
 
 
-@dataclass
-class NodeVPI:
-    tensor: np.ndarray       # shape [S, d1, d2, ...]                  │
-    interfaces: list[str]    # ["α", "β", ...] length = tensor.ndim-1 │
-    max_lineages: list[int]  # [m_α, m_β, ...] per interface 
-
-
-
-
-
-class PartialLikelihoods:
-    """
-    Class that bookkeeps the vectors of population interfaces (vpis) and their
-    associated likelihood values.
-    
-    Contains methods for evaluating and storing likelihoods based on the rules
-    described by Rabier et al.
-    """
-    
-    def __init__(self) -> None:
-        """
-        Initialize an empty PartialLikelihood obj.
-
-        Args:
-            N/A
-        Returns:
-            N/A
-        """
-        # A map from a vector of population interfaces (vpi)
-        # -- represented as a tuple of strings-- 
-        # to probability maps defined by rules 0-4.
-        self.vpis : dict = {}
-        
-    def set_ploidy(self, ploidy : int) -> None:
-        """
-        Set the ploidy value for the partial likelihoods object.
-        
-        Args:
-            ploidyness (int): ploidy value.
-        Returns:
-            N/A
-        """
-        self.ploidy = ploidy
-
-    def Rule0():
-        pass
-
-        
-    def Rule1(self,
-              vpi_key_x : tuple, 
-              branch_id_x : int,
-              m_x : int, 
-              Qt : np.ndarray) -> tuple:
-        """
-        Given a branch x, and partial likelihoods for the population interface 
-        that includes x_bottom, we'd like to compute the partial likelihoods for 
-        the population interface that includes x_top.
-        
-        This uses Rule 1 from (1)
-        
-
-        Args:
-            vpi_key_x (tuple): the key to the vpi map, the value of which is a 
-                             mapping containing mappings from vectors 
-                             (nx, n_xbot; rx, r_xbot) to probability values 
-                             for each site
-            branch_id_x (int): the unique id of branch x
-            m_x (int): number of possible lineages at the branch x
-            Qt (np.ndarray): the transition rate matrix exponential
-
-        Returns:
-            tuple: vpi key that maps to the partial likelihoods at the 
-                   population interface that now includes the top of this 
-                   branch, x_top.
-        """
-        
-        
-        # Check if vectors are properly ordered
-        if "branch_" + str(branch_id_x) + ": bottom" != vpi_key_x[-1]:
-            vpi_key_temp = self.reorder_vpi(vpi_key_x,
-                                            site_count, 
-                                            branch_id_x, 
-                                            False)
-            del self.vpis[vpi_key_x]
-            vpi_key_x = vpi_key_temp
-            
-            
-        F_b = self.vpis[vpi_key_x]
-        
-        # Replace the instance of x_bot with x_top
-        new_vpi_key = list(vpi_key_x)
-        edit_index = vpi_key_x.index("branch_" + str(branch_id_x) + ": bottom")
-        new_vpi_key[edit_index] = "branch_" + str(branch_id_x) + ": top"
-        new_vpi_key = tuple(new_vpi_key)
-        
-        # Put the map back
-        self.vpis[new_vpi_key] = F_b @ Qt
-        del self.vpis[vpi_key_x]
-        
-        return new_vpi_key
-                
-    def Rule2(self, 
-              vpi_key_x : tuple, 
-              vpi_key_y : tuple,  
-              branch_id_x : str,
-              branch_id_y : str, 
-              branch_id_z : str) -> tuple:
-        """
-        Given branches x and y that have no leaf descendents in common and a 
-        parent branch z, and partial likelihood mappings for the population 
-        interfaces that include x_top and y_top, we would like to calculate 
-        the partial likelihood mapping for the population interface
-        that includes z_bottom.
-        
-        This uses Rule 2 from (1)
-
-        Args:
-            vpi_key_x (tuple): The vpi that contains x_top
-            vpi_key_y (tuple): The vpi that contains y_top
-            branch_id_x (str): the unique id of branch x
-            branch_id_y (str): the unique id of branch y
-            branch_id_z (str): the unique id of branch z
-        
-
-        Returns:
-            tuple: the vpi key that is the result of applying rule 2 to 
-                   vpi_x and vpi_y. Should include z_bot.
-        """
-        
-        #Reorder the vpis if necessary
-        if "branch_" + str(branch_id_x) + ": top" != vpi_key_x[-1]:
-            
-            vpi_key_xtemp = self.reorder_vpi(vpi_key_x, 
-                                             site_count, 
-                                             branch_id_x,
-                                             True)
-            del self.vpis[vpi_key_x]
-            vpi_key_x = vpi_key_xtemp
-        
-        if "branch_" + str(branch_id_y) + ": top" != vpi_key_y[-1]:
-            
-            vpi_key_ytemp = self.reorder_vpi(vpi_key_y, 
-                                             site_count,
-                                             branch_id_y, 
-                                             True)
-            del self.vpis[vpi_key_y]
-            vpi_key_y = vpi_key_ytemp
-            
-        F_t_x = self.vpis[vpi_key_x]
-        F_t_y = self.vpis[vpi_key_y]
-        
-        if not cs:
-            F_b = {}
-            #Compute F x,y,z_bot
-            for site in range(site_count):
-                nx_rx_map_y = rn_to_rn_minus_dim(F_t_y[site], 1)
-                nx_rx_map_x = rn_to_rn_minus_dim(F_t_x[site], 1)
-                F_b[site] = {}
-                
-                #Compute all combinations of (nx;rx) and (ny;ry)
-                for vectors_x in nx_rx_map_x.keys():
-                    for vectors_y in nx_rx_map_y.keys():
-                        nx = list(vectors_x[0])
-                        rx = list(vectors_x[1])
-                        ny = list(vectors_y[0])
-                        ry = list(vectors_y[1])
-                        
-                        #Iterate over all possible values of n_zbot, r_zbot
-                        for index in range(vector_len):
-                            actual_index = index_to_nr(index)
-                            n_bot = actual_index[0]
-                            r_bot = actual_index[1]
-                            # Evaluate the formula given in rule 2, 
-                            # and insert as an entry in F_b
-                            entry = eval_Rule2(F_t_x[site], F_t_y[site],
-                                               nx, ny, n_bot, rx, ry, r_bot)
-                            F_b[site][entry[0]] = entry[1]
-        else:
-            F_b = self.evaluator.Rule2(F_t_x, F_t_y, site_count, vector_len)
-        
-        #Combine the vpis
-        new_vpi_key_x= list(vpi_key_x)
-        new_vpi_key_x.remove("branch_" + str(branch_id_x) + ": top")
-        
-        new_vpi_key_y= list(vpi_key_y)
-        new_vpi_key_y.remove("branch_" + str(branch_id_y) + ": top")
-        
-        #Create new vpi key, (vpi_x, vpi_y, z_branch_bottom)
-        z_name = "branch_" + str(branch_id_z) + ": bottom"
-        vpi_y = np.append(new_vpi_key_y, z_name)
-        new_vpi_key = tuple(np.append(new_vpi_key_x, vpi_y))
-        
-        
-        #Update the vpi tracker
-        self.vpis[new_vpi_key] = F_b
-        del self.vpis[vpi_key_x]
-        del self.vpis[vpi_key_y]
-                         
-        return new_vpi_key
-
-    def Rule3(self, 
-              vpi_key_x : tuple, 
-              branch_id_x : str,
-              branch_id_y : str, 
-              branch_id_z : str,
-              g_this : float,
-              g_that : float,
-              mx : int) -> tuple:
-        """
-        Given a branch x, its partial likelihood mapping at x_top, and parent 
-        branches y and z, we would like to compute the partial likelihood 
-        mapping for the population interface x, y_bottom, z_bottom.
-
-        This uses Rule 3 from (1)
-        
-        Args:
-            vpi_key_x (tuple): the vpi containing x_top
-            branch_id_x (str): the unique id of branch x
-            branch_id_y (str): the unique id of branch y
-            branch_id_z (str): the unique id of branch z
-            g_this (float): gamma inheritance probability for branch y
-            g_that (float): gamma inheritance probability for branch z
-            mx (int): number of possible lineages at x.
-
-        Returns:
-            tuple: the vpi key that now corresponds to F (x, y_bot, z_bot)
-        """
-        
-        F_t_x = self.vpis[vpi_key_x]
-        
-        if not cs:
-            F_b = {}
-            for site in range(site_count):
-                nx_rx_map = rn_to_rn_minus_dim(F_t_x[site], 1)
-                F_b[site] = {}
-                #Iterate over the possible (nx;rx) values
-                for vector in nx_rx_map.keys():
-                    nx = list(vector[0])
-                    rx = list(vector[1])
-                    #Iterate over the possible values for n_y, n_z, r_y, and r_z
-                    for n_y in range(mx + 1):
-                        for n_z in range(mx - n_y + 1):
-                            if n_y + n_z >= 1:
-                                for r_y in range(n_y + 1):
-                                    for r_z in range(n_z + 1):
-                                        # Evaluate the formula in rule 3 
-                                        # and add the result to F_b
-                                        entry = eval_Rule3(F_t_x[site],
-                                                           nx,
-                                                           rx, 
-                                                           n_y, 
-                                                           n_z, 
-                                                           r_y, 
-                                                           r_z, 
-                                                           g_this, 
-                                                           g_that)
-                                        F_b[site][entry[0]] = entry[1]
-        else:
-            F_b = self.evaluator.Rule3(F_t_x, 
-                                       site_count, 
-                                       vector_len, 
-                                       mx, 
-                                       g_this, 
-                                       g_that)
-        
-        #Create new vpi key                      
-        new_vpi_key = list(vpi_key_x)
-        new_vpi_key.remove("branch_" + str(branch_id_x) + ": top")
-        new_vpi_key.append("branch_" + str(branch_id_y) + ": bottom")
-        new_vpi_key.append("branch_" + str(branch_id_z) + ": bottom")
-        new_vpi_key = tuple(new_vpi_key)
-        
-        # Update vpi tracker
-        self.vpis[new_vpi_key] = F_b
-        del self.vpis[vpi_key_x]
-        
-        return new_vpi_key               
-            
-    def Rule4(self, 
-              vpi_key_xy : tuple, 
-              branch_index_x : int, 
-              branch_index_y : int, 
-              branch_index_z : int) -> tuple:
-        """
-        Given a branches x and y that share common leaf descendants and that 
-        have parent branch z, compute F z, z_bot via 
-        Rule 4 described by (1)
-
-        Args:
-            vpi_key_x (tuple): vpi containing x_top and y_top.
-            branch_index_x (int): the index of branch x
-            branch_index_y (int): the index of branch y
-            branch_index_z (int): the index of branch z
-
-        Returns:
-            tuple: vpi key for F(z,z_bot)
-        """
-
-        if "branch_" + str(branch_index_y) + ": top" != vpi_key_xy[-1]:
-            vpi_key_temp = self.reorder_vpi(vpi_key_xy,
-                                            site_count, 
-                                            branch_index_y, 
-                                            True)
-            del self.vpis[vpi_key_xy]
-            vpi_key_xy = vpi_key_temp
-        
-        F_t = self.vpis[vpi_key_xy]
-        
-        if not cs:
-            F_b = {}
-            for site in range(site_count):
-                nx_rx_map = rn_to_rn_minus_dim(F_t[site], 2)
-                
-                F_b[site] = {}
-                
-                #Compute all combinations of (nx;rx) and (ny;ry)
-                for vectors_x in nx_rx_map.keys():
-                
-                    nx = list(vectors_x[0])
-                    rx = list(vectors_x[1])
-                    
-                    #Iterate over all possible values of n_zbot, r_zbot
-                    for index in range(vector_len):
-                        actual_index = index_to_nr(index)
-                        n_bot = actual_index[0]
-                        r_bot = actual_index[1]
-                        # Evaluate the formula given in rule 2,
-                        # and insert as an entry in F_b
-                        entry = eval_Rule4(F_t[site], nx, rx, n_bot, r_bot)
-                        F_b[site][entry[0]] = entry[1]
-        else:      
-            F_b = self.evaluator.Rule4(F_t, site_count, vector_len)
-        
-        #Create new vpi
-        new_vpi_key = list(vpi_key_xy)
-        new_vpi_key.remove("branch_" + str(branch_index_x) + ": top")
-        new_vpi_key.remove("branch_" + str(branch_index_y) + ": top")
-        new_vpi_key.append("branch_" + str(branch_index_z) + ": bottom")
-        new_vpi_key = tuple(new_vpi_key)
-    
-        # Update vpi tracker
-        self.vpis[new_vpi_key] = F_b
-        del self.vpis[vpi_key_xy]
-        
-        return new_vpi_key
-    
-    def reorder_vpi(self, 
-                    vpi_key: tuple, 
-                    branch_index : int, 
-                    for_top : bool) -> tuple:
-        """
-        For use when a rule requires a certain ordering of a vpi, and the
-        current vpi does not satisfy it.
-        
-        I.E, For Rule1, have vpi (branch_1_bottom, branch_2_bottom) but 
-        need to calculate for branch 1 top. 
-        
-        The vpi needs to be reordered to (branch_2_bottom, branch_1_bottom), 
-        and the vectors in the partial likelihood mappings need to be reordered 
-        to match.
-
-        Args:
-            vpi_key (tuple): a vpi tuple
-            branch_index (int): branch index of the branch that needs 
-                                to be in the front
-            for_top (bool): bool indicating whether we are looking for 
-                            branch_index_top or branch_index_bottom in the 
-                            vpi key.
-
-        Returns:
-            tuple: the new, reordered vpi key.
-        """
-        #print("REORDER 1")
-        if for_top:
-            name = "branch_" + str(branch_index) + ": top"
-            former_index = list(vpi_key).index(name)
-        else:
-            name = "branch_" + str(branch_index) + ": bottom"
-            former_index = list(vpi_key).index(name)
-            
-        new_vpi_key = list(vpi_key)
-        new_vpi_key.append(new_vpi_key.pop(former_index))
-        
-        F_map = self.vpis[vpi_key]
-        
-        if not cs:
-            new_F = {}
-            
-            # Reorder all the vectors based on the location of the 
-            # interface within the vpi
-            for site in range(site_count):
-                new_F[site] = {}
-            
-                for vectors, prob in F_map[site].items():
-                    nx = list(vectors[0])
-                    rx = list(vectors[1])
-                    new_nx = list(nx)
-                    new_rx = list(rx)
-                    
-                    #pop the element from the list and move to the front
-                    new_nx.append(new_nx.pop(former_index))
-                    new_rx.append(new_rx.pop(former_index))
-            
-                    new_F[site][(tuple(new_nx), tuple(new_rx))] = prob
-            
-            F_map = new_F
-            
-        else:
-            for site in range(site_count):
-                for tup in F_map[site].Keys:
-                    tup.MoveToEnd(former_index)
-        
-        self.vpis[tuple(new_vpi_key)] = F_map
-    
-        return tuple(new_vpi_key)
-    
-    def get_key_with(self, branch_id : str) -> tuple:
-        """
-        From the set of vpis, grab the one (should only be one) that contains 
-        the branch identified by branch_index
-
-        Args:
-            branch_index (int): unique branch identifier
-
-        Returns:
-            tuple: the vpi key corresponding to branch_index, or None if no 
-                   such vpi currently exists
-        """
-    
-        for vpi_key in self.vpis:
-            top = "branch_" + branch_id + ": top"
-            bottom = "branch_" + branch_id + ": bottom"
-            
-            #Return vpi if there's a match
-            if top in vpi_key or bottom in vpi_key:
-                return vpi_key
-        
-        #No vpis were found containing branch_index
-        return None
-            
-def state_dim(m: int) -> int:
-    return nr_to_index(m, m) + 1
-
-
-def build_merge_tensor(mx: int, my: int) -> np.ndarray:
-    """
-    Build the merge coefficient tensor M for combining two interfaces
-    with max lineages mx and my.
-
-    M[i, j, k] = C(rz, rx) * C(nz-rz, nx-rx) / C(nz, nx)
-    
-    where i ↔ (nx, rx), j ↔ (ny, ry), k ↔ (nz, rz)
-    and nz = nx + ny, rz = rx + ry (zero otherwise).
-
-    Used by both Rule 2 (disjoint merge) and Rule 4 (overlapping merge).
-
-    Shape: [dim(mx), dim(my), dim(mx + my)]
-    """
-    mz = mx + my
-    M = np.zeros((state_dim(mx), state_dim(my), state_dim(mz)))
-
-    for nx in range(1, mx + 1):
-        for rx in range(nx + 1):
-            i = nr_to_index(nx, rx)
-            for ny in range(1, my + 1):
-                for ry in range(ny + 1):
-                    j = nr_to_index(ny, ry)
-                    
-                    nz = nx + ny
-                    rz = rx + ry
-                    k = nr_to_index(nz, rz)
-
-                    M[i, j, k] = (comb(rz, rx) * comb(nz - rz, nx - rx) 
-                                  / comb(nz, nx))
-
-    return M
-
-def _disjoint_subnets(n: InternalNode) -> bool:
-    """
-    Determine if the left and right subnets of an internal node are disjoint.
-    """
-    
-    lr = n.get_model_children()
-    assert len(lr) == 2, "Internal node must have exactly two children"
-    subnets : tuple[set[ModelNode], set[ModelNode]] = ({}, {})
-    i = 0
-    
-    for child in lr:
-        q = deque(child)
-        while len(q) != 0:
-            cur = q.popleft()
-            for kin in cur.get_model_children():
-                subnets[i].add(kin)
-                q.append(kin)
-        i += 1
-    
-    return subnets[0].isdisjoint(subnets[1])
