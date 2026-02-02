@@ -203,6 +203,9 @@ def nr_to_index(n : int, r : int) -> int:
     """
     
     return n_to_index(n) + r
+
+def dim(n : int) -> int:
+    return nr_to_index(n, n)
  
 def to_array(Fb_map : dict, 
              vector_len : int, 
@@ -639,12 +642,39 @@ class SNPStrategy(Strategy):
         self.v : float = v
         self.coal : float = coal
         self.sites : int = sites
-        print(max_samples)
-        print(nr_to_index(max_samples, max_samples))
-        self.vector_len : int = nr_to_index(max_samples, max_samples) + 1
+        
+        self.vector_len : int = state_dim(max_samples)
     
-    def _rule1(self, partial_likelihoods : np.ndarray, branch_len : float) -> np.array:
-        return partial_likelihoods @ self.q.expt(branch_len)
+    def _rule1(self, F : np.ndarray, branch_len : float) -> np.ndarray:
+        """
+        Given vpi tensor F, with interface α, and branch length t, and max lineages m_α, 
+        compute the vpi tensor F_top at the top of the branch.
+
+        Args:
+            F (np.ndarray): vpi tensor F
+            branch_len (float): branch length
+        Returns:
+            np.ndarray: vpi tensor F_top
+        """
+
+        #Explanation of einsum:
+        #s...j...m... -> sum over all dimensions except the last one
+        #ji -> matrix multiplication of the last two dimensions
+        #s...i... -> result is shape [S, d1, d2, ...]
+        return np.einsum("s...j...m...,ji->s...i...", F, self.q.expt(branch_len))
+    
+    def _rule2(self, F_x : np.ndarray, F_y : np.ndarray, m_x : int, m_y : int) -> np.ndarray:
+
+        def generate_M()-> np.ndarray:
+            pass
+
+
+        #Explanation of einsum:
+        #s...i -> sum over the last dimension
+        #s...j -> sum over the last dimension
+        #ijk -> matrix multiplication of the last three dimensions
+        #s...k -> result is shape [S, d1, d2, ...]
+        return np.einsum("s...i, s...j, ijk->s...k", F_x, F_y, generate_M())
         
     def compute_at_leaf(self, n: LeafNode) -> None:
         """
@@ -659,14 +689,16 @@ class SNPStrategy(Strategy):
         assert len(n.data) == 1, "Leaf node must have exactly one data sequence"
         reds : list[int] = n.data[0].get_numerical_seq()
         
-        base_likelihoods : np.array = np.zeros((self.sites, self.vector_len), dtype=np.float64)
+        base_likelihoods : np.ndarray = np.zeros((self.sites, dim(n.samples)), dtype=np.float64)
         
         for site in range(self.sites):
             base_likelihoods[site, nr_to_index(n.samples, reds[site])] = 1.0
         
-        return self._rule1(base_likelihoods, n.branch().length)
+        top = self._rule1(base_likelihoods, n.branch().length)
+        n.vpi = NodeVPI(top, [f"{n.get_name()}_top"], [n.samples])
+
          
-    def compute_at_internal(self, n: InternalNode, samples : int) -> None:
+    def compute_at_internal(self, n: InternalNode) -> None:
         """
         Compute the partial likelihoods at an internal node.
         """
@@ -680,7 +712,7 @@ class SNPStrategy(Strategy):
         return self.rule1(partial_likelihoods, len(n.branch))
         
     
-    def compute_at_reticulation(self, n: ReticulationNode, samples : int) -> None:
+    def compute_at_reticulation(self, n: ReticulationNode) -> None:
         """
         Compute the partial likelihoods at a reticulation node.
         """
@@ -723,24 +755,19 @@ class SNPModelVisitor(Visitor):
     Visitor for the SNP model.
     """
     def __init__(self, strategy: SNPStrategy) -> None:
-        self.samples : dict[ModelNode, int] = {}
         self.strategy : SNPStrategy = strategy
     
     def visit_leaf(self, n: LeafNode) -> None:
         self.strategy.compute_at_leaf(n)
-        self.samples[n] = n.samples
-    
+        
     def visit_internal(self, n: InternalNode) -> None:
-        self.samples[n] = sum([self.samples[child] for child in n.get_model_children()])
-        self.strategy.compute_at_internal(n, self.samples[n])
+        self.strategy.compute_at_internal(n)
         
     def visit_reticulation(self, n: ReticulationNode) -> None:
-        self.samples[n] = sum([self.samples[child] for child in n.get_model_children()])
-        self.strategy.compute_at_reticulation(n, self.samples[n])
+        self.strategy.compute_at_reticulation(n)
     
     def visit_root(self, n: RootNode) -> None:
-        self.samples[n] = sum([self.samples[child] for child in n.get_model_children()])
-        self.strategy.compute_at_root(n, self.samples[n])
+        self.strategy.compute_at_root(n)
     
     def visit_aggregator(self, n: RootAggregatorNode) -> None:
         self.strategy.compute_at_aggregator(n)
@@ -758,6 +785,15 @@ class SNPModelVisitor(Visitor):
             "root_aggregator": self.visit_aggregator,
         }
         return dispatch[n.get_node_type()](n)
+
+
+@dataclass
+class NodeVPI:
+    tensor: np.ndarray       # shape [S, d1, d2, ...]                  │
+    interfaces: list[str]    # ["α", "β", ...] length = tensor.ndim-1 │
+    max_lineages: list[int]  # [m_α, m_β, ...] per interface 
+
+
 
 
 
@@ -1191,6 +1227,42 @@ class PartialLikelihoods:
         #No vpis were found containing branch_index
         return None
             
+def state_dim(m: int) -> int:
+    return nr_to_index(m, m) + 1
+
+
+def build_merge_tensor(mx: int, my: int) -> np.ndarray:
+    """
+    Build the merge coefficient tensor M for combining two interfaces
+    with max lineages mx and my.
+
+    M[i, j, k] = C(rz, rx) * C(nz-rz, nx-rx) / C(nz, nx)
+    
+    where i ↔ (nx, rx), j ↔ (ny, ry), k ↔ (nz, rz)
+    and nz = nx + ny, rz = rx + ry (zero otherwise).
+
+    Used by both Rule 2 (disjoint merge) and Rule 4 (overlapping merge).
+
+    Shape: [dim(mx), dim(my), dim(mx + my)]
+    """
+    mz = mx + my
+    M = np.zeros((state_dim(mx), state_dim(my), state_dim(mz)))
+
+    for nx in range(1, mx + 1):
+        for rx in range(nx + 1):
+            i = nr_to_index(nx, rx)
+            for ny in range(1, my + 1):
+                for ry in range(ny + 1):
+                    j = nr_to_index(ny, ry)
+                    
+                    nz = nx + ny
+                    rz = rx + ry
+                    k = nr_to_index(nz, rz)
+
+                    M[i, j, k] = (comb(rz, rx) * comb(nz - rz, nx - rx) 
+                                  / comb(nz, nx))
+
+    return M
 
 def _disjoint_subnets(n: InternalNode) -> bool:
     """
