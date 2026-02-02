@@ -292,11 +292,11 @@ def _disjoint_subnets(n: InternalNode) -> bool:
     
     lr = n.get_model_children()
     assert len(lr) == 2, "Internal node must have exactly two children"
-    subnets : tuple[set[ModelNode], set[ModelNode]] = ({}, {})
+    subnets : tuple[set[ModelNode], set[ModelNode]] = (set(), set())
     i = 0
     
     for child in lr:
-        q = deque(child)
+        q = deque([child])
         while len(q) != 0:
             cur = q.popleft()
             for kin in cur.get_model_children():
@@ -650,7 +650,7 @@ class SNPStrategy(Strategy):
         return np.einsum('...i,ijk->...jk', F, build_split_tensor(mx, gammax))
     
     def _rule4(self, F, mx, my) -> np.ndarray:
-        return np.einsum('s...i...j...,ijk->s...k...', F, build_merge_tensor(mx, my))  
+        return np.einsum('...ij,ijk->...k', F, build_merge_tensor(mx, my))  
         
     def compute_at_leaf(self, n: LeafNode) -> None:
         """
@@ -691,7 +691,7 @@ class SNPStrategy(Strategy):
             interfaces = x.interfaces[:-2] + [f"{n.get_name()}_top"] 
             max_lin = x.max_lineages[:-2] + [mx + my]
         
-        F = self._rule1(F, len(n.branch))  
+        F = self._rule1(F, n.branch().length)  
            
         n.vpi = NodeVPI(F, interfaces, max_lin)
         
@@ -724,11 +724,11 @@ class SNPStrategy(Strategy):
         """
         rule2 = _disjoint_subnets(n)
         if rule2:
-            partials = self._rule2(x.tensor, y.tensor, x.max_lineages[-1], y.max_lineages[-1])
+            F = self._rule2(x.tensor, y.tensor, x.max_lineages[-1], y.max_lineages[-1])
         else:
-            partials = self._rule4(x.tensor, x.max_lineages[-1], y.max_lineages[-1])
+            F = self._rule4(x.tensor, x.max_lineages[-1], y.max_lineages[-1])
         
-        n.vpi = NodeVPI(partials, [f"{n.get_name()}_bottom"], x.max_lineages[-1] + y.max_lineages[-1])
+        n.vpi = NodeVPI(F, [f"{n.get_name()}_bottom"], [x.max_lineages[-1] + y.max_lineages[-1]])
         
 
     def compute_at_aggregator(self, n: RootAggregatorNode, root : NodeVPI) -> None:
