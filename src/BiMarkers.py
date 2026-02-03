@@ -478,10 +478,17 @@ def build_model(filename : str,
     """
     Build a SNP model from a data file and network.
     """
+    #Parse data 
     aln = MSA(filename)
+    
+    #Build components
     network = NetworkComponent(net = net)
     msa = MSAComponent({NetworkComponent}, aln)
+    
+    #Auto Build Model
     model = ModelFactory(network, msa).build()
+    
+    #Attach the root likelihood aggregator
     snp_root = RootAggregatorNode()
     model.root = snp_root
     net_root : RootNode = model.nodetypes["root"][0]
