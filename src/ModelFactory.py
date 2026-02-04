@@ -141,9 +141,9 @@ class NetworkComponent(ModelComponent):
         self.network = net
         self.constructor = node_constructor if node_constructor else self._default_constructor
     
-    def _default_constructor(self, name: str) -> ANetworkNode:
+    def _default_constructor(self, name: str) -> NetworkNode:
         """Default node constructor that creates ANetworkNode instances."""
-        return ANetworkNode(name=name, node_type="network")
+        return NetworkNode(name=name, node_type="network")
     
     def build(self, model: Model) -> None:
         """

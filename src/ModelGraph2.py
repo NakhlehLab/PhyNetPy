@@ -425,7 +425,7 @@ class InternalNode(ModelNode):
     """
     An internal node in the model graph.
     """
-    def __init__(self, name: str, branch_length: Branch, disjoint_subnets: bool) -> None:
+    def __init__(self, name: str, branch_length: Branch) -> None:
         """
         Initialize an InternalNode object.
         
@@ -438,7 +438,6 @@ class InternalNode(ModelNode):
         self.node_type = "internal"
         self.name : str = name
         self.branch_info : Branch = branch_length
-        self.disjoint_subnets : bool = disjoint_subnets
     
     def branch(self) -> Branch:
         """

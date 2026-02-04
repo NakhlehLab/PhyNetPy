@@ -136,13 +136,21 @@ def snp_3():
     Run MCMC SNP with 500 iterations and evaluate the topology and branch 
     lengths of the inferred network.
     """
-    result = SNP_LIKELIHOOD(str(nexus_path.absolute()),
-                            u = 1,
-                            v = 1,
-                            coal = .005,
-                            samples = {"A" : 2, "B" : 2, "C" : 2})
+    mac = False
+    if mac:
+        result = SNP_LIKELIHOOD("../NexusFiles/paper_net.nex",
+                                u = 1,
+                                v = 1,
+                                coal = .005,
+                                samples = {"A" : 2, "B" : 2, "C" : 2})
+    else:
+        result = SNP_LIKELIHOOD(str(nexus_path.absolute()),
+                                u = 1,
+                                v = 1,
+                                coal = .005,
+                                samples = {"A" : 2, "B" : 2, "C" : 2})
 
-    print(result)
+        print(result)
     return 1
 
 def snp_4():
