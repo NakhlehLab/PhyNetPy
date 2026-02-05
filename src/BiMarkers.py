@@ -32,6 +32,7 @@ Design - [ ]
 """
 
 from math import sqrt, comb, pow
+import time
 from typing import Callable
 from numba.core import base
 from numba.core.typing.builtins import Int
@@ -205,15 +206,11 @@ def nr_to_index(n : int, r : int) -> int:
     
     return n_to_index(n) + r
 
-def dim(n : int) -> int:
-    return nr_to_index(n, n)
-
 @dataclass
 class NodeVPI:
     tensor: np.ndarray       # shape [S, d1, d2, ...]                  
     interfaces: list[str]    # ["α", "β", ...] length = tensor.ndim-1 
     max_lineages: list[int]  # [m_α, m_β, ...] per interface 
-
 
 def state_dim(m: int) -> int:
     return nr_to_index(m, m) + 1
@@ -406,11 +403,7 @@ def SNP_LIKELIHOOD(filename : str,
     
     aln = MSA(filename)
     
-    snp_model = build_model(filename, 
-                            net,
-                            u, 
-                            v, 
-                            coal)
+    snp_model = build_model(filename, net)
     
     q = BiMarkersTransition(sum(samples.values()), u, v, coal)
     
@@ -472,7 +465,17 @@ def SNP_LIKELIHOOD(filename : str,
         return strategy.L
     
     if sequential:
-        return likelihood_sequential(snp_model.get_root())
+        start_t = time.perf_counter()
+        likelihood_sequential(snp_model.get_root())
+        end_t = time.perf_counter()
+        print(f"TIME FOR RUN 1 (cache not built): {end_t - start_t}")
+        
+        start_t = time.perf_counter()
+        res = likelihood_sequential(snp_model.get_root())
+        end_t = time.perf_counter()
+        print(f"TIME FOR RUN 2 (cache built): {end_t - start_t}")
+        
+        return res 
     else:
         return likelihood_parallel(snp_model.get_root())
 
@@ -482,10 +485,7 @@ def SNP_LIKELIHOOD(filename : str,
 ##################
 
 def build_model(filename : str,
-                net : Network,
-                u : float = .5 ,
-                v : float = .5, 
-                coal : float = 1) -> Model:
+                net : Network) -> Model:
     """
     Build a SNP model from a data file and network.
     """
@@ -639,6 +639,9 @@ class SNPStrategy(Strategy):
         self.sites : int = sites
         self.vector_len : int = state_dim(max_samples)
         self.L : np.ndarray 
+        
+        #Cache is from nodes to [is_dirty, vpi]. If is_dirty is true, needs recalculation
+        self.cache : dict[ModelNode, tuple[bool, NodeVPI]] = dict()
     
     def _rule1(self, F : np.ndarray, branch_len : float, d : int) -> np.ndarray:
         """
@@ -679,8 +682,11 @@ class SNPStrategy(Strategy):
         and the second dimension (columns) is the number of samples for this leaf. 
         The position of the 1.0 probability is the number of red alleles at that site.
         """
-        print("Computing at leaf", n.get_name())
-
+        
+        if n in self.cache:
+            if self.cache[n][0] is False:
+                return self.cache[n][1]
+            
         assert len(n.data) == 1, "Leaf node must have exactly one data sequence"
         reds : list[int] = n.data[0].get_numerical_seq()
         
@@ -691,14 +697,17 @@ class SNPStrategy(Strategy):
         
         F = self._rule1(F, n.branch().length, state_dim(n.samples))
         n.vpi = NodeVPI(F, [f"{n.get_name()}_top"], [n.samples])
-        print(f"Tensor at interface: {n.vpi.interfaces[-1]}")
-        print(F)
+        self.cache[n] = (False, n.vpi)
         return n.vpi
 
     def compute_at_internal(self, n: InternalNode, x : NodeVPI, y: NodeVPI) -> NodeVPI:
         """
         Compute the partial likelihoods at an internal node.
         """
+        if n in self.cache:
+            if self.cache[n][0] is False:
+                return self.cache[n][1]
+        
         rule2 = _disjoint_subnets(n)
         
         if rule2:
@@ -717,14 +726,16 @@ class SNPStrategy(Strategy):
         F = self._rule1(F, n.branch().length, state_dim(max_lin[-1]))  
            
         n.vpi = NodeVPI(F, interfaces, max_lin)
-        print(f"Tensor at interface: {n.vpi.interfaces[-1]}")
-        print(F)
+        self.cache[n] = (False, n.vpi)
         return n.vpi
     
     def compute_at_reticulation(self, n : ReticulationNode, x : NodeVPI) -> NodeVPI:
         """
         Compute the partial likelihoods at a reticulation node.
         """
+        if n in self.cache:
+            if self.cache[n][0] is False:
+                return self.cache[n][1]
         
         branches : tuple[Branch, Branch]= n.branch_info
         
@@ -742,14 +753,17 @@ class SNPStrategy(Strategy):
         max_lin = x.max_lineages[:-1] + [m, m] 
         
         n.vpi = NodeVPI(F, interfaces, max_lin)
-        print(f"Tensor at interface: {n.vpi.interfaces[-1]}")
-        print(F)
+        self.cache[n] = (False, n.vpi)
         return n.vpi
         
     def compute_at_root(self, n: RootNode, x : NodeVPI, y : NodeVPI) -> NodeVPI:
         """
         Compute the partial likelihoods at an internal node.
         """
+        if n in self.cache:
+            if self.cache[n][0] is False:
+                return self.cache[n][1]
+        
         rule2 = _disjoint_subnets(n)
         
         if rule2:
@@ -761,14 +775,17 @@ class SNPStrategy(Strategy):
             
         
         n.vpi = NodeVPI(F, [f"{n.get_name()}_bottom"], [final_lin])
-        print(f"Tensor at interface: {n.vpi.interfaces[-1]}")
-        print(F)
+        self.cache[n] = (False, n.vpi)
         return n.vpi
         
     def compute_at_aggregator(self, n: RootAggregatorNode, root : NodeVPI) -> None:
         """
         Compute the partial likelihoods at a root aggregator node.
         """
+        
+        if n in self.cache:
+            if self.cache[n][0] is False:
+                return 
         
         m = root.max_lineages[-1]
         
@@ -789,11 +806,9 @@ class SNPStrategy(Strategy):
         # Compute log likelihood per site, then sum
         site_likelihoods = root.tensor @ pi  # [S] array
         self.L = np.sum(np.log(site_likelihoods))
+        n.vpi = NodeVPI(self.L, [], [])
+        self.cache[n] = (False, n.vpi)
         
-        
-        
-        
-
 class SNPModelVisitor(Visitor):
     """
     Visitor for the SNP model.
@@ -801,14 +816,9 @@ class SNPModelVisitor(Visitor):
     def __init__(self, strategy: SNPStrategy) -> None:
         self.strategy : SNPStrategy = strategy
         self.vpis : list[NodeVPI] = []
-    
-    def _print(self) -> None:
-        for vpi in self.vpis:
-            print(vpi.interfaces)
             
     def visit_leaf(self, n: LeafNode) -> None:
         self.vpis.append(self.strategy.compute_at_leaf(n))
-        self._print()
         
     def visit_internal(self, n: InternalNode) -> None:
         child_vpis : list[NodeVPI]= [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()]
@@ -819,14 +829,12 @@ class SNPModelVisitor(Visitor):
         else:
             self._remove(unique_vpis[1])
             self.vpis.append(self.strategy.compute_at_internal(n, unique_vpis[0], unique_vpis[1]))
-        self._print()
         
     def visit_reticulation(self, n: ReticulationNode) -> None:
         child_vpi : NodeVPI = [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()][0]
         self._remove(child_vpi)
         self.vpis.append(self.strategy.compute_at_reticulation(n, child_vpi))
-        self._print()
-    
+        
     def visit_root(self, n: RootNode) -> None:
         child_vpis : list[NodeVPI]= [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()]
         unique_vpis = deduplicate_vpis(child_vpis)
@@ -836,12 +844,11 @@ class SNPModelVisitor(Visitor):
         else:
             self._remove(unique_vpis[1])
             self.vpis.append(self.strategy.compute_at_root(n, unique_vpis[0], unique_vpis[1]))
-        self._print()
-    
+        
     def visit_aggregator(self, n: RootAggregatorNode) -> None:
         child_vpi : NodeVPI = [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()][0]
         self.strategy.compute_at_aggregator(n, child_vpi)
-        self._print()
+        
     
     def visit(self, n: ModelNode) -> None:
         """
