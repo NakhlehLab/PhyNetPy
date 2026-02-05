@@ -754,10 +754,13 @@ class SNPStrategy(Strategy):
         
         if rule2:
             F = self._rule2(x.tensor, y.tensor, x.max_lineages[-1], y.max_lineages[-1])
+            final_lin = x.max_lineages[-1] + y.max_lineages[-1]
         else:
             F = self._rule4(x.tensor, x.max_lineages[-2], x.max_lineages[-1])
+            final_lin = x.max_lineages[-2] + x.max_lineages[-1]
+            
         
-        n.vpi = NodeVPI(F, [f"{n.get_name()}_bottom"], [x.max_lineages[-1] + y.max_lineages[-1]])
+        n.vpi = NodeVPI(F, [f"{n.get_name()}_bottom"], [final_lin])
         print(f"Tensor at interface: {n.vpi.interfaces[-1]}")
         print(F)
         return n.vpi
@@ -766,13 +769,26 @@ class SNPStrategy(Strategy):
         """
         Compute the partial likelihoods at a root aggregator node.
         """
-        #Normalize Q matrix
-        q_null_space = scipy.linalg.null_space(self.q.getQ())
-        x = q_null_space / (q_null_space[0] + q_null_space[1])
-
-        #Compute log likelihood 
-        self.L = np.log(np.dot(root.tensor, x))
-    
+        
+        m = root.max_lineages[-1]
+        
+        # Compute stationary distribution for this dimension
+        # π[i] = C(n,r) * θ_r^r * θ_g^(n-r)  where θ_r = v/(u+v), θ_g = u/(u+v)
+        theta_r = self.v / (self.u + self.v)
+        theta_g = self.u / (self.u + self.v)
+        
+        pi = np.zeros(state_dim(m))
+        for n_lin in range(1, m + 1):
+            for r in range(n_lin + 1):
+                idx = nr_to_index(n_lin, r)
+                pi[idx] = comb(n_lin, r) * (theta_r ** r) * (theta_g ** (n_lin - r))
+        
+        # Normalize
+        pi = pi / np.sum(pi)
+        
+        # Compute log likelihood per site, then sum
+        site_likelihoods = root.tensor @ pi  # [S] array
+        self.L = np.sum(np.log(site_likelihoods))
         
         
         
