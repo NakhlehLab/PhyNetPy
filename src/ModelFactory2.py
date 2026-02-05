@@ -157,6 +157,9 @@ class NetworkComponent(ModelComponent):
         for edge in model.network.E():
             modelnode1 = model.network_node_map[edge.src]
             modelnode2 = model.network_node_map[edge.dest]
+            # if type(modelnode2) is ReticulationNode:
+            #     modelnode2.
+                
             modelnode2.join(modelnode1)
 
 

@@ -34,6 +34,7 @@ Design - [ ]
 from math import sqrt, comb, pow
 from typing import Callable
 from numba.core import base
+from numba.core.typing.builtins import Int
 import numpy as np
 import scipy
 from scipy.linalg import expm
@@ -665,7 +666,6 @@ class SNPStrategy(Strategy):
     
     def _rule3(self, F, mx, gammax) -> np.ndarray:
         #Explanation of einsum:
-        
         return np.einsum('...i,ijk->...jk', F, build_split_tensor(mx, gammax))
     
     def _rule4(self, F, mx, my) -> np.ndarray:
@@ -695,22 +695,23 @@ class SNPStrategy(Strategy):
         print(F)
         return n.vpi
 
-         
     def compute_at_internal(self, n: InternalNode, x : NodeVPI, y: NodeVPI) -> NodeVPI:
         """
         Compute the partial likelihoods at an internal node.
         """
         rule2 = _disjoint_subnets(n)
-        mx = x.max_lineages[-1]
-        my = y.max_lineages[-1]
         
         if rule2:
+            mx = x.max_lineages[-1]
+            my = y.max_lineages[-1]
             F = self._rule2(x.tensor, y.tensor, mx, my)
             interfaces = x.interfaces[:-1] + y.interfaces[:-1] + [f"{n.get_name()}_top"] 
-            max_lin = x.max_lineages[:-1] + y.max_lineages[:-1] + [mx+my]
+            max_lin = x.max_lineages[:-1] + y.max_lineages[:-1] + [mx + my]
         else:
-            F = self._rule4(x.tensor, x.max_lineages[-1], y.max_lineages[-1])
-            interfaces = x.interfaces[:-2] + [f"{n.get_name()}_top"] 
+            mx = x.max_lineages[-2]
+            my = x.max_lineages[-1]
+            F = self._rule4(x.tensor, mx, my)
+            interfaces = x.interfaces[:-2] + [f"{n.get_name()}_top"]
             max_lin = x.max_lineages[:-2] + [mx + my]
         
         F = self._rule1(F, n.branch().length, state_dim(max_lin[-1]))  
@@ -719,13 +720,14 @@ class SNPStrategy(Strategy):
         print(f"Tensor at interface: {n.vpi.interfaces[-1]}")
         print(F)
         return n.vpi
-        
+    
     def compute_at_reticulation(self, n : ReticulationNode, x : NodeVPI) -> NodeVPI:
         """
         Compute the partial likelihoods at a reticulation node.
         """
         
         branches : tuple[Branch, Branch]= n.branch_info
+        
         gamma = branches[0].inheritance_probability
         m = x.max_lineages[-1]
         
@@ -736,7 +738,7 @@ class SNPStrategy(Strategy):
         F = self._rule1(F, branches[1].length, state_dim(m))
         
         #Book keep the interfaces and lineages
-        interfaces = x.interfaces[:-1] + [f"{n.get_name()}_left_top", f"{n.get_name()}_right_top"]  
+        interfaces = x.interfaces[:-1] + [f"{n.get_name()}_{branches[0].parent_id}_top", f"{n.get_name()}_{branches[1].parent_id}_top"]  
         max_lin = x.max_lineages[:-1] + [m, m] 
         
         n.vpi = NodeVPI(F, interfaces, max_lin)
@@ -744,23 +746,22 @@ class SNPStrategy(Strategy):
         print(F)
         return n.vpi
         
-
     def compute_at_root(self, n: RootNode, x : NodeVPI, y : NodeVPI) -> NodeVPI:
         """
         Compute the partial likelihoods at an internal node.
         """
         rule2 = _disjoint_subnets(n)
+        
         if rule2:
             F = self._rule2(x.tensor, y.tensor, x.max_lineages[-1], y.max_lineages[-1])
         else:
-            F = self._rule4(x.tensor, x.max_lineages[-1], y.max_lineages[-1])
+            F = self._rule4(x.tensor, x.max_lineages[-2], x.max_lineages[-1])
         
         n.vpi = NodeVPI(F, [f"{n.get_name()}_bottom"], [x.max_lineages[-1] + y.max_lineages[-1]])
         print(f"Tensor at interface: {n.vpi.interfaces[-1]}")
         print(F)
         return n.vpi
         
-
     def compute_at_aggregator(self, n: RootAggregatorNode, root : NodeVPI) -> None:
         """
         Compute the partial likelihoods at a root aggregator node.
@@ -771,6 +772,9 @@ class SNPStrategy(Strategy):
 
         #Compute log likelihood 
         self.L = np.log(np.dot(root.tensor, x))
+    
+        
+        
         
         
 
@@ -791,29 +795,35 @@ class SNPModelVisitor(Visitor):
         self._print()
         
     def visit_internal(self, n: InternalNode) -> None:
-        child_vpis : list[NodeVPI]= [self._get_vpi_for(child.get_name()) for child in n.get_model_children()]
+        child_vpis : list[NodeVPI]= [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()]
         unique_vpis = deduplicate_vpis(child_vpis)
         self._remove(unique_vpis[0])
-        self._remove(unique_vpis[1])
-        self.vpis.append(self.strategy.compute_at_internal(n, unique_vpis[0], unique_vpis[1]))
+        if len(unique_vpis) == 1:
+            self.vpis.append(self.strategy.compute_at_internal(n, unique_vpis[0], unique_vpis[0]))
+        else:
+            self._remove(unique_vpis[1])
+            self.vpis.append(self.strategy.compute_at_internal(n, unique_vpis[0], unique_vpis[1]))
         self._print()
         
     def visit_reticulation(self, n: ReticulationNode) -> None:
-        child_vpi : NodeVPI = [self._get_vpi_for(child.get_name()) for child in n.get_model_children()][0]
+        child_vpi : NodeVPI = [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()][0]
         self._remove(child_vpi)
         self.vpis.append(self.strategy.compute_at_reticulation(n, child_vpi))
         self._print()
     
     def visit_root(self, n: RootNode) -> None:
-        child_vpis : list[NodeVPI]= [self._get_vpi_for(child.get_name()) for child in n.get_model_children()]
+        child_vpis : list[NodeVPI]= [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()]
         unique_vpis = deduplicate_vpis(child_vpis)
         self._remove(unique_vpis[0])
-        self._remove(unique_vpis[1])
-        self.vpis.append(self.strategy.compute_at_root(n, unique_vpis[0], unique_vpis[1]))
+        if len(unique_vpis) == 1:
+            self.vpis.append(self.strategy.compute_at_root(n, unique_vpis[0], unique_vpis[0]))
+        else:
+            self._remove(unique_vpis[1])
+            self.vpis.append(self.strategy.compute_at_root(n, unique_vpis[0], unique_vpis[1]))
         self._print()
     
     def visit_aggregator(self, n: RootAggregatorNode) -> None:
-        child_vpi : NodeVPI = [self._get_vpi_for(child.get_name()) for child in n.get_model_children()][0]
+        child_vpi : NodeVPI = [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()][0]
         self.strategy.compute_at_aggregator(n, child_vpi)
         self._print()
     
@@ -831,12 +841,29 @@ class SNPModelVisitor(Visitor):
         }
         return dispatch[n.get_node_type()](n)
 
-    def _get_vpi_for(self, node_label : str) -> NodeVPI:
-        for vpi in self.vpis:
-            for iface in vpi.interfaces:
-                if node_label in iface:
-                    return vpi
-        raise KeyError(f"Given interface {node_label} not found in vpi tracker")
+    def _get_vpi_for(self, n : ModelNode, node_label : str, retic = False) -> NodeVPI:
+        
+        def get() -> tuple[Int, NodeVPI]:
+            for vpi in self.vpis:
+                index = 0
+                for iface in vpi.interfaces:
+                    #if child node is a retic it will also have a qualifier
+                    if node_label in iface and (not retic or (n.get_name() in iface)):
+                        return index, vpi 
+                    index += 1
+        
+        def move_to_end(v : NodeVPI, index : int) -> None:
+            #Move interface to end
+            interface_to_move = v.interfaces[index]
+            v.interfaces.remove(interface_to_move)
+            v.interfaces.append(interface_to_move)
+            #Move tensor axis to end
+            np.moveaxis(v.tensor, index + 1, -1)
+            
+        
+        i, n_vpi = get()
+        move_to_end(n_vpi, i)
+        return n_vpi
 
     def _remove(self, nv : NodeVPI) -> None:
         self.vpis = [v for v in self.vpis if v is not nv]
