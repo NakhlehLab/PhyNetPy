@@ -18,6 +18,7 @@ sdist/
 var/
 Data/
 Nexus/
+NexusFiles/
 *.egg-info/
 .installed.cfg
 *.egg
