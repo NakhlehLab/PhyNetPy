@@ -499,6 +499,45 @@ def get_sparse_split(m: int, gamma: float) -> SparseSplit:
         _SPARSE_SPLIT_CACHE[key] = build_sparse_split(m, gamma)
     return _SPARSE_SPLIT_CACHE[key]
 
+
+# ── GPU sparse caches ────────────────────────────────────────────────────
+# CuPy arrays cannot be indexed with NumPy arrays, so we keep separate
+# caches where the coordinate/coefficient arrays live on GPU memory.
+
+_SPARSE_MERGE_CACHE_GPU: dict[tuple[int, int], SparseMerge] = {}
+_SPARSE_SPLIT_CACHE_GPU: dict[tuple[int, float], SparseSplit] = {}
+
+
+def get_sparse_merge_gpu(mx: int, my: int) -> SparseMerge:
+    """Get or build a GPU-resident cached sparse merge tensor."""
+    key = (mx, my)
+    if key not in _SPARSE_MERGE_CACHE_GPU:
+        sm = get_sparse_merge(mx, my)  # build on CPU first
+        _SPARSE_MERGE_CACHE_GPU[key] = SparseMerge(
+            i_arr=cp.asarray(sm.i_arr),
+            j_arr=cp.asarray(sm.j_arr),
+            k_arr=cp.asarray(sm.k_arr),
+            coeff_arr=cp.asarray(sm.coeff_arr),
+            dim_x=sm.dim_x, dim_y=sm.dim_y, dim_z=sm.dim_z,
+            mx=sm.mx, my=sm.my,
+        )
+    return _SPARSE_MERGE_CACHE_GPU[key]
+
+
+def get_sparse_split_gpu(m: int, gamma: float) -> SparseSplit:
+    """Get or build a GPU-resident cached sparse split tensor."""
+    key = (m, gamma)
+    if key not in _SPARSE_SPLIT_CACHE_GPU:
+        ss = get_sparse_split(m, gamma)  # build on CPU first
+        _SPARSE_SPLIT_CACHE_GPU[key] = SparseSplit(
+            i_arr=cp.asarray(ss.i_arr),
+            j_arr=cp.asarray(ss.j_arr),
+            k_arr=cp.asarray(ss.k_arr),
+            coeff_arr=cp.asarray(ss.coeff_arr),
+            dim=ss.dim, m=ss.m,
+        )
+    return _SPARSE_SPLIT_CACHE_GPU[key]
+
 def _disjoint_subnets(n: InternalNode) -> bool:
     
     """
@@ -994,7 +1033,8 @@ def SNP_LIKELIHOOD(filename : str,
         """Run one site batch and return its log-likelihood contribution."""
         batch_sites = (site_slice[1] - site_slice[0]) if site_slice else n_sites
         strategy = SNPStrategy(q, u, v, coal, n_sites, max_n, 
-                               site_slice=site_slice)
+                               site_slice=site_slice,
+                               use_gpu=use_gpu)
         visitor = SNPModelVisitor(strategy)
         for node in Traversal(snp_model.get_root(), TraversalOrder.POST_ORDER):
             visitor.visit(node)
@@ -1174,10 +1214,14 @@ class BiMarkersTransition:
 class SNPStrategy(Strategy):
     """
     Visitor for the SNP model.
+    
+    Supports both CPU (NumPy) and GPU (CuPy) execution. When use_gpu=True,
+    all tensor operations run on the GPU via CuPy's drop-in NumPy API.
     """
     def __init__(self, q : BiMarkersTransition, u : float, v : float, 
                  coal : float, sites : int, max_samples : int,
-                 site_slice: tuple[int, int] | None = None) -> None:
+                 site_slice: tuple[int, int] | None = None,
+                 use_gpu: bool = False) -> None:
         self.q : BiMarkersTransition = q
         self.u : float = u
         self.v : float = v
@@ -1186,13 +1230,48 @@ class SNPStrategy(Strategy):
         self.site_slice : tuple[int, int] | None = site_slice
         self.sites : int = (site_slice[1] - site_slice[0]) if site_slice else sites
         self.vector_len : int = state_dim(max_samples)
-        self.L : np.ndarray 
+        self.L : float = 0.0
+        
+        # GPU support: xp is the array module (numpy or cupy)
+        self.use_gpu : bool = use_gpu and CUPY_RUNTIME_OK
+        if self.use_gpu:
+            self.xp = cp
+        else:
+            self.xp = np
         
         #Cache is from nodes to [is_dirty, vpi]. If is_dirty is true, needs recalculation
         self.cache : dict[ModelNode, tuple[bool, NodeVPI]] = dict()
     
-    @staticmethod
-    def _rescale(F: np.ndarray, log_scale: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    # ───────────────────────────────────────────────────────────────────────
+    # GPU helpers
+    # ───────────────────────────────────────────────────────────────────────
+    
+    def _scatter_add(self, target, slices, values) -> None:
+        """
+        Scatter-add: target[slices] += values, handling duplicate indices.
+        
+        On CPU: uses np.add.at (unbuffered).
+        On GPU: uses cupyx.scatter_add (CUDA-accelerated).
+        """
+        if self.use_gpu:
+            import cupyx
+            cupyx.scatter_add(target, slices, values)
+        else:
+            np.add.at(target, slices, values)
+    
+    def _get_sm(self, mx: int, my: int) -> SparseMerge:
+        """Get sparse merge tensor on the correct device."""
+        if self.use_gpu:
+            return get_sparse_merge_gpu(mx, my)
+        return get_sparse_merge(mx, my)
+    
+    def _get_ss(self, m: int, gamma: float) -> SparseSplit:
+        """Get sparse split tensor on the correct device."""
+        if self.use_gpu:
+            return get_sparse_split_gpu(m, gamma)
+        return get_sparse_split(m, gamma)
+    
+    def _rescale(self, F, log_scale):
         """
         Per-vector rescaling to prevent numerical underflow.
         
@@ -1200,27 +1279,18 @@ class SNPStrategy(Strategy):
         its max absolute value is 1.0. The per-vector log scaling factors 
         are accumulated into log_scale, which grows to shape F.shape[:-1].
         
-        This ensures that every vector entering a matrix multiplication 
-        has entries in a safe floating-point range (max ≈ 1.0).
-        
-        Args:
-            F: VPI tensor, shape (S, d1, d2, ..., dk)
-            log_scale: Per-vector log scaling, shape ≤ F.shape[:-1]
-                       (will be broadcast-expanded if smaller)
-        Returns:
-            Tuple of (rescaled_F, updated_log_scale) where log_scale
-            has shape F.shape[:-1]
+        Works on both CPU (NumPy) and GPU (CuPy) via self.xp.
         """
+        xp = self.xp
         # Per-vector max: max over the LAST axis only
-        max_val = np.max(np.abs(F), axis=-1, keepdims=True)  # shape (..., 1)
-        max_val = np.where(max_val > 0, max_val, 1.0)
+        max_val = xp.max(xp.abs(F), axis=-1, keepdims=True)  # shape (..., 1)
+        max_val = xp.where(max_val > 0, max_val, 1.0)
         
         F = F / max_val
         
-        log_max = np.log(max_val.squeeze(-1))  # shape = F.shape[:-1]
+        log_max = xp.log(max_val.squeeze(-1))  # shape = F.shape[:-1]
         
         # Expand log_scale with trailing singletons if it has fewer dims
-        # (e.g., per-site (S,) → (S, 1, ..., 1) for broadcasting)
         if log_scale.ndim < log_max.ndim:
             extra_dims = log_max.ndim - log_scale.ndim
             log_scale = log_scale.reshape(log_scale.shape + (1,) * extra_dims)
@@ -1229,8 +1299,7 @@ class SNPStrategy(Strategy):
         
         return F, log_scale
     
-    @staticmethod
-    def _rescale_global(F: np.ndarray, log_scale: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _rescale_global(self, F, log_scale):
         """
         Global per-site rescaling (axis-order agnostic).
         
@@ -1239,94 +1308,72 @@ class SNPStrategy(Strategy):
         reticulation computation where axes are being swapped.
         
         The log_scale must be per-site (1-D) for this method.
-        
-        Args:
-            F: VPI tensor, shape (S, d1, d2, ..., dk)
-            log_scale: Per-site log scaling factor, shape (S,)
-        Returns:
-            Tuple of (rescaled_F, updated_log_scale) with shape (S,)
+        Works on both CPU (NumPy) and GPU (CuPy) via self.xp.
         """
+        xp = self.xp
         reduce_axes = tuple(range(1, F.ndim))
-        max_val = np.max(np.abs(F), axis=reduce_axes)  # shape (S,)
-        max_val = np.where(max_val > 0, max_val, 1.0)
+        max_val = xp.max(xp.abs(F), axis=reduce_axes)  # shape (S,)
+        max_val = xp.where(max_val > 0, max_val, 1.0)
         
         scale_shape = (F.shape[0],) + (1,) * (F.ndim - 1)
         F = F / max_val.reshape(scale_shape)
         
-        # Ensure log_scale is 1-D (per-site) before adding
         if log_scale.ndim > 1:
             raise ValueError(
                 f"_rescale_global requires per-site log_scale (1-D), "
                 f"got shape {log_scale.shape}"
             )
-        log_scale = log_scale + np.log(max_val)
+        log_scale = log_scale + xp.log(max_val)
         
         return F, log_scale
     
-    @staticmethod
-    def _equalize_scales(F: np.ndarray, log_scale: np.ndarray
-                         ) -> tuple[np.ndarray, np.ndarray]:
+    def _equalize_scales(self, F, log_scale):
         """
         Equalize per-vector scales to a common per-site maximum.
         
         Before merge/split operations that combine values across 
         different vector positions, we need all vectors within the same 
-        site to be on a comparable scale. This function:
-          1. Finds the per-site max of log_scale
-          2. Adjusts F by exp(log_scale - max) to put all vectors on 
-             the same scale
-          3. Returns the adjusted F and the per-site max as new log_scale
+        site to be on a comparable scale.
         
-        Vectors whose scale is vastly smaller than the max get attenuated 
-        toward zero — this is correct since they contribute negligibly to 
-        the final likelihood.
-        
-        Args:
-            F: VPI tensor, shape (S, d1, ..., dk)
-            log_scale: Per-vector log scaling, shape (S, d1, ..., dk-1)
-        Returns:
-            Tuple of (adjusted_F, per_site_log_scale) where 
-            per_site_log_scale has shape (S,)
+        Works on both CPU (NumPy) and GPU (CuPy) via self.xp.
         """
+        xp = self.xp
         if log_scale.ndim <= 1:
             # Already per-site scalar — nothing to equalize
             return F, log_scale
         
         # Per-site max of the log scales
         reduce_axes = tuple(range(1, log_scale.ndim))
-        common_log = np.max(log_scale, axis=reduce_axes)  # shape (S,)
+        common_log = xp.max(log_scale, axis=reduce_axes)  # shape (S,)
         
         # Compute adjustment: exp(log_scale - common_log)
-        # Reshape common_log for broadcasting: (S, 1, 1, ...)
         broadcast_shape = (log_scale.shape[0],) + (1,) * (log_scale.ndim - 1)
         diff = log_scale - common_log.reshape(broadcast_shape)
         
         # Clamp diff to prevent exp() underflow for hugely negative diffs
-        # (those vectors are negligible anyway)
-        diff = np.maximum(diff, -500.0)
+        diff = xp.maximum(diff, -500.0)
         
         # Apply adjustment to F: add trailing dim for broadcasting with last axis
-        adjustment = np.exp(diff)[..., np.newaxis]  # shape (S, d1, ..., dk-1, 1)
+        adjustment = xp.exp(diff)[..., xp.newaxis]  # shape (S, d1, ..., dk-1, 1)
         F = F * adjustment
         
         return F, common_log
     
-    def _rule1(self, F : np.ndarray, branch_len : float, d : int) -> np.ndarray:
+    def _rule1(self, F, branch_len: float, d: int):
         """
         Given vpi tensor F, with interface α, and branch length t, and max lineages m_α, 
         compute the vpi tensor F_top at the top of the branch.
 
-        Args:
-            F (np.ndarray): vpi tensor F
-            branch_len (float): branch length
-        Returns:
-            np.ndarray: vpi tensor F_top
+        P(t) is computed on CPU (small matrix, scipy.linalg.expm) and transferred
+        to GPU if needed. The matmul F @ P_sub runs on the tensor's device.
         """
-        P_full = self.q.expt(branch_len)
+        P_full = self.q.expt(branch_len)   # always NumPy (CPU)
         P_sub = P_full[:d, :d]
+        if self.use_gpu:
+            P_sub = self.xp.asarray(P_sub)  # transfer to GPU
         return F @ P_sub
     
-    def _rule2(self, F_x : np.ndarray, F_y : np.ndarray, m_x : int, m_y : int) -> np.ndarray:
+    def _rule2(self, F_x, F_y, m_x: int, m_y: int):
         """
         Merge two VPI tensors from disjoint sub-networks (SPARSE).
         
@@ -1334,64 +1381,85 @@ class SNPStrategy(Strategy):
         F_y has shape (S, *y_extra, state_dim(m_y))
         Result has shape (S, *x_extra, *y_extra, state_dim(m_x + m_y))
         
-        Uses sparse COO merge coefficients instead of dense einsum.
-        Only the non-zero (i, j) → k entries are computed, giving a
-        speedup factor of state_dim(m_x + m_y) over the dense version.
+        Uses sparse COO merge coefficients. GPU-compatible via self.xp.
+        The nnz dimension is processed in chunks to prevent GPU/CPU OOM
+        from the broadcast intermediate (S, *x_extra, *y_extra, nnz).
         """
-        sm = get_sparse_merge(m_x, m_y)
+        xp = self.xp
+        sm = self._get_sm(m_x, m_y)
+        nnz = len(sm.i_arr)
         
-        # Gather along the merge dimension (last axis of each tensor)
-        # F_x[..., i_arr] → shape (*x_shape_prefix, nnz)
-        # F_y[..., j_arr] → shape (*y_shape_prefix, nnz)
-        fx_g = F_x[..., sm.i_arr]   # (S, *x_extra, nnz)
-        fy_g = F_y[..., sm.j_arr]   # (S, *y_extra, nnz)
+        n_x_extra = F_x.ndim - 2
+        n_y_extra = F_y.ndim - 2
         
-        # We need outer product over the extra dims.
-        # fx_g has shape (S, *x_extra, nnz)
-        # fy_g has shape (S, *y_extra, nnz)
-        # Result needs shape (S, *x_extra, *y_extra, dim_z)
+        # Pre-compute result shape: (S, *x_extra, *y_extra, dim_z)
+        result_shape = (list(F_x.shape[:-1]) 
+                        + list(F_y.shape[1:-1]) 
+                        + [sm.dim_z])
+        result = xp.zeros(result_shape, dtype=F_x.dtype)
         
-        n_x_extra = F_x.ndim - 2   # number of carried x dims
-        n_y_extra = F_y.ndim - 2   # number of carried y dims
+        # ---------- determine chunk size for the nnz dimension ----------
+        # The broadcast intermediate has shape (S, *x_extra, *y_extra, chunk)
+        # and we want that to stay within a memory budget.
+        S = F_x.shape[0]
+        prefix_elems = S
+        for d in F_x.shape[1:-1]:   # x_extra dims
+            prefix_elems *= d
+        for d in F_y.shape[1:-1]:   # y_extra dims
+            prefix_elems *= d
         
-        # Reshape for broadcasting:
-        # fx_g → (S, *x_extra, *[1]*n_y_extra, nnz)
-        # fy_g → (S, *[1]*n_x_extra, *y_extra, nnz)
-        if n_y_extra > 0:
-            fx_shape = list(fx_g.shape)
-            # Insert n_y_extra singleton dims before the last axis (nnz)
-            for _ in range(n_y_extra):
-                fx_shape.insert(-1, 1)
-            fx_g = fx_g.reshape(fx_shape)
+        # Budget: ~1 GB on CPU, 25% of free VRAM on GPU
+        if self.use_gpu:
+            free = cp.cuda.Device().mem_info[0]
+            budget_bytes = max(int(free * 0.25), 256 * 1024**2)
+        else:
+            budget_bytes = 1 * 1024**3   # 1 GB
         
-        if n_x_extra > 0:
-            fy_shape = list(fy_g.shape)
-            # Insert n_x_extra singleton dims after S (pos 1) and before y_extra
-            for _ in range(n_x_extra):
-                fy_shape.insert(1, 1)
-            fy_g = fy_g.reshape(fy_shape)
+        # Each nnz element in the chunk costs 8 bytes × prefix_elems
+        # (the contribution array is the dominant allocation)
+        bytes_per_nz = prefix_elems * 8
+        chunk_size = max(1, budget_bytes // bytes_per_nz) if bytes_per_nz > 0 else nnz
         
-        # Element-wise multiply with broadcast → (S, *x_extra, *y_extra, nnz)
-        contributions = fx_g * fy_g * sm.coeff_arr
-        
-        # Scatter-add into result
-        result_shape = list(contributions.shape[:-1]) + [sm.dim_z]
-        result = np.zeros(result_shape, dtype=F_x.dtype)
-        np.add.at(result, (..., sm.k_arr), contributions)
+        # ---------- chunked gather → broadcast → scatter-add ----------
+        for c0 in range(0, nnz, chunk_size):
+            c1 = min(c0 + chunk_size, nnz)
+            
+            fx_g = F_x[..., sm.i_arr[c0:c1]]   # (S, *x_extra, chunk)
+            fy_g = F_y[..., sm.j_arr[c0:c1]]   # (S, *y_extra, chunk)
+            
+            # Reshape for outer-product broadcast over extra dims
+            if n_y_extra > 0:
+                fx_shape = list(fx_g.shape)
+                for _ in range(n_y_extra):
+                    fx_shape.insert(-1, 1)
+                fx_g = fx_g.reshape(fx_shape)
+            
+            if n_x_extra > 0:
+                fy_shape = list(fy_g.shape)
+                for _ in range(n_x_extra):
+                    fy_shape.insert(1, 1)
+                fy_g = fy_g.reshape(fy_shape)
+            
+            contributions = fx_g * fy_g * sm.coeff_arr[c0:c1]
+            self._scatter_add(result, (..., sm.k_arr[c0:c1]), contributions)
+            
+            # Free intermediates eagerly on GPU
+            if self.use_gpu:
+                del fx_g, fy_g, contributions
         
         return result
     
-    def _rule3(self, F, mx, gammax) -> np.ndarray:
+    def _rule3(self, F, mx, gammax):
         """
         Split a VPI tensor at a reticulation node (SPARSE).
         
         F has shape (..., state_dim(mx))
         Result has shape (..., state_dim(mx), state_dim(mx))
         
-        Uses sparse COO split coefficients. For each non-zero (i, j, k),
-        result[..., j, k] += F[..., i] * coeff.
+        GPU-compatible via self.xp and self._scatter_add.
         """
-        ss = get_sparse_split(mx, gammax)
+        xp = self.xp
+        ss = self._get_ss(mx, gammax)
         
         # Gather: F[..., i_arr] → shape (..., nnz)
         f_g = F[..., ss.i_arr]
@@ -1401,26 +1469,26 @@ class SNPStrategy(Strategy):
         
         # Scatter into 2D output (j, k)
         prefix_shape = F.shape[:-1]
-        result = np.zeros((*prefix_shape, ss.dim, ss.dim), dtype=F.dtype)
+        result = xp.zeros((*prefix_shape, ss.dim, ss.dim), dtype=F.dtype)
         
         # Use linear index for scatter: j * dim + k
         linear_idx = ss.j_arr * ss.dim + ss.k_arr
         result_flat = result.reshape(*prefix_shape, ss.dim * ss.dim)
-        np.add.at(result_flat, (..., linear_idx), contributions)
+        self._scatter_add(result_flat, (..., linear_idx), contributions)
         
         return result_flat.reshape(result.shape)
     
-    def _rule4(self, F, mx, my) -> np.ndarray:
+    def _rule4(self, F, mx, my):
         """
         Merge two interfaces from the same VPI tensor (SPARSE).
         
         F has shape (..., state_dim(mx), state_dim(my))
         Result has shape (..., state_dim(mx + my))
         
-        The last two axes of F correspond to the two interfaces being merged.
-        Uses sparse COO merge coefficients.
+        GPU-compatible via self.xp and self._scatter_add.
         """
-        sm = get_sparse_merge(mx, my)
+        xp = self.xp
+        sm = self._get_sm(mx, my)
         
         # F[..., i_arr, j_arr] gathers the (i, j) pairs → shape (..., nnz)
         f_g = F[..., sm.i_arr, sm.j_arr]
@@ -1430,8 +1498,8 @@ class SNPStrategy(Strategy):
         
         # Scatter into result
         prefix_shape = F.shape[:-2]
-        result = np.zeros((*prefix_shape, sm.dim_z), dtype=F.dtype)
-        np.add.at(result, (..., sm.k_arr), contributions)
+        result = xp.zeros((*prefix_shape, sm.dim_z), dtype=F.dtype)
+        self._scatter_add(result, (..., sm.k_arr), contributions)
         
         return result  
         
@@ -1439,10 +1507,13 @@ class SNPStrategy(Strategy):
         """
         Compute the partial likelihoods at a leaf node.
 
-        The format for the partial likelihoods is a two dimensional array where the first dimension (rows) is the site index 
-        and the second dimension (columns) is the number of samples for this leaf. 
-        The position of the 1.0 probability is the number of red alleles at that site.
+        The format for the partial likelihoods is a two dimensional array where 
+        the first dimension (rows) is the site index and the second dimension 
+        (columns) is the number of samples for this leaf. 
+        
+        Uses vectorized indexing for GPU efficiency (no Python per-site loop).
         """
+        xp = self.xp
         
         if n in self.cache:
             if self.cache[n][0] is False:
@@ -1455,15 +1526,21 @@ class SNPStrategy(Strategy):
         if self.site_slice is not None:
             reds = reds[self.site_slice[0]:self.site_slice[1]]
         
-        F : np.ndarray = np.zeros((self.sites, state_dim(n.samples)), dtype=np.float64)
+        # Vectorized leaf initialization (GPU-friendly: single kernel launch)
+        # Pre-compute state indices on CPU, then transfer
+        state_indices_np = np.array(
+            [nr_to_index(n.samples, r) for r in reds], dtype=np.int64
+        )
         
-        for site in range(self.sites):
-            F[site, nr_to_index(n.samples, reds[site])] = 1.0
+        F = xp.zeros((self.sites, state_dim(n.samples)), dtype=xp.float64)
+        site_indices = xp.arange(self.sites)
+        state_indices = xp.asarray(state_indices_np) if self.use_gpu else state_indices_np
+        F[site_indices, state_indices] = 1.0
         
         # log_scale shape matches F.shape[:-1] = (sites,)
-        log_scale = np.zeros(self.sites, dtype=np.float64)
+        log_scale = xp.zeros(self.sites, dtype=xp.float64)
         F = self._rule1(F, n.branch().length, state_dim(n.samples))
-        F, log_scale = self._rescale(F, log_scale)  # log_scale stays (sites,)
+        F, log_scale = self._rescale(F, log_scale)
         
         n.vpi = NodeVPI(F, [f"{n.get_name()}_top"], [n.samples], log_scale)
         self.cache[n] = (False, n.vpi)
@@ -1521,7 +1598,11 @@ class SNPStrategy(Strategy):
         During the two transition steps, we use global per-site rescaling
         (axis-order agnostic) to prevent intermediate underflow.
         After both transitions, we do a final per-vector rescale.
+        
+        GPU-compatible via self.xp.
         """
+        xp = self.xp
+        
         if n in self.cache:
             if self.cache[n][0] is False:
                 return self.cache[n][1]
@@ -1541,12 +1622,12 @@ class SNPStrategy(Strategy):
         F, log_scale = self._rescale_global(F, log_scale)
         
         # Apply transition on branch 0's axis (axis -2)
-        F = np.moveaxis(F, -2, -1)
+        F = xp.moveaxis(F, -2, -1)
         F = self._rule1(F, branches[0].length, state_dim(m))
         F, log_scale = self._rescale_global(F, log_scale)
         
         # Apply transition on branch 1's axis (now at -2, move to -1)
-        F = np.moveaxis(F, -1, -2)
+        F = xp.moveaxis(F, -1, -2)
         F = self._rule1(F, branches[1].length, state_dim(m))
         F, log_scale = self._rescale_global(F, log_scale)
         
@@ -1600,7 +1681,11 @@ class SNPStrategy(Strategy):
         true log-likelihood without numerical underflow. The root VPI
         should have shape (S, d) with log_scale shape (S,) after 
         equalization at the root node.
+        
+        GPU-compatible: pi is built on CPU and transferred; final
+        log-likelihood is brought back to CPU as a Python float.
         """
+        xp = self.xp
         
         if n in self.cache:
             if self.cache[n][0] is False:
@@ -1608,19 +1693,21 @@ class SNPStrategy(Strategy):
         
         m = root.max_lineages[-1]
         
-        # Compute stationary distribution for this dimension
-        # π[i] = C(n,r) * θ_r^r * θ_g^(n-r)  where θ_r = v/(u+v), θ_g = u/(u+v)
+        # Compute stationary distribution on CPU (small vector, scalar math)
         theta_r = self.v / (self.u + self.v)
         theta_g = self.u / (self.u + self.v)
         
-        pi = np.zeros(state_dim(m))
+        pi_np = np.zeros(state_dim(m))
         for n_lin in range(1, m + 1):
             for r in range(n_lin + 1):
                 idx = nr_to_index(n_lin, r)
-                pi[idx] = comb(n_lin, r) * (theta_r ** r) * (theta_g ** (n_lin - r))
+                pi_np[idx] = comb(n_lin, r) * (theta_r ** r) * (theta_g ** (n_lin - r))
         
         # Normalize
-        pi = pi / np.sum(pi)
+        pi_np = pi_np / np.sum(pi_np)
+        
+        # Transfer to GPU if needed
+        pi = xp.asarray(pi_np) if self.use_gpu else pi_np
         
         # Equalize to per-site scale if log_scale is still multi-dimensional
         root_F, root_ls = self._equalize_scales(root.tensor, root.log_scale)
@@ -1631,13 +1718,14 @@ class SNPStrategy(Strategy):
         scaled_site_likelihoods = root_F @ pi  # [S] array
         
         # Clamp to avoid log(0) — sites where lik=0 get -inf contribution
-        scaled_site_likelihoods = np.maximum(
-            scaled_site_likelihoods, np.finfo(np.float64).tiny
+        scaled_site_likelihoods = xp.maximum(
+            scaled_site_likelihoods, xp.finfo(xp.float64).tiny
         )
         
-        log_site_likelihoods = np.log(scaled_site_likelihoods) + root_ls
+        log_site_likelihoods = xp.log(scaled_site_likelihoods) + root_ls
         
-        self.L = np.sum(log_site_likelihoods)
+        # Bring result back to CPU as a Python float
+        self.L = float(xp.sum(log_site_likelihoods))
         n.vpi = NodeVPI(self.L, [], [], np.zeros(0))
         self.cache[n] = (False, n.vpi)
         
@@ -1741,11 +1829,14 @@ class SNPModelVisitor(Visitor):
             if index == len(v.interfaces) - 1:
                 return  # Already at the end, nothing to do
             
+            # Use the strategy's xp module for GPU compatibility
+            xp = self.strategy.xp
+            
             # If log_scale is multi-dimensional, equalize to per-site BEFORE
             # rearranging axes (log_scale must match tensor.shape[:-1], which
             # changes after moveaxis)
             if v.log_scale is not None and v.log_scale.ndim > 1:
-                v.tensor, v.log_scale = SNPStrategy._equalize_scales(
+                v.tensor, v.log_scale = self.strategy._equalize_scales(
                     v.tensor, v.log_scale
                 )
             
@@ -1755,9 +1846,9 @@ class SNPModelVisitor(Visitor):
             #Move max_lineages to end (must stay in sync with interfaces)
             lineage_to_move = v.max_lineages.pop(index)
             v.max_lineages.append(lineage_to_move)
-            #Move tensor axis to end (np.moveaxis returns a new array!)
+            #Move tensor axis to end (xp.moveaxis returns a new array!)
             # Tensor axes: axis 0 = sites, axes 1..N = interfaces
-            v.tensor = np.moveaxis(v.tensor, index + 1, -1)
+            v.tensor = xp.moveaxis(v.tensor, index + 1, -1)
             # log_scale is now per-site (1-D) — compatible with any axis order
             
         
