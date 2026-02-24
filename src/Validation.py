@@ -100,9 +100,29 @@ class DataIntegrityError(ValidationError):
 class ValidationSummary:
     """
     Container for validation results and summary information.
+
+    Tracks errors, warnings, and summary statistics produced during
+    validation of a single phylogenetic file.  A summary whose
+    :attr:`is_valid` flag is ``False`` contains at least one error.
+
+    Attributes:
+        file_path (str): Absolute or relative path to the validated file.
+        file_format (str): Human-readable format label (e.g. ``"Newick"``).
+        is_valid (bool): ``True`` until :meth:`add_error` is called.
+        errors (List[str]): Accumulated error messages.
+        warnings (List[str]): Accumulated warning messages.
+        summary_stats (Dict[str, Any]): Free-form key/value statistics.
     """
     
     def __init__(self, file_path: str, file_format: str):
+        """
+        Initialize a ValidationSummary.
+
+        Args:
+            file_path (str): Path to the file being validated.
+            file_format (str): Name of the file format (e.g. ``"Newick"``,
+                ``"FASTA"``).
+        """
         self.file_path = file_path
         self.file_format = file_format
         self.is_valid = True
@@ -111,20 +131,50 @@ class ValidationSummary:
         self.summary_stats: Dict[str, Any] = {}
         
     def add_error(self, error: str) -> None:
-        """Add an error message and mark validation as failed."""
+        """
+        Add an error message and mark validation as failed.
+
+        Args:
+            error (str): Human-readable description of the validation error.
+        """
         self.errors.append(error)
         self.is_valid = False
         
     def add_warning(self, warning: str) -> None:
-        """Add a warning message."""
+        """
+        Add a warning message.
+
+        Warnings do not affect :attr:`is_valid`; they flag non-fatal
+        issues such as missing branch lengths or low taxa counts.
+
+        Args:
+            warning (str): Human-readable description of the warning.
+        """
         self.warnings.append(warning)
         
     def add_stat(self, key: str, value: Any) -> None:
-        """Add a summary statistic."""
+        """
+        Add a summary statistic.
+
+        Statistics are stored in :attr:`summary_stats` and rendered in the
+        human-readable report produced by :meth:`__str__`.
+
+        Args:
+            key (str): Label for the statistic (e.g. ``"Number of Taxa"``).
+            value (Any): The statistic value.  Typically a ``str``, ``int``,
+                ``float``, or ``list``, but any printable type is accepted.
+        """
         self.summary_stats[key] = value
         
     def __str__(self) -> str:
-        """Return formatted summary report."""
+        """
+        Return formatted summary report.
+
+        Returns:
+            str: Multi-line, human-readable report containing the file
+                path, format, validity status, statistics, warnings,
+                and errors.
+        """
         lines = []
         lines.append("=" * 60)
         lines.append(f"VALIDATION SUMMARY: {os.path.basename(self.file_path)}")
@@ -403,23 +453,59 @@ class GeneTreeAggregateSummary:
 class BaseValidator(ABC):
     """
     Abstract base class for file format validators.
+
+    Subclasses set three class-level attributes and implement ``_parse``:
+
+    *   ``format_name``  – human-readable format label, e.g. ``"FASTA"``
+    *   ``_has_dependency`` – ``True`` when the optional library needed for
+        this format is importable at runtime.
+    *   ``_dependency_msg`` – error text shown when the library is absent.
+
+    The public :meth:`validate` method is a *template method*; subclasses
+    should not override it.
     """
+
+    format_name: str = ""
+    _has_dependency: bool = True
+    _dependency_msg: str = ""
     
     def __init__(self):
+        """
+        Initialize the validator with an empty set of supported extensions.
+
+        Subclasses should populate :attr:`supported_extensions` in their
+        own ``__init__`` after calling ``super().__init__()``.
+        """
         self.supported_extensions: Set[str] = set()
-        
-    @abstractmethod
+
+    # ── template method ───────────────────────────────────────────────
+
     def validate(self, file_path: str) -> ValidationSummary:
         """
-        Validate a file and return summary.
-        
+        Validate a file and return a summary.
+
         Args:
-            file_path (str): Path to the file to validate
-            
+            file_path (str): Path to the file to validate.
+
         Returns:
-            ValidationSummary: Validation results and summary
+            ValidationSummary: Validation results and summary.
         """
-        pass
+        summary = ValidationSummary(file_path, self.format_name)
+        try:
+            self._check_file_exists(file_path)
+            summary.summary_stats.update(self._get_file_stats(file_path))
+            if not self._has_dependency:
+                summary.add_error(self._dependency_msg)
+                return summary
+            self._parse(file_path, summary)
+        except Exception as e:
+            summary.add_error(f"Validation failed: {str(e)}")
+        return summary
+
+    @abstractmethod
+    def _parse(self, file_path: str, summary: ValidationSummary) -> None:
+        """Format-specific parsing and analysis (called by :meth:`validate`)."""
+        ...
         
     def _check_file_exists(self, file_path: str) -> None:
         """Check if file exists and is readable."""
@@ -447,31 +533,20 @@ class NewickValidator(BaseValidator):
     """
     Validator for Newick format files (.nwk, .newick, .tre, .tree).
     """
+
+    format_name = "Newick"
+    _has_dependency = HAS_BIOPYTHON
+    _dependency_msg = "BioPython required for Newick validation"
     
     def __init__(self):
         super().__init__()
         self.supported_extensions = {'.nwk', '.newick', '.tre', '.tree'}
         
-    def validate(self, file_path: str) -> ValidationSummary:
-        """Validate Newick format file."""
-        summary = ValidationSummary(file_path, "Newick")
-        
-        try:
-            self._check_file_exists(file_path)
-            summary.summary_stats.update(self._get_file_stats(file_path))
-            
-            if not HAS_BIOPYTHON:
-                summary.add_error("BioPython required for Newick validation")
-                return summary
-                
-            trees = self._parse_newick_trees(file_path, summary)
-            if trees:
-                self._analyze_trees(trees, summary)
-                
-        except Exception as e:
-            summary.add_error(f"Validation failed: {str(e)}")
-            
-        return summary
+    def _parse(self, file_path: str, summary: ValidationSummary) -> None:
+        """Parse Newick file and analyse the resulting trees."""
+        trees = self._parse_newick_trees(file_path, summary)
+        if trees:
+            self._analyze_trees(trees, summary)
         
     def _parse_newick_trees(self, file_path: str, summary: ValidationSummary) -> List[Any]:
         """Parse Newick trees from file."""
@@ -569,29 +644,18 @@ class NexusValidator(BaseValidator):
     """
     Validator for Nexus format files (.nex, .nexus).
     """
+
+    format_name = "Nexus"
+    _has_dependency = HAS_NEXUS
+    _dependency_msg = "python-nexus required for Nexus validation"
     
     def __init__(self):
         super().__init__()
         self.supported_extensions = {'.nex', '.nexus'}
         
-    def validate(self, file_path: str) -> ValidationSummary:
-        """Validate Nexus format file."""
-        summary = ValidationSummary(file_path, "Nexus")
-        
-        try:
-            self._check_file_exists(file_path)
-            summary.summary_stats.update(self._get_file_stats(file_path))
-            
-            if not HAS_NEXUS:
-                summary.add_error("python-nexus required for Nexus validation")
-                return summary
-                
-            self._parse_nexus_file(file_path, summary)
-                
-        except Exception as e:
-            summary.add_error(f"Validation failed: {str(e)}")
-            
-        return summary
+    def _parse(self, file_path: str, summary: ValidationSummary) -> None:
+        """Parse and analyse a Nexus file."""
+        self._parse_nexus_file(file_path, summary)
         
     def _parse_nexus_file(self, file_path: str, summary: ValidationSummary) -> None:
         """Parse and analyze Nexus file."""
@@ -816,9 +880,13 @@ class NexusValidator(BaseValidator):
             )
             
             if report.negative_branch_lengths > 0:
-                report.errors.append(
+                msg = (
                     f"{report.negative_branch_lengths} negative branch "
                     f"length(s) detected"
+                )
+                report.warnings.append(msg)
+                warnings.warn(
+                    f"Tree '{report.tree_name}': {msg}"
                 )
             if report.zero_branch_lengths > 0:
                 report.warnings.append(
@@ -949,29 +1017,18 @@ class FastaValidator(BaseValidator):
     """
     Validator for FASTA format files (.fasta, .fas, .fa).
     """
+
+    format_name = "FASTA"
+    _has_dependency = HAS_BIOPYTHON
+    _dependency_msg = "BioPython required for FASTA validation"
     
     def __init__(self):
         super().__init__()
         self.supported_extensions = {'.fasta', '.fas', '.fa', '.fna', '.ffn', '.faa'}
         
-    def validate(self, file_path: str) -> ValidationSummary:
-        """Validate FASTA format file."""
-        summary = ValidationSummary(file_path, "FASTA")
-        
-        try:
-            self._check_file_exists(file_path)
-            summary.summary_stats.update(self._get_file_stats(file_path))
-            
-            if not HAS_BIOPYTHON:
-                summary.add_error("BioPython required for FASTA validation")
-                return summary
-                
-            self._parse_fasta_file(file_path, summary)
-                
-        except Exception as e:
-            summary.add_error(f"Validation failed: {str(e)}")
-            
-        return summary
+    def _parse(self, file_path: str, summary: ValidationSummary) -> None:
+        """Parse and analyse a FASTA file."""
+        self._parse_fasta_file(file_path, summary)
         
     def _parse_fasta_file(self, file_path: str, summary: ValidationSummary) -> None:
         """Parse and analyze FASTA file."""
@@ -1038,29 +1095,18 @@ class PhylipValidator(BaseValidator):
     """
     Validator for PHYLIP format files (.phy, .phylip).
     """
+
+    format_name = "PHYLIP"
+    _has_dependency = HAS_BIOPYTHON
+    _dependency_msg = "BioPython required for PHYLIP validation"
     
     def __init__(self):
         super().__init__()
         self.supported_extensions = {'.phy', '.phylip'}
         
-    def validate(self, file_path: str) -> ValidationSummary:
-        """Validate PHYLIP format file."""
-        summary = ValidationSummary(file_path, "PHYLIP")
-        
-        try:
-            self._check_file_exists(file_path)
-            summary.summary_stats.update(self._get_file_stats(file_path))
-            
-            if not HAS_BIOPYTHON:
-                summary.add_error("BioPython required for PHYLIP validation")
-                return summary
-                
-            self._parse_phylip_file(file_path, summary)
-                
-        except Exception as e:
-            summary.add_error(f"Validation failed: {str(e)}")
-            
-        return summary
+    def _parse(self, file_path: str, summary: ValidationSummary) -> None:
+        """Parse and analyse a PHYLIP file."""
+        self._parse_phylip_file(file_path, summary)
         
     def _parse_phylip_file(self, file_path: str, summary: ValidationSummary) -> None:
         """Parse and analyze PHYLIP file."""
@@ -1107,29 +1153,18 @@ class ClustalValidator(BaseValidator):
     """
     Validator for Clustal format files (.aln, .clustal).
     """
+
+    format_name = "Clustal"
+    _has_dependency = HAS_BIOPYTHON
+    _dependency_msg = "BioPython required for Clustal validation"
     
     def __init__(self):
         super().__init__()
         self.supported_extensions = {'.aln', '.clustal'}
         
-    def validate(self, file_path: str) -> ValidationSummary:
-        """Validate Clustal format file."""
-        summary = ValidationSummary(file_path, "Clustal")
-        
-        try:
-            self._check_file_exists(file_path)
-            summary.summary_stats.update(self._get_file_stats(file_path))
-            
-            if not HAS_BIOPYTHON:
-                summary.add_error("BioPython required for Clustal validation")
-                return summary
-                
-            self._parse_clustal_file(file_path, summary)
-                
-        except Exception as e:
-            summary.add_error(f"Validation failed: {str(e)}")
-            
-        return summary
+    def _parse(self, file_path: str, summary: ValidationSummary) -> None:
+        """Parse and analyse a Clustal file."""
+        self._parse_clustal_file(file_path, summary)
         
     def _parse_clustal_file(self, file_path: str, summary: ValidationSummary) -> None:
         """Parse and analyze Clustal file."""
@@ -1165,29 +1200,18 @@ class XMLValidator(BaseValidator):
     """
     Validator for XML format files (.xml).
     """
+
+    format_name = "XML"
+    _has_dependency = HAS_XML
+    _dependency_msg = "XML parsing not available"
     
     def __init__(self):
         super().__init__()
         self.supported_extensions = {'.xml'}
         
-    def validate(self, file_path: str) -> ValidationSummary:
-        """Validate XML format file."""
-        summary = ValidationSummary(file_path, "XML")
-        
-        try:
-            self._check_file_exists(file_path)
-            summary.summary_stats.update(self._get_file_stats(file_path))
-            
-            if not HAS_XML:
-                summary.add_error("XML parsing not available")
-                return summary
-                
-            self._parse_xml_file(file_path, summary)
-                
-        except Exception as e:
-            summary.add_error(f"Validation failed: {str(e)}")
-            
-        return summary
+    def _parse(self, file_path: str, summary: ValidationSummary) -> None:
+        """Parse and analyse an XML file."""
+        self._parse_xml_file(file_path, summary)
         
     def _parse_xml_file(self, file_path: str, summary: ValidationSummary) -> None:
         """Parse and analyze XML file."""
@@ -1224,29 +1248,18 @@ class GenBankValidator(BaseValidator):
     """
     Validator for GenBank format files (.gb, .gbk, .genbank).
     """
+
+    format_name = "GenBank"
+    _has_dependency = HAS_BIOPYTHON
+    _dependency_msg = "BioPython required for GenBank validation"
     
     def __init__(self):
         super().__init__()
         self.supported_extensions = {'.gb', '.gbk', '.genbank'}
         
-    def validate(self, file_path: str) -> ValidationSummary:
-        """Validate GenBank format file."""
-        summary = ValidationSummary(file_path, "GenBank")
-        
-        try:
-            self._check_file_exists(file_path)
-            summary.summary_stats.update(self._get_file_stats(file_path))
-            
-            if not HAS_BIOPYTHON:
-                summary.add_error("BioPython required for GenBank validation")
-                return summary
-                
-            self._parse_genbank_file(file_path, summary)
-                
-        except Exception as e:
-            summary.add_error(f"Validation failed: {str(e)}")
-            
-        return summary
+    def _parse(self, file_path: str, summary: ValidationSummary) -> None:
+        """Parse and analyse a GenBank file."""
+        self._parse_genbank_file(file_path, summary)
         
     def _parse_genbank_file(self, file_path: str, summary: ValidationSummary) -> None:
         """Parse and analyze GenBank file."""
@@ -1291,9 +1304,26 @@ class GenBankValidator(BaseValidator):
 class PhylogeneticValidator:
     """
     Main validator class that handles multiple file formats.
+
+    Maintains a registry of :class:`BaseValidator` subclasses keyed by
+    format name and a reverse mapping from file extension to format.
+    Use :meth:`validate_file` for a single file or
+    :meth:`validate_directory` for batch validation.
+
+    Attributes:
+        validators (Dict[str, BaseValidator]): Format name to validator
+            instance mapping.
+        extension_map (Dict[str, str]): File extension (e.g. ``".nwk"``)
+            to format name mapping.
     """
     
     def __init__(self):
+        """
+        Initialize the validator registry.
+
+        Instantiates one :class:`BaseValidator` subclass per supported
+        format and builds the extension-to-format lookup table.
+        """
         self.validators = {
             'newick': NewickValidator(),
             'nexus': NexusValidator(),
@@ -1313,13 +1343,20 @@ class PhylogeneticValidator:
     def validate_file(self, file_path: str, format_hint: Optional[str] = None) -> ValidationSummary:
         """
         Validate a phylogenetic file.
-        
+
+        Determines the appropriate :class:`BaseValidator` subclass from the
+        file extension (or *format_hint*) and delegates to it.
+
         Args:
-            file_path (str): Path to the file to validate
-            format_hint (str, optional): Hint about the file format
-            
+            file_path (str): Path to the file to validate.
+            format_hint (str, optional): Override for automatic format
+                detection.  Should be a key from :attr:`validators`
+                (e.g. ``"newick"``, ``"fasta"``).
+
         Returns:
-            ValidationSummary: Validation results and summary
+            ValidationSummary: Validation results and summary.  If the
+                format is unrecognised, the summary will contain an error
+                and ``is_valid`` will be ``False``.
         """
         # Determine format
         if format_hint:
@@ -1337,7 +1374,14 @@ class PhylogeneticValidator:
         return validator.validate(file_path)
         
     def get_supported_formats(self) -> Dict[str, List[str]]:
-        """Get dictionary of supported formats and their extensions."""
+        """
+        Get dictionary of supported formats and their extensions.
+
+        Returns:
+            Dict[str, List[str]]: Mapping of format name (e.g.
+                ``"newick"``) to a sorted list of file extensions
+                (e.g. ``[".newick", ".nwk", ".tre", ".tree"]``).
+        """
         return {
             name: sorted(list(validator.supported_extensions))
             for name, validator in self.validators.items()
@@ -1346,13 +1390,22 @@ class PhylogeneticValidator:
     def validate_directory(self, directory_path: str, recursive: bool = False) -> List[ValidationSummary]:
         """
         Validate all supported files in a directory.
-        
+
+        Iterates over files whose extensions appear in
+        :attr:`extension_map` and validates each one.
+
         Args:
-            directory_path (str): Path to directory
-            recursive (bool): Whether to search recursively
-            
+            directory_path (str): Path to the directory to scan.
+            recursive (bool): If ``True``, descend into subdirectories
+                via :func:`os.walk`.  Defaults to ``False``.
+
         Returns:
-            List[ValidationSummary]: List of validation results
+            List[ValidationSummary]: One :class:`ValidationSummary` per
+                file that was validated, in discovery order.
+
+        Raises:
+            FileNotFoundError: If *directory_path* does not exist.
+            NotADirectoryError: If *directory_path* is not a directory.
         """
         results = []
         
@@ -1378,14 +1431,24 @@ class PhylogeneticValidator:
 def validate_file(file_path: str, format_hint: Optional[str] = None, print_summary: bool = True) -> ValidationSummary:
     """
     Convenience function to validate a single file.
-    
+
+    Creates a :class:`PhylogeneticValidator`, validates the file, and
+    optionally prints the human-readable summary.
+
     Args:
-        file_path (str): Path to the file to validate
-        format_hint (str, optional): Hint about the file format
-        print_summary (bool): Whether to print the summary
-        
+        file_path (str): Path to the file to validate.
+        format_hint (str, optional): Override for automatic format
+            detection (e.g. ``"newick"``).  When ``None``, the format
+            is inferred from the file extension.
+        print_summary (bool): If ``True`` (the default), print the
+            formatted :class:`ValidationSummary` to stdout.
+
     Returns:
-        ValidationSummary: Validation results
+        ValidationSummary: Validation results and summary statistics.
+
+    Raises:
+        FileNotFoundError: If *file_path* does not exist (propagated
+            from the underlying validator).
     """
     validator = PhylogeneticValidator()
     summary = validator.validate_file(file_path, format_hint)
@@ -1399,14 +1462,24 @@ def validate_file(file_path: str, format_hint: Optional[str] = None, print_summa
 def validate_directory(directory_path: str, recursive: bool = False, print_summaries: bool = True) -> List[ValidationSummary]:
     """
     Convenience function to validate all files in a directory.
-    
+
+    Creates a :class:`PhylogeneticValidator` and validates every file
+    in *directory_path* whose extension is recognised.
+
     Args:
-        directory_path (str): Path to directory
-        recursive (bool): Whether to search recursively
-        print_summaries (bool): Whether to print summaries
-        
+        directory_path (str): Path to the directory to scan.
+        recursive (bool): If ``True``, descend into subdirectories.
+            Defaults to ``False``.
+        print_summaries (bool): If ``True`` (the default), print each
+            :class:`ValidationSummary` to stdout.
+
     Returns:
-        List[ValidationSummary]: List of validation results
+        List[ValidationSummary]: One summary per validated file, in
+            discovery order.
+
+    Raises:
+        FileNotFoundError: If *directory_path* does not exist.
+        NotADirectoryError: If *directory_path* is not a directory.
     """
     validator = PhylogeneticValidator()
     summaries = validator.validate_directory(directory_path, recursive)
@@ -1422,9 +1495,11 @@ def validate_directory(directory_path: str, recursive: bool = False, print_summa
 def get_supported_formats() -> Dict[str, List[str]]:
     """
     Get dictionary of supported formats and their extensions.
-    
+
     Returns:
-        Dict[str, List[str]]: Format names mapped to extension lists
+        Dict[str, List[str]]: Mapping of format name (e.g. ``"newick"``,
+            ``"fasta"``) to a sorted list of recognised file extensions
+            (e.g. ``[".fas", ".fasta", ".fna"]``).
     """
     validator = PhylogeneticValidator()
     return validator.get_supported_formats()

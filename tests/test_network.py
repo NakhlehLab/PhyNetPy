@@ -1,7 +1,7 @@
 import pytest
 from typing import Iterable, Optional, Sequence, Tuple
-from PhyNetPy.Network import Network, Node, Edge
-from PhyNetPy.GraphUtils import *
+from phynetpy.Network import Network, Node, Edge
+from phynetpy.GraphUtils import *
 
 
 #######################
@@ -574,7 +574,3 @@ def test_to_newick():
     lvl2 : Network = build_level_two_network()
     assert(Network.from_newick(sn.newick()).is_isomorphic(sn))
     assert(Network.from_newick(lvl2.newick()).is_isomorphic(lvl2))
-    
-    
-
-test_to_newick()

@@ -17,10 +17,14 @@
 ##
 ##############################################################################
 
-from PhyNetPy.Infer_MP_Allop import *
 import cProfile
 import time
 import pytest
+
+pytest.importorskip("phynetpy.Infer_MP_Allop", reason="Infer_MP_Allop module removed")
+
+from phynetpy.Infer_MP_Allop import *
+from phynetpy.IO import read_nexus
 """
 Testing Suite for the Network.py class. Extensively ensures that
 the Network, Edge, Node, and related classes are working as intended.
@@ -132,7 +136,7 @@ def mp_4():
     Test on external data set (5 trees) that did not pass PhyloNet.
     """
 
-    gt = GeneTrees(NetworkParser('/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/external_5.nex').get_all_networks(), external_naming)
+    gt = GeneTrees(read_nexus('/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/external_5.nex'), external_naming)
     
     for tree in gt.trees:
         print(tree.newick())
@@ -153,7 +157,7 @@ def mp_5():
     """
     Scenario J Runtime test (100 Genes) r1 t20
     """
-    gt = GeneTrees(NetworkParser('/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/J_100.nex').get_all_networks())
+    gt = GeneTrees(read_nexus('/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/J_100.nex'))
     
     start_t = time.time()
     res = INFER_MP_ALLOP(

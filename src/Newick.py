@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import Union
 
 from .GeneTrees import GeneTrees
-from .NetworkParser import NetworkParser
 
 #########################
 #### EXCEPTION CLASS ####
@@ -57,33 +56,39 @@ class NewickParserError(Exception):
 #### HELPER FUNCTIONS ####
 ##########################
 
-def get_labels(newick_str : str) -> set[str]:
+def get_labels(newick_str: str) -> set[str]:
     """
-    Given a newick string, gather a list of all unique taxa labels present in
-    the string.
+    Given a newick string, gather a set of all unique taxa labels present in
+    the string.  Strips branch lengths (after ``:``) and NHX comments
+    (after ``[``) so that only bare taxon names are returned.
 
     Args:
-        newick_str (str): a newick string.
+        newick_str (str): A newick format string (may include a trailing
+            semicolon).
 
     Returns:
-        set[str]: a set of unique taxa labels
+        set[str]: A set of unique taxa labels.
     """
-    label_set : set[str] = set()
-        
-    pos : int = 0
+    label_set: set[str] = set()
+    pos: int = 0
     cur_label = ""
-    
-    # Search through the string and separate until you have only a taxa label.
+
     while pos < len(newick_str):
         if newick_str[pos] in {")", "(", ","}:
-            if len(cur_label) > 0:
-                label_set.add(cur_label.split(":", maxsplit = 1)[0].split("[")[0].strip())
+            if cur_label:
+                cleaned = cur_label.split(":", maxsplit=1)[0].split("[")[0].strip()
+                if cleaned:
+                    label_set.add(cleaned)
             cur_label = ""
         else:
             cur_label += newick_str[pos]
-        
         pos += 1
-    
+
+    if cur_label:
+        cleaned = cur_label.split(":", maxsplit=1)[0].split("[")[0].strip().rstrip(";")
+        if cleaned:
+            label_set.add(cleaned)
+
     return label_set
             
 ###########################################
@@ -234,7 +239,8 @@ class NexusTemplate:
         Returns:
             N/A
         """
-        gene_trees = GeneTrees(NetworkParser(filename).get_all_networks())
+        from .IO import read_nexus
+        gene_trees = GeneTrees(read_nexus(filename))
         for tree in gene_trees.trees:
             self.add(tree.newick())
         

@@ -1,7 +1,7 @@
 from enum import Enum, auto
 from typing import Any, Iterator, Generator, Optional
 from collections import deque
-from .ModelGraph2 import ModelNode
+from .ModelGraph import ModelNode
 
 class TraversalOrder(Enum):
     """Traversal order options."""

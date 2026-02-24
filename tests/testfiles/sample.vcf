@@ -1,0 +1,16 @@
+##fileformat=VCFv4.1
+##INFO=<ID=NS,Number=1,Type=Integer,Description="Number of Samples With Data">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##source=PhyNetPy_test_data
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Ind1_SpeciesA	Ind2_SpeciesA	Ind1_SpeciesB	Ind2_SpeciesB	Ind1_SpeciesC	Ind2_SpeciesC
+chr1	100	rs001	A	T	50	PASS	NS=6	GT	0/0	0/0	0/1	0/1	1/1	1/1
+chr1	200	rs002	G	C	45	PASS	NS=6	GT	0/0	0/1	0/0	0/1	0/1	1/1
+chr1	300	rs003	T	A	60	PASS	NS=6	GT	0/1	0/1	1/1	1/1	1/1	1/1
+chr1	400	rs004	C	G	55	PASS	NS=6	GT	0/0	0/0	0/0	0/0	0/1	0/1
+chr1	500	rs005	A	G	40	PASS	NS=6	GT	1/1	1/1	0/1	0/1	0/0	0/0
+chr1	600	rs006	T	C	35	PASS	NS=6	GT	0/0	0/0	0/0	0/1	1/1	1/1
+chr1	700	rs007	G	A	50	PASS	NS=6	GT	0/1	0/0	0/1	0/0	0/1	0/1
+chr1	800	rs008	C	T	65	PASS	NS=6	GT	0/0	0/0	0/1	0/1	1/1	0/1
+chr1	900	rs009	A	C	30	PASS	NS=6	GT	./. 	0/0	0/1	0/1	1/1	1/1
+chr1	1000	rs010	T	G	55	PASS	NS=6	GT	0/0	0/0	0/0	0/0	0/1	0/1
+

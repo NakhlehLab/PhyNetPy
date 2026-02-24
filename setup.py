@@ -23,7 +23,7 @@ if USE_CYTHON:
         cython_extensions = [
             Extension(
                 "phynetpy.graph_core_cy",
-                ["src/graph_core_cy.pyx"],
+                ["src/cython/graph_core_cy.pyx"],
                 extra_compile_args=["-O3"] if os.name != 'nt' else [],
             ),
         ]
@@ -68,7 +68,7 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/guides/single-sourcing-package-version/
-    version="0.2.0",  # Required
+    version="0.3.0",  # Required
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary

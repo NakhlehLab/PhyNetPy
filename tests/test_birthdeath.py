@@ -1,5 +1,5 @@
 import pytest
-from PhyNetPy.BirthDeath import *
+from phynetpy.BirthDeath import *
 
 
 ################

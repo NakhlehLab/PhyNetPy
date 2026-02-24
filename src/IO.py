@@ -34,16 +34,17 @@ import re
 import textwrap
 import traceback
 import warnings
-from collections import defaultdict
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, Union
 
 from Bio import Phylo, SeqIO
 from nexus import NexusReader
 
 from .MSA import DataSequence, MSA
 from .Network import Edge, Network, Node
+from .Newick import get_labels as _get_newick_labels
+from .GeneTrees import GeneTrees
 
 
 #####################
@@ -882,30 +883,43 @@ class _NewickTreeBuilder:
             dict: An attribute dictionary for the node.
         """
         attr: dict = {}
+        # Non-reticulation nodes: just forward the raw comment, if any
         if node.name is None or node.name[0] != "#":
             if node.comment is not None:
                 attr["comment"] = node.comment
             return attr
 
-        # Reticulation node
+        # ── Reticulation node (#H0, #LGT1, etc.) ──
         event, num = _parse_reticulation_attributes(node.name.split("#")[1])
         attr["eventType"] = event
         attr["index"] = num
 
+        # A reticulation has exactly two parent edges. We need to pair them
+        # and assign inheritance probabilities (gamma). BioPython delivers
+        # the two occurrences of the same #-name in separate calls, so
+        # self._inheritance accumulates partial info across calls.
+        #
+        # Three cases:
+        #   1) Comment contains "&gamma=X" → explicit gamma
+        #   2) Comment is something else    → unrelated metadata
+        #   3) No comment at all            → gamma must be inferred
         if node.comment is not None:
             if node.comment.split("=")[0] == "&gamma":
                 gamma = float(node.comment.split("=")[1])
                 attr["gamma"] = {parent.label: [gamma, node.branch_length]}
 
                 if node.name in self._inheritance:
+                    # Second occurrence: pair with the first parent's entry
                     for par, info in self._inheritance[node.name].items():
                         if info[0] == -1:
+                            # First parent had no explicit gamma → derive it
                             old_info = [1 - gamma, info[1]]
                             self._inheritance[node.name] = {
                                 par: old_info,
                                 parent.label: [gamma, node.branch_length]
                             }
                         else:
+                            # Both parents gave explicit gammas → must sum to 1
                             if info[0] + gamma != 1:
                                 raise IOError(
                                     "Gamma values provided in newick string "
@@ -917,28 +931,33 @@ class _NewickTreeBuilder:
                             }
                         break
                 else:
+                    # First occurrence of this retic name
                     self._inheritance[node.name] = {
                         parent.label: [gamma, node.branch_length]
                     }
             else:
                 attr["comment"] = node.comment
         else:
-            # No comment on a reticulation node
+            # No gamma annotation on this edge
             if node.name in self._inheritance:
+                # Second occurrence: pair with previously stored parent
                 for par, info in self._inheritance[node.name].items():
                     if info[0] == -1:
+                        # Neither parent specified gamma → default to 0.5/0.5
                         gammas = {
                             par: [0.5, info[1]],
                             parent.label: [0.5, node.branch_length]
                         }
                         self._inheritance[node.name] = gammas
                     else:
+                        # First parent had explicit gamma → complement it
                         self._inheritance[node.name] = {
                             par: info,
                             parent.label: [1 - info[0], node.branch_length]
                         }
                     break
             else:
+                # First occurrence without gamma → mark as -1 (unknown)
                 self._inheritance[node.name] = {
                     parent.label: [-1, node.branch_length]
                 }
@@ -1091,7 +1110,157 @@ def read_newick(newick_str: str) -> Network:
     return builder.build(tree)
 
 
-def read_newick_file(filepath: str) -> List[Network]:
+####################################
+#### GeneTrees Read Helpers ########
+####################################
+
+def _ensure_rooted(network: Network) -> Network:
+    """
+    Ensure a Network representing a tree is rooted (bifurcation at the root).
+
+    If the root has exactly 2 children the tree is already rooted and is
+    returned unchanged.  If the root has 3+ children (trifurcation, i.e.
+    unrooted representation) the first child subtree is arbitrarily chosen
+    as the outgroup: a new root is created with two children -- the
+    outgroup and a new internal node parenting the remaining subtrees.
+
+    Args:
+        network (Network): A tree-topology Network.
+
+    Returns:
+        Network: The (possibly modified) rooted Network.
+    """
+    root = network.root()
+    children = network.get_children(root)
+
+    if len(children) <= 2:
+        return network
+
+    warnings.warn(
+        f"Tree with root '{root.label}' has {len(children)} children "
+        f"(unrooted). Auto-rooting by picking the first child as outgroup."
+    )
+
+    outgroup = children[0]
+    remaining = children[1:]
+
+    new_root = Node("Root")
+    new_internal = Node(f"I_{root.label}")
+
+    child_lengths: Dict[Node, float] = {}
+    for child in children:
+        edge = network.get_edge(root, child)
+        child_lengths[child] = edge.get_length()
+
+    for child in children:
+        network.remove_edge(network.get_edge(root, child))
+    network.remove_nodes(root)
+
+    network.add_nodes(new_root, new_internal)
+
+    outgroup_edge = Edge(new_root, outgroup, length=child_lengths[outgroup])
+    network.add_edges(outgroup_edge)
+
+    network.add_edges(Edge(new_root, new_internal))
+
+    for child in remaining:
+        network.add_edges(Edge(new_internal, child, length=child_lengths[child]))
+
+    return network
+
+
+def _validate_tree_topology(network: Network, label: str = "") -> List[str]:
+    """
+    Validate that a Network has tree topology suitable for a gene tree.
+
+    Checks:
+      - No reticulation nodes (in-degree >= 2).
+      - All internal nodes are binary (exactly 2 children).
+
+    Args:
+        network (Network): The network to validate.
+        label (str): An optional name/index used in warning messages.
+
+    Returns:
+        list[str]: Warning messages (empty if topology is valid).
+    """
+    issues: List[str] = []
+    prefix = f"Tree '{label}': " if label else ""
+
+    for node in network.V():
+        if node.is_reticulation():
+            issues.append(
+                f"{prefix}node '{node.label}' is a reticulation node "
+                f"(in-degree >= 2). Gene trees must be strict trees."
+            )
+
+    for node in network.V():
+        n_children = len(network.get_children(node))
+        if n_children == 0:
+            continue
+        if n_children != 2:
+            issues.append(
+                f"{prefix}internal node '{node.label}' has {n_children} "
+                f"children (expected 2 for a binary tree)"
+            )
+
+    return issues
+
+
+def _networks_to_genetrees(
+    networks: List[Network],
+    species_gene_mapping: Optional[Dict[str, List[str]]] = None,
+    naming_rule: Optional[Any] = None,
+) -> GeneTrees:
+    """
+    Convert a list of Network objects into a GeneTrees container,
+    enforcing rooting and validating tree topology along the way.
+
+    Args:
+        networks: Parsed Network objects.
+        species_gene_mapping: Explicit species -> gene labels dict.
+        naming_rule: Callable for deriving species from gene labels.
+
+    Returns:
+        GeneTrees: A validated, rooted gene tree collection.
+    """
+    from .GeneTrees import GeneTrees
+
+    rooted: List[Network] = []
+    for i, net in enumerate(networks):
+        topology_issues = _validate_tree_topology(net, label=str(i + 1))
+        for issue in topology_issues:
+            warnings.warn(issue)
+
+        net = _ensure_rooted(net)
+        rooted.append(net)
+
+    kwargs: Dict[str, Any] = {"gene_tree_list": rooted}
+    if species_gene_mapping is not None:
+        kwargs["species_gene_mapping"] = species_gene_mapping
+    if naming_rule is not None and species_gene_mapping is None:
+        kwargs["naming_rule"] = naming_rule
+
+    gt = GeneTrees(**kwargs)
+
+    if species_gene_mapping is not None:
+        mapping_issues = gt.validate_mapping()
+        for issue in mapping_issues:
+            warnings.warn(f"GeneTrees mapping: {issue}")
+
+    return gt
+
+
+####################################
+#### Newick Reading Functions ######
+####################################
+
+def read_newick_file(
+    filepath: str,
+    return_type: Literal["networks", "genetrees"] = "networks",
+    species_gene_mapping: Optional[Dict[str, List[str]]] = None,
+    naming_rule: Optional[Callable[..., Any]] = None,
+) -> Union[List[Network], GeneTrees]:
     """
     Read a file containing one or more newick strings (one per line) 
     and parse each into a PhyNetPy Network.
@@ -1100,14 +1269,22 @@ def read_newick_file(filepath: str) -> List[Network]:
 
     Args:
         filepath (str): Path to a file containing newick strings.
+        return_type (str): ``"networks"`` (default) returns a list of
+            Network objects.  ``"genetrees"`` validates each network as
+            a rooted binary tree and wraps them in a GeneTrees object.
+        species_gene_mapping (dict, optional): Explicit species -> gene
+            label mapping.  Only used when *return_type* is
+            ``"genetrees"``.
+        naming_rule (Callable, optional): Gene-label-to-species callable.
+            Only used when *return_type* is ``"genetrees"`` and no
+            explicit mapping is given.
 
     Raises:
         FileNotFoundError: If the file does not exist.
         IOError: If no valid newick strings are found, or parsing fails.
 
     Returns:
-        list[Network]: A list of parsed Network objects, one per newick 
-                       string.
+        list[Network] | GeneTrees: Parsed phylogenetic data.
     """
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Newick file not found: {filepath}")
@@ -1134,6 +1311,13 @@ def read_newick_file(filepath: str) -> List[Network]:
     if not networks:
         raise IOError(
             f"No valid newick strings found in '{filepath}'."
+        )
+
+    if return_type == "genetrees":
+        return _networks_to_genetrees(
+            networks,
+            species_gene_mapping=species_gene_mapping,
+            naming_rule=naming_rule,
         )
 
     return networks
@@ -1195,8 +1379,11 @@ def write_newick_file(
 def read_nexus(
     filepath: str,
     validate_input: bool = False,
-    print_validation_summary: bool = False
-) -> List[Network]:
+    print_validation_summary: bool = False,
+    return_type: Literal["networks", "genetrees"] = "networks",
+    species_gene_mapping: Optional[Dict[str, List[str]]] = None,
+    naming_rule: Optional[Callable[..., Any]] = None,
+) -> Union[List[Network], GeneTrees]:
     """
     Read a nexus file and parse all trees/networks in the TREES block 
     into PhyNetPy Network objects.
@@ -1220,21 +1407,26 @@ def read_nexus(
     Args:
         filepath (str): Path to a nexus file (.nex, .nexus).
         validate_input (bool, optional): If True, run NexusValidator on 
-                                          the file before parsing.  
-                                          Defaults to False.
+            the file before parsing. Defaults to False.
         print_validation_summary (bool, optional): If True and 
-                                                    validate_input is 
-                                                    True, print the 
-                                                    validation summary.  
-                                                    Defaults to False.
+            validate_input is True, print the validation summary.  
+            Defaults to False.
+        return_type (str): ``"networks"`` (default) returns a list of
+            Network objects.  ``"genetrees"`` validates each network as
+            a rooted binary tree and wraps them in a GeneTrees object.
+        species_gene_mapping (dict, optional): Explicit species -> gene
+            label mapping. Only used when *return_type* is
+            ``"genetrees"``.
+        naming_rule (Callable, optional): Gene-label-to-species callable.
+            Only used when *return_type* is ``"genetrees"`` and no
+            explicit mapping is given.
 
     Raises:
         FileNotFoundError: If the file does not exist.
         IOError: If the file cannot be parsed or contains no trees.
 
     Returns:
-        list[Network]: A list of Network objects, one per tree/network 
-                       in the file.
+        list[Network] | GeneTrees: Parsed phylogenetic data.
     """
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Nexus file not found: {filepath}")
@@ -1292,6 +1484,13 @@ def read_nexus(
             f"No valid trees could be parsed from nexus file '{filepath}'."
         )
 
+    if return_type == "genetrees":
+        return _networks_to_genetrees(
+            networks,
+            species_gene_mapping=species_gene_mapping,
+            naming_rule=naming_rule,
+        )
+
     return networks
 
 
@@ -1330,40 +1529,6 @@ def read_nexus_msa(filepath: str) -> MSA:
 ##################################
 #### Nexus Writing Functions #####
 ##################################
-
-def _get_newick_labels(newick_str: str) -> Set[str]:
-    """
-    Given a newick string, extract all unique taxa labels present in 
-    the string.
-
-    Args:
-        newick_str (str): A newick format string.
-
-    Returns:
-        set[str]: A set of unique taxa labels.
-    """
-    label_set: Set[str] = set()
-    pos: int = 0
-    cur_label = ""
-
-    while pos < len(newick_str):
-        if newick_str[pos] in {")", "(", ","}:
-            if len(cur_label) > 0:
-                cleaned = cur_label.split(":", maxsplit=1)[0].split("[")[0].strip()
-                if cleaned:
-                    label_set.add(cleaned)
-            cur_label = ""
-        else:
-            cur_label += newick_str[pos]
-        pos += 1
-
-    # Handle any remaining label at the end
-    if cur_label:
-        cleaned = cur_label.split(":", maxsplit=1)[0].split("[")[0].strip().rstrip(";")
-        if cleaned:
-            label_set.add(cleaned)
-
-    return label_set
 
 
 def write_nexus(
@@ -1442,13 +1607,11 @@ def write_nexus(
             # Header
             f.write("#NEXUS\n\n")
 
-            # TAXA block
+            # TAXA block — put all labels on one line so that
+            # NexusReader does not count the terminating ';' as a taxon.
             f.write("BEGIN TAXA;\n")
             f.write(f"DIMENSIONS NTAX={len(all_taxa)};\n")
-            f.write("TAXALABELS\n")
-            for taxon in sorted(all_taxa):
-                f.write(f"{taxon}\n")
-            f.write(";\n")
+            f.write("TAXLABELS " + " ".join(sorted(all_taxa)) + ";\n")
             f.write("END;\n")
 
             # TREES block

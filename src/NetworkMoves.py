@@ -43,12 +43,26 @@ follows:
 #### Network Changes ####
 #########################
 
-def add_hybrid(net : Network,
-               source : Edge, 
-               destination : Edge, 
-               t_src : float = None, 
-               t_dest : float = None) -> None:
+def add_hybrid(net: Network,
+               source: Edge, 
+               destination: Edge, 
+               t_src: float = None, 
+               t_dest: float = None) -> None:
+    """Add a hybrid (reticulation) edge between *source* and *destination*.
 
+    Two new internal nodes are inserted -- one splitting *source* and one
+    splitting *destination* -- and a directed edge is created from the
+    source-side node to the destination-side node (which is marked as a
+    reticulation).  If *source* and *destination* are the same edge, a
+    bubble (parallel pair of edges) is created instead.
+
+    Args:
+        net: The network to modify in place.
+        source: The edge on which to place the new outgoing node.
+        destination: The edge on which to place the new reticulation node.
+        t_src: Optional time at which to place the source-side node.
+        t_dest: Optional time at which to place the destination-side node.
+    """
     if source == destination:
         warnings.warn("Source and destination edges are the same. Bubble edge will be created.")
         

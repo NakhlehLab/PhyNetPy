@@ -34,13 +34,8 @@ Design - [ ]
 from math import sqrt, comb, pow
 import time
 from typing import Callable
-from numba.core import base
-from numba.core.typing.builtins import Int
 import numpy as np
-import string
-import scipy
 from scipy.linalg import expm
-import math
 from dataclasses import dataclass
 
 # CUDA imports - with graceful fallback
@@ -171,20 +166,21 @@ GPU_SPECS = _detect_gpu()
 # Relative imports
 from .MSA import MSA, DataSequence
 from .BirthDeath import CBDP
-from .NetworkParser import NetworkParser
+from .IO import read_nexus
 from .Alphabet import Alphabet
 from .Matrix import Matrix
 # from .ModelGraph import (
 #     Model, ModelNode, CalculationNode, Parameter, Accumulator, ExtantSpecies
 # )
-from .ModelFactory2 import *
+from .ModelFactory import *
 from .Network import *
 from .MetropolisHastings import MetropolisHastings, ProposalKernel
 from .Visitor import *
 from .Strategy import *
 from .Executor import *
 from .Traversal import *
-from .ModelGraph2 import *
+from .ModelGraph import *
+from .GraphUtils import level as network_level
 
 
 """
@@ -267,12 +263,28 @@ def nr_to_index(n : int, r : int) -> int:
 
 @dataclass
 class NodeVPI:
-    tensor: np.ndarray       # shape [S, d1, d2, ...]                  
-    interfaces: list[str]    # ["α", "β", ...] length = tensor.ndim-1 
-    max_lineages: list[int]  # [m_α, m_β, ...] per interface 
-    log_scale: np.ndarray = None  # per-site log scaling factor, shape [S]
+    """Partial-likelihood vector bundle carried by a model node.
+
+    Attributes:
+        tensor: Partial-likelihood array of shape ``(S, d1, d2, ...)``,
+            where *S* is the number of sites and each subsequent axis
+            corresponds to an interface.
+        interfaces: Labels for each tensor axis beyond the site axis
+            (length equals ``tensor.ndim - 1``).
+        max_lineages: Maximum lineage count per interface.
+        log_scale: Per-site log rescaling factors, shape ``(S,)``.
+    """
+    tensor: np.ndarray
+    interfaces: list[str]
+    max_lineages: list[int]
+    log_scale: np.ndarray = None
 
 def state_dim(m: int) -> int:
+    """Return the state-space dimension for *m* lineages.
+
+    The dimension equals the number of valid ``(n, r)`` pairs where
+    ``1 <= n <= m`` and ``0 <= r <= n``.
+    """
     return nr_to_index(m, m) + 1
 
 def build_split_tensor(m: int, gamma: float) -> np.ndarray:
@@ -560,13 +572,25 @@ def _disjoint_subnets(n: InternalNode) -> bool:
 
 def deduplicate_vpis(vpis: list[NodeVPI]) -> list[NodeVPI]:
     """
-    Remove duplicates by identity, preserving order.
+    Remove duplicates by identity (``is``), preserving order.
+
+    Uses an ``id()``-based set for O(n) performance instead of O(n^2)
+    linear scans.
+
+    Args:
+        vpis (list[NodeVPI]): VPI objects, possibly with duplicate references.
+
+    Returns:
+        list[NodeVPI]: De-duplicated list in original order.
     """
-    seen = []
+    seen_ids: set[int] = set()
+    unique: list[NodeVPI] = []
     for vpi in vpis:
-        if not any(vpi is v for v in seen):
-            seen.append(vpi)
-    return seen
+        vid = id(vpi)
+        if vid not in seen_ids:
+            seen_ids.add(vid)
+            unique.append(vpi)
+    return unique
 
 
 def _compute_max_lineages(model: Model, samples: dict[str, int]) -> int:
@@ -610,7 +634,8 @@ def _compute_network_level(model: Model) -> int:
     """
     Compute the level of the phylogenetic network from the model graph.
     
-    The level is the number of reticulation nodes in the network.
+    The level is the maximum number of reticulation nodes in any single
+    biconnected component (blob) of the underlying undirected graph.
     This directly determines the maximum tensor dimensionality:
       level-0 (tree): 2D tensors  (sites × d)
       level-1:        3D tensors  (sites × d × d)
@@ -620,8 +645,10 @@ def _compute_network_level(model: Model) -> int:
     Args:
         model: The built SNP model.
     Returns:
-        int: The network level (number of reticulation nodes).
+        int: The network level (max reticulations per blob).
     """
+    if model.network is not None:
+        return network_level(model.network)
     return len(model.nodetypes.get("reticulation", []))
 
 
@@ -973,7 +1000,7 @@ def SNP_LIKELIHOOD(filename : str,
                           resources (GPU VRAM or system RAM).
     """
     
-    net = NetworkParser(filename).get_network(0)
+    net = read_nexus(filename)[0]
     
     aln = MSA(filename)
     
@@ -1241,6 +1268,13 @@ class SNPStrategy(Strategy):
         
         #Cache is from nodes to [is_dirty, vpi]. If is_dirty is true, needs recalculation
         self.cache : dict[ModelNode, tuple[bool, NodeVPI]] = dict()
+
+    def _get_cached_vpi(self, n: ModelNode) -> NodeVPI | None:
+        """Return the cached VPI if *n* is clean, otherwise ``None``."""
+        entry = self.cache.get(n)
+        if entry is not None and entry[0] is False:
+            return entry[1]
+        return None
     
     # ───────────────────────────────────────────────────────────────────────
     # GPU helpers
@@ -1528,9 +1562,7 @@ class SNPStrategy(Strategy):
         
         # Vectorized leaf initialization (GPU-friendly: single kernel launch)
         # Pre-compute state indices on CPU, then transfer
-        state_indices_np = np.array(
-            [nr_to_index(n.samples, r) for r in reds], dtype=np.int64
-        )
+        state_indices_np = np.array([nr_to_index(n.samples, r) for r in reds], dtype=np.int64)
         
         F = xp.zeros((self.sites, state_dim(n.samples)), dtype=xp.float64)
         site_indices = xp.arange(self.sites)
@@ -1550,9 +1582,9 @@ class SNPStrategy(Strategy):
         """
         Compute the partial likelihoods at an internal node.
         """
-        if n in self.cache:
-            if self.cache[n][0] is False:
-                return self.cache[n][1]
+        cached = self._get_cached_vpi(n)
+        if cached is not None:
+            return cached
         
         rule2 = _disjoint_subnets(n)
         
@@ -1603,9 +1635,9 @@ class SNPStrategy(Strategy):
         """
         xp = self.xp
         
-        if n in self.cache:
-            if self.cache[n][0] is False:
-                return self.cache[n][1]
+        cached = self._get_cached_vpi(n)
+        if cached is not None:
+            return cached
         
         branches : tuple[Branch, Branch]= n.branch_info
         
@@ -1646,9 +1678,9 @@ class SNPStrategy(Strategy):
         """
         Compute the partial likelihoods at the root node.
         """
-        if n in self.cache:
-            if self.cache[n][0] is False:
-                return self.cache[n][1]
+        cached = self._get_cached_vpi(n)
+        if cached is not None:
+            return cached
         
         rule2 = _disjoint_subnets(n)
         
@@ -1687,9 +1719,8 @@ class SNPStrategy(Strategy):
         """
         xp = self.xp
         
-        if n in self.cache:
-            if self.cache[n][0] is False:
-                return 
+        if self._get_cached_vpi(n) is not None:
+            return 
         
         m = root.max_lineages[-1]
         

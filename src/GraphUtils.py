@@ -29,7 +29,6 @@ Design - [ ]
 
 from .Network import *
 from collections import deque
-from .NetworkParser import *
 from typing import Dict, List, Tuple, Set, Union
 import numpy as np
 import heapq
@@ -164,6 +163,7 @@ def subnet_given_leaves(net : Network, leaf_set : list[Node]) -> Network:
         Network: A new Network object with node and edge copies of the original.
     """
     subnet : Network = Network()
+    target_set : set[Node] = set(leaf_set)
     
     sub_root = net.mrca(set(leaf_set))
     new_sub_root = sub_root.copy()
@@ -175,22 +175,24 @@ def subnet_given_leaves(net : Network, leaf_set : list[Node]) -> Network:
         cur = q.popleft()
     
         for child in net.get_children(cur):
-            new_child = child.copy()
-            old_new_map[child] = new_child
-            subnet.add_nodes(new_child)
+            if child not in target_set \
+               and len(net.leaf_descendants(child).intersection(target_set)) == 0:
+                continue
             
-            #Copy edge info
+            if child not in old_new_map:
+                new_child = child.copy()
+                old_new_map[child] = new_child
+                subnet.add_nodes(new_child)
+                q.appendleft(child)
+            
             old_edge = net.get_edge(cur, child)
-        
-            #Add equivalent edge
-            new_edge = Edge(old_new_map[cur], new_child)
+            new_edge = Edge(old_new_map[cur], old_new_map[child])
             new_edge.set_gamma(old_edge.get_gamma())
             new_edge.set_length(old_edge.get_length())
-
             subnet.add_edges(new_edge)
-            
-            #Add child to queue
-            q.appendleft(child)
+    
+    if len(list(subnet.V())) > 1:
+        subnet.clean()
     
     return subnet
     
@@ -398,6 +400,14 @@ def sample_displayed_tree(net: Network,
     tree_copy.clean()
     return tree_copy
 
+def _copy_edge_attributes(src_edge: Edge, dest_edge: Edge) -> None:
+    """Copy gamma, weight, length, and tag from *src_edge* to *dest_edge*."""
+    dest_edge.set_gamma(src_edge.get_gamma())
+    dest_edge.set_weight(src_edge.get_weight())
+    dest_edge.set_length(src_edge.get_length())
+    dest_edge.set_tag(src_edge.get_tag())
+
+
 def contract_edge(net: Network, edge: Edge, keep: str = "parent") -> None:
     """
     Contract an internal edge by merging its endpoints.
@@ -411,79 +421,39 @@ def contract_edge(net: Network, edge: Edge, keep: str = "parent") -> None:
     Raises:
         NetworkError: On invalid keep value.
     """
-    if keep not in ["parent", "child"]:
+    if keep not in ("parent", "child"):
         raise NetworkError("keep must be one of ['parent','child']")
 
-    u = edge.src
-    v = edge.dest
+    keep_node = edge.src if keep == "parent" else edge.dest
+    drop_node = edge.dest if keep == "parent" else edge.src
 
-    if keep == "parent":
-        keep_node = u
-        drop_node = v
-        # Redirect incoming edges of v (except u->v) to u
-        for e in list(net.in_edges(drop_node)):
-            if e.src == keep_node:
-                continue
-            # Avoid duplicate parallel if already exists
-            exists = any(pe.src == e.src and pe.dest == keep_node for pe in net.E())
-            if not exists:
-                new_e = Edge(e.src, keep_node)
-                new_e.set_gamma(e.get_gamma())
-                new_e.set_weight(e.get_weight())
-                new_e.set_length(e.get_length())
-                new_e.set_tag(e.get_tag())
-                net.add_edges(new_e)
+    existing_pairs: set[tuple[int, int]] = {(id(e.src), id(e.dest)) for e in net.E()}
+
+    for e in list(net.in_edges(drop_node)):
+        if e.src is keep_node:
             net.remove_edge(e)
-        # Redirect outgoing edges of v to u
-        for e in list(net.out_edges(drop_node)):
-            if e.dest == keep_node:
-                continue
-            exists = any(pe.src == keep_node and pe.dest == e.dest for pe in net.E())
-            if not exists:
-                new_e = Edge(keep_node, e.dest)
-                new_e.set_gamma(e.get_gamma())
-                new_e.set_weight(e.get_weight())
-                new_e.set_length(e.get_length())
-                new_e.set_tag(e.get_tag())
-                net.add_edges(new_e)
+            continue
+        if (id(e.src), id(keep_node)) not in existing_pairs:
+            new_e = Edge(e.src, keep_node)
+            _copy_edge_attributes(e, new_e)
+            net.add_edges(new_e)
+            existing_pairs.add((id(e.src), id(keep_node)))
+        net.remove_edge(e)
+
+    for e in list(net.out_edges(drop_node)):
+        if e.dest is keep_node:
             net.remove_edge(e)
-        # Remove original edge and the dropped node
-        if edge in net.E():
-            net.remove_edge(edge)
-        net.remove_nodes(drop_node)
-    else:
-        keep_node = v
-        drop_node = u
-        # Redirect incoming edges of u to v
-        for e in list(net.in_edges(drop_node)):
-            if e.src == keep_node:
-                continue
-            exists = any(pe.src == e.src and pe.dest == keep_node for pe in net.E())
-            if not exists:
-                new_e = Edge(e.src, keep_node)
-                new_e.set_gamma(e.get_gamma())
-                new_e.set_weight(e.get_weight())
-                new_e.set_length(e.get_length())
-                new_e.set_tag(e.get_tag())
-                net.add_edges(new_e)
-            net.remove_edge(e)
-        # Redirect outgoing edges of u (except u->v) to v
-        for e in list(net.out_edges(drop_node)):
-            if e.dest == keep_node:
-                continue
-            exists = any(pe.src == keep_node and pe.dest == e.dest for pe in net.E())
-            if not exists:
-                new_e = Edge(keep_node, e.dest)
-                new_e.set_gamma(e.get_gamma())
-                new_e.set_weight(e.get_weight())
-                new_e.set_length(e.get_length())
-                new_e.set_tag(e.get_tag())
-                net.add_edges(new_e)
-            net.remove_edge(e)
-        # Remove original edge and the dropped node
-        if edge in net.E():
-            net.remove_edge(edge)
-        net.remove_nodes(drop_node)
+            continue
+        if (id(keep_node), id(e.dest)) not in existing_pairs:
+            new_e = Edge(keep_node, e.dest)
+            _copy_edge_attributes(e, new_e)
+            net.add_edges(new_e)
+            existing_pairs.add((id(keep_node), id(e.dest)))
+        net.remove_edge(e)
+
+    if edge in net.E():
+        net.remove_edge(edge)
+    net.remove_nodes(drop_node)
 
 def reroot(net: Network, new_root: Node) -> Network:
     """
@@ -496,6 +466,9 @@ def reroot(net: Network, new_root: Node) -> Network:
     Args:
         net (Network): A network object.
         new_root (Node): Node in `net` to be the new root.
+
+    Raises:
+        NetworkError: If `new_root` is not a node in the network.
 
     Returns:
         Network: Re-rooted copy.
@@ -605,10 +578,15 @@ def bridges_and_articulations(net: Network) -> tuple[list[tuple[str, str]], list
     Compute bridges and articulation points on the underlying undirected graph
     using Tarjan's algorithm.
 
+    Args:
+        net (Network): A network object.
+
     Returns:
-        (bridges, articulations): bridges as (u,v) with u<v by name, articulations as names.
+        tuple[list[tuple[str, str]], list[str]]:
+            A pair (bridges, articulations) where bridges are (u, v) tuples
+            with u < v by node label, and articulations are node labels.
     """
-    # Undirected adjacency (simple graph)
+    # Build an undirected adjacency list from the directed edge set.
     adj: Dict[Node, list[Node]] = {n: [] for n in net.V()}
     for e in net.E():
         if e.dest not in adj[e.src]:
@@ -616,6 +594,10 @@ def bridges_and_articulations(net: Network) -> tuple[list[tuple[str, str]], list
         if e.src not in adj[e.dest]:
             adj[e.dest].append(e.src)
 
+    # Tarjan's algorithm state:
+    #   disc[u]   – discovery time of node u
+    #   low[u]    – lowest disc reachable from the subtree rooted at u
+    #   parent[u] – DFS-tree parent of u (None for DFS roots)
     time = 0
     disc: Dict[Node, int] = {}
     low: Dict[Node, int] = {}
@@ -638,17 +620,19 @@ def bridges_and_articulations(net: Network) -> tuple[list[tuple[str, str]], list
                 parent[v] = u
                 child_count += 1
                 dfs(v)
+                # Propagate the lowest-reachable discovery time upward
                 low[u] = min(low[u], low[v])
-                # Bridge
+                # Bridge: no back-edge from v's subtree reaches u or above
                 if low[v] > disc[u]:
                     bridges.add(tuple(sorted((u.label, v.label))))  # type: ignore
-                # Articulation (non-root)
+                # Articulation (non-root): removing u disconnects v's subtree
                 if parent[u] is not None and low[v] >= disc[u]:
                     is_art = True
             elif v != parent[u]:
+                # Back edge: update low-link to reflect the cycle
                 low[u] = min(low[u], disc[v])
 
-        # Root articulation
+        # A DFS root is an articulation point iff it has >1 DFS children
         if parent[u] is None and child_count > 1:
             is_art = True
         if is_art:
@@ -667,6 +651,9 @@ def transitive_reduction(net: Network) -> Network:
 
     Args:
         net (Network): Input network (must be acyclic).
+
+    Raises:
+        NetworkError: If the network contains a directed cycle.
 
     Returns:
         Network: A reduced network with identical reachability.
@@ -722,7 +709,7 @@ def blobs(net: Network) -> list[set[Node]]:
                          biconnected component in the undirected view of the
                          network.
     """
-    # Reuse the biconnected component logic from level()
+    # Build undirected adjacency list from directed edges
     adj: Dict[Node, list[Node]] = {n: [] for n in net.V()}
     for e in net.E():
         if e.dest not in adj[e.src]:
@@ -730,6 +717,11 @@ def blobs(net: Network) -> list[set[Node]]:
         if e.src not in adj[e.dest]:
             adj[e.dest].append(e.src)
 
+    # Tarjan's biconnected-component algorithm.
+    # An edge stack tracks the DFS-tree and back edges belonging to the
+    # current component.  When an articulation point is detected
+    # (low[v] >= disc[u]), all edges from the stack down to (u,v) form
+    # one biconnected component.
     time = 0
     disc: Dict[Node, int] = {n: -1 for n in net.V()}
     low: Dict[Node, int] = {n: -1 for n in net.V()}
@@ -741,6 +733,7 @@ def blobs(net: Network) -> list[set[Node]]:
         edge_stack.append((u, v))
 
     def pop_component(until: tuple[Node, Node]) -> set[Node]:
+        """Pop edges until *until* is reached; return the node set."""
         comp_nodes: set[Node] = set()
         while edge_stack:
             a, b = edge_stack.pop()
@@ -761,23 +754,61 @@ def blobs(net: Network) -> list[set[Node]]:
                 push_edge(u, v)
                 dfs(v)
                 low[u] = min(low[u], low[v])
+                # Articulation detected: v's subtree cannot reach above u
                 if low[v] >= disc[u]:
                     comp = pop_component((u, v))
                     if len(comp) > 0:
                         components.append(comp)
             elif v != parent[u] and disc[v] < disc[u]:
+                # Back edge → part of the current component
                 push_edge(u, v)
                 low[u] = min(low[u], disc[v])
 
     for n in net.V():
         if disc[n] == -1:
             dfs(n)
+            # Flush any remaining edges into a final component
             if edge_stack:
                 comp = pop_component(edge_stack[-1])
                 if len(comp) > 0:
                     components.append(comp)
 
     return components
+
+def tree_of_blobs(net: Network) -> list[Network]:
+    """
+    Decompose a phylogenetic network into its biconnected components (blobs).
+
+    Each blob is a maximal biconnected subgraph of the underlying undirected
+    graph. Returns a list of Network objects, one per biconnected component,
+    containing copies of the original nodes and directed edges. Node names
+    are preserved but all objects are distinct from the original network.
+
+    Args:
+        net (Network): A phylogenetic network.
+
+    Returns:
+        list[Network]: One Network per biconnected component (blob).
+    """
+    result: list[Network] = []
+
+    for comp_nodes in blobs(net):
+        blob = Network()
+        old_new: dict[Node, Node] = {}
+
+        for node in comp_nodes:
+            new_node = node.copy()
+            old_new[node] = new_node
+            blob.add_nodes(new_node)
+
+        for e in net.E():
+            if e.src in comp_nodes and e.dest in comp_nodes:
+                new_edge = e.copy(old_new[e.src], old_new[e.dest])
+                blob.add_edges(new_edge)
+
+        result.append(blob)
+
+    return result
 
 def level(net: Network) -> int:
     """
@@ -917,6 +948,8 @@ def topological_order(net: Network) -> list[Node]:
     """
     Compute a topological order of nodes in an acyclic network.
 
+    Delegates to :pymeth:`Network.topological_order`.
+
     Args:
         net (Network): A network object.
 
@@ -926,20 +959,7 @@ def topological_order(net: Network) -> list[Node]:
     Returns:
         list[Node]: Nodes in topological order from roots to leaves.
     """
-    indeg: Dict[Node, int] = {n: net.in_degree(n) for n in net.V()}
-    q: deque[Node] = deque([n for n, d in indeg.items() if d == 0])
-    order: list[Node] = []
-    while q:
-        u = q.popleft()
-        order.append(u)
-        for e in net.out_edges(u):
-            v = e.dest
-            indeg[v] -= 1
-            if indeg[v] == 0:
-                q.append(v)
-    if len(order) != len(net.V()):
-        raise NetworkError("Graph has cycles; no topological order exists")
-    return order
+    return net.topological_order()
 
 def break_cycles(net: Network, strategy: str = "greedy") -> Network:
     """
@@ -952,6 +972,9 @@ def break_cycles(net: Network, strategy: str = "greedy") -> Network:
     Args:
         net (Network): A network object.
         strategy (str): Currently only 'greedy' is supported.
+
+    Raises:
+        NetworkError: If an unsupported strategy is specified.
 
     Returns:
         Network: An acyclic copy of the input network.
@@ -1074,24 +1097,6 @@ def induced_subnetwork_by_taxa(net: Network, taxa: list[str]) -> Network:
     sub.clean([False, False, True])
     return sub
 
-def random_object(mylist : list[Any], rng : np.random.Generator) -> object:
-    """
-    Select a random item from a list using an rng object 
-    (for testing consistency and debugging purposes)
-
-    Args:
-        mylist (list[Any]): a list of any type
-        rng (np.random.Generator) : the result of a .default_rng(seed) call
-
-    Returns:
-        object : an item from mylist
-    """
-    rand_index : int = rng.integers(0, len(mylist)) # type: ignore
-    return mylist[rand_index]
-
-def printable_dict(mydict : dict[Node, Any]) -> None:
-    print({key.label : value for key, value in mydict.items()})
-
 def extract_topology(newick_str: str) -> str:  
     """
     Extract the topology from a newick string by removing branch lengths,
@@ -1186,11 +1191,16 @@ def extract_topology_from_file(filename: str, output_filename: str = None) -> li
     Extract topology from all newick strings in a file.
     
     Args:
-        filename (str): Path to file containing newick strings
-        output_filename (str, optional): Path to save cleaned newick strings
+        filename (str): Path to file containing newick strings.
+        output_filename (str, optional): Path to save cleaned newick strings.
+            If None, results are only returned without writing to disk.
+
+    Raises:
+        FileNotFoundError: If `filename` does not exist.
+        IOError: If reading or writing the file fails.
         
     Returns:
-        list[str]: List of topology-only newick strings
+        list[str]: List of topology-only newick strings.
     """
     cleaned_newicks = []
     
@@ -1248,407 +1258,286 @@ def is_isomorphic(net1 : Network, net2 : Network) -> bool:
     if len(retics1) != len(retics2):
         return False
     
-    # Normalize both networks by relabeling leaves to generic names
-    # This allows us to compare topology regardless of leaf labels
-    def normalize_network(net: Network) -> tuple[str, set[frozenset[str]]]:
-        """Create a normalized copy with generic leaf labels and return topology info"""
+    def normalized_clusters(net: Network) -> set[frozenset[str]]:
+        """Create a normalized copy with generic leaf labels and return cluster set."""
         net_copy, old_new = net.copy()
         
-        # Get leaves sorted by their original labels for consistent ordering
         leaves = sorted(net.get_leaves(), key=lambda n: n.label)
         
-        # Create mapping from old leaves to new generic labels
-        label_map = {}
         for i, leaf in enumerate(leaves):
-            old_leaf = old_new[leaf]
-            label_map[old_leaf] = f"L{i+1}"
+            net_copy.update_node_name(old_new[leaf], f"L{i+1}")
         
-        # Relabel all leaves in the copy
-        for old_leaf, new_label in label_map.items():
-            net_copy.update_node_name(old_leaf, new_label)
-        
-        # Extract topology-only newick (removes branch lengths, etc.)
-        newick_str = net_copy.newick()
-        topo_str = extract_topology(newick_str)
-        
-        # Also get clusters normalized by generic labels
         clusters = get_all_clusters(net_copy, include_trivial=False)
-        cluster_set = set[frozenset[str]](frozenset[str](n.label for n in cluster) for cluster in clusters)
-        
-        return (topo_str, cluster_set)
+        return {frozenset(n.label for n in cluster) for cluster in clusters}
     
-    # Compare normalized topologies using both newick and clusters
-    # This is more robust than just newick comparison
-    topo1, clusters1 = normalize_network(net1)
-    topo2, clusters2 = normalize_network(net2)
-    
-    # Networks are isomorphic if both topology strings and cluster sets match
-    return topo1 == topo2 and clusters1 == clusters2
+    return normalized_clusters(net1) == normalized_clusters(net2)
 
-def ascii(net : Network, show_edge_lengths : bool = False) -> str:
+
+# ── Shared helpers for ascii() / ascii_extended() ──────────────────────
+
+def _ascii_compute_depths(
+    net: Network, root: Node
+) -> tuple[dict[Node, int], int]:
+    """BFS depth assignment. Reticulation nodes keep the maximum depth."""
+    node_depth: dict[Node, int] = {}
+    queue: deque[tuple[Node, int]] = deque([(root, 0)])
+    max_depth = 0
+    while queue:
+        node, depth = queue.popleft()
+        if node in node_depth:
+            node_depth[node] = max(node_depth[node], depth)
+        else:
+            node_depth[node] = depth
+        max_depth = max(max_depth, depth)
+        for child in net.get_children(node):
+            queue.append((child, depth + 1))
+    return node_depth, max_depth
+
+
+def _ascii_ordered_leaves(net: Network, node: Node) -> list[Node]:
+    """Left-to-right DFS collection of leaf nodes."""
+    children = net.get_children(node)
+    if len(children) == 0:
+        return [node]
+    result: list[Node] = []
+    for child in children:
+        result.extend(_ascii_ordered_leaves(net, child))
+    return result
+
+
+def _ascii_compute_x(
+    net: Network, node: Node, node_x: dict[Node, float]
+) -> float:
+    """Recursive x-position: leaves keep their preset value; internal
+    nodes are centred on the mean of their children."""
+    if node in node_x:
+        return node_x[node]
+    children = net.get_children(node)
+    if len(children) == 0:
+        return node_x.get(node, 0.0)
+    child_xs = [_ascii_compute_x(net, child, node_x) for child in children]
+    node_x[node] = sum(child_xs) / len(child_xs)
+    return node_x[node]
+
+
+def _ascii_group_by_depth(
+    node_depth: dict[Node, int], node_x: dict[Node, float]
+) -> dict[int, list[Node]]:
+    """Group nodes by depth and sort each group by x-position."""
+    nodes_by_depth: dict[int, list[Node]] = {}
+    for node, depth in node_depth.items():
+        nodes_by_depth.setdefault(depth, []).append(node)
+    for depth in nodes_by_depth:
+        nodes_by_depth[depth].sort(key=lambda n: node_x[n])
+    return nodes_by_depth
+
+
+def _ascii_prepare_layout(
+    net: Network,
+) -> tuple[Node, dict[Node, int], int, list[Node], dict[Node, float], None] | str:
+    """Shared preamble for both ascii renderers.
+
+    Returns either a descriptive error string or a tuple of
+    ``(root, node_depth, max_depth, ordered_leaves, node_x, None)``.
     """
-    Prints out an ascii art depiction of this Network object as a vertical 
+    if len(net.V()) == 0:
+        return "(empty network)"
+    try:
+        root = net.root()
+    except Exception:
+        return "(network has no valid root)"
+
+    node_depth, max_depth = _ascii_compute_depths(net, root)
+    ordered_leaves = _ascii_ordered_leaves(net, root)
+    if len(ordered_leaves) == 0:
+        return f"  {root.label if root.label else '?'}"
+
+    node_x: dict[Node, float] = {leaf: float(i) for i, leaf in enumerate(ordered_leaves)}
+    _ascii_compute_x(net, root, node_x)
+    return root, node_depth, max_depth, ordered_leaves, node_x, None
+
+
+# ── Public ASCII renderers ─────────────────────────────────────────────
+
+def ascii(net: Network, show_edge_lengths: bool = False) -> str:
+    """
+    Prints out an ascii art depiction of this Network object as a vertical
     tree/network with the root at the top and leaves at the bottom.
 
     Args:
         net (Network): A Network
         show_edge_lengths (bool): If True, display edge lengths. Defaults to False.
-        
+
     Returns:
         str: The ASCII art representation of the network
-        
+
     Example:
-        For newick string "((C,D)A, E)Root;", outputs:
-        
+        For newick string "((C,D)A, E)Root;", outputs::
+
                   Root
                  /    \\
                 A      E
                / \\
               C   D
     """
-    from collections import deque
-    
-    if len(net.V()) == 0:
-        return "(empty network)"
-    
-    try:
-        root = net.root()
-    except Exception:
-        # Network might have issues finding root
-        return "(network has no valid root)"
-    
-    # Step 1: Assign depth levels to each node using BFS
-    node_depth : dict[Node, int] = {}
-    queue : deque[tuple[Node, int]] = deque([(root, 0)])
-    max_depth = 0
-    
-    while queue:
-        node, depth = queue.popleft()
-        if node in node_depth:
-            # For reticulation nodes, take the maximum depth
-            node_depth[node] = max(node_depth[node], depth)
-        else:
-            node_depth[node] = depth
-        max_depth = max(max_depth, depth)
-        
-        for child in net.get_children(node):
-            queue.append((child, depth + 1))
-    
-    # Step 2: Assign x-positions to leaves first, then propagate up
-    # Leaves get consecutive x-positions
-    node_x : dict[Node, float] = {}
-    
-    # Get leaves in a consistent order (by traversing left-to-right)
-    def get_ordered_leaves(node : Node) -> list[Node]:
-        children = net.get_children(node)
-        if len(children) == 0:
-            return [node]
-        result = []
-        for child in children:
-            result.extend(get_ordered_leaves(child))
-        return result
-    
-    ordered_leaves = get_ordered_leaves(root)
-    
-    if len(ordered_leaves) == 0:
-        # Handle case where root has no descendants
-        return f"  {root.label if root.label else '?'}"
-    
-    # Assign x-positions to leaves
-    for i, leaf in enumerate(ordered_leaves):
-        node_x[leaf] = float(i)
-    
-    # Compute x-positions for internal nodes (average of children)
-    def compute_x(node : Node) -> float:
-        if node in node_x:
-            return node_x[node]
-        children = net.get_children(node)
-        if len(children) == 0:
-            return node_x.get(node, 0.0)
-        child_xs = [compute_x(child) for child in children]
-        node_x[node] = sum(child_xs) / len(child_xs)
-        return node_x[node]
-    
-    compute_x(root)
-    
-    # Step 3: Build the ASCII art
-    # Determine character width per unit x and spacing
-    char_width = 6  # characters per x unit
-    
-    # Get max label length for spacing
-    max_label_len = max(len(node.label) if node.label else 1 for node in net.V())
+    layout = _ascii_prepare_layout(net)
+    if isinstance(layout, str):
+        return layout
+    root, node_depth, max_depth, ordered_leaves, node_x, _ = layout
+
+    char_width = 6
+    max_label_len = max(len(n.label) if n.label else 1 for n in net.V())
     char_width = max(char_width, max_label_len + 2)
-    
-    # Group nodes by depth
-    nodes_by_depth : dict[int, list[Node]] = {}
-    for node, depth in node_depth.items():
-        if depth not in nodes_by_depth:
-            nodes_by_depth[depth] = []
-        nodes_by_depth[depth].append(node)
-    
-    # Sort nodes at each depth by x position
-    for depth in nodes_by_depth:
-        nodes_by_depth[depth].sort(key=lambda n: node_x[n])
-    
-    lines : list[str] = []
-    total_width = int((len(ordered_leaves)) * char_width + max_label_len)
-    
-    # Helper to get x pixel position for a node
-    def get_node_center(node : Node) -> int:
+    total_width = int(len(ordered_leaves) * char_width + max_label_len)
+    nodes_by_depth = _ascii_group_by_depth(node_depth, node_x)
+
+    def _center(node: Node) -> int:
         return int(node_x[node] * char_width) + char_width // 2
-    
+
+    lines: list[str] = []
     for depth in range(max_depth + 1):
         if depth not in nodes_by_depth:
             continue
-        
         nodes_at_depth = nodes_by_depth[depth]
-        
-        # Build the node label line
+
         label_line = [' '] * total_width
         for node in nodes_at_depth:
             x_pos = int(node_x[node] * char_width)
             label = node.label if node.label else "?"
-            # Center the label at x_pos
-            start = x_pos - len(label) // 2 + char_width // 2
-            start = max(0, start)
+            start = max(0, x_pos - len(label) // 2 + char_width // 2)
             for i, ch in enumerate(label):
                 if start + i < total_width:
                     label_line[start + i] = ch
-        
         lines.append(''.join(label_line).rstrip())
-        
-        # Build the branch lines connecting to children
+
         if depth < max_depth:
             branch_line = [' '] * total_width
-            
             for node in nodes_at_depth:
                 children = net.get_children(node)
                 if len(children) == 0:
                     continue
-                
-                parent_x = get_node_center(node)
-                
-                # Get sorted children positions
-                child_positions = [(child, get_node_center(child)) for child in children]
-                child_positions.sort(key=lambda x: x[1])
-                
+                parent_x = _center(node)
+                child_positions = sorted(
+                    [(_center(c), c) for c in children], key=lambda t: t[0]
+                )
                 if len(child_positions) == 1:
-                    # Single child
-                    _, child_x = child_positions[0]
-                    if child_x < parent_x:
+                    cx = child_positions[0][0]
+                    if cx < parent_x:
                         if 0 <= parent_x - 1 < total_width:
                             branch_line[parent_x - 1] = '/'
-                    elif child_x > parent_x:
+                    elif cx > parent_x:
                         if 0 <= parent_x + 1 < total_width:
                             branch_line[parent_x + 1] = '\\'
                     else:
                         if 0 <= parent_x < total_width:
                             branch_line[parent_x] = '|'
                 elif len(child_positions) == 2:
-                    # Two children - standard / and \
-                    left_x = child_positions[0][1]
-                    right_x = child_positions[1][1]
-                    
-                    if left_x < parent_x:
+                    if child_positions[0][0] < parent_x:
                         if 0 <= parent_x - 1 < total_width:
                             branch_line[parent_x - 1] = '/'
-                    if right_x > parent_x:
+                    if child_positions[1][0] > parent_x:
                         if 0 <= parent_x + 1 < total_width:
                             branch_line[parent_x + 1] = '\\'
                 else:
-                    # More than 2 children - use /|\ or similar pattern
-                    leftmost = child_positions[0][1]
-                    rightmost = child_positions[-1][1]
-                    
-                    # Draw left branch
-                    if leftmost < parent_x:
-                        if 0 <= parent_x - 1 < total_width:
-                            branch_line[parent_x - 1] = '/'
-                    
-                    # Draw right branch
-                    if rightmost > parent_x:
-                        if 0 <= parent_x + 1 < total_width:
-                            branch_line[parent_x + 1] = '\\'
-                    
-                    # Draw vertical bar for any middle children 
-                    # (those directly below parent)
-                    for child, child_x in child_positions:
-                        if child_x == parent_x:
-                            if 0 <= parent_x < total_width:
-                                branch_line[parent_x] = '|'
-                        # For children not exactly at left/right/center,
-                        # we can draw additional branch characters if needed
-            
+                    leftmost = child_positions[0][0]
+                    rightmost = child_positions[-1][0]
+                    if leftmost < parent_x and 0 <= parent_x - 1 < total_width:
+                        branch_line[parent_x - 1] = '/'
+                    if rightmost > parent_x and 0 <= parent_x + 1 < total_width:
+                        branch_line[parent_x + 1] = '\\'
+                    for cx, _ in child_positions:
+                        if cx == parent_x and 0 <= parent_x < total_width:
+                            branch_line[parent_x] = '|'
             lines.append(''.join(branch_line).rstrip())
-    
+
     return '\n'.join(lines)
 
 
-def ascii_extended(net : Network) -> str:
+def ascii_extended(net: Network) -> str:
     """
-    Prints a more detailed vertical ASCII art depiction of the Network 
+    Prints a more detailed vertical ASCII art depiction of the Network
     with extended connecting lines between levels for wide trees.
 
     Args:
         net (Network): A Network
-        
+
     Returns:
         str: The ASCII art representation of the network
     """
-    from collections import deque
-    
-    if len(net.V()) == 0:
-        return "(empty network)"
-    
-    try:
-        root = net.root()
-    except Exception:
-        return "(network has no valid root)"
-    
-    # Step 1: Assign depth levels to each node
-    node_depth : dict[Node, int] = {}
-    queue : deque[tuple[Node, int]] = deque([(root, 0)])
-    max_depth = 0
-    
-    while queue:
-        node, depth = queue.popleft()
-        if node in node_depth:
-            node_depth[node] = max(node_depth[node], depth)
-        else:
-            node_depth[node] = depth
-        max_depth = max(max_depth, depth)
-        
-        for child in net.get_children(node):
-            queue.append((child, depth + 1))
-    
-    # Step 2: Assign x-positions
-    node_x : dict[Node, float] = {}
-    
-    def get_ordered_leaves(node : Node) -> list[Node]:
-        children = net.get_children(node)
-        if len(children) == 0:
-            return [node]
-        result = []
-        for child in children:
-            result.extend(get_ordered_leaves(child))
-        return result
-    
-    ordered_leaves = get_ordered_leaves(root)
-    
-    if len(ordered_leaves) == 0:
-        return f"  {root.label if root.label else '?'}"
-    
-    for i, leaf in enumerate(ordered_leaves):
-        node_x[leaf] = float(i)
-    
-    def compute_x(node : Node) -> float:
-        if node in node_x:
-            return node_x[node]
-        children = net.get_children(node)
-        if len(children) == 0:
-            return node_x.get(node, 0.0)
-        child_xs = [compute_x(child) for child in children]
-        node_x[node] = sum(child_xs) / len(child_xs)
-        return node_x[node]
-    
-    compute_x(root)
-    
-    # Step 3: Build ASCII with better spacing
-    max_label_len = max(len(node.label) if node.label else 1 for node in net.V())
+    layout = _ascii_prepare_layout(net)
+    if isinstance(layout, str):
+        return layout
+    root, node_depth, max_depth, ordered_leaves, node_x, _ = layout
+
+    max_label_len = max(len(n.label) if n.label else 1 for n in net.V())
     spacing = max(4, max_label_len + 2)
     total_width = int(len(ordered_leaves) * spacing) + spacing
-    
-    nodes_by_depth : dict[int, list[Node]] = {}
-    for node, depth in node_depth.items():
-        if depth not in nodes_by_depth:
-            nodes_by_depth[depth] = []
-        nodes_by_depth[depth].append(node)
-    
-    for depth in nodes_by_depth:
-        nodes_by_depth[depth].sort(key=lambda n: node_x[n])
-    
-    lines : list[str] = []
-    
-    def get_node_center(node : Node) -> int:
+    nodes_by_depth = _ascii_group_by_depth(node_depth, node_x)
+
+    def _center(node: Node) -> int:
         return int(node_x[node] * spacing) + spacing // 2
-    
+
+    lines: list[str] = []
     for depth in range(max_depth + 1):
         if depth not in nodes_by_depth:
             continue
-        
         nodes_at_depth = nodes_by_depth[depth]
-        
-        # Node label line
+
         label_line = [' '] * total_width
-        node_positions : dict[Node, int] = {}
-        
+        node_positions: dict[Node, int] = {}
         for node in nodes_at_depth:
-            x_pos = get_node_center(node)
+            x_pos = _center(node)
             label = node.label if node.label else "?"
-            start = x_pos - len(label) // 2
-            start = max(0, min(start, total_width - len(label)))
+            start = max(0, min(x_pos - len(label) // 2, total_width - len(label)))
             node_positions[node] = x_pos
-            
             for i, ch in enumerate(label):
                 if start + i < total_width:
                     label_line[start + i] = ch
-        
         lines.append(''.join(label_line).rstrip())
-        
-        # Branch connection lines
+
         if depth < max_depth:
             branch_line = [' '] * total_width
             extend_line = [' '] * total_width
-            
             for node in nodes_at_depth:
                 children = net.get_children(node)
                 if len(children) == 0:
                     continue
-                
-                parent_pos = node_positions.get(node, get_node_center(node))
-                
-                # Get sorted child positions
-                child_positions = [(child, get_node_center(child)) for child in children]
-                child_positions.sort(key=lambda x: x[1])
-                
-                leftmost = child_positions[0][1]
-                rightmost = child_positions[-1][1]
-                
-                # Draw branches based on child positions
+                parent_pos = node_positions.get(node, _center(node))
+                child_positions = sorted(
+                    [(_center(c), c) for c in children], key=lambda t: t[0]
+                )
+                leftmost = child_positions[0][0]
+                rightmost = child_positions[-1][0]
+
                 if leftmost < parent_pos:
                     if 0 <= parent_pos - 1 < total_width:
                         branch_line[parent_pos - 1] = '/'
-                    # Extended line to far left children
                     if leftmost < parent_pos - 2:
                         for x in range(leftmost, parent_pos - 1):
                             if 0 <= x < total_width:
                                 extend_line[x] = '_'
                         if 0 <= leftmost < total_width:
                             extend_line[leftmost] = '/'
-                
+
                 if rightmost > parent_pos:
                     if 0 <= parent_pos + 1 < total_width:
                         branch_line[parent_pos + 1] = '\\'
-                    # Extended line to far right children  
                     if rightmost > parent_pos + 2:
                         for x in range(parent_pos + 2, rightmost + 1):
                             if 0 <= x < total_width:
                                 extend_line[x] = '_'
                         if 0 <= rightmost < total_width:
                             extend_line[rightmost] = '\\'
-                
-                # Handle middle children (directly below)
-                for child, child_pos in child_positions:
-                    if child_pos == parent_pos:
-                        if 0 <= parent_pos < total_width:
-                            branch_line[parent_pos] = '|'
-            
+
+                for cx, _ in child_positions:
+                    if cx == parent_pos and 0 <= parent_pos < total_width:
+                        branch_line[parent_pos] = '|'
+
             line1_str = ''.join(branch_line).rstrip()
             line2_str = ''.join(extend_line).rstrip()
-            
             if line1_str.strip():
                 lines.append(line1_str)
             if line2_str.strip():
                 lines.append(line2_str)
-    
+
     return '\n'.join(lines)

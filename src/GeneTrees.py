@@ -27,14 +27,17 @@ Tests  - [ ]
 Design - [x]
 """
 
-from typing import Any, Callable, Dict, Set, Tuple, FrozenSet, List, Union, Optional
-from .Network import *
-from .GraphUtils import get_all_clusters
+import os
 import tempfile
 import subprocess
-import os
+import warnings
 from io import StringIO
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple, Union
+
 from Bio import Phylo
+
+from .Network import *
+from .GraphUtils import get_all_clusters
 
 #########################
 #### EXCEPTION CLASS #### 
@@ -99,27 +102,43 @@ class GeneTrees:
     """
     A container for a set of networks that are binary and represent a 
     gene tree.
+    
+    Supports two strategies for grouping gene labels into species:
+      1. An explicit ``species_gene_mapping`` dict (species -> gene labels).
+      2. A ``naming_rule`` callable that derives the species key from a
+         gene label string.
+    
+    When neither is provided every gene label is treated as its own species
+    (identity mapping).
     """
     
-    def __init__(self, 
-                 gene_tree_list: Optional[List[Network]] = None, 
-                 naming_rule: Callable[..., Any] = phynetpy_naming) -> None:
+    def __init__(
+        self,
+        gene_tree_list: Optional[List[Network]] = None,
+        naming_rule: Optional[Callable[..., Any]] = None,
+        species_gene_mapping: Optional[Dict[str, List[str]]] = None,
+    ) -> None:
         """
-        Wrapper class for a set of networks that represent gene trees
+        Wrapper class for a set of networks that represent gene trees.
 
         Args:
             gene_tree_list (list[Network], optional): A list of networks, 
-                                                      of the binary tree 
-                                                      variety. Defaults to None.
+                of the binary tree variety. Defaults to None.
             naming_rule (Callable[..., Any], optional): A function 
-                                                        f : str -> str. 
-                                                        Defaults to 
-                                                        phynetpy_naming.
+                f : str -> str that maps a gene label to its species key.
+                Ignored when *species_gene_mapping* is provided.
+                Defaults to None (identity mapping).
+            species_gene_mapping (dict[str, list[str]], optional): Explicit
+                mapping from species name to a list of gene/allele labels.
+                Takes priority over *naming_rule* when both are given.
         """
         
         self.trees: Set[Network] = set[Network]()
         self.taxa_names: Set[str] = set[str]()
-        self.naming_rule: Callable[..., Any] = naming_rule
+        self._species_gene_mapping: Optional[Dict[str, List[str]]] = (
+            species_gene_mapping
+        )
+        self.naming_rule: Optional[Callable[..., Any]] = naming_rule
         
         if gene_tree_list is not None:
             for tree in gene_tree_list:
@@ -140,24 +159,94 @@ class GeneTrees:
         for leaf in tree.get_leaves():
             self.taxa_names.add(leaf.label)
         
+    @property
+    def species_gene_mapping(self) -> Optional[Dict[str, List[str]]]:
+        """Return the explicit species-to-gene mapping, if set."""
+        return self._species_gene_mapping
+
+    @species_gene_mapping.setter
+    def species_gene_mapping(self, value: Optional[Dict[str, List[str]]]) -> None:
+        self._species_gene_mapping = value
+
+    def _resolve_mapping(self) -> Dict[str, List[str]]:
+        """
+        Build the species -> gene-labels mapping using the best available
+        strategy.
+
+        Priority:
+          1. Explicit ``species_gene_mapping`` (filtered to present taxa).
+          2. ``naming_rule`` callable applied to each taxon.
+          3. Identity mapping (each label is its own species).
+
+        Returns:
+            dict[str, list[str]]: species -> gene label mapping.
+        """
+        if self._species_gene_mapping is not None:
+            present = self.taxa_names
+            return {
+                sp: [g for g in genes if g in present]
+                for sp, genes in self._species_gene_mapping.items()
+                if any(g in present for g in genes)
+            }
+
+        if self.naming_rule is not None:
+            mapping: Dict[str, List[str]] = {}
+            for name in self.taxa_names:
+                key = self.naming_rule(name)
+                mapping.setdefault(key, []).append(name)
+            return mapping
+
+        return {name: [name] for name in self.taxa_names}
+
     def mp_allop_map(self) -> Dict[str, List[str]]:
         """
-        Create a subgenome mapping from the stored set of gene trees
+        Create a subgenome mapping from the stored set of gene trees.
 
-        Args:
-            N/A
+        Uses the explicit species_gene_mapping if available, otherwise
+        falls back to the naming_rule, and finally to an identity mapping.
+
         Returns:
             dict[str, list[str]]: subgenome mapping
         """
-        subgenome_map: Dict[str, List[str]] = {}
-        if len(self.taxa_names) != 0:
-            for taxa_name in self.taxa_names:
-                key = self.naming_rule(taxa_name)
-                if key in subgenome_map.keys(): 
-                    subgenome_map[key].append(taxa_name)
-                else:
-                    subgenome_map[key] = [taxa_name]
-        return subgenome_map
+        return self._resolve_mapping()
+
+    def validate_mapping(self) -> List[str]:
+        """
+        Check the explicit species_gene_mapping against the actual taxa
+        present in the gene trees.
+
+        Returns:
+            list[str]: A list of warning/error messages. Empty means valid.
+        """
+        issues: List[str] = []
+        if self._species_gene_mapping is None:
+            return issues
+
+        mapped_genes: Set[str] = set()
+        for sp, genes in self._species_gene_mapping.items():
+            for g in genes:
+                if g in mapped_genes:
+                    issues.append(
+                        f"Gene '{g}' appears under multiple species entries"
+                    )
+                mapped_genes.add(g)
+                if g not in self.taxa_names:
+                    issues.append(
+                        f"Mapped gene '{g}' (species '{sp}') not found "
+                        f"in any gene tree"
+                    )
+
+        unmapped = self.taxa_names - mapped_genes
+        if unmapped:
+            issues.append(
+                f"Taxa not covered by mapping: {sorted(unmapped)}"
+            )
+            warnings.warn(
+                f"GeneTrees: {len(unmapped)} taxa not covered by the "
+                f"species-gene mapping: {sorted(unmapped)}"
+            )
+
+        return issues
 
     def cluster_support(self,
                         include_trivial: bool = False,
@@ -485,25 +574,43 @@ class GeneTrees:
 
     def astral(self,
                 astral_jar_path: str,
-                mapping_rule: Callable[[str], str] = external_naming,
+                mapping_rule: Optional[Callable[[str], str]] = None,
                 extra_args: Optional[List[str]] = None) -> Network:
         """
         Infer a species tree using ASTRAL from the stored gene trees.
 
         Requires a path to the ASTRAL .jar. We write trees to a temp file and a
-        multi-allele mapping derived from `mapping_rule` (species <- genes),
-        call ASTRAL, then parse the resulting Newick into a Network.
+        multi-allele mapping, then call ASTRAL and parse the result.
+
+        The mapping is resolved in this order:
+          1. The instance-level ``species_gene_mapping`` (if set).
+          2. The *mapping_rule* argument passed here.
+          3. The instance-level ``naming_rule``.
+          4. Identity mapping (each gene = its own species).
+
+        Args:
+            astral_jar_path (str): Path to the ASTRAL jar file.
+            mapping_rule (Callable, optional): Override callable for
+                deriving species from gene labels.  Ignored when an
+                explicit species_gene_mapping is available.
+            extra_args (list[str], optional): Additional CLI args for ASTRAL.
         """
         if extra_args is None:
             extra_args = []
 
-        # Write gene trees and mapping
+        if mapping_rule is not None and self._species_gene_mapping is None:
+            old_rule = self.naming_rule
+            self.naming_rule = mapping_rule
+            species_map = self._resolve_mapping()
+            self.naming_rule = old_rule
+        else:
+            species_map = self._resolve_mapping()
+
         with tempfile.TemporaryDirectory() as tmpdir:
             trees_path = os.path.join(tmpdir, "genes.tre")
             map_path = os.path.join(tmpdir, "mapping.txt")
             out_path = os.path.join(tmpdir, "astral_out.tre")
 
-            # Trees file: one Newick per line
             with open(trees_path, "w") as f:
                 for t in self.trees:
                     f.write(t.newick())
@@ -511,24 +618,22 @@ class GeneTrees:
                         f.write(";")
                     f.write("\n")
 
-            # Mapping file: species: gene1 gene2 ...
-            species_map: Dict[str, List[str]] = {}
-            for name in self.taxa_names:
-                sp = mapping_rule(name)
-                species_map.setdefault(sp, []).append(name)
             with open(map_path, "w") as f:
                 for sp, genes in species_map.items():
                     f.write(f"{sp}: {' '.join(sorted(genes))}\n")
 
-            cmd = ["java", "-jar", astral_jar_path, "-a", map_path, "-i", trees_path, "-o", out_path]
+            cmd = [
+                "java", "-jar", astral_jar_path,
+                "-a", map_path, "-i", trees_path, "-o", out_path,
+            ]
             cmd.extend(extra_args)
-            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(
+                cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
 
-            # Read resulting tree
             with open(out_path, "r") as f:
                 newick = f.read().strip()
 
-        # Parse Newick into Network using Biopython (similar to NetworkParser)
         handle = StringIO(newick)
         bio_tree = Phylo.read(handle, "newick")
         return self._biopy_tree_to_network(bio_tree)
@@ -581,28 +686,49 @@ class GeneTrees:
                     q.append(child)
         return net
 
-    def duplication_loss_summary(self,
-                                 species_tree: Network,
-                                 naming_rule: Callable[[str], str] = external_naming
-                                 ) -> Dict[str, Any]:
+    def duplication_loss_summary(
+        self,
+        species_tree: Network,
+        naming_rule: Optional[Callable[[str], str]] = None,
+    ) -> Dict[str, Any]:
         """
         Reconcile each gene tree against a species tree using LCA mapping and
         report total duplications and losses (parsimony-based estimate).
 
-        Returns a dict with totals and per-tree breakdowns.
+        The gene-to-species mapping is resolved in the same priority order
+        as :meth:`_resolve_mapping`:
+          1. Explicit ``species_gene_mapping``.
+          2. *naming_rule* argument (if provided and no explicit mapping).
+          3. Instance ``naming_rule``.
+          4. Identity mapping.
+
+        Returns:
+            dict with ``"totals"`` and ``"per_tree"`` breakdowns.
         """
-        # Build species node map
-        sp_name_to_node: Dict[str, Any] = {leaf.label: leaf for leaf in species_tree.get_leaves()}
+        if naming_rule is not None and self._species_gene_mapping is None:
+            old_rule = self.naming_rule
+            self.naming_rule = naming_rule
+            species_map = self._resolve_mapping()
+            self.naming_rule = old_rule
+        else:
+            species_map = self._resolve_mapping()
+
+        gene_to_species: Dict[str, str] = {}
+        for sp, genes in species_map.items():
+            for g in genes:
+                gene_to_species[g] = sp
+
+        sp_name_to_node: Dict[str, Any] = {
+            leaf.label: leaf for leaf in species_tree.get_leaves()
+        }
 
         def lca_of_species(names: Set[str]) -> Any:
             return species_tree.mrca(set(names))
 
         def is_descendant(u: Any, v: Any) -> bool:
-            # Is v descendant of u on the tree?
             return v in species_tree.get_subtree_at(u)
 
         def distance_down(anc: Any, desc: Any) -> int:
-            # Count edges on path from anc to desc (assume desc is descendant)
             if anc == desc:
                 return 0
             from collections import deque
@@ -623,21 +749,17 @@ class GeneTrees:
         details: List[dict[str, int]] = []
 
         for tree in self.trees:
-            # Map leaves to species
             leaf_to_species: Dict[Any, str] = {}
             for leaf in tree.get_leaves():
-                sp = naming_rule(leaf.label)
-                if sp not in sp_name_to_node:
-                    # Skip leaves not present in species tree
+                sp = gene_to_species.get(leaf.label)
+                if sp is None or sp not in sp_name_to_node:
                     continue
                 leaf_to_species[leaf] = sp
 
-            # Postorder list via topological order reversed (tree is acyclic)
             nodes = tree.V()
-            # Build child map
-            children_map: Dict[Any, List[Any]] = {n: tree.get_children(n) for n in nodes}
-
-            # Compute mapped species node for each gene node
+            children_map: Dict[Any, List[Any]] = {
+                n: tree.get_children(n) for n in nodes
+            }
             mapped: Dict[Any, Any] = {}
 
             def map_node(n: Any) -> Any:
@@ -647,7 +769,6 @@ class GeneTrees:
                     sp_node = sp_name_to_node[leaf_to_species[n]]
                     mapped[n] = sp_node
                     return sp_node
-                # internal: LCA of descendant species
                 desc_species: Set[str] = set()
                 def collect_species(x: Any) -> None:
                     if x in leaf_to_species:
@@ -657,7 +778,6 @@ class GeneTrees:
                             collect_species(ch)
                 collect_species(n)
                 if len(desc_species) == 0:
-                    # no mappable leaves under this node; map to root
                     sp_node = species_tree.root()
                 else:
                     sp_node = lca_of_species(desc_species)
@@ -667,7 +787,6 @@ class GeneTrees:
             dups = 0
             losses = 0
 
-            # Process internal nodes
             for n in nodes:
                 ch = children_map[n]
                 if len(ch) < 2:
@@ -675,10 +794,8 @@ class GeneTrees:
                 m_n = map_node(n)
                 m_c1 = map_node(ch[0])
                 m_c2 = map_node(ch[1])
-                # Duplication if parent maps to the same species node as a child
                 if m_n == m_c1 or m_n == m_c2:
                     dups += 1
-                # Losses along paths from m_n to each child mapping
                 if is_descendant(m_n, m_c1):
                     d1 = distance_down(m_n, m_c1)
                     losses += max(0, d1 - 1)

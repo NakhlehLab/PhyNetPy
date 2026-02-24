@@ -149,12 +149,17 @@ def random_network(
     seed: int | None = None
 ) -> Network:
     """
-    Generate a random phylogenetic network with n taxa and a given 
-    reticulation level.
+    Generate a random phylogenetic network with n taxa and a given number 
+    of reticulations.
 
     First generates a random tree using a Yule (pure-birth) process, then 
     rebuilds the topology with clean node names. Finally, grafts reticulation 
-    edges to achieve the desired network level.
+    edges to reach the desired reticulation count.
+
+    Note: The ``level`` parameter specifies the number of reticulation nodes
+    to add, not the network level in the strict sense (max reticulations per
+    biconnected component). Depending on placement, the resulting network's
+    true level may be less than this value.
 
     Args:
         n (int): Number of leaf taxa (must be >= 3 for level >= 1).

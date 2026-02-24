@@ -22,7 +22,6 @@ from .Matrix import Matrix
 from .Alphabet import Alphabet
 
 # Parsing and I/O
-from .NetworkParser import NetworkParser
 from .Newick import get_labels, NexusTemplate, NewickParserError
 from .IO import (read_fasta, write_fasta, read_fasta_records, 
                   write_fasta_from_network, read_vcf, write_vcf, 
@@ -47,8 +46,8 @@ from .BiMarkers import *
 from .SNPSimulator import simulate as simulate_snp, random_network, SimulatedSNPData
 
 # Old architecture (v1) - for CUDA BiMarkers support
-from .ModelGraph2 import *
-from .ModelFactory2 import *
+from .ModelGraph import *
+from .ModelFactory import *
 from .MetropolisHastings import MetropolisHastings, HillClimbing, ProposalKernel
 from .State import State
 from .ModelMove import Move, SwitchParentage, AddReticulation, RemoveReticulation, FlipReticulation
@@ -86,6 +85,6 @@ except ImportError:
         print("CUDA BiMarkers not available. Install with: pip install phynetpy[cuda]")
         return False
 
-__version__ = "1.1.0"
+__version__ = "0.3.0"
 __author__ = "Mark Kessler"
 

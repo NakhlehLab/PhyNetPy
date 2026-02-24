@@ -2,7 +2,7 @@
 Use pytest to test the correctness of the Alphabet.py module.
 """
 
-from PhyNetPy.Alphabet import *
+from phynetpy.Alphabet import *
 import pytest
 from dataclasses import FrozenInstanceError
 

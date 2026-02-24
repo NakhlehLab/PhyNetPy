@@ -19,6 +19,8 @@ var/
 Data/
 Nexus/
 NexusFiles/
+Guides/
+DEFJ/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -51,3 +53,6 @@ coverage.xml
 
 # Sphinx documentation
 docs/_build/
+
+# Archived modules
+archive/

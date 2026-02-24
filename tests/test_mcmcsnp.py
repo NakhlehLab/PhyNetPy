@@ -17,9 +17,8 @@
 ##
 ##############################################################################
 
-from .MCMC_BiMarkers_CUDA import SNP_LIKELIHOOD, SNP_LIKELIHOOD_DATA
-from .BiMarkers import SNP_LIKELIHOOD
-from .SNPSimulator import simulate, random_network
+from phynetpy.BiMarkers import SNP_LIKELIHOOD
+from phynetpy.SNPSimulator import simulate, random_network
 import pytest
 import time
 import os
@@ -319,5 +318,3 @@ class MCMC_SNP_TEST:
             print(f"Tests failed. {sum(res)}/3 passed.")
         
 
-
-MCMC_SNP_TEST().test()

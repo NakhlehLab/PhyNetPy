@@ -1,3 +1,11 @@
+"""
+Core phylogenetic data structures shared across PhyNetPy.
+
+Provides the :class:`Branch` class which stores the length, inheritance
+probability, and parent identity for a single branch (edge) in a
+phylogenetic tree or network.
+"""
+
 import warnings 
 
 
@@ -32,7 +40,7 @@ class Branch:
         """
         Set the length of the branch.
         """
-        if value < 0:
+        if value is not None and value < 0:
             warnings.warn("Branch length cannot be negative, the length will not be changed")
             return
 
@@ -50,7 +58,7 @@ class Branch:
         """
         Set the inheritance probability of the branch.
         """
-        if value < 0 or value > 1:
+        if value is not None and (value < 0 or value > 1):
             warnings.warn("Inheritance probability must be between 0 and 1, the inheritance probability will not be changed")
             return
         self._inheritance_probability = value

@@ -1,0 +1,28 @@
+include README.md
+include LICENSE
+include pyproject.toml
+include setup.py
+
+recursive-include src *.py *.pyx
+
+prune .venv
+prune .git
+prune .cursor
+prune archive
+prune build
+prune dist
+prune tests
+prune phynetpy.egg-info
+
+prune 1.1
+prune ABC
+prune Bayesian
+prune DEFJ
+prune DLLS
+prune Guides
+prune NexusFiles
+
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude *.so
+global-exclude *.c
