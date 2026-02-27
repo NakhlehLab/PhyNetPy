@@ -22,8 +22,13 @@ from .Matrix import Matrix
 from .Alphabet import Alphabet
 
 # Parsing and I/O
-from .NetworkParser import NetworkParser
 from .Newick import get_labels, NexusTemplate, NewickParserError
+from .IO import (read_fasta, write_fasta, read_fasta_records, 
+                  write_fasta_from_network, read_vcf, write_vcf, 
+                  read_vcf_metadata, read_newick, read_newick_file,
+                  write_newick, write_newick_file, read_nexus,
+                  read_nexus_msa, write_nexus, convert_newick,
+                  detect_newick_standard)
 
 # Models and utilities
 from .GTR import GTR, JC, K80, HKY
@@ -32,15 +37,17 @@ from .GraphUtils import *
 from .GeneTrees import GeneTrees
 
 # Validation
-from .Validation import ValidationSummary, ValidationError
+from .Validation import (ValidationSummary, ValidationError, 
+                          GeneTreeReport, GeneTreeAggregateSummary)
 
 # New architecture (v1.1+)
 
 from .BiMarkers import *
+from .SNPSimulator import simulate as simulate_snp, random_network, SimulatedSNPData
 
 # Old architecture (v1) - for CUDA BiMarkers support
-from .ModelGraph2 import *
-from .ModelFactory2 import *
+from .ModelGraph import *
+from .ModelFactory import *
 from .MetropolisHastings import MetropolisHastings, HillClimbing, ProposalKernel
 from .State import State
 from .ModelMove import Move, SwitchParentage, AddReticulation, RemoveReticulation, FlipReticulation
@@ -78,6 +85,6 @@ except ImportError:
         print("CUDA BiMarkers not available. Install with: pip install phynetpy[cuda]")
         return False
 
-__version__ = "1.1.0"
+__version__ = "0.3.0"
 __author__ = "Mark Kessler"
 

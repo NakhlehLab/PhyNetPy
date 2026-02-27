@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=61", "wheel", "setuptools_scm"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
-
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -36,6 +36,13 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AlphabetMapping:
+    """Immutable mapping from character symbols to integer indices.
+
+    Args:
+        name: Human-readable name of the alphabet (e.g. ``"DNA"``).
+        mapping: Dictionary mapping single-character symbols to
+            contiguous zero-based integer codes.
+    """
     name : str
     mapping : dict[str, int]
 

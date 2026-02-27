@@ -1,0 +1,6 @@
+#NEXUS
+
+BEGIN TREES;
+Tree primates = ((((Homo_sapiens:0.1,Pan_troglodytes:0.1):0.05,Gorilla_gorilla:0.15):0.1,Pongo_abelii:0.25):0.15,Macaca_mulatta:0.4);
+Tree alt_topo = (((Homo_sapiens:0.12,Pan_troglodytes:0.12):0.08,(Gorilla_gorilla:0.15,Pongo_abelii:0.15):0.05):0.2,Macaca_mulatta:0.4);
+END;

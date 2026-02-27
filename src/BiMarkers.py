@@ -20,7 +20,7 @@
 
 """ 
 Author : Mark Kessler
-Last Edit : 1/23/26
+Last Edit : 2/5/26
 First Included in Version : 1.0.0
 
 CUDA-accelerated
@@ -32,13 +32,11 @@ Design - [ ]
 """
 
 from math import sqrt, comb, pow
+import time
 from typing import Callable
-from numba.core import base
 import numpy as np
-import scipy
 from scipy.linalg import expm
-import math
-
+from dataclasses import dataclass
 
 # CUDA imports - with graceful fallback
 # Numba CUDA requires CUDA Toolkit 12.x (tested with CUDA 12.2)
@@ -107,23 +105,82 @@ except ImportError:
 # Use CUPY_RUNTIME_OK for actual operations, CUPY_AVAILABLE just means import worked
 CUDA_IMPORTS_AVAILABLE = CUPY_RUNTIME_OK or NUMBA_CUDA_AVAILABLE
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GPU HARDWARE DETECTION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class GPUSpecs:
+    """Hardware specs for the user's GPU (detected at import time)."""
+    available: bool = False
+    name: str = "No GPU"
+    vram_bytes: int = 0
+    vram_mb: int = 0
+    compute_capability: tuple[int, int] = (0, 0)
+    
+    @property
+    def vram_gb(self) -> float:
+        return self.vram_bytes / (1024 ** 3)
+    
+    def __repr__(self) -> str:
+        if not self.available:
+            return "GPUSpecs(available=False)"
+        return (f"GPUSpecs({self.name}, "
+                f"VRAM={self.vram_gb:.1f} GB, "
+                f"CC={self.compute_capability[0]}.{self.compute_capability[1]})")
+
+
+def _detect_gpu() -> GPUSpecs:
+    """
+    Detect the GPU hardware specs for the current machine.
+    
+    Uses CuPy to query device properties. Falls back gracefully
+    if no GPU or no CuPy is available.
+    
+    Returns:
+        GPUSpecs: Detected GPU hardware specifications.
+    """
+    if not CUPY_RUNTIME_OK:
+        return GPUSpecs()
+    
+    try:
+        device = cp.cuda.Device(0)
+        props = cp.cuda.runtime.getDeviceProperties(device.id)
+        total_mem = device.mem_info[1]  # (free, total) → total
+        
+        return GPUSpecs(
+            available=True,
+            name=props['name'].decode() if isinstance(props['name'], bytes) else str(props['name']),
+            vram_bytes=total_mem,
+            vram_mb=total_mem // (1024 * 1024),
+            compute_capability=(props['major'], props['minor']),
+        )
+    except Exception:
+        return GPUSpecs()
+
+
+# Detect GPU specs once at module import
+GPU_SPECS = _detect_gpu()
+
 # Relative imports
 from .MSA import MSA, DataSequence
 from .BirthDeath import CBDP
-from .NetworkParser import NetworkParser
+from .IO import read_nexus
 from .Alphabet import Alphabet
 from .Matrix import Matrix
 # from .ModelGraph import (
 #     Model, ModelNode, CalculationNode, Parameter, Accumulator, ExtantSpecies
 # )
-from .ModelFactory2 import *
+from .ModelFactory import *
 from .Network import *
 from .MetropolisHastings import MetropolisHastings, ProposalKernel
 from .Visitor import *
 from .Strategy import *
 from .Executor import *
 from .Traversal import *
-from .ModelGraph2 import *
+from .ModelGraph import *
+from .GraphUtils import level as network_level
 
 
 """
@@ -203,91 +260,647 @@ def nr_to_index(n : int, r : int) -> int:
     """
     
     return n_to_index(n) + r
- 
-def to_array(Fb_map : dict, 
-             vector_len : int, 
-             site_count : int) -> np.ndarray:
+
+@dataclass
+class NodeVPI:
+    """Partial-likelihood vector bundle carried by a model node.
+
+    Attributes:
+        tensor: Partial-likelihood array of shape ``(S, d1, d2, ...)``,
+            where *S* is the number of sites and each subsequent axis
+            corresponds to an interface.
+        interfaces: Labels for each tensor axis beyond the site axis
+            (length equals ``tensor.ndim - 1``).
+        max_lineages: Maximum lineage count per interface.
+        log_scale: Per-site log rescaling factors, shape ``(S,)``.
     """
-    Takes a vpi/partial likelihood mapping, and translates it into a matrix
-    such that the columns denote the site, and the row indeces correspond to 
-    (n,r) pairs.
+    tensor: np.ndarray
+    interfaces: list[str]
+    max_lineages: list[int]
+    log_scale: np.ndarray = None
+
+def state_dim(m: int) -> int:
+    """Return the state-space dimension for *m* lineages.
+
+    The dimension equals the number of valid ``(n, r)`` pairs where
+    ``1 <= n <= m`` and ``0 <= r <= n``.
+    """
+    return nr_to_index(m, m) + 1
+
+def build_split_tensor(m: int, gamma: float) -> np.ndarray:
+    """
+    Build the split coefficient tensor S for a reticulation node
+    with max lineages m and inheritance probability gamma.
+
+    S[i, j, k] = C(n, n_b) * C(r, r_b) * gamma^{n_b} * (1-gamma)^{n_d}
+
+    where i ↔ (n, r), j ↔ (n_b, r_b), k ↔ (n_d, r_d)
+    and n = n_b + n_d, r = r_b + r_d (zero otherwise).
+
+    Shape: [dim(m), dim(m), dim(m)]
+    """
+    d = state_dim(m)
+    S = np.zeros((d, d, d))
+
+    for n in range(1, m + 1):
+        for r in range(n + 1):
+            i = nr_to_index(n, r)
+            for nb in range(1, n + 1):
+                nd = n - nb
+                if nd < 1:
+                    continue
+                for rb in range(min(r, nb) + 1):
+                    rd = r - rb
+                    if rd < 0 or rd > nd:
+                        continue
+
+                    j = nr_to_index(nb, rb)
+                    k = nr_to_index(nd, rd)
+
+                    S[i, j, k] = (comb(n, nb) * comb(r, rb)
+                                  * (gamma ** nb) * ((1 - gamma) ** nd))
+
+    return S
+
+def build_merge_tensor(mx: int, my: int) -> np.ndarray:
+    """
+    Build the merge coefficient tensor M for combining two interfaces
+    with max lineages mx and my.
+
+    M[i, j, k] = C(rz, rx) * C(nz-rz, nx-rx) / C(nz, nx)
     
-    This function serves the purpose of formatting the likelihoods at the root 
-    for easy computation.
+    where i ↔ (nx, rx), j ↔ (ny, ry), k ↔ (nz, rz)
+    and nz = nx + ny, rz = rx + ry (zero otherwise).
+
+    Used by both Rule 2 (disjoint merge) and Rule 4 (overlapping merge).
+
+    Shape: [dim(mx), dim(my), dim(mx + my)]
+    """
+    mz = mx + my
+    M = np.zeros((state_dim(mx), state_dim(my), state_dim(mz)))
+
+    for nx in range(1, mx + 1):
+        for rx in range(nx + 1):
+            i = nr_to_index(nx, rx)
+            for ny in range(1, my + 1):
+                for ry in range(ny + 1):
+                    j = nr_to_index(ny, ry)
+                    
+                    nz = nx + ny
+                    rz = rx + ry
+                    k = nr_to_index(nz, rz)
+
+                    M[i, j, k] = (comb(rz, rx) * comb(nz - rz, nx - rx) 
+                                  / comb(nz, nx))
+
+    return M
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SPARSE COEFFICIENT REPRESENTATIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# The dense merge/split 3D tensors are 95–99.7% zeros. Only entries where
+# nz = nx + ny, rz = rx + ry (merge) or n = nb + nd, r = rb + rd (split)
+# are non-zero. Storing as COO (coordinate) arrays and using vectorized
+# scatter-add replaces the O(dim_x · dim_y · dim_z) einsum with
+# O(dim_x · dim_y) work — a speedup factor of dim_z (hundreds to thousands).
+#
+
+@dataclass
+class SparseMerge:
+    """
+    Sparse COO representation of the merge tensor M[i, j, k].
+    
+    For each non-zero entry: stores (i_arr[n], j_arr[n], k_arr[n], coeff_arr[n]).
+    There is exactly one k for each (i, j) pair (since nz = nx + ny is unique).
+    
+    nnz = state_dim(mx) * state_dim(my)   (one per valid (i,j) pair)
+    """
+    i_arr: np.ndarray       # int32 indices into F_x's last axis
+    j_arr: np.ndarray       # int32 indices into F_y's last axis
+    k_arr: np.ndarray       # int32 indices into result's last axis
+    coeff_arr: np.ndarray   # float64 coefficients
+    dim_x: int              # state_dim(mx)
+    dim_y: int              # state_dim(my)
+    dim_z: int              # state_dim(mx + my)
+    mx: int
+    my: int
+
+
+@dataclass
+class SparseSplit:
+    """
+    Sparse COO representation of the split tensor S[i, j, k].
+    
+    For each non-zero entry: stores (i_arr[n], j_arr[n], k_arr[n], coeff_arr[n]).
+    Multiple (j, k) pairs map to each i (since n = nb + nd has many valid splits).
+    """
+    i_arr: np.ndarray
+    j_arr: np.ndarray
+    k_arr: np.ndarray
+    coeff_arr: np.ndarray
+    dim: int               # state_dim(m)
+    m: int
+
+
+def build_sparse_merge(mx: int, my: int) -> SparseMerge:
+    """
+    Build sparse COO merge tensor. 
+    
+    ~50× less memory and dim_z × faster contraction than the dense version.
+    
+    Args:
+        mx: Max lineages for the left interface.
+        my: Max lineages for the right interface.
+    Returns:
+        SparseMerge with coordinate arrays.
+    """
+    i_list, j_list, k_list, c_list = [], [], [], []
+    
+    for nx in range(1, mx + 1):
+        for rx in range(nx + 1):
+            i = nr_to_index(nx, rx)
+            for ny in range(1, my + 1):
+                for ry in range(ny + 1):
+                    j = nr_to_index(ny, ry)
+                    nz = nx + ny
+                    rz = rx + ry
+                    k = nr_to_index(nz, rz)
+                    coeff = comb(rz, rx) * comb(nz - rz, nx - rx) / comb(nz, nx)
+                    
+                    i_list.append(i)
+                    j_list.append(j)
+                    k_list.append(k)
+                    c_list.append(coeff)
+    
+    return SparseMerge(
+        i_arr=np.array(i_list, dtype=np.int32),
+        j_arr=np.array(j_list, dtype=np.int32),
+        k_arr=np.array(k_list, dtype=np.int32),
+        coeff_arr=np.array(c_list, dtype=np.float64),
+        dim_x=state_dim(mx),
+        dim_y=state_dim(my),
+        dim_z=state_dim(mx + my),
+        mx=mx,
+        my=my,
+    )
+
+
+def build_sparse_split(m: int, gamma: float) -> SparseSplit:
+    """
+    Build sparse COO split tensor.
+    
+    Args:
+        m: Max lineages at the node being split.
+        gamma: Inheritance probability for the left parent branch.
+    Returns:
+        SparseSplit with coordinate arrays.
+    """
+    i_list, j_list, k_list, c_list = [], [], [], []
+    
+    for n in range(1, m + 1):
+        for r in range(n + 1):
+            i = nr_to_index(n, r)
+            for nb in range(1, n + 1):
+                nd = n - nb
+                if nd < 1:
+                    continue
+                for rb in range(min(r, nb) + 1):
+                    rd = r - rb
+                    if rd < 0 or rd > nd:
+                        continue
+                    
+                    j = nr_to_index(nb, rb)
+                    k = nr_to_index(nd, rd)
+                    coeff = (comb(n, nb) * comb(r, rb)
+                             * (gamma ** nb) * ((1 - gamma) ** nd))
+                    
+                    i_list.append(i)
+                    j_list.append(j)
+                    k_list.append(k)
+                    c_list.append(coeff)
+    
+    return SparseSplit(
+        i_arr=np.array(i_list, dtype=np.int32),
+        j_arr=np.array(j_list, dtype=np.int32),
+        k_arr=np.array(k_list, dtype=np.int32),
+        coeff_arr=np.array(c_list, dtype=np.float64),
+        dim=state_dim(m),
+        m=m,
+    )
+
+
+# Module-level caches to avoid rebuilding sparse tensors
+_SPARSE_MERGE_CACHE: dict[tuple[int, int], SparseMerge] = {}
+_SPARSE_SPLIT_CACHE: dict[tuple[int, float], SparseSplit] = {}
+
+
+def get_sparse_merge(mx: int, my: int) -> SparseMerge:
+    """Get or build a cached sparse merge tensor."""
+    key = (mx, my)
+    if key not in _SPARSE_MERGE_CACHE:
+        _SPARSE_MERGE_CACHE[key] = build_sparse_merge(mx, my)
+    return _SPARSE_MERGE_CACHE[key]
+
+
+def get_sparse_split(m: int, gamma: float) -> SparseSplit:
+    """Get or build a cached sparse split tensor."""
+    key = (m, gamma)
+    if key not in _SPARSE_SPLIT_CACHE:
+        _SPARSE_SPLIT_CACHE[key] = build_sparse_split(m, gamma)
+    return _SPARSE_SPLIT_CACHE[key]
+
+
+# ── GPU sparse caches ────────────────────────────────────────────────────
+# CuPy arrays cannot be indexed with NumPy arrays, so we keep separate
+# caches where the coordinate/coefficient arrays live on GPU memory.
+
+_SPARSE_MERGE_CACHE_GPU: dict[tuple[int, int], SparseMerge] = {}
+_SPARSE_SPLIT_CACHE_GPU: dict[tuple[int, float], SparseSplit] = {}
+
+
+def get_sparse_merge_gpu(mx: int, my: int) -> SparseMerge:
+    """Get or build a GPU-resident cached sparse merge tensor."""
+    key = (mx, my)
+    if key not in _SPARSE_MERGE_CACHE_GPU:
+        sm = get_sparse_merge(mx, my)  # build on CPU first
+        _SPARSE_MERGE_CACHE_GPU[key] = SparseMerge(
+            i_arr=cp.asarray(sm.i_arr),
+            j_arr=cp.asarray(sm.j_arr),
+            k_arr=cp.asarray(sm.k_arr),
+            coeff_arr=cp.asarray(sm.coeff_arr),
+            dim_x=sm.dim_x, dim_y=sm.dim_y, dim_z=sm.dim_z,
+            mx=sm.mx, my=sm.my,
+        )
+    return _SPARSE_MERGE_CACHE_GPU[key]
+
+
+def get_sparse_split_gpu(m: int, gamma: float) -> SparseSplit:
+    """Get or build a GPU-resident cached sparse split tensor."""
+    key = (m, gamma)
+    if key not in _SPARSE_SPLIT_CACHE_GPU:
+        ss = get_sparse_split(m, gamma)  # build on CPU first
+        _SPARSE_SPLIT_CACHE_GPU[key] = SparseSplit(
+            i_arr=cp.asarray(ss.i_arr),
+            j_arr=cp.asarray(ss.j_arr),
+            k_arr=cp.asarray(ss.k_arr),
+            coeff_arr=cp.asarray(ss.coeff_arr),
+            dim=ss.dim, m=ss.m,
+        )
+    return _SPARSE_SPLIT_CACHE_GPU[key]
+
+def _disjoint_subnets(n: InternalNode) -> bool:
+    
+    """
+    Determine if the left and right subnets of an internal node are disjoint.
+    """
+    lr = n.get_model_children()
+    assert len(lr) == 2, "Internal node must have exactly two children"
+    subnets = (set(), set())
+    
+    for i, child in enumerate(lr):
+        q = deque([child])
+        while q:
+            cur = q.popleft()
+            subnets[i].add(cur)
+            children = cur.get_model_children()
+            if children:  # Guard against None
+                q.extend(children)
+    
+    return subnets[0].isdisjoint(subnets[1])
+
+def deduplicate_vpis(vpis: list[NodeVPI]) -> list[NodeVPI]:
+    """
+    Remove duplicates by identity (``is``), preserving order.
+
+    Uses an ``id()``-based set for O(n) performance instead of O(n^2)
+    linear scans.
 
     Args:
-        Fb_map (dict): vpi/partial likelihood mapping of a single dimension 
-                       (ie, may not be downstream of a reticulation node, 
-                       without it having been resolved)
-        vector_len (int): rows of resulting matrix
-        site_count (int): columns of resulting matrix
+        vpis (list[NodeVPI]): VPI objects, possibly with duplicate references.
 
     Returns:
-        np.ndarray: Matrix of dimension vector_len by site_count, 
-                    containing floats
+        list[NodeVPI]: De-duplicated list in original order.
     """
+    seen_ids: set[int] = set()
+    unique: list[NodeVPI] = []
+    for vpi in vpis:
+        vid = id(vpi)
+        if vid not in seen_ids:
+            seen_ids.add(vid)
+            unique.append(vpi)
+    return unique
+
+
+def _compute_max_lineages(model: Model, samples: dict[str, int]) -> int:
+    """
+    Pre-compute the maximum possible lineage count at any node in the model,
+    accounting for lineage duplication at reticulation nodes.
     
-    F_b = np.zeros((vector_len, site_count))  
+    In a network with reticulations, both parent branches of a reticulation 
+    node inherit ALL the child's lineages. When these branches merge later 
+    at a common ancestor, the lineage count can exceed sum(samples).
     
-    if not cs:
-        for site in range(site_count):
-            for nr_pair, prob in Fb_map[site].items():
-                #nr_pair should be of the form ((n),(r))
-                F_b[int(nr_to_index(nr_pair[0][0], nr_pair[1][0]))][site] = prob
+    The Q matrix must be large enough to accommodate this maximum.
+    
+    Args:
+        model: The built SNP model.
+        samples: Dict mapping leaf names to their sample counts.
+    Returns:
+        int: The maximum number of lineages at any merge point.
+    """
+    max_lin_at : dict = {}
+    
+    for node in Traversal(model.get_root(), TraversalOrder.POST_ORDER):
+        ntype = node.get_node_type()
+        if ntype == "leaf":
+            max_lin_at[node] = samples.get(node.get_name(), 1)
+        elif ntype == "reticulation":
+            children = node.get_model_children()
+            # Both parent branches inherit ALL the child's lineages
+            max_lin_at[node] = max_lin_at[children[0]]
+        elif ntype in ("internal", "root"):
+            children = node.get_model_children()
+            max_lin_at[node] = sum(max_lin_at[c] for c in children)
+        elif ntype == "root_aggregator":
+            children = node.get_model_children()
+            max_lin_at[node] = max_lin_at[children[0]]
+    
+    return max(max_lin_at.values())
+
+
+def _compute_network_level(model: Model) -> int:
+    """
+    Compute the level of the phylogenetic network from the model graph.
+    
+    The level is the maximum number of reticulation nodes in any single
+    biconnected component (blob) of the underlying undirected graph.
+    This directly determines the maximum tensor dimensionality:
+      level-0 (tree): 2D tensors  (sites × d)
+      level-1:        3D tensors  (sites × d × d)
+      level-2:        4D tensors  (sites × d × d × d)
+      ...
+    
+    Args:
+        model: The built SNP model.
+    Returns:
+        int: The network level (max reticulations per blob).
+    """
+    if model.network is not None:
+        return network_level(model.network)
+    return len(model.nodetypes.get("reticulation", []))
+
+
+def _estimate_peak_vpi_memory(model: Model, samples: dict[str, int], 
+                               n_sites: int) -> tuple[int, list[int]]:
+    """
+    Estimate the peak VPI tensor memory (in bytes) before running the algorithm.
+    
+    Simulates the VPI flow through the model graph to track the maximum tensor
+    shape that will be created during computation. This allows us to reject 
+    infeasible computations before allocating any large arrays.
+    
+    The VPI tensor at each node has shape:
+      (n_sites, state_dim(m1), state_dim(m2), ..., state_dim(mk))
+    where m1..mk are the max lineages for each open interface.
+    
+    Args:
+        model: The built SNP model.
+        samples: Dict mapping leaf names to their sample counts.
+        n_sites: Number of alignment sites.
+    Returns:
+        Tuple of (peak_bytes, peak_shape) where peak_shape is the tensor
+        shape that would cause the peak memory allocation.
+    """
+    from collections import deque
+    
+    # Track open interface dimensions per VPI, using the same logic
+    # as the visitor: track (interfaces, max_lineages) per node
+    vpi_dims : dict = {}   # ModelNode -> list[int] (max_lineages per interface)
+    vpi_id   : dict = {}   # ModelNode -> id tracking which VPI object this belongs to
+    
+    peak_bytes = 0
+    peak_shape = [n_sites]
+    
+    id_counter = 0
+    
+    for node in Traversal(model.get_root(), TraversalOrder.POST_ORDER):
+        ntype = node.get_node_type()
+        
+        if ntype == "leaf":
+            s = samples.get(node.get_name(), 1)
+            vpi_dims[node] = [s]
+            vpi_id[node] = id_counter
+            id_counter += 1
+            
+        elif ntype == "reticulation":
+            children = node.get_model_children()
+            child = children[0]
+            child_dims = vpi_dims[child]
+            # Split: child's last dimension becomes two interfaces (same size)
+            m = child_dims[-1]
+            vpi_dims[node] = child_dims[:-1] + [m, m]
+            vpi_id[node] = vpi_id[child]
+            
+        elif ntype in ("internal", "root"):
+            children = node.get_model_children()
+            child_dims_list = [vpi_dims[c] for c in children]
+            child_ids = [vpi_id[c] for c in children]
+            
+            if child_ids[0] == child_ids[1]:
+                # Rule 4 (same VPI): merge last two dims into one
+                dims = child_dims_list[0]
+                merged = dims[-2] + dims[-1]
+                new_dims = dims[:-2] + [merged]
+            else:
+                # Rule 2 (disjoint): outer product of the two VPIs
+                # Remove last dim from each (being merged), combine extras
+                d0 = child_dims_list[0]
+                d1 = child_dims_list[1]
+                merged = d0[-1] + d1[-1]
+                new_dims = d0[:-1] + d1[:-1] + [merged]
+            
+            vpi_dims[node] = new_dims
+            vpi_id[node] = vpi_id[children[0]]
+            
+        elif ntype == "root_aggregator":
+            children = node.get_model_children()
+            vpi_dims[node] = vpi_dims[children[0]]
+            vpi_id[node] = vpi_id[children[0]]
+        
+        # Compute memory for this node's VPI tensor
+        shape = [n_sites] + [state_dim(m) for m in vpi_dims.get(node, [1])]
+        tensor_bytes = 8  # float64
+        for s in shape:
+            tensor_bytes *= s
+        
+        if tensor_bytes > peak_bytes:
+            peak_bytes = tensor_bytes
+            peak_shape = shape
+    
+    return peak_bytes, peak_shape
+
+
+class SNPResourceError(RuntimeError):
+    """
+    Raised when the SNP likelihood computation would exceed available 
+    hardware resources (GPU VRAM or system RAM).
+    """
+    pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AUTO CPU/GPU ROUTING THRESHOLDS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Taxa count thresholds above which GPU is required for reasonable performance.
+# These are based on the O(S × D^{k+1}) complexity of the VPI algorithm,
+# where k = network level and D = state_dim(max_lineages).
+GPU_THRESHOLD = {
+    0: float('inf'),  # Pure trees: CPU is always fine
+    1: 20,            # Level-1: GPU after 20 taxa
+    2: 12,            # Level-2: GPU after 12 taxa
+    3: 8,             # Level-3: GPU after 8 taxa (if ever supported)
+}
+
+# Safety margin: require this fraction of VRAM to be available
+# (i.e., peak tensor < 80% of VRAM to leave room for merge/split tensors, 
+# Q matrix, etc.)
+GPU_VRAM_SAFETY_FACTOR = 0.80
+
+
+def _compute_batch_size(model: Model, samples: dict[str, int],
+                        n_sites: int, use_gpu: bool) -> int:
+    """
+    Determine the optimal site batch size that fits in available memory.
+    
+    Sites are independent in the SNP likelihood, so we can compute
+    the likelihood in chunks and sum. This function finds the largest
+    batch size where the peak VPI tensor fits comfortably in memory.
+    
+    Args:
+        model: The built SNP model.
+        samples: Dict mapping leaf names to their sample counts.
+        n_sites: Total number of alignment sites.
+        use_gpu: Whether GPU will be used.
+    Returns:
+        Optimal batch size (≤ n_sites). If the full alignment fits, 
+        returns n_sites (no batching needed).
+    
+    Raises:
+        SNPResourceError: If even a single site exceeds available memory.
+    """
+    # Estimate memory for 1 site to get per-site cost
+    _, peak_shape_1 = _estimate_peak_vpi_memory(model, samples, 1)
+    per_site_elements = 1
+    for s in peak_shape_1[1:]:      # skip the sites dimension (=1)
+        per_site_elements *= s
+    per_site_bytes = per_site_elements * 8  # float64
+    
+    # Determine available memory
+    if use_gpu and GPU_SPECS.available:
+        available = int(GPU_SPECS.vram_bytes * GPU_VRAM_SAFETY_FACTOR)
     else:
-        for site in range(site_count):
-            for nr_key in Fb_map[site].Keys:
-                n = nr_key.NX[0]
-                r = nr_key.RX[0]
-                prob = Fb_map[site][nr_key]
-                F_b[nr_to_index(n, r)][site] = prob
+        try:
+            import psutil
+            available = int(psutil.virtual_memory().available * 0.5)
+        except ImportError:
+            available = 8 * (1024 ** 3)  # conservative 8 GB
     
-    return F_b
+    # We need memory for at least 2 tensors at once (old + new during a rule)
+    # plus the Q/P matrices, so use a factor of 3x
+    memory_per_site = per_site_bytes * 3
+    
+    if memory_per_site == 0:
+        return n_sites
+    
+    max_batch = max(1, available // memory_per_site)
+    
+    if max_batch < 1:
+        level = _compute_network_level(model)
+        n_taxa = len(model.nodetypes.get("leaf", []))
+        max_n = _compute_max_lineages(model, samples)
+        shape_str = " × ".join(str(s) for s in peak_shape_1)
+        raise SNPResourceError(
+            f"Even a single site exceeds available memory.\n"
+            f"  Network: {n_taxa} taxa, level-{level}, max_lineages={max_n}\n"
+            f"  Per-site VPI tensor: ({shape_str}) = "
+            f"{per_site_bytes / (1024**2):.1f} MB\n"
+            f"  This network topology is too complex for available hardware."
+        )
+    
+    return min(max_batch, n_sites)
 
-def rn_to_rn_minus_dim(set_of_rns : dict[tuple[list[float]], float], 
-                       dim : int) -> dict[tuple[list[float]], set[tuple]]:
+
+def _check_feasibility(model: Model, samples: dict[str, int],
+                        n_sites: int, use_gpu: bool) -> None:
     """
-    This is a function defined as
+    Pre-flight check: verify that even a single-site VPI tensor fits in memory.
     
-    f: Rn;Rn -> Rn-dim;Rn-dim.
+    With site batching, we no longer need the full n_sites to fit at once.
+    This check only ensures that the per-site overhead is feasible. The 
+    actual batch size is determined by _compute_batch_size().
     
-    This function takes set_of_rns and turns it into a mapping 
-    {(nx[:-dim] , rx[:-dim]) : set((nx[-dim:] , rx[-dim:], probability))} 
-    where the keys are vectors in Rn-dim, and their popped last elements and 
-    the probability is stored as values.
-
     Args:
-        set_of_rns (dict[tuple[list[float]], float]): a mapping in the form of 
-                           {(nx , rx) -> probability in R} 
-                           where nx and rx are both vectors in Rn
-        dim (int): the number of dimensions to reduce from Rn.
-
-    Returns:
-        dict[tuple[list[float]], set[tuple]]: map in the form -- 
-        {(nx[:-dim] , rx[:-dim]) : set((nx[-dim:] , rx[-dim:], probability))}
+        model: The built SNP model.
+        samples: Dict mapping leaf names to their sample counts.
+        n_sites: Number of alignment sites (used only for diagnostics).
+        use_gpu: Whether GPU will be used for this computation.
+    
+    Raises:
+        SNPResourceError: If even a single site exceeds available resources.
     """
+    # Check with 1 site — if that doesn't fit, nothing will
+    peak_bytes_1, peak_shape_1 = _estimate_peak_vpi_memory(model, samples, 1)
+    level = _compute_network_level(model)
+    n_taxa = len(model.nodetypes.get("leaf", []))
+    max_n = _compute_max_lineages(model, samples)
     
-    rn_minus_dim = {}
+    shape_str = " × ".join(str(s) for s in peak_shape_1)
+    per_site_mb = peak_bytes_1 / (1024 * 1024)
     
-    for vectors, prob in set_of_rns.items():
-        nx = vectors[0]
-        rx = vectors[1]
+    if use_gpu:
+        gpu = GPU_SPECS
+        if not gpu.available:
+            raise SNPResourceError(
+                f"GPU computation required for {n_taxa} taxa at level-{level}, "
+                f"but no GPU was detected. Install CuPy with a compatible "
+                f"CUDA toolkit, or reduce the problem size."
+            )
         
-        #keep track of the remaining elements and the probability
-        new_value = (nx[-dim:], rx[-dim:], prob)
+        usable_vram = gpu.vram_bytes * GPU_VRAM_SAFETY_FACTOR
+        # Need at least ~3x per-site for working memory
+        if peak_bytes_1 * 3 > usable_vram:
+            raise SNPResourceError(
+                f"Even a single site exceeds GPU memory.\n"
+                f"  Network: {n_taxa} taxa, level-{level}, "
+                f"max_lineages={max_n}\n"
+                f"  Per-site VPI tensor: ({shape_str}) = "
+                f"{per_site_mb:.1f} MB\n"
+                f"  GPU: {gpu.name} with {gpu.vram_gb:.1f} GB VRAM\n"
+                f"  This network topology is too complex for this GPU."
+            )
+    else:
+        try:
+            import psutil
+            available_ram = psutil.virtual_memory().available
+        except ImportError:
+            available_ram = 16 * (1024 ** 3)
         
-        #Reduce vectors dimension by grabbing the first n-dim elements
-        new_key = (nx[:-dim], rx[:-dim])
-        
-        #Take care of duplicates
-        if new_key in rn_minus_dim.keys():
-            rn_minus_dim[new_key].add(new_value)
-        else:
-            init_value = set()
-            init_value.add(new_value)
-            rn_minus_dim[new_key] = init_value
+        # Need at least ~3x per-site for working memory
+        if peak_bytes_1 * 3 > available_ram * 0.5:
+            ram_gb = available_ram / (1024 ** 3)
+            raise SNPResourceError(
+                f"Even a single site exceeds available system RAM.\n"
+                f"  Network: {n_taxa} taxa, level-{level}, "
+                f"max_lineages={max_n}\n"
+                f"  Per-site VPI tensor: ({shape_str}) = "
+                f"{per_site_mb:.1f} MB\n"
+                f"  Available RAM: ~{ram_gb:.1f} GB\n"
+                f"  This network topology is too complex for CPU computation."
+            )
 
-    return rn_minus_dim
 
 #####################
 # Method Signatures #
@@ -352,156 +965,152 @@ def SNP_LIKELIHOOD(filename : str,
     """
     Given a set of taxa with SNP data and a phylogenetic network, calculate the 
     likelihood of the network given the data using the SNP likelihood algorithm.
+    
+    Automatically selects CPU or GPU execution based on network complexity:
+      - Level-0 (tree):    always CPU
+      - Level-1 (1 retic): GPU when taxa > 20
+      - Level-2 (2 retics): GPU when taxa > 12
+    
+    Before starting computation, a pre-flight feasibility check predicts
+    peak memory usage and raises SNPResourceError if the computation would 
+    exceed GPU VRAM or system RAM.
 
     Args:
         filename (str): string path destination of a nexus file that 
                         contains SNP data and a network
-        u (float, optional): Parameter for the probability of an
-                             allele changing from red to green. Defaults to .5.
-        v (float, optional): Parameter for the probability of an
-                             allele changing from green to red. Defaults to .5.
-        coal (float, optional): Parameter for the rate of coalescence. 
-                                Defaults to 1.
+        u (float): Parameter for the probability of an allele changing 
+                   from red to green.
+        v (float): Parameter for the probability of an allele changing 
+                   from green to red.
+        coal (float): Parameter for the rate of coalescence.
+        samples (dict[str, int]): Mapping from taxon names to sample counts.
         max_workers (int, optional): The number of workers to use for parallel 
                                      computation. Only used if sequential is False.
                                      Defaults to 8.
         sequential (bool, optional): Whether to use sequential computation. 
-                                     Only used if sequential is False.
                                      Defaults to True.
-        executor (Executor, optional): The executor to use for special 
-                                    computations. Only used if sequential is False.
+        executor (Executor, optional): The executor to use. If None, one is 
+                                    auto-selected based on network complexity.
                                     Defaults to None.
     Returns:
         float: The log likelihood (a negative number) of the network.
+    
+    Raises:
+        SNPResourceError: If the computation would exceed available hardware
+                          resources (GPU VRAM or system RAM).
     """
     
-    net = NetworkParser(filename).get_network(0)
+    net = read_nexus(filename)[0]
     
     aln = MSA(filename)
     
-    snp_model = build_model(filename, 
-                            net,
-                            u, 
-                            v, 
-                            coal)
+    snp_model = build_model(filename, net)
     
-    q = BiMarkersTransition(sum(samples.values()), u, v, coal)
+    # ── Analyze network complexity ──────────────────────────────────────
+    level = _compute_network_level(snp_model)
+    n_taxa = len(snp_model.nodetypes.get("leaf", []))
+    n_sites = aln.dim()[1]
     
-    strategy = SNPStrategy(q, u, v, coal, aln.dim()[1], sum(samples.values()))
+    # Compute the true max lineages: with reticulations, lineage duplication
+    # at split points means the effective lineage count can exceed sum(samples).
+    max_n = _compute_max_lineages(snp_model, samples)
     
-    visitor = SNPModelVisitor(strategy)
+    # ── Auto CPU/GPU routing ────────────────────────────────────────────
+    gpu_taxa_threshold = GPU_THRESHOLD.get(level, 8)
+    needs_gpu = n_taxa > gpu_taxa_threshold
+    use_gpu = needs_gpu and GPU_SPECS.available
     
-    def likelihood_sequential(root: ModelNode) -> float:
-        """
-        The traversal for SNP likelihood is a level order traversal. 
-        This is due to how VPI's are computed from prior VPI's. A new VPI 
-        needs all VPI's that include incoming lineages to be computed first. 
-        Computing by levels ensures that all VPI's are computed before the next level is computed.
-
-        In this implementation, the levels are not computed in parallel.
-
-        Args:
-            root (ModelNode): The root node of the model.
-        Returns:
-            float: The log likelihood (a negative number) of the network.
-        """
-
-        for nodes, lvl in LevelParallelTraversal(root, bottom_up=True):
-            print("PROCESSING LEVEL No. ", lvl)
-            for node in nodes:
-                print("Visiting node", node.get_name())
-                visitor.visit(node)
-            
-        return snp_model.get_root().result
-
+    if needs_gpu and not GPU_SPECS.available:
+        import warnings
+        warnings.warn(
+            f"Network has {n_taxa} taxa at level-{level} "
+            f"(GPU recommended above {gpu_taxa_threshold} taxa), "
+            f"but no GPU detected. Falling back to CPU — "
+            f"computation may be slow.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     
-    def likelihood_parallel(root: ModelNode) -> float:
-        """
-        The traversal for SNP likelihood is a level order traversal. 
-        This is due to how VPI's are computed from prior VPI's. A new VPI 
-        needs all VPI's that include incoming lineages to be computed first. 
-        Computing by levels ensures that all VPI's are computed before the next level is computed.
-
-        In this implementation, the levels *ARE* computed in parallel.
-
-        Args:
-            root (ModelNode): The root node of the model.
-        Returns:
-            float: The log likelihood (a negative number) of the network.
-        """
-        from concurrent.futures import ThreadPoolExecutor
-
-        # Traversal for LevelParallel yields a tuple of (level_number, nodes_at_level)
-        # The level_num can be safely ignored.
-        for level_num, nodes in LevelParallelTraversal(root, bottom_up=True):
-            if len(nodes) == 1:
-                visitor.visit(nodes[0])
-            else:
-                with ThreadPoolExecutor(max_workers=max_workers) as pool:
-                    pool.map(visitor.visit, nodes)
+    # ── Determine site batch size ──────────────────────────────────────
+    batch_size = _compute_batch_size(snp_model, samples, n_sites, use_gpu)
+    n_batches = (n_sites + batch_size - 1) // batch_size
     
-    if sequential:
-        return likelihood_sequential(snp_model.get_root())
+    peak_bytes, peak_shape = _estimate_peak_vpi_memory(
+        snp_model, samples, min(batch_size, n_sites)
+    )
+    peak_mb = peak_bytes / (1024 * 1024)
+    
+    device_str = (f"GPU ({GPU_SPECS.name})" if use_gpu 
+                  else "CPU")
+    print(f"SNP_LIKELIHOOD: {n_taxa} taxa, level-{level}, "
+          f"max_lineages={max_n}, {n_sites} sites")
+    batch_info = f" ({n_batches} batches of {batch_size})" if n_batches > 1 else ""
+    print(f"  Device: {device_str} | "
+          f"Peak tensor: {' × '.join(str(s) for s in peak_shape)} "
+          f"({peak_mb:.1f} MB){batch_info}")
+    
+    # ── Build shared objects ────────────────────────────────────────────
+    q = BiMarkersTransition(max_n, u, v, coal)
+    
+    for leaf in snp_model.nodetypes["leaf"]:
+        assert(type(leaf) is LeafNode)
+        leaf.samples = samples[leaf.get_name()]
+    
+    def _run_batch(site_slice: tuple[int, int] | None) -> float:
+        """Run one site batch and return its log-likelihood contribution."""
+        batch_sites = (site_slice[1] - site_slice[0]) if site_slice else n_sites
+        strategy = SNPStrategy(q, u, v, coal, n_sites, max_n, 
+                               site_slice=site_slice,
+                               use_gpu=use_gpu)
+        visitor = SNPModelVisitor(strategy)
+        for node in Traversal(snp_model.get_root(), TraversalOrder.POST_ORDER):
+            visitor.visit(node)
+        return strategy.L
+    
+    # ── Execute ─────────────────────────────────────────────────────────
+    start_t = time.perf_counter()
+    
+    if n_batches == 1:
+        # No batching needed — process all sites at once
+        total_log_lik = _run_batch(None)
     else:
-        return likelihood_parallel(snp_model.get_root())
+        # Site batching: sum log-likelihoods across independent batches
+        total_log_lik = 0.0
+        for b in range(n_batches):
+            s_start = b * batch_size
+            s_end = min(s_start + batch_size, n_sites)
+            batch_lik = _run_batch((s_start, s_end))
+            total_log_lik += batch_lik
+            if n_batches <= 20 or b % max(1, n_batches // 10) == 0:
+                print(f"    Batch {b+1}/{n_batches}: sites [{s_start}:{s_end}] "
+                      f"log-lik={batch_lik:.4f}")
+    
+    end_t = time.perf_counter()
+    print(f"  Total time: {end_t - start_t:.3f}s | log-lik = {total_log_lik:.6f}")
+    
+    return total_log_lik
 
-    
-       
-def SNP_LIKELIHOOD_TEST(filename : str,
-                         table : dict,
-                         u : float = .5 ,
-                         v : float = .5, 
-                         coal : float = 1) -> dict:
-    """
-    THIS FUNCTION IS ONLY FOR TESTING PURPOSES
-    Given a set of taxa with SNP data and a phylogenetic network, calculate the 
-    likelihood of the network given the data using the SNP likelihood algorithm.
-
-    Args:
-        filename (str): string path destination of a nexus file that 
-                        contains SNP data and a network
-        table (dict): A dictionary of A/B/C or A/B/C/D lineage counts to probability values.
-        u (float, optional): Parameter for the probability of an
-                             allele changing from red to green. Defaults to .5.
-        v (float, optional): Parameter for the probability of an
-                             allele changing from green to red. Defaults to .5.
-        coal (float, optional): Parameter for the rate of coalescence. 
-                                Defaults to 1.
-        
-    Returns:
-        dict: map from lineage counts (tuples of A/B/C or A/B/C/D) to non log probability values.
-    """
-    
-    net = NetworkParser(filename).get_network(0)
-        
-    snp_model = build_model(filename, 
-                            net,
-                            u, 
-                            v, 
-                            coal)
-    
-    for taxa in snp_model.all_nodes[ExtantSpecies]:
-        leaf : ExtantSpecies = taxa
-        leaf.update([DataSequence(set_reds[leaf.label], leaf.label)])
-    
-    return snp_model.likelihood()
 
 ##################
 # Model Building #
 ##################
 
 def build_model(filename : str,
-                net : Network,
-                u : float = .5 ,
-                v : float = .5, 
-                coal : float = 1) -> Model:
+                net : Network) -> Model:
     """
     Build a SNP model from a data file and network.
     """
+    #Parse data 
     aln = MSA(filename)
+    
+    #Build components
     network = NetworkComponent(net = net)
     msa = MSAComponent({NetworkComponent}, aln)
+    
+    #Auto Build Model
     model = ModelFactory(network, msa).build()
+    
+    #Attach the root likelihood aggregator
     snp_root = RootAggregatorNode()
     model.root = snp_root
     net_root : RootNode = model.nodetypes["root"][0]
@@ -632,118 +1241,571 @@ class BiMarkersTransition:
 class SNPStrategy(Strategy):
     """
     Visitor for the SNP model.
+    
+    Supports both CPU (NumPy) and GPU (CuPy) execution. When use_gpu=True,
+    all tensor operations run on the GPU via CuPy's drop-in NumPy API.
     """
-    def __init__(self, q : BiMarkersTransition, u : float, v : float, coal : float, sites : int, max_samples : int) -> None:
+    def __init__(self, q : BiMarkersTransition, u : float, v : float, 
+                 coal : float, sites : int, max_samples : int,
+                 site_slice: tuple[int, int] | None = None,
+                 use_gpu: bool = False) -> None:
         self.q : BiMarkersTransition = q
         self.u : float = u
         self.v : float = v
         self.coal : float = coal
-        self.sites : int = sites
-        print(max_samples)
-        print(nr_to_index(max_samples, max_samples))
-        self.vector_len : int = nr_to_index(max_samples, max_samples) + 1
-    
-    def _rule1(self, partial_likelihoods : np.ndarray, branch_len : float) -> np.array:
-        return partial_likelihoods @ self.q.expt(branch_len)
+        self.total_sites : int = sites
+        self.site_slice : tuple[int, int] | None = site_slice
+        self.sites : int = (site_slice[1] - site_slice[0]) if site_slice else sites
+        self.vector_len : int = state_dim(max_samples)
+        self.L : float = 0.0
         
-    def compute_at_leaf(self, n: LeafNode) -> None:
+        # GPU support: xp is the array module (numpy or cupy)
+        self.use_gpu : bool = use_gpu and CUPY_RUNTIME_OK
+        if self.use_gpu:
+            self.xp = cp
+        else:
+            self.xp = np
+        
+        #Cache is from nodes to [is_dirty, vpi]. If is_dirty is true, needs recalculation
+        self.cache : dict[ModelNode, tuple[bool, NodeVPI]] = dict()
+
+    def _get_cached_vpi(self, n: ModelNode) -> NodeVPI | None:
+        """Return the cached VPI if *n* is clean, otherwise ``None``."""
+        entry = self.cache.get(n)
+        if entry is not None and entry[0] is False:
+            return entry[1]
+        return None
+    
+    # ───────────────────────────────────────────────────────────────────────
+    # GPU helpers
+    # ───────────────────────────────────────────────────────────────────────
+    
+    def _scatter_add(self, target, slices, values) -> None:
+        """
+        Scatter-add: target[slices] += values, handling duplicate indices.
+        
+        On CPU: uses np.add.at (unbuffered).
+        On GPU: uses cupyx.scatter_add (CUDA-accelerated).
+        """
+        if self.use_gpu:
+            import cupyx
+            cupyx.scatter_add(target, slices, values)
+        else:
+            np.add.at(target, slices, values)
+    
+    def _get_sm(self, mx: int, my: int) -> SparseMerge:
+        """Get sparse merge tensor on the correct device."""
+        if self.use_gpu:
+            return get_sparse_merge_gpu(mx, my)
+        return get_sparse_merge(mx, my)
+    
+    def _get_ss(self, m: int, gamma: float) -> SparseSplit:
+        """Get sparse split tensor on the correct device."""
+        if self.use_gpu:
+            return get_sparse_split_gpu(m, gamma)
+        return get_sparse_split(m, gamma)
+    
+    def _rescale(self, F, log_scale):
+        """
+        Per-vector rescaling to prevent numerical underflow.
+        
+        Normalizes each vector (along the last axis) independently so that 
+        its max absolute value is 1.0. The per-vector log scaling factors 
+        are accumulated into log_scale, which grows to shape F.shape[:-1].
+        
+        Works on both CPU (NumPy) and GPU (CuPy) via self.xp.
+        """
+        xp = self.xp
+        # Per-vector max: max over the LAST axis only
+        max_val = xp.max(xp.abs(F), axis=-1, keepdims=True)  # shape (..., 1)
+        max_val = xp.where(max_val > 0, max_val, 1.0)
+        
+        F = F / max_val
+        
+        log_max = xp.log(max_val.squeeze(-1))  # shape = F.shape[:-1]
+        
+        # Expand log_scale with trailing singletons if it has fewer dims
+        if log_scale.ndim < log_max.ndim:
+            extra_dims = log_max.ndim - log_scale.ndim
+            log_scale = log_scale.reshape(log_scale.shape + (1,) * extra_dims)
+        
+        log_scale = log_scale + log_max
+        
+        return F, log_scale
+    
+    def _rescale_global(self, F, log_scale):
+        """
+        Global per-site rescaling (axis-order agnostic).
+        
+        Divides all elements by the global per-site maximum. This is 
+        compatible with any axis arrangement and is used within the 
+        reticulation computation where axes are being swapped.
+        
+        The log_scale must be per-site (1-D) for this method.
+        Works on both CPU (NumPy) and GPU (CuPy) via self.xp.
+        """
+        xp = self.xp
+        reduce_axes = tuple(range(1, F.ndim))
+        max_val = xp.max(xp.abs(F), axis=reduce_axes)  # shape (S,)
+        max_val = xp.where(max_val > 0, max_val, 1.0)
+        
+        scale_shape = (F.shape[0],) + (1,) * (F.ndim - 1)
+        F = F / max_val.reshape(scale_shape)
+        
+        if log_scale.ndim > 1:
+            raise ValueError(
+                f"_rescale_global requires per-site log_scale (1-D), "
+                f"got shape {log_scale.shape}"
+            )
+        log_scale = log_scale + xp.log(max_val)
+        
+        return F, log_scale
+    
+    def _equalize_scales(self, F, log_scale):
+        """
+        Equalize per-vector scales to a common per-site maximum.
+        
+        Before merge/split operations that combine values across 
+        different vector positions, we need all vectors within the same 
+        site to be on a comparable scale.
+        
+        Works on both CPU (NumPy) and GPU (CuPy) via self.xp.
+        """
+        xp = self.xp
+        if log_scale.ndim <= 1:
+            # Already per-site scalar — nothing to equalize
+            return F, log_scale
+        
+        # Per-site max of the log scales
+        reduce_axes = tuple(range(1, log_scale.ndim))
+        common_log = xp.max(log_scale, axis=reduce_axes)  # shape (S,)
+        
+        # Compute adjustment: exp(log_scale - common_log)
+        broadcast_shape = (log_scale.shape[0],) + (1,) * (log_scale.ndim - 1)
+        diff = log_scale - common_log.reshape(broadcast_shape)
+        
+        # Clamp diff to prevent exp() underflow for hugely negative diffs
+        diff = xp.maximum(diff, -500.0)
+        
+        # Apply adjustment to F: add trailing dim for broadcasting with last axis
+        adjustment = xp.exp(diff)[..., xp.newaxis]  # shape (S, d1, ..., dk-1, 1)
+        F = F * adjustment
+        
+        return F, common_log
+    
+    def _rule1(self, F, branch_len: float, d: int):
+        """
+        Given vpi tensor F, with interface α, and branch length t, and max lineages m_α, 
+        compute the vpi tensor F_top at the top of the branch.
+
+        P(t) is computed on CPU (small matrix, scipy.linalg.expm) and transferred
+        to GPU if needed. The matmul F @ P_sub runs on the tensor's device.
+        """
+        P_full = self.q.expt(branch_len)   # always NumPy (CPU)
+        P_sub = P_full[:d, :d]
+        if self.use_gpu:
+            P_sub = self.xp.asarray(P_sub)  # transfer to GPU
+        return F @ P_sub
+    
+    def _rule2(self, F_x, F_y, m_x: int, m_y: int):
+        """
+        Merge two VPI tensors from disjoint sub-networks (SPARSE).
+        
+        F_x has shape (S, *x_extra, state_dim(m_x))
+        F_y has shape (S, *y_extra, state_dim(m_y))
+        Result has shape (S, *x_extra, *y_extra, state_dim(m_x + m_y))
+        
+        Uses sparse COO merge coefficients. GPU-compatible via self.xp.
+        The nnz dimension is processed in chunks to prevent GPU/CPU OOM
+        from the broadcast intermediate (S, *x_extra, *y_extra, nnz).
+        """
+        xp = self.xp
+        sm = self._get_sm(m_x, m_y)
+        nnz = len(sm.i_arr)
+        
+        n_x_extra = F_x.ndim - 2
+        n_y_extra = F_y.ndim - 2
+        
+        # Pre-compute result shape: (S, *x_extra, *y_extra, dim_z)
+        result_shape = (list(F_x.shape[:-1]) 
+                        + list(F_y.shape[1:-1]) 
+                        + [sm.dim_z])
+        result = xp.zeros(result_shape, dtype=F_x.dtype)
+        
+        # ---------- determine chunk size for the nnz dimension ----------
+        # The broadcast intermediate has shape (S, *x_extra, *y_extra, chunk)
+        # and we want that to stay within a memory budget.
+        S = F_x.shape[0]
+        prefix_elems = S
+        for d in F_x.shape[1:-1]:   # x_extra dims
+            prefix_elems *= d
+        for d in F_y.shape[1:-1]:   # y_extra dims
+            prefix_elems *= d
+        
+        # Budget: ~1 GB on CPU, 25% of free VRAM on GPU
+        if self.use_gpu:
+            free = cp.cuda.Device().mem_info[0]
+            budget_bytes = max(int(free * 0.25), 256 * 1024**2)
+        else:
+            budget_bytes = 1 * 1024**3   # 1 GB
+        
+        # Each nnz element in the chunk costs 8 bytes × prefix_elems
+        # (the contribution array is the dominant allocation)
+        bytes_per_nz = prefix_elems * 8
+        chunk_size = max(1, budget_bytes // bytes_per_nz) if bytes_per_nz > 0 else nnz
+        
+        # ---------- chunked gather → broadcast → scatter-add ----------
+        for c0 in range(0, nnz, chunk_size):
+            c1 = min(c0 + chunk_size, nnz)
+            
+            fx_g = F_x[..., sm.i_arr[c0:c1]]   # (S, *x_extra, chunk)
+            fy_g = F_y[..., sm.j_arr[c0:c1]]   # (S, *y_extra, chunk)
+            
+            # Reshape for outer-product broadcast over extra dims
+            if n_y_extra > 0:
+                fx_shape = list(fx_g.shape)
+                for _ in range(n_y_extra):
+                    fx_shape.insert(-1, 1)
+                fx_g = fx_g.reshape(fx_shape)
+            
+            if n_x_extra > 0:
+                fy_shape = list(fy_g.shape)
+                for _ in range(n_x_extra):
+                    fy_shape.insert(1, 1)
+                fy_g = fy_g.reshape(fy_shape)
+            
+            contributions = fx_g * fy_g * sm.coeff_arr[c0:c1]
+            self._scatter_add(result, (..., sm.k_arr[c0:c1]), contributions)
+            
+            # Free intermediates eagerly on GPU
+            if self.use_gpu:
+                del fx_g, fy_g, contributions
+        
+        return result
+    
+    def _rule3(self, F, mx, gammax):
+        """
+        Split a VPI tensor at a reticulation node (SPARSE).
+        
+        F has shape (..., state_dim(mx))
+        Result has shape (..., state_dim(mx), state_dim(mx))
+        
+        GPU-compatible via self.xp and self._scatter_add.
+        """
+        xp = self.xp
+        ss = self._get_ss(mx, gammax)
+        
+        # Gather: F[..., i_arr] → shape (..., nnz)
+        f_g = F[..., ss.i_arr]
+        
+        # Weighted contributions: (..., nnz)
+        contributions = f_g * ss.coeff_arr
+        
+        # Scatter into 2D output (j, k)
+        prefix_shape = F.shape[:-1]
+        result = xp.zeros((*prefix_shape, ss.dim, ss.dim), dtype=F.dtype)
+        
+        # Use linear index for scatter: j * dim + k
+        linear_idx = ss.j_arr * ss.dim + ss.k_arr
+        result_flat = result.reshape(*prefix_shape, ss.dim * ss.dim)
+        self._scatter_add(result_flat, (..., linear_idx), contributions)
+        
+        return result_flat.reshape(result.shape)
+    
+    def _rule4(self, F, mx, my):
+        """
+        Merge two interfaces from the same VPI tensor (SPARSE).
+        
+        F has shape (..., state_dim(mx), state_dim(my))
+        Result has shape (..., state_dim(mx + my))
+        
+        GPU-compatible via self.xp and self._scatter_add.
+        """
+        xp = self.xp
+        sm = self._get_sm(mx, my)
+        
+        # F[..., i_arr, j_arr] gathers the (i, j) pairs → shape (..., nnz)
+        f_g = F[..., sm.i_arr, sm.j_arr]
+        
+        # Weighted contributions: (..., nnz)
+        contributions = f_g * sm.coeff_arr
+        
+        # Scatter into result
+        prefix_shape = F.shape[:-2]
+        result = xp.zeros((*prefix_shape, sm.dim_z), dtype=F.dtype)
+        self._scatter_add(result, (..., sm.k_arr), contributions)
+        
+        return result  
+        
+    def compute_at_leaf(self, n: LeafNode) -> NodeVPI:
         """
         Compute the partial likelihoods at a leaf node.
 
-        The format for the partial likelihoods is a two dimensional array where the first dimension (rows) is the site index 
-        and the second dimension (columns) is the number of samples for this leaf. 
-        The position of the 1.0 probability is the number of red alleles at that site.
+        The format for the partial likelihoods is a two dimensional array where 
+        the first dimension (rows) is the site index and the second dimension 
+        (columns) is the number of samples for this leaf. 
+        
+        Uses vectorized indexing for GPU efficiency (no Python per-site loop).
         """
-        print("Computing at leaf", n.get_name())
-
+        xp = self.xp
+        
+        if n in self.cache:
+            if self.cache[n][0] is False:
+                return self.cache[n][1]
+            
         assert len(n.data) == 1, "Leaf node must have exactly one data sequence"
         reds : list[int] = n.data[0].get_numerical_seq()
         
-        base_likelihoods : np.array = np.zeros((self.sites, self.vector_len), dtype=np.float64)
+        # Slice to current batch if site batching is active
+        if self.site_slice is not None:
+            reds = reds[self.site_slice[0]:self.site_slice[1]]
         
-        for site in range(self.sites):
-            base_likelihoods[site, nr_to_index(n.samples, reds[site])] = 1.0
+        # Vectorized leaf initialization (GPU-friendly: single kernel launch)
+        # Pre-compute state indices on CPU, then transfer
+        state_indices_np = np.array([nr_to_index(n.samples, r) for r in reds], dtype=np.int64)
         
-        return self._rule1(base_likelihoods, n.branch().length)
-         
-    def compute_at_internal(self, n: InternalNode, samples : int) -> None:
+        F = xp.zeros((self.sites, state_dim(n.samples)), dtype=xp.float64)
+        site_indices = xp.arange(self.sites)
+        state_indices = xp.asarray(state_indices_np) if self.use_gpu else state_indices_np
+        F[site_indices, state_indices] = 1.0
+        
+        # log_scale shape matches F.shape[:-1] = (sites,)
+        log_scale = xp.zeros(self.sites, dtype=xp.float64)
+        F = self._rule1(F, n.branch().length, state_dim(n.samples))
+        F, log_scale = self._rescale(F, log_scale)
+        
+        n.vpi = NodeVPI(F, [f"{n.get_name()}_top"], [n.samples], log_scale)
+        self.cache[n] = (False, n.vpi)
+        return n.vpi
+
+    def compute_at_internal(self, n: InternalNode, x : NodeVPI, y: NodeVPI) -> NodeVPI:
         """
         Compute the partial likelihoods at an internal node.
         """
-        rule2 = _disjoint_subnets(n)
-        if rule2:
-            # Use Rule 2
-            pass
-        else:
-            # Use Rule 4
-            pass
-        return self.rule1(partial_likelihoods, len(n.branch))
+        cached = self._get_cached_vpi(n)
+        if cached is not None:
+            return cached
         
+        rule2 = _disjoint_subnets(n)
+        
+        if rule2:
+            mx = x.max_lineages[-1]
+            my = y.max_lineages[-1]
+            
+            # Equalize both VPIs to per-site scales before merge
+            x_F, x_ls = self._equalize_scales(x.tensor, x.log_scale)
+            y_F, y_ls = self._equalize_scales(y.tensor, y.log_scale)
+            
+            F = self._rule2(x_F, y_F, mx, my)
+            interfaces = x.interfaces[:-1] + y.interfaces[:-1] + [f"{n.get_name()}_top"] 
+            max_lin = x.max_lineages[:-1] + y.max_lineages[:-1] + [mx + my]
+            # After equalization, both log_scales are per-site (S,)
+            log_scale = x_ls + y_ls
+        else:
+            mx = x.max_lineages[-2]
+            my = x.max_lineages[-1]
+            
+            # Equalize multi-dim scales to per-site before rule4 merge
+            x_F, x_ls = self._equalize_scales(x.tensor, x.log_scale)
+            
+            F = self._rule4(x_F, mx, my)
+            interfaces = x.interfaces[:-2] + [f"{n.get_name()}_top"]
+            max_lin = x.max_lineages[:-2] + [mx + my]
+            log_scale = x_ls
+        
+        # Rescale result (log_scale starts per-site, grows with F's dims)
+        F, log_scale = self._rescale(F, log_scale)
+        F = self._rule1(F, n.branch().length, state_dim(max_lin[-1]))
+        F, log_scale = self._rescale(F, log_scale)
+           
+        n.vpi = NodeVPI(F, interfaces, max_lin, log_scale)
+        self.cache[n] = (False, n.vpi)
+        return n.vpi
     
-    def compute_at_reticulation(self, n: ReticulationNode, samples : int) -> None:
+    def compute_at_reticulation(self, n : ReticulationNode, x : NodeVPI) -> NodeVPI:
         """
         Compute the partial likelihoods at a reticulation node.
+        
+        The split creates two new interfaces (one per parent branch).
+        During the two transition steps, we use global per-site rescaling
+        (axis-order agnostic) to prevent intermediate underflow.
+        After both transitions, we do a final per-vector rescale.
+        
+        GPU-compatible via self.xp.
         """
-        # # Use Rule 3
-        # branch1, branch2 = n.branches()
-
-        # partials1 : np.array
-        # partials2 : np.array
-        # return self._rule1(partials1, branch1.length), self._rule1(partials2, branch2.length)
-        print("Computing at reticulation", n.get_name())
-        return 1
-
-    def compute_at_root(self, n: RootNode, samples : int) -> None:
+        xp = self.xp
+        
+        cached = self._get_cached_vpi(n)
+        if cached is not None:
+            return cached
+        
+        branches : tuple[Branch, Branch]= n.branch_info
+        
+        gamma = branches[0].inheritance_probability
+        m = x.max_lineages[-1]
+        
+        # Equalize to per-site log_scale before the split 
+        x_F, log_scale = self._equalize_scales(x.tensor, x.log_scale)
+        
+        # rule3 (split): F shape (..., d) → (..., d_branch0, d_branch1)
+        F = self._rule3(x_F, m, gamma)
+        
+        # Global per-site rescale (safe across any axis arrangement)
+        F, log_scale = self._rescale_global(F, log_scale)
+        
+        # Apply transition on branch 0's axis (axis -2)
+        F = xp.moveaxis(F, -2, -1)
+        F = self._rule1(F, branches[0].length, state_dim(m))
+        F, log_scale = self._rescale_global(F, log_scale)
+        
+        # Apply transition on branch 1's axis (now at -2, move to -1)
+        F = xp.moveaxis(F, -1, -2)
+        F = self._rule1(F, branches[1].length, state_dim(m))
+        F, log_scale = self._rescale_global(F, log_scale)
+        
+        # Final per-vector rescale for downstream merge/split compatibility
+        F, log_scale = self._rescale(F, log_scale)
+        
+        #Book keep the interfaces and lineages
+        interfaces = x.interfaces[:-1] + [f"{n.get_name()}_{branches[0].parent_id}_top", f"{n.get_name()}_{branches[1].parent_id}_top"]  
+        max_lin = x.max_lineages[:-1] + [m, m] 
+        
+        n.vpi = NodeVPI(F, interfaces, max_lin, log_scale)
+        self.cache[n] = (False, n.vpi)
+        return n.vpi
+        
+    def compute_at_root(self, n: RootNode, x : NodeVPI, y : NodeVPI) -> NodeVPI:
         """
-        Compute the partial likelihoods at an internal node.
+        Compute the partial likelihoods at the root node.
         """
+        cached = self._get_cached_vpi(n)
+        if cached is not None:
+            return cached
+        
         rule2 = _disjoint_subnets(n)
+        
         if rule2:
-            # Use Rule 2
-            pass
+            # Equalize both VPIs to per-site scales before merge
+            x_F, x_ls = self._equalize_scales(x.tensor, x.log_scale)
+            y_F, y_ls = self._equalize_scales(y.tensor, y.log_scale)
+            
+            F = self._rule2(x_F, y_F, x.max_lineages[-1], y.max_lineages[-1])
+            final_lin = x.max_lineages[-1] + y.max_lineages[-1]
+            log_scale = x_ls + y_ls
         else:
-            # Use Rule 4
-            pass
-        return 
-
-    def compute_at_aggregator(self, n: RootAggregatorNode, root_partials : np.ndarray) -> None:
+            x_F, x_ls = self._equalize_scales(x.tensor, x.log_scale)
+            
+            F = self._rule4(x_F, x.max_lineages[-2], x.max_lineages[-1])
+            final_lin = x.max_lineages[-2] + x.max_lineages[-1]
+            log_scale = x_ls
+        
+        F, log_scale = self._rescale(F, log_scale)
+        
+        n.vpi = NodeVPI(F, [f"{n.get_name()}_bottom"], [final_lin], log_scale)
+        self.cache[n] = (False, n.vpi)
+        return n.vpi
+        
+    def compute_at_aggregator(self, n: RootAggregatorNode, root : NodeVPI) -> None:
         """
         Compute the partial likelihoods at a root aggregator node.
+        
+        Uses the accumulated per-vector log_scale factors to recover the
+        true log-likelihood without numerical underflow. The root VPI
+        should have shape (S, d) with log_scale shape (S,) after 
+        equalization at the root node.
+        
+        GPU-compatible: pi is built on CPU and transferred; final
+        log-likelihood is brought back to CPU as a Python float.
         """
-        #Normalize Q matrix
-        q_null_space = scipy.linalg.null_space(self.q.getQ())
-        x = q_null_space / (q_null_space[0] + q_null_space[1])
-
-        #Compute log likelihood 
-        L = np.log(np.dot(root_partials, x))
-        return L
-
+        xp = self.xp
+        
+        if self._get_cached_vpi(n) is not None:
+            return 
+        
+        m = root.max_lineages[-1]
+        
+        # Compute stationary distribution on CPU (small vector, scalar math)
+        theta_r = self.v / (self.u + self.v)
+        theta_g = self.u / (self.u + self.v)
+        
+        pi_np = np.zeros(state_dim(m))
+        for n_lin in range(1, m + 1):
+            for r in range(n_lin + 1):
+                idx = nr_to_index(n_lin, r)
+                pi_np[idx] = comb(n_lin, r) * (theta_r ** r) * (theta_g ** (n_lin - r))
+        
+        # Normalize
+        pi_np = pi_np / np.sum(pi_np)
+        
+        # Transfer to GPU if needed
+        pi = xp.asarray(pi_np) if self.use_gpu else pi_np
+        
+        # Equalize to per-site scale if log_scale is still multi-dimensional
+        root_F, root_ls = self._equalize_scales(root.tensor, root.log_scale)
+        
+        # Compute log likelihood per site:
+        #   true_lik[s] = scaled_lik[s] * exp(log_scale[s])
+        #   log(true_lik[s]) = log(scaled_lik[s]) + log_scale[s]
+        scaled_site_likelihoods = root_F @ pi  # [S] array
+        
+        # Clamp to avoid log(0) — sites where lik=0 get -inf contribution
+        scaled_site_likelihoods = xp.maximum(
+            scaled_site_likelihoods, xp.finfo(xp.float64).tiny
+        )
+        
+        log_site_likelihoods = xp.log(scaled_site_likelihoods) + root_ls
+        
+        # Bring result back to CPU as a Python float
+        self.L = float(xp.sum(log_site_likelihoods))
+        n.vpi = NodeVPI(self.L, [], [], np.zeros(0))
+        self.cache[n] = (False, n.vpi)
+        
 class SNPModelVisitor(Visitor):
     """
     Visitor for the SNP model.
     """
     def __init__(self, strategy: SNPStrategy) -> None:
-        self.samples : dict[ModelNode, int] = {}
         self.strategy : SNPStrategy = strategy
-    
+        self.vpis : list[NodeVPI] = []
+            
     def visit_leaf(self, n: LeafNode) -> None:
-        self.strategy.compute_at_leaf(n)
-        self.samples[n] = n.samples
-    
+        self.vpis.append(self.strategy.compute_at_leaf(n))
+        
     def visit_internal(self, n: InternalNode) -> None:
-        self.samples[n] = sum([self.samples[child] for child in n.get_model_children()])
-        self.strategy.compute_at_internal(n, self.samples[n])
+        child_vpis : list[NodeVPI]= [
+            self._get_vpi_for(n, child.get_name(), retic=(child.get_node_type() == "reticulation"))
+            for child in n.get_model_children()
+        ]
+        unique_vpis = deduplicate_vpis(child_vpis)
+        self._remove(unique_vpis[0])
+        if len(unique_vpis) == 1:
+            self.vpis.append(self.strategy.compute_at_internal(n, unique_vpis[0], unique_vpis[0]))
+        else:
+            self._remove(unique_vpis[1])
+            self.vpis.append(self.strategy.compute_at_internal(n, unique_vpis[0], unique_vpis[1]))
         
     def visit_reticulation(self, n: ReticulationNode) -> None:
-        self.samples[n] = sum([self.samples[child] for child in n.get_model_children()])
-        self.strategy.compute_at_reticulation(n, self.samples[n])
-    
+        child_vpi : NodeVPI = [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()][0]
+        self._remove(child_vpi)
+        self.vpis.append(self.strategy.compute_at_reticulation(n, child_vpi))
+        
     def visit_root(self, n: RootNode) -> None:
-        self.samples[n] = sum([self.samples[child] for child in n.get_model_children()])
-        self.strategy.compute_at_root(n, self.samples[n])
-    
+        child_vpis : list[NodeVPI]= [
+            self._get_vpi_for(n, child.get_name(), retic=(child.get_node_type() == "reticulation"))
+            for child in n.get_model_children()
+        ]
+        unique_vpis = deduplicate_vpis(child_vpis)
+        self._remove(unique_vpis[0])
+        if len(unique_vpis) == 1:
+            self.vpis.append(self.strategy.compute_at_root(n, unique_vpis[0], unique_vpis[0]))
+        else:
+            self._remove(unique_vpis[1])
+            self.vpis.append(self.strategy.compute_at_root(n, unique_vpis[0], unique_vpis[1]))
+        
     def visit_aggregator(self, n: RootAggregatorNode) -> None:
-        self.strategy.compute_at_aggregator(n)
+        child_vpi : NodeVPI = [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()][0]
+        self.strategy.compute_at_aggregator(n, child_vpi)
+        
     
     def visit(self, n: ModelNode) -> None:
         """
@@ -759,456 +1821,80 @@ class SNPModelVisitor(Visitor):
         }
         return dispatch[n.get_node_type()](n)
 
-
-
-class PartialLikelihoods:
-    """
-    Class that bookkeeps the vectors of population interfaces (vpis) and their
-    associated likelihood values.
-    
-    Contains methods for evaluating and storing likelihoods based on the rules
-    described by Rabier et al.
-    """
-    
-    def __init__(self) -> None:
+    def _get_vpi_for(self, n : ModelNode, node_label : str, retic : bool = False) -> NodeVPI:
         """
-        Initialize an empty PartialLikelihood obj.
-
-        Args:
-            N/A
-        Returns:
-            N/A
-        """
-        # A map from a vector of population interfaces (vpi)
-        # -- represented as a tuple of strings-- 
-        # to probability maps defined by rules 0-4.
-        self.vpis : dict = {}
-        
-    def set_ploidy(self, ploidy : int) -> None:
-        """
-        Set the ploidy value for the partial likelihoods object.
+        Find the VPI containing the interface for a given child node.
         
         Args:
-            ploidyness (int): ploidy value.
-        Returns:
-            N/A
-        """
-        self.ploidy = ploidy
-
-    def Rule0():
-        pass
-
-        
-    def Rule1(self,
-              vpi_key_x : tuple, 
-              branch_id_x : int,
-              m_x : int, 
-              Qt : np.ndarray) -> tuple:
-        """
-        Given a branch x, and partial likelihoods for the population interface 
-        that includes x_bottom, we'd like to compute the partial likelihoods for 
-        the population interface that includes x_top.
-        
-        This uses Rule 1 from (1)
-        
-
-        Args:
-            vpi_key_x (tuple): the key to the vpi map, the value of which is a 
-                             mapping containing mappings from vectors 
-                             (nx, n_xbot; rx, r_xbot) to probability values 
-                             for each site
-            branch_id_x (int): the unique id of branch x
-            m_x (int): number of possible lineages at the branch x
-            Qt (np.ndarray): the transition rate matrix exponential
-
-        Returns:
-            tuple: vpi key that maps to the partial likelihoods at the 
-                   population interface that now includes the top of this 
-                   branch, x_top.
+            n: The parent model node requesting the VPI.
+            node_label: The name of the child model node to look up.
+            retic: If True, the child is a reticulation node, and we must
+                   match the exact interface '{node_label}_{n.get_name()}_top'
+                   to select the correct parent-specific interface.
         """
         
+        def _iface_matches_label(iface: str, label: str) -> bool:
+            """
+            Delimiter-aware match: checks startswith('{label}_').
+            Prevents 'T1' from matching 'T10_top'.
+            """
+            return iface.startswith(label + "_") or iface == label
         
-        # Check if vectors are properly ordered
-        if "branch_" + str(branch_id_x) + ": bottom" != vpi_key_x[-1]:
-            vpi_key_temp = self.reorder_vpi(vpi_key_x,
-                                            site_count, 
-                                            branch_id_x, 
-                                            False)
-            del self.vpis[vpi_key_x]
-            vpi_key_x = vpi_key_temp
+        def get() -> tuple[int, NodeVPI]:
+            if retic:
+                # Reticulation interfaces have the form: {retic_name}_{parent_name}_top
+                # We need to find the exact interface for THIS parent
+                expected_iface = f"{node_label}_{n.get_name()}_top"
+                for vpi in self.vpis:
+                    for index, iface in enumerate(vpi.interfaces):
+                        if iface == expected_iface:
+                            return index, vpi
+            else:
+                for vpi in self.vpis:
+                    for index, iface in enumerate(vpi.interfaces):
+                        if _iface_matches_label(iface, node_label):
+                            return index, vpi 
+            return None
+        
+        def move_to_end(v : NodeVPI, index : int) -> None:
+            if index == len(v.interfaces) - 1:
+                return  # Already at the end, nothing to do
             
+            # Use the strategy's xp module for GPU compatibility
+            xp = self.strategy.xp
             
-        F_b = self.vpis[vpi_key_x]
-        
-        # Replace the instance of x_bot with x_top
-        new_vpi_key = list(vpi_key_x)
-        edit_index = vpi_key_x.index("branch_" + str(branch_id_x) + ": bottom")
-        new_vpi_key[edit_index] = "branch_" + str(branch_id_x) + ": top"
-        new_vpi_key = tuple(new_vpi_key)
-        
-        # Put the map back
-        self.vpis[new_vpi_key] = F_b @ Qt
-        del self.vpis[vpi_key_x]
-        
-        return new_vpi_key
-                
-    def Rule2(self, 
-              vpi_key_x : tuple, 
-              vpi_key_y : tuple,  
-              branch_id_x : str,
-              branch_id_y : str, 
-              branch_id_z : str) -> tuple:
-        """
-        Given branches x and y that have no leaf descendents in common and a 
-        parent branch z, and partial likelihood mappings for the population 
-        interfaces that include x_top and y_top, we would like to calculate 
-        the partial likelihood mapping for the population interface
-        that includes z_bottom.
-        
-        This uses Rule 2 from (1)
-
-        Args:
-            vpi_key_x (tuple): The vpi that contains x_top
-            vpi_key_y (tuple): The vpi that contains y_top
-            branch_id_x (str): the unique id of branch x
-            branch_id_y (str): the unique id of branch y
-            branch_id_z (str): the unique id of branch z
-        
-
-        Returns:
-            tuple: the vpi key that is the result of applying rule 2 to 
-                   vpi_x and vpi_y. Should include z_bot.
-        """
-        
-        #Reorder the vpis if necessary
-        if "branch_" + str(branch_id_x) + ": top" != vpi_key_x[-1]:
+            # If log_scale is multi-dimensional, equalize to per-site BEFORE
+            # rearranging axes (log_scale must match tensor.shape[:-1], which
+            # changes after moveaxis)
+            if v.log_scale is not None and v.log_scale.ndim > 1:
+                v.tensor, v.log_scale = self.strategy._equalize_scales(
+                    v.tensor, v.log_scale
+                )
             
-            vpi_key_xtemp = self.reorder_vpi(vpi_key_x, 
-                                             site_count, 
-                                             branch_id_x,
-                                             True)
-            del self.vpis[vpi_key_x]
-            vpi_key_x = vpi_key_xtemp
-        
-        if "branch_" + str(branch_id_y) + ": top" != vpi_key_y[-1]:
+            #Move interface to end (use pop to handle duplicate values safely)
+            interface_to_move = v.interfaces.pop(index)
+            v.interfaces.append(interface_to_move)
+            #Move max_lineages to end (must stay in sync with interfaces)
+            lineage_to_move = v.max_lineages.pop(index)
+            v.max_lineages.append(lineage_to_move)
+            #Move tensor axis to end (xp.moveaxis returns a new array!)
+            # Tensor axes: axis 0 = sites, axes 1..N = interfaces
+            v.tensor = xp.moveaxis(v.tensor, index + 1, -1)
+            # log_scale is now per-site (1-D) — compatible with any axis order
             
-            vpi_key_ytemp = self.reorder_vpi(vpi_key_y, 
-                                             site_count,
-                                             branch_id_y, 
-                                             True)
-            del self.vpis[vpi_key_y]
-            vpi_key_y = vpi_key_ytemp
-            
-        F_t_x = self.vpis[vpi_key_x]
-        F_t_y = self.vpis[vpi_key_y]
         
-        if not cs:
-            F_b = {}
-            #Compute F x,y,z_bot
-            for site in range(site_count):
-                nx_rx_map_y = rn_to_rn_minus_dim(F_t_y[site], 1)
-                nx_rx_map_x = rn_to_rn_minus_dim(F_t_x[site], 1)
-                F_b[site] = {}
-                
-                #Compute all combinations of (nx;rx) and (ny;ry)
-                for vectors_x in nx_rx_map_x.keys():
-                    for vectors_y in nx_rx_map_y.keys():
-                        nx = list(vectors_x[0])
-                        rx = list(vectors_x[1])
-                        ny = list(vectors_y[0])
-                        ry = list(vectors_y[1])
-                        
-                        #Iterate over all possible values of n_zbot, r_zbot
-                        for index in range(vector_len):
-                            actual_index = index_to_nr(index)
-                            n_bot = actual_index[0]
-                            r_bot = actual_index[1]
-                            # Evaluate the formula given in rule 2, 
-                            # and insert as an entry in F_b
-                            entry = eval_Rule2(F_t_x[site], F_t_y[site],
-                                               nx, ny, n_bot, rx, ry, r_bot)
-                            F_b[site][entry[0]] = entry[1]
-        else:
-            F_b = self.evaluator.Rule2(F_t_x, F_t_y, site_count, vector_len)
-        
-        #Combine the vpis
-        new_vpi_key_x= list(vpi_key_x)
-        new_vpi_key_x.remove("branch_" + str(branch_id_x) + ": top")
-        
-        new_vpi_key_y= list(vpi_key_y)
-        new_vpi_key_y.remove("branch_" + str(branch_id_y) + ": top")
-        
-        #Create new vpi key, (vpi_x, vpi_y, z_branch_bottom)
-        z_name = "branch_" + str(branch_id_z) + ": bottom"
-        vpi_y = np.append(new_vpi_key_y, z_name)
-        new_vpi_key = tuple(np.append(new_vpi_key_x, vpi_y))
-        
-        
-        #Update the vpi tracker
-        self.vpis[new_vpi_key] = F_b
-        del self.vpis[vpi_key_x]
-        del self.vpis[vpi_key_y]
-                         
-        return new_vpi_key
+        result = get()
+        if result is None:
+            raise ValueError(
+                f"Could not find VPI for node '{node_label}' "
+                f"(parent: '{n.get_name()}', retic={retic}). "
+                f"Available interfaces: {[iface for vpi in self.vpis for iface in vpi.interfaces]}"
+            )
+        i, n_vpi = result
+        move_to_end(n_vpi, i)
+        return n_vpi
 
-    def Rule3(self, 
-              vpi_key_x : tuple, 
-              branch_id_x : str,
-              branch_id_y : str, 
-              branch_id_z : str,
-              g_this : float,
-              g_that : float,
-              mx : int) -> tuple:
-        """
-        Given a branch x, its partial likelihood mapping at x_top, and parent 
-        branches y and z, we would like to compute the partial likelihood 
-        mapping for the population interface x, y_bottom, z_bottom.
-
-        This uses Rule 3 from (1)
-        
-        Args:
-            vpi_key_x (tuple): the vpi containing x_top
-            branch_id_x (str): the unique id of branch x
-            branch_id_y (str): the unique id of branch y
-            branch_id_z (str): the unique id of branch z
-            g_this (float): gamma inheritance probability for branch y
-            g_that (float): gamma inheritance probability for branch z
-            mx (int): number of possible lineages at x.
-
-        Returns:
-            tuple: the vpi key that now corresponds to F (x, y_bot, z_bot)
-        """
-        
-        F_t_x = self.vpis[vpi_key_x]
-        
-        if not cs:
-            F_b = {}
-            for site in range(site_count):
-                nx_rx_map = rn_to_rn_minus_dim(F_t_x[site], 1)
-                F_b[site] = {}
-                #Iterate over the possible (nx;rx) values
-                for vector in nx_rx_map.keys():
-                    nx = list(vector[0])
-                    rx = list(vector[1])
-                    #Iterate over the possible values for n_y, n_z, r_y, and r_z
-                    for n_y in range(mx + 1):
-                        for n_z in range(mx - n_y + 1):
-                            if n_y + n_z >= 1:
-                                for r_y in range(n_y + 1):
-                                    for r_z in range(n_z + 1):
-                                        # Evaluate the formula in rule 3 
-                                        # and add the result to F_b
-                                        entry = eval_Rule3(F_t_x[site],
-                                                           nx,
-                                                           rx, 
-                                                           n_y, 
-                                                           n_z, 
-                                                           r_y, 
-                                                           r_z, 
-                                                           g_this, 
-                                                           g_that)
-                                        F_b[site][entry[0]] = entry[1]
-        else:
-            F_b = self.evaluator.Rule3(F_t_x, 
-                                       site_count, 
-                                       vector_len, 
-                                       mx, 
-                                       g_this, 
-                                       g_that)
-        
-        #Create new vpi key                      
-        new_vpi_key = list(vpi_key_x)
-        new_vpi_key.remove("branch_" + str(branch_id_x) + ": top")
-        new_vpi_key.append("branch_" + str(branch_id_y) + ": bottom")
-        new_vpi_key.append("branch_" + str(branch_id_z) + ": bottom")
-        new_vpi_key = tuple(new_vpi_key)
-        
-        # Update vpi tracker
-        self.vpis[new_vpi_key] = F_b
-        del self.vpis[vpi_key_x]
-        
-        return new_vpi_key               
-            
-    def Rule4(self, 
-              vpi_key_xy : tuple, 
-              branch_index_x : int, 
-              branch_index_y : int, 
-              branch_index_z : int) -> tuple:
-        """
-        Given a branches x and y that share common leaf descendants and that 
-        have parent branch z, compute F z, z_bot via 
-        Rule 4 described by (1)
-
-        Args:
-            vpi_key_x (tuple): vpi containing x_top and y_top.
-            branch_index_x (int): the index of branch x
-            branch_index_y (int): the index of branch y
-            branch_index_z (int): the index of branch z
-
-        Returns:
-            tuple: vpi key for F(z,z_bot)
-        """
-
-        if "branch_" + str(branch_index_y) + ": top" != vpi_key_xy[-1]:
-            vpi_key_temp = self.reorder_vpi(vpi_key_xy,
-                                            site_count, 
-                                            branch_index_y, 
-                                            True)
-            del self.vpis[vpi_key_xy]
-            vpi_key_xy = vpi_key_temp
-        
-        F_t = self.vpis[vpi_key_xy]
-        
-        if not cs:
-            F_b = {}
-            for site in range(site_count):
-                nx_rx_map = rn_to_rn_minus_dim(F_t[site], 2)
-                
-                F_b[site] = {}
-                
-                #Compute all combinations of (nx;rx) and (ny;ry)
-                for vectors_x in nx_rx_map.keys():
-                
-                    nx = list(vectors_x[0])
-                    rx = list(vectors_x[1])
-                    
-                    #Iterate over all possible values of n_zbot, r_zbot
-                    for index in range(vector_len):
-                        actual_index = index_to_nr(index)
-                        n_bot = actual_index[0]
-                        r_bot = actual_index[1]
-                        # Evaluate the formula given in rule 2,
-                        # and insert as an entry in F_b
-                        entry = eval_Rule4(F_t[site], nx, rx, n_bot, r_bot)
-                        F_b[site][entry[0]] = entry[1]
-        else:      
-            F_b = self.evaluator.Rule4(F_t, site_count, vector_len)
-        
-        #Create new vpi
-        new_vpi_key = list(vpi_key_xy)
-        new_vpi_key.remove("branch_" + str(branch_index_x) + ": top")
-        new_vpi_key.remove("branch_" + str(branch_index_y) + ": top")
-        new_vpi_key.append("branch_" + str(branch_index_z) + ": bottom")
-        new_vpi_key = tuple(new_vpi_key)
+    def _remove(self, nv : NodeVPI) -> None:
+        self.vpis = [v for v in self.vpis if v is not nv]
     
-        # Update vpi tracker
-        self.vpis[new_vpi_key] = F_b
-        del self.vpis[vpi_key_xy]
-        
-        return new_vpi_key
     
-    def reorder_vpi(self, 
-                    vpi_key: tuple, 
-                    branch_index : int, 
-                    for_top : bool) -> tuple:
-        """
-        For use when a rule requires a certain ordering of a vpi, and the
-        current vpi does not satisfy it.
-        
-        I.E, For Rule1, have vpi (branch_1_bottom, branch_2_bottom) but 
-        need to calculate for branch 1 top. 
-        
-        The vpi needs to be reordered to (branch_2_bottom, branch_1_bottom), 
-        and the vectors in the partial likelihood mappings need to be reordered 
-        to match.
-
-        Args:
-            vpi_key (tuple): a vpi tuple
-            branch_index (int): branch index of the branch that needs 
-                                to be in the front
-            for_top (bool): bool indicating whether we are looking for 
-                            branch_index_top or branch_index_bottom in the 
-                            vpi key.
-
-        Returns:
-            tuple: the new, reordered vpi key.
-        """
-        #print("REORDER 1")
-        if for_top:
-            name = "branch_" + str(branch_index) + ": top"
-            former_index = list(vpi_key).index(name)
-        else:
-            name = "branch_" + str(branch_index) + ": bottom"
-            former_index = list(vpi_key).index(name)
-            
-        new_vpi_key = list(vpi_key)
-        new_vpi_key.append(new_vpi_key.pop(former_index))
-        
-        F_map = self.vpis[vpi_key]
-        
-        if not cs:
-            new_F = {}
-            
-            # Reorder all the vectors based on the location of the 
-            # interface within the vpi
-            for site in range(site_count):
-                new_F[site] = {}
-            
-                for vectors, prob in F_map[site].items():
-                    nx = list(vectors[0])
-                    rx = list(vectors[1])
-                    new_nx = list(nx)
-                    new_rx = list(rx)
-                    
-                    #pop the element from the list and move to the front
-                    new_nx.append(new_nx.pop(former_index))
-                    new_rx.append(new_rx.pop(former_index))
-            
-                    new_F[site][(tuple(new_nx), tuple(new_rx))] = prob
-            
-            F_map = new_F
-            
-        else:
-            for site in range(site_count):
-                for tup in F_map[site].Keys:
-                    tup.MoveToEnd(former_index)
-        
-        self.vpis[tuple(new_vpi_key)] = F_map
-    
-        return tuple(new_vpi_key)
-    
-    def get_key_with(self, branch_id : str) -> tuple:
-        """
-        From the set of vpis, grab the one (should only be one) that contains 
-        the branch identified by branch_index
-
-        Args:
-            branch_index (int): unique branch identifier
-
-        Returns:
-            tuple: the vpi key corresponding to branch_index, or None if no 
-                   such vpi currently exists
-        """
-    
-        for vpi_key in self.vpis:
-            top = "branch_" + branch_id + ": top"
-            bottom = "branch_" + branch_id + ": bottom"
-            
-            #Return vpi if there's a match
-            if top in vpi_key or bottom in vpi_key:
-                return vpi_key
-        
-        #No vpis were found containing branch_index
-        return None
-            
-
-def _disjoint_subnets(n: InternalNode) -> bool:
-    """
-    Determine if the left and right subnets of an internal node are disjoint.
-    """
-    
-    lr = n.get_model_children()
-    assert len(lr) == 2, "Internal node must have exactly two children"
-    subnets : tuple[set[ModelNode], set[ModelNode]] = ({}, {})
-    i = 0
-    
-    for child in lr:
-        q = deque(child)
-        while len(q) != 0:
-            cur = q.popleft()
-            for kin in cur.get_model_children():
-                subnets[i].add(kin)
-                q.append(kin)
-        i += 1
-    
-    return subnets[0].isdisjoint(subnets[1])

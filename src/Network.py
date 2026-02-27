@@ -58,13 +58,18 @@ _USING_CYTHON = False
 _CNodeSet = None
 
 try:
-    from PhyNetPy.graph_core_cy import CNodeSet as _CNodeSet
+    from .cython.graph_core_cy import CNodeSet as _CNodeSet  # type: ignore[import-not-found]
     _USING_CYTHON = True
 except ImportError:
     pass  # Fall back to pure Python NodeSet defined below
 
 def using_cython() -> bool:
-    """Check if Cython acceleration is enabled."""
+    """Check if Cython acceleration is enabled.
+
+    Returns:
+        bool: True if the Cython-accelerated NodeSet implementation is
+            available and in use, False if using the pure-Python fallback.
+    """
     return _USING_CYTHON
 
 def _make_nodeset(directed: bool = True):
@@ -566,6 +571,9 @@ class Node:
             N/A
         Returns:
             DataSequence: Data sequence wrapper.
+        Raises:
+            NodeError: If no sequence record has been associated with this
+                       node.
         """
         if self.__seq is None:
             raise NodeError("No sequence record has been associated with this\
@@ -903,8 +911,9 @@ class UEdge:
         Args:
             n1 (Node): A Node (designated member #1 for efficient retrieval)
             n2 (Node): A Node (designated member #2 for efficient retrieval)
-            length (float, optional): _description_. Defaults to None.
-            weight (float, optional): _description_. Defaults to None.
+            length (float, optional): Branch length of this edge. Defaults
+                                      to None.
+            weight (float, optional): Edge weight value. Defaults to None.
         Returns:
             N/A
         
@@ -1239,6 +1248,8 @@ class Edge:
             gamma (float): A probability (between 0 and 1 inclusive).
         Returns:
             N/A
+        Raises:
+            ValueError: If gamma is not between 0 and 1 inclusive.
         """
         
         if gamma < 0 or gamma > 1:
@@ -1396,7 +1407,12 @@ class Edge:
     
     def to_branch(self) -> Branch:
         """
-        Convert this edge to a branch.
+        Convert this edge to a Branch object for use in phylogenetic
+        computations.
+
+        Returns:
+            Branch: A Branch with this edge's length, gamma, and source
+                    node label.
         """
         return Branch(self.__length, self.__gamma, self.src.label)
     
@@ -2254,6 +2270,20 @@ class Network(Graph):
             - Reticulation nodes marked with #: ((A,#H1)B,(C,#H1)D)E;
             - Inheritance probabilities: #H1[&gamma=0.7]
             
+            The parsing proceeds in three phases:
+              1. **Tokenize** – split the raw string into structural tokens
+                 (parentheses, commas, colons), names, branch lengths, and
+                 bracket-comment blocks.
+              2. **Parse** – recursively consume tokens to build an
+                 intermediate ``NewickNode`` tree that mirrors the nested
+                 parenthetical structure.
+              3. **Build** – walk the ``NewickNode`` tree to create
+                 ``Node`` / ``Edge`` objects and assemble the
+                 ``Network``.  Reticulation nodes (names starting with
+                 ``#``) are deduplicated via a shared ``node_map`` so that
+                 the same ``Node`` instance receives edges from both
+                 parents.
+
             Args:
                 newick_str (str): A Newick-formatted string representing a phylogenetic network
                 
@@ -2658,21 +2688,13 @@ class Network(Graph):
     
     def roots(self) -> list[Node]:
         """
-        Return the root(s) of the Network. Phylogenetic networks only have one 
-        root, but for generality and practical use, multiple roots have been 
-        allowed. This function, by default, only returns 1 root-- change the
-        flag to false to return all.
+        Return all root(s) of the Network. Phylogenetic networks typically have
+        one root, but for generality and practical use, multiple roots have
+        been allowed. Use ``root()`` to retrieve a single root.
 
-        Raises:
-            NetworkError: If there are no roots in the network (cycle, or empty)
-
-        Args:
-            singular (bool, optional): Flag that signals whether to return one
-                                       or all roots. If True, returns one. 
-                                       If false, returns all. Defaults to True.
         Returns:
-            list[Node] | Node: If singular is set to True, returns a Node. If 
-                               False, returns a list of Nodes.
+            list[Node]: A list of all root nodes (nodes with in-degree 0 and
+                        out-degree > 0).
         """
         roots = [root for root in self.__roots 
                 if self._nodes.out_deg(root) != 0]
@@ -2702,6 +2724,8 @@ class Network(Graph):
             node (Node): any node in V.
         Returns:
             list[Node]: the parents of the node.
+        Raises:
+            NetworkError: If the node is not in the graph.
         """
         try:
             return [edge.src for edge in self._nodes.in_edges(node)]
@@ -2718,6 +2742,8 @@ class Network(Graph):
             node (Node): any node in V.
         Returns:
             list[Node]: the children of the node.
+        Raises:
+            NetworkError: If the node is not in the graph.
         """
         try:
             return [edge.dest for edge in self._nodes.out_edges(node)]
@@ -2800,13 +2826,15 @@ class Network(Graph):
 
     def mrca(self, set_of_nodes: set[Node] | set[str]) -> Node:
         """
-        Computes the Least Common Ancestor of a set of graph nodes
+        Computes the Least Common Ancestor of a set of graph nodes.
 
         Args:
             set_of_nodes (set[Node] | set[str]): A set of Nodes, or node names.
-
         Returns:
             Node: The node that is the LCA of the set.
+        Raises:
+            NetworkError: If any node in the set is not in the graph, or if
+                          elements are of an unexpected type.
         """
         format_set : set[Node] = set()
         for item in set_of_nodes:
@@ -2883,10 +2911,11 @@ class Network(Graph):
         node. Uses DFS to find paths to leaves.
 
         Args:
-            node (Node): The node for which to compute leaf children
-
+            node (Node): The node for which to compute leaf children.
         Returns:
-            set[Node]: The list of all leaves that descend from 'node'
+            set[Node]: The set of all leaves that descend from 'node'.
+        Raises:
+            NetworkError: If node is not found in the graph.
         """
         if node not in self.V():
             raise NetworkError("Node not found in graph.")
@@ -2949,9 +2978,10 @@ class Network(Graph):
         Args:
             n (Node): Any node in the graph. 
                       It is an error to input a node that is not in the graph.
-
         Returns:
             int: subgenome count
+        Raises:
+            NetworkError: If the input node is not in the graph.
         """
         
         if n not in self.V():
@@ -2970,7 +3000,9 @@ class Network(Graph):
         Args:
             n (Node): A node in a graph.
         Returns:
-            edges (list[Edge]): The set of all edges in the subgraph of n.
+            list[Edge]: The set of all edges in the subgraph of n.
+        Raises:
+            NetworkError: If the input node is not in the graph.
         """
         if n not in self.V():
             raise NetworkError("Input node is not in the graph.")
@@ -3000,7 +3032,9 @@ class Network(Graph):
         Args:
             n (Node): A node in a graph.
         Returns:
-            edges (list[Edge]): The set of all edges in the subgraph of n.
+            list[Edge]: The set of all edges on paths from the root to n.
+        Raises:
+            NetworkError: If the input node is not in the graph.
         """
         if n not in self.V():
             raise NetworkError("Input node is not in the graph.")
@@ -3467,9 +3501,14 @@ class Network(Graph):
 
         Args:
             net (Network): The other network.
-
+            measure (str): Distance measure to use. One of
+                           ``tree``, ``tri``, ``cluster``, ``luay``,
+                           ``rnbs``, ``apd``, ``normapd``, ``wapd``, or
+                           ``normwapd``.
         Returns:
             float: Measure of the two networks similarity/distance.
+        Raises:
+            NetworkError: If an unrecognized measure string is provided.
         """
         
         temp = tempfile.NamedTemporaryFile(suffix='.nex')
@@ -3526,7 +3565,7 @@ class Network(Graph):
         Returns:
             bool: True if the networks are topologically isomorphic, False otherwise.
         """
-        from PhyNetPy.GraphUtils import is_isomorphic
+        from .GraphUtils import is_isomorphic
         return is_isomorphic(self, other)
     
     def nakhleh_distance(self, other: Network) -> float:
@@ -3664,7 +3703,14 @@ class Network(Graph):
 
     def dist_from_root(self, node : Node) -> int:
         """
-        Get the distance from the root to the given node.
+        Get the distance from the root to the given node, measured in edge
+        count (hop count) via BFS.
+
+        Args:
+            node (Node): A node in this network.
+        Returns:
+            int: The number of edges on the BFS-shortest path from the root
+                 to the given node.
         """
         return self.bfs_dfs()[0][node]
     
@@ -3672,14 +3718,11 @@ class Network(Graph):
         """
         Compute a topological order of nodes in an acyclic network.
 
-        Args:
-            net (Network): A network object.
-
-        Raises:
-            NetworkError: If the network contains a directed cycle.
-
         Returns:
             list[Node]: Nodes in topological order from roots to leaves.
+        Raises:
+            NetworkError: If the network contains a directed cycle and no
+                          valid topological order exists.
         """
         indeg : dict[Node, int] = {n: self.in_degree(n) for n in self.V()}
         q : deque[Node] = deque([n for n, d in indeg.items() if d == 0])
@@ -3759,6 +3802,12 @@ class Network(Graph):
         Set time attributes for all nodes based on their distance from root.
         Uses cumulative branch lengths from root. Useful for enabling 
         biologically meaningful node comparisons.
+
+        The root node is assigned time 0.0 and each descendant's time is the
+        sum of branch lengths along the BFS path from the root.
+
+        Returns:
+            None
         """
         try:
             root = self.root()
@@ -3784,8 +3833,15 @@ class Network(Graph):
     def set_node_times_by_edge_count(self) -> None:
         """
         Set time attributes for all nodes based on their edge count from root.
-        This provides biologically meaningful comparison when actual times are not available.
-        Edge counts are converted to time values for comparison purposes.
+        This provides biologically meaningful comparison when actual times are
+        not available. Edge counts are converted to time values for comparison
+        purposes.
+
+        The root node is assigned time 0.0 and each descendant's time equals
+        the number of edges on the BFS path from the root.
+
+        Returns:
+            None
         """
         try:
             root = self.root()
@@ -3834,7 +3890,19 @@ class MUL(Network):
    
     def network_to_mul_recursive(net: Network) -> Network:
         """
-        Recursively expand reticulations, handling nested reticulations correctly.
+        Recursively expand reticulations, handling nested reticulations
+        correctly.
+
+        Each reticulation node with multiple parents is expanded by
+        duplicating the downstream subnetwork for each additional parent,
+        processing the deepest reticulations first.
+
+        Args:
+            net (Network): A phylogenetic network potentially containing
+                           reticulation nodes.
+        Returns:
+            Network: A tree (MUL tree) with all reticulations removed
+                     through subnetwork duplication.
         """
         
         def expand_at_reticulation(network : Network, retic_node : Node) -> Network:

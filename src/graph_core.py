@@ -1,17 +1,20 @@
 """
 Graph core data structures with automatic Cython acceleration.
 
-This module provides NodeSet and EdgeSet classes, automatically using 
-the Cython-optimized versions if available, falling back to pure Python.
+This module provides NodeSet and EdgeSet classes, automatically using
+the Cython-optimized versions if available, falling back to the pure
+Python implementations defined in :mod:`.Network`.
 
-Usage:
+Usage::
+
     from PhyNetPy.graph_core import NodeSet, EdgeSet
-    
+
     # These will be Cython versions if compiled, Python otherwise
     ns = NodeSet(directed=True)
     es = EdgeSet(directed=True)
 
-To check which version is active:
+To check which version is active::
+
     from PhyNetPy.graph_core import USING_CYTHON
     print(f"Using Cython: {USING_CYTHON}")
 """
@@ -19,18 +22,10 @@ To check which version is active:
 USING_CYTHON = False
 
 try:
-    # Try to import Cython versions
-    from PhyNetPy.graph_core_cy import CNodeSet as NodeSet, CEdgeSet as EdgeSet
+    from .cython.graph_core_cy import CNodeSet as NodeSet, CEdgeSet as EdgeSet  # type: ignore[import-not-found]
     USING_CYTHON = True
 except ImportError:
-    # Fall back to pure Python versions from Network.py
-    # Note: This import assumes NodeSet/EdgeSet are exposed in Network.py
-    # For now, we'll define USING_CYTHON as False and let users import directly
-    USING_CYTHON = False
-    
-    # Placeholder - users should import from Network.py directly if Cython unavailable
-    NodeSet = None
-    EdgeSet = None
+    from .Network import NodeSet, EdgeSet  # type: ignore[assignment]
 
 
 def get_implementation_info() -> dict:
