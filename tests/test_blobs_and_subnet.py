@@ -1,3 +1,18 @@
+"""
+Test suite for blob decomposition and subnetwork extraction utilities
+(phynetpy.GraphUtils).
+
+Tests cover the following GraphUtils functions on a variety of network
+topologies (simple tree, level-1, level-2, two-blob, etc.):
+
+    - ``blobs()`` – biconnected component decomposition
+    - ``tree_of_blobs()`` – blob-wise subnetwork decomposition
+    - ``subnet_given_leaves()`` – subnetwork extraction for a leaf subset
+    - ``induced_subnetwork_by_taxa()`` – taxa-name-based subnetwork induction
+
+Integration tests verify consistency between the different decompositions.
+"""
+
 import pytest
 from typing import Optional, Sequence, Tuple
 
@@ -12,9 +27,9 @@ from phynetpy.GraphUtils import (
 )
 
 
-#############################
-#### NETWORK BUILDERS    ####
-#############################
+# ===================================================================
+# Network Builders – reusable topologies for the tests below
+# ===================================================================
 
 EdgeSpec = Tuple[str, str, Optional[float]]
 
@@ -195,9 +210,9 @@ def build_two_blob_network() -> Network:
     return net
 
 
-############################
-#### BLOB TESTS         ####
-############################
+# ===================================================================
+# Blob Decomposition Tests
+# ===================================================================
 
 class TestBlobs:
 
@@ -243,9 +258,9 @@ class TestBlobs:
             )
 
 
-############################
-#### TREE OF BLOBS TESTS ####
-############################
+# ===================================================================
+# Tree-of-Blobs Decomposition Tests
+# ===================================================================
 
 class TestTreeOfBlobs:
 
@@ -326,9 +341,9 @@ class TestTreeOfBlobs:
                     )
 
 
-####################################
-#### SUBNET GIVEN LEAVES TESTS  ####
-####################################
+# ===================================================================
+# Subnet-Given-Leaves Tests
+# ===================================================================
 
 class TestSubnetGivenLeaves:
 
@@ -438,9 +453,9 @@ class TestSubnetGivenLeaves:
         assert "B" not in sub_leaves
 
 
-####################################
-#### INDUCED SUBNETWORK TESTS   ####
-####################################
+# ===================================================================
+# Induced Subnetwork by Taxa Tests
+# ===================================================================
 
 class TestInducedSubnetworkByTaxa:
 
@@ -476,9 +491,9 @@ class TestInducedSubnetworkByTaxa:
         assert "C" in sub_leaves
 
 
-####################################
-#### INTEGRATION TESTS          ####
-####################################
+# ===================================================================
+# Integration Tests
+# ===================================================================
 
 class TestIntegration:
 

@@ -1,251 +1,199 @@
-#! /usr/bin/env python
-# -*- coding: utf-8 -*-
+"""
+Test suite for the Maximum Parsimony Allopolyploidy inference module
+(phynetpy.Infer_MP_Allop).
 
-##############################################################################
-##  -- PhyNetPy --                                                              
-##  Library for the Development and use of Phylogenetic Network Methods
-##
-##  Copyright 2025 Mark Kessler, Luay Nakhleh.
-##  All rights reserved.
-##
-##  See "LICENSE.txt" for terms and conditions of usage.
-##
-##  If you use this work or any portion thereof in published work,
-##  please cite it as:
-##
-##     Mark Kessler, Luay Nakhleh. 2025.
-##
-##############################################################################
+Includes:
+    - Parsimony scoring against known scenario networks.
+    - Network inference with bootstrap support.
+    - Larger-scale inference tests (10, 100 gene trees).
+    - Runtime / convergence benchmarks (stubs).
+    - Robustness tests for malformed input and starting-network generation.
 
-import cProfile
+The entire class is currently **skipped** (``@pytest.mark.skip``) because
+the module is under active development and requires local data files.
+Remove the skip marker once the pipeline and test data are stable.
+
+Copyright 2025 Mark Kessler, Luay Nakhleh. All rights reserved.
+"""
+
+import math
 import time
+from typing import Union
+
 import pytest
 
+# Guard: skip the entire module if Infer_MP_Allop is not available
 pytest.importorskip("phynetpy.Infer_MP_Allop", reason="Infer_MP_Allop module removed")
 
-from phynetpy.Infer_MP_Allop import *
-from phynetpy.IO import read_nexus
-"""
-Testing Suite for the Network.py class. Extensively ensures that
-the Network, Edge, Node, and related classes are working as intended.
-To be included in a final release, this file MUST run without any errors
-and all tests must be passed.
-"""
+from phynetpy.Infer_MP_Allop import *  # noqa: E402, F403
+from phynetpy.IO import read_nexus  # noqa: E402
 
-def _minmaxkey(mapping : dict[object, Union[int, float]],
-               mini : bool = True) -> object:
-    """
-    Return the object in a mapping with the minimum or maximum value associated
-    with it.
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _minmaxkey(mapping: dict[object, Union[int, float]],
+               mini: bool = True) -> object:
+    """Return the key in *mapping* whose value is the minimum (or maximum).
 
     Args:
-        mapping (dict[object, int  |  float]): A mapping from objects to 
-                                               numerical values
-        mini (bool, optional): If True, return the object with the minimum
-                               value. If False, return the object with the
-                               maximum value. Defaults to True.
-    Returns:
-        object: The object with the minimimum or maximum value.
-    """
+        mapping: A dictionary from objects to numerical values.
+        mini: If True return the key with the **minimum** value; if False
+              return the key with the **maximum** value.
 
-    cur = math.inf
+    Returns:
+        The key corresponding to the extreme value.
+    """
+    cur = math.inf if mini else -math.inf
     cur_key = None
-    if not mini:
-        cur = cur * -1
-        
+
     for key, value in mapping.items():
-        if mini:
-            if value < cur:
-                cur = value
-                cur_key = key
-        else:
-            if value > cur:
-                cur = value
-                cur_key = key
-    
+        if (mini and value < cur) or (not mini and value > cur):
+            cur = value
+            cur_key = key
+
     return cur_key
 
-def mp_1():
-    """
-    Check that the parsimony scoring function works for a lvl 1 network.
-    """
+
+# ---------------------------------------------------------------------------
+# Individual test routines
+# ---------------------------------------------------------------------------
+
+def _mp_score_level1() -> int:
+    """Check parsimony score on scenario-D ideal network (level-1)."""
     file_net = "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/scenarioD_ideal.nex"
-    file_gt = "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/D10.nex" 
-    subgenome_map = {"B": ["01bA"], "A": ["01aA"], "X": ["01xA", "01xB"],
-                     "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]}
-    
-    # {'U': ['01uA', '01uB'], 'T': ['01tA', '01tB'], 
-    #                  'B': ['01bA'], 'F': ['01fA'], 'C': ['01cA'], 
-    #                  'A': ['01aA'], 'D': ['01dA'], 'O': ['01oA']}
-    
-    #44 isn't right I don't think. Check on this, I think it should be 4.
+    file_gt = "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/D10.nex"
+    subgenome_map = {
+        "B": ["01bA"], "A": ["01aA"],
+        "X": ["01xA", "01xB"], "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"],
+    }
+
     score = ALLOP_SCORE(file_net, file_gt, subgenome_map)
-    if score == 3: 
+    if score == 3:
         return 1
-    else:
-        print(f"WRONG SCORE: {score}")
-        return 0
+    print(f"WRONG SCORE: {score}")
+    return 0
 
-def mp_2():
-    """
-    Check that all files with 3 gene trees infer the correct network.
-    """
-    
+
+def _mp_infer_bootstrap() -> int:
+    """Infer network with bootstrap support on scenario-D data."""
     file_net = "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/scenarioD_ideal.nex"
-    file_gt = "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/D10.nex" 
-    subgenome_map : dict[str, list[str]] = {"B": ["01bA"], "A": ["01aA"], "X": ["01xA", "01xB"],
-                     "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"]}
-    
-    # start = time.time()
-    res = INFER_MP_ALLOP_BOOTSTRAP(file_net,
-                                   file_gt,
-                                   subgenome_map)
-    
-    # end = time.time()
-    
-    # print(f"Method time: {end - start}")
-    
-    net_min : Network = _minmaxkey(res, mini = False)
-    # print(net_min.newick())
-    # print(res[net_min])
-    return 1
-    
+    file_gt = "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/D10.nex"
+    subgenome_map: dict[str, list[str]] = {
+        "B": ["01bA"], "A": ["01aA"],
+        "X": ["01xA", "01xB"], "Y": ["01yA", "01yB"], "Z": ["01zA", "01zB"],
+    }
 
-def mp_3():
-    """
-    Check that all files with 10 gene trees infer the correct network.
-    """ 
-    
+    res = INFER_MP_ALLOP_BOOTSTRAP(file_net, file_gt, subgenome_map)
+    _minmaxkey(res, mini=False)
+    return 1
+
+
+def _mp_infer_10_gene_trees() -> int:
+    """Infer network from 10 gene trees (scenario J pruned)."""
     res = INFER_MP_ALLOP(
-                    '/Users/mak17/Documents/PhyNetPy/src/J_pruned_v2.nex',
-                    {'U': ['01uA', '01uB'], 'T': ['01tA', '01tB'], 
-                     'B': ['01bA'], 'F': ['01fA'], 'C': ['01cA'], 'A': ['01aA'],
-                     'D': ['01dA'], 'O': ['01oA']})
-    
+        "/Users/mak17/Documents/PhyNetPy/src/J_pruned_v2.nex",
+        {
+            "U": ["01uA", "01uB"], "T": ["01tA", "01tB"],
+            "B": ["01bA"], "F": ["01fA"], "C": ["01cA"],
+            "A": ["01aA"], "D": ["01dA"], "O": ["01oA"],
+        },
+    )
+
     if min(res.values()) == -4:
-        net_min : Network = _minmaxkey(res, mini = False)
+        net_min: Network = _minmaxkey(res, mini=False)  # type: ignore[name-defined]
         print(net_min.newick())
         return 1
-    else:
-        net_min : Network = _minmaxkey(res, mini = False)
-        print(net_min.newick())
-        return 0
+    net_min: Network = _minmaxkey(res, mini=False)  # type: ignore[name-defined]
+    print(net_min.newick())
+    return 0
 
-def mp_4():
-    """
-    Test on external data set (5 trees) that did not pass PhyloNet.
-    """
 
-    gt = GeneTrees(read_nexus('/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/external_5.nex'), external_naming)
-    
+def _mp_external_5_trees() -> int:
+    """Test inference on an external data set with 5 gene trees."""
+    gt = GeneTrees(  # type: ignore[name-defined]
+        read_nexus(
+            "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/external_5.nex"
+        ),
+        external_naming,  # type: ignore[name-defined]
+    )
     for tree in gt.trees:
         print(tree.newick())
-       
-    print(gt.mp_allop_map()) 
-    
+    print(gt.mp_allop_map())
+
     start_t = time.time()
     res = INFER_MP_ALLOP(
-                    '/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/external_5.nex',
-                    gt.mp_allop_map())
-    end_t = time.time()
-    
-    print(f"External with 5 GT run time: {end_t - start_t}")
+        "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/external_5.nex",
+        gt.mp_allop_map(),
+    )
+    print(f"External with 5 GT run time: {time.time() - start_t}")
     print(f"Results: {res}")
     return 1
 
-def mp_5():
-    """
-    Scenario J Runtime test (100 Genes) r1 t20
-    """
-    gt = GeneTrees(read_nexus('/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/J_100.nex'))
-    
+
+def _mp_scenario_j_100_genes() -> int:
+    """Runtime test: scenario J with 100 gene trees."""
+    gt = GeneTrees(  # type: ignore[name-defined]
+        read_nexus("/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/J_100.nex")
+    )
+
     start_t = time.time()
-    res = INFER_MP_ALLOP(
-                    '/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/J_100.nex',
-                    gt.mp_allop_map())
-    end_t = time.time()
-    
-    print(f"J with 100 GT run time: {end_t - start_t}")
-    return 1
-    
-
-def mp_6():
-    """
-    Runtime testing. This test is not a pass/fail test, but provides all metrics
-    and scaling data.
-    """
+    INFER_MP_ALLOP(
+        "/Users/mak17/Documents/Lab-PhyNetPy/PhyNetPy/src/J_100.nex",
+        gt.mp_allop_map(),
+    )
+    print(f"J with 100 GT run time: {time.time() - start_t}")
     return 1
 
-def mp_7():
-    """
-    Convergence testing. This test is not a pass/fail test, but provides info
-    on how quickly the algorithm converges on the correct network.
-    """
+
+# Stubs for future work
+def _mp_runtime_study() -> int:
+    """(Stub) Runtime scaling study across varying gene-tree counts."""
     return 1
 
-def mp_8():
-    """
-    Full study on scenarios D, E, F, and J . Generate plots.
-    """
+def _mp_convergence_study() -> int:
+    """(Stub) Convergence analysis measuring iterations to correct topology."""
     return 1
 
-def mp_9():
-    """
-    Test with malformed data and ensure that the program halts gracefully.
-    """
+def _mp_full_scenario_study() -> int:
+    """(Stub) Full study on scenarios D, E, F, and J with plots."""
     return 1
 
-def mp_10():
-    """
-    Test the starting network generator function to ensure that start nets
-    are of proper ploidy values.
-    """
+def _mp_malformed_data() -> int:
+    """(Stub) Ensure graceful failure on malformed input data."""
     return 1
 
-@pytest.mark.skip(reason="Skipping Infer MP Allop tests for now")
-class Test_Infer_MP_Allop:
-    
-    # RUN ALL TESTS HERE
-    # def test(self) -> None: # type: ignore
-    #     res = [mp_1(),
-    #            mp_2(),
-    #            mp_3(),
-    #            mp_4(),
-    #            mp_5(),
-    #            mp_6(),
-    #            mp_7(),
-    #            mp_8(),
-    #            mp_9(),
-    #            mp_10()]
-        
-    #     if sum(res) == 10:
-    #         print("All (10/10) correctness tests passed!")
-    #     else:
-    #         print(f"Tests failed. {sum(res)}/10 passed.")
-    
-    def test(self, indv : int) -> None:
-        tests = [mp_1,
-                 mp_2,
-                 mp_3,
-                 mp_4,
-                 mp_5,
-                 mp_6,
-                 mp_7,
-                 mp_8,
-                 mp_9,
-                 mp_10]
-        
-        if tests[indv]() == 1:
-            print("Passed :D")
-            return
-        else:
-            print("Failed :(")
-            return
+def _mp_starting_network_ploidy() -> int:
+    """(Stub) Verify starting networks satisfy ploidy constraints."""
+    return 1
 
-# tester = Test_Infer_MP_Allop()
-# time_start = time.time()
-# for _ in range(20):
-#     tester.test(2)
-# time_end = time.time()
-# print(f"Time taken: {time_end - time_start}")
-#Infer_MP_Allop_Test().test(3)
+
+# ---------------------------------------------------------------------------
+# Pytest class (currently skipped)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skip(reason="Infer MP Allop module under development; requires local data")
+class TestInferMPAllop:
+    """Aggregated MP allopolyploidy inference tests.
+
+    Remove the ``@pytest.mark.skip`` decorator once the module is stable
+    and the required data files are available in CI.
+    """
+
+    _TESTS = [
+        _mp_score_level1,
+        _mp_infer_bootstrap,
+        _mp_infer_10_gene_trees,
+        _mp_external_5_trees,
+        _mp_scenario_j_100_genes,
+        _mp_runtime_study,
+        _mp_convergence_study,
+        _mp_full_scenario_study,
+        _mp_malformed_data,
+        _mp_starting_network_ploidy,
+    ]
+
+    def test_individual(self, indv: int = 0) -> None:
+        """Run a single test by index (useful for isolated debugging)."""
+        assert self._TESTS[indv]() == 1, f"Test {indv} failed"

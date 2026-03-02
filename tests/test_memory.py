@@ -1,10 +1,20 @@
 """
 Memory and performance tests for Network data structures.
 
-These tests verify that the set-based implementations of in_map, out_map,
-__leaves, and __roots provide memory and performance benefits.
+Validates that the set-based implementations of ``in_map``, ``out_map``,
+``__leaves``, and ``__roots`` in :class:`Network` / :class:`NodeSet` provide
+acceptable memory and performance characteristics.
 
-Run with: pytest test_memory.py -v -s
+Test groups:
+    - **TestMemoryUsage** – tracemalloc snapshots for network construction
+      and edge add/remove leak checks.
+    - **TestSetOperationPerformance** – timing assertions for in-edge lookups,
+      leaf-membership checks, and edge mutation throughput.
+    - **TestCorrectnessAfterRefactor** – structural invariant checks that
+      verify the set-based refactor did not break in/out-edge bookkeeping,
+      leaf/root classification, edge removal, or duplicate-edge rejection.
+
+Run with: ``pytest test_memory.py -v -s``
 """
 
 import pytest
