@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MetropolisHastings - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; MetropolisHastings
+                </div>
+                
+                <h1>MetropolisHastings Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>Metropolis-Hastings MCMC and Hill Climbing search algorithms for phylogenetic inference.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>MetropolisHastings.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#proposalkernel">ProposalKernel</a></li>
+                        <li><a href="#infer_mp_allop_kernel">Infer_MP_Allop_Kernel</a></li>
+                        <li><a href="#hillclimbing">HillClimbing</a></li>
+                        <li><a href="#metropolishastings">MetropolisHastings</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">HillClimbException</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>This exception is raised when there is an error running the Hill Climbing algorithm.</p>
+                    </div>
+                </div>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">MetropolisHastingsException</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>This exception is raised when there is an error running the Metropolis Hastings algorithm.</p>
+                    </div>
+                </div>
+
+                <h2 id="proposalkernel">ProposalKernel</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ProposalKernel</span>(<span class="params">ABC</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Abstract class that defines proposal kernel behavior. In general, simply must have a generate method that spits out a move.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a proposal kernel</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">generate</span> <span class="keyword">-&gt;</span> Move <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>*ABSTRACT METHOD* Generate the next move for a model to apply to the network.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Move: Any newly instantiated object that is a subclass of Move.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="infer_mp_allop_kernel">Infer_MP_Allop_Kernel</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Infer_MP_Allop_Kernel</span>(<span class="params">ProposalKernel</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Proposal kernel for the Infer_MP_Allop_2.0 method.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize proposal kernel for the Infer_MP_Allop_2.0 method.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">generate</span> <span class="keyword">-&gt;</span> SwitchParentage
+                            </div>
+                            <div class="function-body">
+                                <p>Simply return a new SwitchParentage object.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> SwitchParentage: A new switch parentage move.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="hillclimbing">HillClimbing</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">HillClimbing</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Class that implements the Hill Climbing search method.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">pkernel: ProposalKernel, submodel: GTR = None, data: Matrix | None = None, model: Model | None = None, num_iter: int = 500, stochastic: int = -1, enhanced_stop: bool = True</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a Hill Climb search.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">pkernel</span></td>
+                                        <td><span class="param-type">ProposalKernel</span></td>
+                                        <td>Some proposal kernel</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">submodel</span></td>
+                                        <td><span class="param-type">GTR, optional</span></td>
+                                        <td>A substitution model. Defaults to JC.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type">Matrix | None, optional</span></td>
+                                        <td>A data matrix. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model | None, optional</span></td>
+                                        <td>A Model obj. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">num_iter</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>Number of iterations. Defaults to 500.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">stochastic</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>Random seed. Defaults to -1.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">enhanced_stop</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>Early stopping flag. Defaults to True.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">run</span> <span class="keyword">-&gt;</span> State
+                            </div>
+                            <div class="function-body">
+                                <p>Run the hill climbing algorithm.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> State: The final end state of the model.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">run_many</span>(<span class="params">count: int</span>) <span class="keyword">-&gt;</span> list[float]
+                            </div>
+                            <div class="function-body">
+                                <p>Runs the hill climbing algorithm 'count' times.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">count</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>the number of times to run.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[float]: [mean, median, max, min]</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="metropolishastings">MetropolisHastings</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">MetropolisHastings</span>
+                    </div>
+                    <div class="class-body">
+                        <p>A special case of Hill Climbing, in which moves are accepted even if the score is not an improvement, based on the Hastings Ratio.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">pkernel: ProposalKernel, submodel: GTR = None, data: Matrix | None = None, model: Model | None = None, num_iter: int = 500</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a Metropolis Hastings search.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">pkernel</span></td>
+                                        <td><span class="param-type">ProposalKernel</span></td>
+                                        <td>A proposal kernel.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">submodel</span></td>
+                                        <td><span class="param-type">GTR, optional</span></td>
+                                        <td>A substitution model. Defaults to JC.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type">Matrix | None, optional</span></td>
+                                        <td>The data. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model | None, optional</span></td>
+                                        <td>A phylogenetic model. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">num_iter</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>Number of iterations. Defaults to 500.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">run</span> <span class="keyword">-&gt;</span> State
+                            </div>
+                            <div class="function-body">
+                                <p>Run the Metropolis-Hastings algorithm.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> State: The end state.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">run_many_different_start</span>(<span class="params">count: int, format_stats: bool = True</span>) <span class="keyword">-&gt;</span> list[float]
+                            </div>
+                            <div class="function-body">
+                                <p>Runs the MH algorithm 'count' times.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">count</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>The number of times to run.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">format_stats</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Flag to print stats.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[float]: [mean, median, max, min]</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html" class="current">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#proposalkernel">ProposalKernel</a></li>
+                <li><a href="#infer_mp_allop_kernel">Infer_MP_Allop_Kernel</a></li>
+                <li><a href="#hillclimbing">HillClimbing</a></li>
+                <li><a href="#metropolishastings">MetropolisHastings</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

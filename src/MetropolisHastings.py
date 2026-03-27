@@ -25,6 +25,8 @@ First Included in Version : 1.0.0
 V1 Architecture - Metropolis-Hastings and Hill Climbing search algorithms.
 """
 
+import copy
+import math
 import time
 import random
 from abc import ABC, abstractmethod
@@ -270,7 +272,8 @@ class HillClimbing:
                     f"ITER #{iter_no} LIKELIHOOD = {cur}"
                 )
             else:
-                raise HillClimbException("Move has resulted in an invalid network state.")
+                if self.enhanced_stop:
+                    no_progress += 1
             
             iter_no += 1
         
@@ -448,8 +451,125 @@ class MetropolisHastings:
         return [mean, median, max_val, min_val]
 
 
+class SimulatedAnnealing:
+    """
+    Simulated annealing search for phylogenetic network optimization.
 
+    Uses an exponential cooling schedule: T(i) = T0 * alpha^i.
+    At each step, a worse move is accepted with probability
+    exp(-delta / T) where delta = proposed_score - current_score
+    (positive delta means the proposal is worse for a maximization
+    problem, i.e. the negated parsimony score is lower).
 
+    Tracks the best network seen across the entire run and restores
+    it at the end, so the returned state always holds the global best.
+    """
+
+    def __init__(self,
+                 pkernel: ProposalKernel,
+                 model: Model,
+                 num_iter: int = 500,
+                 t_start: float = 10.0,
+                 t_end: float = 0.01,
+                 n_restarts: int = 1,
+                 seed: int = 42) -> None:
+        """
+        Args:
+            pkernel: Proposal kernel that generates moves.
+            model: Initial Model object (network + scorer).
+            num_iter: Iterations per annealing run.
+            t_start: Starting temperature.
+            t_end: Final temperature (cooling stops here).
+            n_restarts: Number of independent restarts.
+            seed: RNG seed for reproducibility.
+        """
+        self.kernel = pkernel
+        self.init_model = model
+        self.num_iter = num_iter
+        self.t_start = t_start
+        self.t_end = t_end
+        self.n_restarts = n_restarts
+        self.rng = np.random.default_rng(seed)
+
+        if num_iter > 1:
+            self.alpha = (t_end / t_start) ** (1.0 / (num_iter - 1))
+        else:
+            self.alpha = 1.0
+
+        self.best_score: float = float('-inf')
+        self.best_network = None
+        self.run_stats: list[dict] = []
+
+    def _single_run(self, state: State) -> dict:
+        """Execute one SA cooling run, returning per-run statistics."""
+        temp = self.t_start
+        accepted = 0
+        uphill_accepted = 0
+        best_run_score = state.likelihood()
+        best_run_network = copy.deepcopy(state.current_model.network)
+
+        for i in range(self.num_iter):
+            next_move = self.kernel.generate()
+            is_valid = state.generate_next(next_move)
+
+            if not is_valid:
+                temp *= self.alpha
+                continue
+
+            cur = state.likelihood()
+            proposed = state.proposed().likelihood()
+            delta = cur - proposed
+
+            if delta < 0:
+                state.commit(next_move)
+                accepted += 1
+            elif temp > 0 and self.rng.random() < math.exp(-delta / temp):
+                state.commit(next_move)
+                accepted += 1
+                uphill_accepted += 1
+            else:
+                state.revert(next_move)
+
+            score_now = state.likelihood()
+            if score_now > best_run_score:
+                best_run_score = score_now
+                best_run_network = copy.deepcopy(state.current_model.network)
+
+            temp *= self.alpha
+
+        return {
+            "accepted": accepted,
+            "uphill": uphill_accepted,
+            "final_score": state.likelihood(),
+            "best_score": best_run_score,
+            "best_network": best_run_network,
+        }
+
+    def run(self) -> State:
+        """
+        Run simulated annealing (with optional restarts).
+
+        Returns:
+            State holding the best network found across all restarts.
+        """
+        from .ModelFactory import ModelFactory
+
+        for restart in range(self.n_restarts):
+            model = copy.deepcopy(self.init_model)
+            state = State(model)
+
+            stats = self._single_run(state)
+            self.run_stats.append(stats)
+
+            if stats["best_score"] > self.best_score:
+                self.best_score = stats["best_score"]
+                self.best_network = stats["best_network"]
+
+        final_model = copy.deepcopy(self.init_model)
+        final_model.network = self.best_network
+        final_model.update_network()
+        final_state = State(final_model)
+        return final_state
 
 
 

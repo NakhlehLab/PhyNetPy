@@ -28,7 +28,8 @@ Design - [ ]
 """
 
 from .Network import *
-from collections import deque
+from collections import Counter, deque
+from itertools import product as _product
 from typing import Dict, List, Tuple, Set, Union
 import numpy as np
 import heapq
@@ -208,21 +209,31 @@ def get_all_subtrees(net : Network) -> list[Network]:
         list[Network]: A list of network objects, each representing a tree that
                        is derived from the original network.
     """
-    retics = [node for node in net.V() if node.is_reticulation()]
-    retic2edges = {node : net.in_edges(node) for node in retics}
-    retic_maps : list[dict[Node, Edge]] = _retic_edge_choice(retic2edges, [{} for _ in range(2 ** len(retics))])
-    
-    trees = []
-    
-    for func in retic_maps:
+    retics = sorted(
+        (node for node in net.V() if node.is_reticulation()),
+        key=lambda n: n.label,
+    )
+    if not retics:
+        copy, _ = net.copy()
+        return [copy]
+
+    retic_in_edges = [
+        sorted(list(net.in_edges(node)), key=lambda e: e.src.label)
+        for node in retics
+    ]
+
+    trees: list[Network] = []
+    for combo in _product(*retic_in_edges):
         preop, old_new = net.copy()
-        
-        for edge in func.values():
-            preop.remove_edge([old_new[edge.src], old_new[edge.dest]])
-        
+        for retic_node, kept_edge in zip(retics, combo):
+            for e in list(net.in_edges(retic_node)):
+                if e is not kept_edge:
+                    src_new = old_new[e.src]
+                    dst_new = old_new[e.dest]
+                    preop.remove_edge([src_new, dst_new])
         preop.clean()
         trees.append(preop)
-    
+
     return trees
 
 def dominant_tree(net : Network) -> Network:
@@ -1271,6 +1282,717 @@ def is_isomorphic(net1 : Network, net2 : Network) -> bool:
         return {frozenset(n.label for n in cluster) for cluster in clusters}
     
     return normalized_clusters(net1) == normalized_clusters(net2)
+
+
+# ── Network Distance / Comparison Helpers ──────────────────────────────
+
+def _leaf_label_set(net: Network) -> frozenset[str]:
+    """Return the frozenset of leaf labels in the network."""
+    return frozenset(n.label for n in net.get_leaves())
+
+
+def _hardwired_clusters_by_label(
+    net: Network,
+    include_trivial: bool = False
+) -> set[frozenset[str]]:
+    """
+    Compute hardwired clusters expressed as frozensets of leaf labels.
+
+    A hardwired cluster of node v is the full set of leaf descendants
+    reachable from v by following *all* directed edges (ignoring the
+    reticulation / switching semantics).
+
+    Args:
+        net: A phylogenetic network.
+        include_trivial: If True, include singleton leaf clusters.
+
+    Returns:
+        The set of hardwired clusters (each a frozenset of leaf labels).
+    """
+    clusters: set[frozenset[str]] = set()
+    leaf_nodes = set(net.get_leaves())
+
+    for node in net.V():
+        if node in leaf_nodes and not include_trivial:
+            continue
+        desc = net.leaf_descendants(node)
+        if len(desc) > 1 or (include_trivial and len(desc) >= 1):
+            clusters.add(frozenset(n.label for n in desc))
+
+    return clusters
+
+
+def _softwired_clusters_by_label(
+    net: Network,
+    include_trivial: bool = False
+) -> set[frozenset[str]]:
+    """
+    Compute softwired clusters expressed as frozensets of leaf labels.
+
+    The softwired cluster set is the union of cluster sets taken over
+    every displayed tree of the network.
+
+    Args:
+        net: A phylogenetic network.
+        include_trivial: If True, include singleton leaf clusters.
+
+    Returns:
+        The set of softwired clusters (each a frozenset of leaf labels).
+    """
+    if is_tree(net):
+        return _hardwired_clusters_by_label(net, include_trivial)
+
+    clusters: set[frozenset[str]] = set()
+    for tree in get_all_subtrees(net):
+        clusters.update(_hardwired_clusters_by_label(tree, include_trivial))
+
+    return clusters
+
+
+def _mu_vectors(
+    net: Network,
+    leaf_order: list[str] | None = None
+) -> list[tuple[int, ...]]:
+    """
+    Compute the mu-representation of a network.
+
+    For every node v in the network whose leaf set is
+    X = {l_1, ..., l_n}, the mu-vector is
+
+        mu(v) = (m(v, l_1), ..., m(v, l_n))
+
+    where m(v, l_i) counts the number of distinct directed paths from v
+    to leaf l_i.
+
+    Args:
+        net: A phylogenetic network (must be acyclic).
+        leaf_order: Fixed ordering of leaf labels.  When comparing two
+            networks the same ordering must be used.  If *None*, leaves
+            are sorted alphabetically.
+
+    Returns:
+        A list of mu-vectors (one per node in V).
+    """
+    leaves = net.get_leaves()
+    if leaf_order is None:
+        leaf_order = sorted(n.label for n in leaves)
+
+    leaf_set = set(leaves)
+    leaf_index = {label: i for i, label in enumerate(leaf_order)}
+    n_leaves = len(leaf_order)
+
+    topo = net.topological_order()
+    path_counts: dict[Node, list[int]] = {}
+
+    for node in reversed(topo):
+        counts = [0] * n_leaves
+        if node in leaf_set:
+            idx = leaf_index.get(node.label)
+            if idx is not None:
+                counts[idx] = 1
+        for child in net.get_children(node):
+            if child in path_counts:
+                for i in range(n_leaves):
+                    counts[i] += path_counts[child][i]
+        path_counts[node] = counts
+    
+    reduced = []
+    for node in net.V():
+        if (not node.is_reticulation()
+                and net.in_degree(node) == 1
+                and net.out_degree(node) == 1):
+            continue  # this node would be suppressed in a reduced network
+        reduced.append(tuple(path_counts[node]))
+    return reduced
+    #return [tuple(path_counts[node]) for node in net.V()]
+
+
+def _tripartitions(
+    net: Network
+) -> set[tuple[frozenset[str], frozenset[str], frozenset[str]]]:
+    """
+    Compute tripartitions induced by tree nodes with exactly two children.
+
+    For each such node u with children c_1, c_2 the tripartition is
+
+        (desc(c_1),  desc(c_2),  X \\ (desc(c_1) | desc(c_2)))
+
+    where X is the full leaf label set and desc(c_i) are the hardwired
+    leaf descendants of child c_i.
+
+    Args:
+        net: A phylogenetic network.
+
+    Returns:
+        A set of tripartitions, each in canonical (sorted) form.
+    """
+    all_leaves = _leaf_label_set(net)
+    triparts: set[tuple[frozenset[str], frozenset[str], frozenset[str]]] = set()
+
+    for node in net.V():
+        children = net.get_children(node)
+        if len(children) != 2 or node.is_reticulation():
+            continue
+
+        desc1 = frozenset(n.label for n in net.leaf_descendants(children[0]))
+        desc2 = frozenset(n.label for n in net.leaf_descendants(children[1]))
+        rest = all_leaves - desc1 - desc2
+
+        parts = tuple(sorted(
+            [desc1, desc2, rest],
+            key=lambda s: (len(s), tuple(sorted(s)))
+        ))
+        triparts.add(parts)
+
+    return triparts
+
+
+def _displayed_tree_topology_set(
+    net: Network
+) -> set[frozenset[frozenset[str]]]:
+    """
+    Enumerate the set of unique displayed-tree topologies.
+
+    Each topology is identified by its cluster set (frozenset of
+    frozensets of leaf labels), so two trees that share the same
+    cluster set are considered identical.
+
+    Args:
+        net: A phylogenetic network.
+
+    Returns:
+        A set of tree topologies, each encoded as a frozenset of clusters.
+    """
+    if is_tree(net):
+        clusters = _hardwired_clusters_by_label(net, include_trivial=True)
+        return {frozenset(clusters)}
+
+    topos: set[frozenset[frozenset[str]]] = set()
+    for tree in get_all_subtrees(net):
+        clusters = _hardwired_clusters_by_label(tree, include_trivial=True)
+        topos.add(frozenset(clusters))
+
+    return topos
+
+
+# ── Network Distance Metrics ──────────────────────────────────────────
+
+def hardwired_cluster_distance(
+    net1: Network,
+    net2: Network,
+    normalize: bool = False
+) -> Union[int, float]:
+    """
+    Hardwired cluster distance between two phylogenetic networks.
+
+    The hardwired cluster of a node v is the set of all leaf labels
+    reachable from v by following every directed edge.  The distance is
+    the cardinality of the symmetric difference of the two hardwired
+    cluster sets:
+
+        d_HC(N1, N2) = |HC(N1)  triangle  HC(N2)|
+
+    When *normalize* is True the result is divided by |HC(N1) | HC(N2)|,
+    yielding a value in [0, 1].
+
+    Reference
+    ---------
+    Huson, Rupp & Scornavacca.  *Phylogenetic Networks: Concepts,
+    Algorithms and Applications* (2010), Chapter 7.
+
+    Args:
+        net1: First network.
+        net2: Second network.
+        normalize: Return a value in [0, 1] instead of a raw count.
+
+    Returns:
+        The hardwired cluster distance (int, or float when normalized).
+    """
+    hc1 = _hardwired_clusters_by_label(net1)
+    hc2 = _hardwired_clusters_by_label(net2)
+    sym_diff = len(hc1.symmetric_difference(hc2))
+
+    if normalize:
+        union_size = len(hc1 | hc2)
+        return sym_diff / union_size if union_size > 0 else 0.0
+
+    return sym_diff
+
+
+def softwired_cluster_distance(
+    net1: Network,
+    net2: Network,
+    normalize: bool = False
+) -> Union[int, float]:
+    """
+    Softwired cluster distance between two phylogenetic networks.
+
+    The softwired cluster set of a network is the union of cluster sets
+    across all of its displayed trees.  The distance is the cardinality
+    of the symmetric difference:
+
+        d_SC(N1, N2) = |SC(N1)  triangle  SC(N2)|
+
+    .. note::
+       This enumerates all 2^k displayed trees where k is the number of
+       reticulations.  For networks with many reticulations the cost is
+       exponential.
+
+    When *normalize* is True the result is divided by |SC(N1) | SC(N2)|,
+    yielding a value in [0, 1].
+
+    Reference
+    ---------
+    Huson, Rupp & Scornavacca.  *Phylogenetic Networks: Concepts,
+    Algorithms and Applications* (2010), Chapter 7.
+
+    Args:
+        net1: First network.
+        net2: Second network.
+        normalize: Return a value in [0, 1] instead of a raw count.
+
+    Returns:
+        The softwired cluster distance (int, or float when normalized).
+    """
+    sc1 = _softwired_clusters_by_label(net1)
+    sc2 = _softwired_clusters_by_label(net2)
+    sym_diff = len(sc1.symmetric_difference(sc2))
+
+    if normalize:
+        union_size = len(sc1 | sc2)
+        return sym_diff / union_size if union_size > 0 else 0.0
+
+    return sym_diff
+
+
+def mu_distance(net1: Network, net2: Network) -> int:
+    """
+    Mu-representation distance between two phylogenetic networks.
+
+    For every node v in a network with leaf set X = {l_1, ..., l_n} the
+    *mu-vector* is
+
+        mu(v) = (m(v, l_1), ..., m(v, l_n))
+
+    where m(v, l_i) is the number of directed paths from v to leaf l_i.
+    The *mu-representation* of a network is the multiset of mu-vectors
+    over all nodes.  The distance is the size of the multiset symmetric
+    difference of the two mu-representations.
+
+    This is a metric on the space of *reduced* phylogenetic networks
+    (networks with no degree-2 tree nodes and no parallel edges).  It
+    is also referred to as the *topological distance for reduced
+    networks*.  For trees it reduces to the Robinson--Foulds distance.
+
+    Both networks must share the same leaf label set.
+
+    Reference
+    ---------
+    Cardona, Llabres, Rossello & Valiente.  *Metrics for Phylogenetic
+    Networks I: Generalizations of the Robinson-Foulds Metric*.
+    IEEE/ACM Trans. Comput. Biol. Bioinformatics **6** (2009), 46--61.
+
+    Args:
+        net1: First network.
+        net2: Second network.
+
+    Raises:
+        NetworkError: If the two networks have different leaf label sets.
+
+    Returns:
+        The mu-distance (non-negative integer).
+    """
+    leaves1 = _leaf_label_set(net1)
+    leaves2 = _leaf_label_set(net2)
+
+    if leaves1 != leaves2:
+        raise NetworkError(
+            "mu_distance requires identical leaf label sets. "
+            f"Got {sorted(leaves1)} vs {sorted(leaves2)}"
+        )
+
+    leaf_order = sorted(leaves1)
+    mu1 = _mu_vectors(net1, leaf_order)
+    mu2 = _mu_vectors(net2, leaf_order)
+
+    counter1 = Counter(mu1)
+    counter2 = Counter(mu2)
+
+    all_keys = set(counter1) | set(counter2)
+    return sum(abs(counter1.get(k, 0) - counter2.get(k, 0)) for k in all_keys)
+
+
+def tripartition_distance(
+    net1: Network,
+    net2: Network,
+    normalize: bool = False
+) -> Union[int, float]:
+    """
+    Tripartition-based distance between two phylogenetic networks.
+
+    For each tree node u with exactly two children c_1, c_2 the
+    tripartition is
+
+        (desc(c_1),  desc(c_2),  X \\ (desc(c_1) | desc(c_2)))
+
+    where X is the full leaf set.  The distance is the cardinality of
+    the symmetric difference of the tripartition sets:
+
+        d_T(N1, N2) = |T(N1)  triangle  T(N2)|
+
+    Reticulation nodes (in-degree >= 2) are excluded from tripartition
+    generation.
+
+    When *normalize* is True the result is divided by |T(N1) | T(N2)|,
+    yielding a value in [0, 1].
+
+    Reference
+    ---------
+    Moret *et al.*; Huson, Rupp & Scornavacca.  *Phylogenetic Networks:
+    Concepts, Algorithms and Applications* (2010), Chapter 7.
+
+    Args:
+        net1: First network.
+        net2: Second network.
+        normalize: Return a value in [0, 1] instead of a raw count.
+
+    Returns:
+        The tripartition distance (int, or float when normalized).
+    """
+    t1 = _tripartitions(net1)
+    t2 = _tripartitions(net2)
+    sym_diff = len(t1.symmetric_difference(t2))
+
+    if normalize:
+        union_size = len(t1 | t2)
+        return sym_diff / union_size if union_size > 0 else 0.0
+
+    return sym_diff
+
+
+def displayed_tree_distance(
+    net1: Network,
+    net2: Network,
+    normalize: bool = False
+) -> Union[int, float]:
+    """
+    Tree-based distance between two phylogenetic networks.
+
+    Each network's set of unique displayed-tree topologies (identified
+    by cluster representation) is computed.  The distance is the
+    cardinality of the symmetric difference:
+
+        d_DT(N1, N2) = |DT(N1)  triangle  DT(N2)|
+
+    .. note::
+       This enumerates all 2^k displayed trees per network.  For
+       networks with many reticulations the cost is exponential.
+
+    When *normalize* is True the result is divided by |DT(N1) | DT(N2)|,
+    yielding a value in [0, 1].
+
+    Args:
+        net1: First network.
+        net2: Second network.
+        normalize: Return a value in [0, 1] instead of a raw count.
+
+    Returns:
+        The displayed-tree distance (int, or float when normalized).
+    """
+    dt1 = _displayed_tree_topology_set(net1)
+    dt2 = _displayed_tree_topology_set(net2)
+    sym_diff = len(dt1.symmetric_difference(dt2))
+
+    if normalize:
+        union_size = len(dt1 | dt2)
+        return sym_diff / union_size if union_size > 0 else 0.0
+
+    return sym_diff
+
+
+def robinson_foulds_distance(
+    net1: Network,
+    net2: Network,
+    normalize: bool = False
+) -> Union[int, float]:
+    """
+    Robinson--Foulds distance between two phylogenetic trees or networks.
+
+    For rooted trees the RF distance equals the cardinality of the
+    symmetric difference of the non-trivial cluster sets (clusters of
+    size >= 2 and < n, where n is the number of leaves).
+
+    For networks the function uses hardwired clusters, which is the
+    natural generalization of RF to DAGs.
+
+    Both inputs must share the same leaf label set.
+
+    When *normalize* is True the result is divided by
+    |C(N1)| + |C(N2)| (the maximum possible RF for the given cluster
+    counts), yielding a value in [0, 1].
+
+    Reference
+    ---------
+    Robinson & Foulds.  *Comparison of Phylogenetic Trees*.
+    Mathematical Biosciences **53** (1981), 131--147.
+
+    Cardona, Llabres, Rossello & Valiente.  *Metrics for Phylogenetic
+    Networks I: Generalizations of the Robinson-Foulds Metric*.
+    IEEE/ACM Trans. Comput. Biol. Bioinformatics **6** (2009), 46--61.
+
+    Args:
+        net1: First tree / network.
+        net2: Second tree / network.
+        normalize: Return a value in [0, 1] instead of a raw count.
+
+    Raises:
+        NetworkError: If the two inputs have different leaf label sets.
+
+    Returns:
+        The RF distance (int, or float when normalized).
+    """
+    leaves1 = _leaf_label_set(net1)
+    leaves2 = _leaf_label_set(net2)
+    if leaves1 != leaves2:
+        raise NetworkError(
+            "Robinson-Foulds distance requires identical leaf label sets. "
+            f"Got {sorted(leaves1)} vs {sorted(leaves2)}"
+        )
+
+    n = len(leaves1)
+    hc1 = {c for c in _hardwired_clusters_by_label(net1) if 1 < len(c) < n}
+    hc2 = {c for c in _hardwired_clusters_by_label(net2) if 1 < len(c) < n}
+    sym_diff = len(hc1.symmetric_difference(hc2))
+
+    if normalize:
+        denom = len(hc1) + len(hc2)
+        return sym_diff / denom if denom > 0 else 0.0
+
+    return sym_diff
+
+
+# ── Branch-Length-Aware Distance Helpers ───────────────────────────────
+
+def _displayed_trees_with_probs(
+    net: Network
+) -> list[tuple[Network, float]]:
+    """
+    Enumerate every displayed tree together with its probability.
+
+    The probability of a displayed tree is the product of gamma values
+    of the reticulation edges that were *kept*.  When gamma is unset
+    for an edge, a uniform 1/k weight is assumed (k = in-degree of the
+    reticulation node).
+
+    Args:
+        net: A phylogenetic network.
+
+    Returns:
+        List of (tree_copy, probability) pairs.
+    """
+    retics = sorted(
+        (node for node in net.V() if node.is_reticulation()),
+        key=lambda n: n.label,
+    )
+    if not retics:
+        copy, _ = net.copy()
+        return [(copy, 1.0)]
+
+    retic_in_edges = [
+        sorted(list(net.in_edges(node)), key=lambda e: e.src.label)
+        for node in retics
+    ]
+
+    results: list[tuple[Network, float]] = []
+    for combo in _product(*retic_in_edges):
+        preop, old_new = net.copy()
+        prob = 1.0
+        for retic_node, kept_edge in zip(retics, combo):
+            gamma = kept_edge.get_gamma()
+            if gamma is not None and gamma > 0:
+                prob *= gamma
+            else:
+                k = len(list(net.in_edges(retic_node)))
+                prob *= 1.0 / k if k > 0 else 1.0
+            for e in list(net.in_edges(retic_node)):
+                if e is not kept_edge:
+                    preop.remove_edge([old_new[e.src], old_new[e.dest]])
+        preop.clean()
+        results.append((preop, prob))
+
+    return results
+
+
+def _average_pairwise_matrix(
+    net: Network,
+    weighted: bool = False
+) -> dict[tuple[str, str], float]:
+    """
+    Compute the (weighted) average pairwise leaf distance matrix.
+
+    For each pair of *original* leaves, the distance is averaged across
+    all displayed trees.  If *weighted* is True the average uses each
+    displayed tree's probability (product of kept gammas); otherwise a
+    uniform average is used.
+
+    Branch lengths on the network edges are required.  Edges whose
+    length is *None* are treated as having length 0.
+
+    Args:
+        net: A phylogenetic network.
+        weighted: Use probability-weighted averaging.
+
+    Returns:
+        A dictionary mapping sorted (label_i, label_j) pairs to their
+        averaged distance.
+    """
+    original_leaves = sorted(n.label for n in net.get_leaves())
+    n_leaves = len(original_leaves)
+    pairs = [
+        tuple(sorted((original_leaves[i], original_leaves[j])))
+        for i in range(n_leaves)
+        for j in range(i + 1, n_leaves)
+    ]
+
+    pair_sum: dict[tuple[str, str], float] = {p: 0.0 for p in pairs}
+    weight_sum = 0.0
+
+    trees_with_probs = _displayed_trees_with_probs(net)
+    for tree, prob in trees_with_probs:
+        w = prob if weighted else 1.0
+        weight_sum += w
+        dist_map = pairwise_leaf_distance(tree, use_branch_lengths=True)
+        for pair in pairs:
+            if pair in dist_map:
+                pair_sum[pair] += w * dist_map[pair]
+
+    if weight_sum > 0:
+        for pair in pairs:
+            pair_sum[pair] /= weight_sum
+
+    return pair_sum
+
+
+def average_path_distance(
+    net1: Network,
+    net2: Network,
+    normalize: bool = False
+) -> float:
+    """
+    Average Path Distance (APD) between two phylogenetic networks.
+
+    For each network a pairwise leaf distance matrix is computed by
+    averaging the path lengths across all displayed trees (uniform
+    weighting).  The APD is the L1 norm of the difference between the
+    two matrices:
+
+        APD(N1, N2) = sum_{i<j} |D_N1(l_i,l_j) - D_N2(l_i,l_j)|
+
+    When *normalize* is True the sum is divided by the number of leaf
+    pairs C(n, 2).
+
+    Branch lengths on every edge are required.
+
+    .. note::
+       This enumerates all 2^k displayed trees per network.  For
+       networks with many reticulations the cost is exponential.
+
+    Reference
+    ---------
+    Yakici, Ogilvie & Nakhleh.  *Phylogenetic Network Dissimilarity
+    Measures that Take Branch Lengths into Account*.  RECOMB-CG 2022,
+    LNCS 13234, pp. 86--102.
+
+    Args:
+        net1: First network.
+        net2: Second network.
+        normalize: Divide by C(n, 2) to get a per-pair average.
+
+    Raises:
+        NetworkError: If the two networks have different leaf label sets.
+
+    Returns:
+        The APD (float).
+    """
+    leaves1 = _leaf_label_set(net1)
+    leaves2 = _leaf_label_set(net2)
+    if leaves1 != leaves2:
+        raise NetworkError(
+            "Average path distance requires identical leaf label sets. "
+            f"Got {sorted(leaves1)} vs {sorted(leaves2)}"
+        )
+
+    m1 = _average_pairwise_matrix(net1, weighted=False)
+    m2 = _average_pairwise_matrix(net2, weighted=False)
+
+    total = sum(abs(m1[p] - m2.get(p, 0.0)) for p in m1)
+
+    if normalize:
+        n_pairs = len(m1)
+        return total / n_pairs if n_pairs > 0 else 0.0
+
+    return total
+
+
+def weighted_average_path_distance(
+    net1: Network,
+    net2: Network,
+    normalize: bool = False
+) -> float:
+    """
+    Weighted Average Path Distance (WAPD) between two networks.
+
+    Identical to :func:`average_path_distance` except that the average
+    over displayed trees is weighted by each tree's probability (the
+    product of the gamma values of the kept reticulation edges).
+
+        WAPD(N1, N2) = sum_{i<j} |WD_N1(l_i,l_j) - WD_N2(l_i,l_j)|
+
+    When *normalize* is True the sum is divided by the number of leaf
+    pairs C(n, 2).
+
+    Branch lengths and gamma values on every reticulation edge are
+    required.
+
+    .. note::
+       This enumerates all 2^k displayed trees per network.  For
+       networks with many reticulations the cost is exponential.
+
+    Reference
+    ---------
+    Yakici, Ogilvie & Nakhleh.  *Phylogenetic Network Dissimilarity
+    Measures that Take Branch Lengths into Account*.  RECOMB-CG 2022,
+    LNCS 13234, pp. 86--102.
+
+    Args:
+        net1: First network.
+        net2: Second network.
+        normalize: Divide by C(n, 2) to get a per-pair average.
+
+    Raises:
+        NetworkError: If the two networks have different leaf label sets.
+
+    Returns:
+        The WAPD (float).
+    """
+    leaves1 = _leaf_label_set(net1)
+    leaves2 = _leaf_label_set(net2)
+    if leaves1 != leaves2:
+        raise NetworkError(
+            "Weighted average path distance requires identical leaf label sets. "
+            f"Got {sorted(leaves1)} vs {sorted(leaves2)}"
+        )
+
+    m1 = _average_pairwise_matrix(net1, weighted=True)
+    m2 = _average_pairwise_matrix(net2, weighted=True)
+
+    total = sum(abs(m1[p] - m2.get(p, 0.0)) for p in m1)
+
+    if normalize:
+        n_pairs = len(m1)
+        return total / n_pairs if n_pairs > 0 else 0.0
+
+    return total
 
 
 # ── Shared helpers for ascii() / ascii_extended() ──────────────────────

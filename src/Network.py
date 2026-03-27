@@ -1602,7 +1602,34 @@ class EdgeSet:
                 
             self.__uedges.remove(edge)
                 
-            
+    def rehash_node(self, node: Node, affected_edges: set) -> None:
+        """Rebuild hash entries for all edges touching *node*.
+
+        Must be called **after** the node's name (and therefore its hash)
+        has already been changed.  The caller supplies the set of Edge /
+        UEdge objects that touch *node* so that we can remove them under
+        the *old* hash bucket (which is now unreachable because the node
+        hash changed) and re-insert under the *new* hash.
+        """
+        stale_keys = [k for k in self.__hash if k not in self.__hash]
+        
+        new_hash: dict[tuple[Node, Node], list[Edge]] = {}
+        for key, edges in list(self.__hash.items()):
+            new_hash.setdefault(key, []).extend(edges)
+        self.__hash = new_hash
+
+        rebuilt: dict[tuple[Node, Node], list[Edge]] = {}
+        for edge in self.__edges:
+            k = (edge.src, edge.dest)
+            rebuilt.setdefault(k, []).append(edge)
+        self.__hash = rebuilt
+
+        rebuilt_u: dict[tuple[Node, Node], list[UEdge]] = {}
+        for edge in self.__uedges:
+            k = (edge.n1, edge.n2)
+            rebuilt_u.setdefault(k, []).append(edge)
+        self.__uhash = rebuilt_u
+
     def __retrieve(self, n1 : Node, n2 : Node) -> Union[list[Edge], list[UEdge]]:
         """
         Private method. If (n1, n2) is not a key in the hash map,
@@ -2076,13 +2103,26 @@ class Graph:
         """
         Rename a node and update the bookkeeping.
 
+        Because Node.__hash__ is name-based, we must remove the node from
+        all hash-keyed collections *before* changing the name and re-add
+        it *after*.
+
         Args:
             node (Node): a node in the graph
             name (str): the new name for the node.
         Returns:
             N/A
         """
+        is_leaf = node in self.__leaves
+        if is_leaf:
+            self.__leaves.discard(node)
+
+        affected = (self._nodes.in_edges(node) | self._nodes.out_edges(node))
         self._nodes.update(node, name)
+        self._edges.rehash_node(node, affected)
+
+        if is_leaf:
+            self.__leaves.add(node)
     
     def has_node_named(self, name : str) -> Union[Node, None]:
         """
@@ -2588,6 +2628,33 @@ class Network(Graph):
             raise NetworkError("Tried to remove undirected edge object from a\
                                 directed Network")
     
+    def update_node_name(self, node: Node, name: str) -> None:
+        """
+        Rename a node and update *all* bookkeeping (NodeSet, EdgeSet,
+        leaf/root sets).
+
+        Overrides Graph.update_node_name to additionally rehash the
+        Network-level ``__leaves`` and ``__roots`` sets whose keys
+        depend on Node.__hash__ (which is name-based).
+
+        Args:
+            node (Node): a node in the graph
+            name (str): the new name for the node.
+        """
+        is_leaf = node in self.__leaves
+        is_root = node in self.__roots
+        if is_leaf:
+            self.__leaves.discard(node)
+        if is_root:
+            self.__roots.discard(node)
+
+        super().update_node_name(node, name)
+
+        if is_leaf:
+            self.__leaves.add(node)
+        if is_root:
+            self.__roots.add(node)
+
     def get_edge(self, 
                  n1 : Node, 
                  n2 : Node, 
@@ -2815,11 +2882,22 @@ class Network(Graph):
                 spacer_par = self.get_parents(cur)[0]
                 spacer_child = self.get_children(cur)[0]
                 
-                self.remove_edge(self.get_edge(spacer_par, cur))
-                self.remove_edge(self.get_edge(cur, spacer_child))
+                edge_in = self.get_edge(spacer_par, cur)
+                edge_out = self.get_edge(cur, spacer_child)
+                
+                len_in = edge_in.get_length() if edge_in.get_length() else 0.0
+                len_out = edge_out.get_length() if edge_out.get_length() else 0.0
+                gamma_out = edge_out.get_gamma()
+                
+                self.remove_edge(edge_in)
+                self.remove_edge(edge_out)
                 self.remove_nodes(cur)
                 
-                self.add_edges(Edge(spacer_par, spacer_child))
+                merged = Edge(spacer_par, spacer_child,
+                              length=len_in + len_out)
+                if gamma_out:
+                    merged.set_gamma(gamma_out)
+                self.add_edges(merged)
                 
                 spacers = [n for n in self.V() if self.in_degree(n) == 1 and \
                            self.out_degree(n) == 1]
@@ -3568,18 +3646,21 @@ class Network(Graph):
         from .GraphUtils import is_isomorphic
         return is_isomorphic(self, other)
     
-    def nakhleh_distance(self, other: Network) -> float:
+    def rooted_triplet_distance(self, other: Network) -> float:
         """
-        Computes the rooted triplet distance (Nakhleh distance) between two networks.
+        Computes the rooted triplet distance between two networks.
         
         This distance measure compares the topological relationships between all
-        triplets of leaves in both networks.
+        triplets of leaves in both networks.  For each triplet of leaves
+        {x, y, z}, the pair sharing the deepest MRCA are identified as
+        siblings, producing a canonical encoding.  The distance is the
+        normalized symmetric difference of these triplet sets.
         
         Args:
             other (Network): The other network to compare against.
         
         Returns:
-            float: The Nakhleh distance (0 = identical topology, 1 = completely different).
+            float: The rooted triplet distance (0 = identical, 1 = completely different).
         """
         
         def get_rooted_triplets(network: Network) -> Set[Tuple[str, str, str]]:

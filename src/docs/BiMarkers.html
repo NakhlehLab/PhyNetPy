@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BiMarkers - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; BiMarkers
+                </div>
+                
+                <h1>BiMarkers Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>SNP (biallelic marker) likelihood computation for phylogenetic networks, with optional GPU acceleration.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>2/5/26</dd>
+                        <dt>Source:</dt>
+                        <dd>BiMarkers.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#constants">Constants</a></li>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#gpuspecs">GPUSpecs</a></li>
+                        <li><a href="#nodevpi">NodeVPI</a></li>
+                        <li><a href="#sparsemerge">SparseMerge</a></li>
+                        <li><a href="#sparsesplit">SparseSplit</a></li>
+                        <li><a href="#bimarkerstransition">BiMarkersTransition</a></li>
+                        <li><a href="#snpstrategy">SNPStrategy</a></li>
+                        <li><a href="#snpmodelvisitor">SNPModelVisitor</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="constants">Constants</h2>
+                <div class="constant-def">
+                    <span class="constant-name">CUPY_AVAILABLE</span> = False
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">CUPY_RUNTIME_OK</span> = False
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">NUMBA_CUDA_AVAILABLE</span> = False
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">CUDA_IMPORTS_AVAILABLE</span> = CUPY_RUNTIME_OK or NUMBA_CUDA_AVAILABLE
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">GPU_SPECS</span> = _detect_gpu()
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">THREADS_PER_BLOCK</span> = 256
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">MAX_BLOCKS</span> = 65535
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">GPU_THRESHOLD</span> = {0: float('inf'), 1: 20, 2: 12, 3: 8}
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">GPU_VRAM_SAFETY_FACTOR</span> = 0.8
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">SNPResourceError</span>(<span class="params">RuntimeError</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when the SNP likelihood computation would exceed available hardware resources (GPU VRAM or system RAM).</p>
+                    </div>
+                </div>
+
+                <h2 id="gpuspecs">GPUSpecs</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">GPUSpecs</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Hardware specs for the user's GPU (detected at import time).</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">vram_gb</span> <span class="keyword">-&gt;</span> float <span class="keyword">property</span>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="nodevpi">NodeVPI</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">NodeVPI</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Partial-likelihood vector bundle carried by a model node. Attributes: tensor: Partial-likelihood array of shape ``(S, d1, d2, ...)``, where *S* is the number of sites and each subsequent axis corresponds to an interface. interfaces: Labels for each tensor axis beyond the site axis (length equals ``tensor.ndim - 1``). max_lineages: Maximum lineage count per interface. log_scale: Per-site log rescaling factors, shape ``(S,)``.</p>
+                    </div>
+                </div>
+
+                <h2 id="sparsemerge">SparseMerge</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SparseMerge</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Sparse COO representation of the merge tensor M[i, j, k]. For each non-zero entry: stores (i_arr[n], j_arr[n], k_arr[n], coeff_arr[n]). There is exactly one k for each (i, j) pair (since nz = nx + ny is unique). nnz = state_dim(mx) * state_dim(my) (one per valid (i,j) pair)</p>
+                    </div>
+                </div>
+
+                <h2 id="sparsesplit">SparseSplit</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SparseSplit</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Sparse COO representation of the split tensor S[i, j, k]. For each non-zero entry: stores (i_arr[n], j_arr[n], k_arr[n], coeff_arr[n]). Multiple (j, k) pairs map to each i (since n = nb + nd has many valid splits).</p>
+                    </div>
+                </div>
+
+                <h2 id="bimarkerstransition">BiMarkersTransition</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">BiMarkersTransition</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Class that encodes the probabilities of transitioning from one (n,r) pair to another under a Biallelic model. Includes method for efficiently computing e^Qt Inputs: 1) n-- the total number of samples in the species tree 2) u-- the probability of going from the red allele to the green one 3) v-- the probability of going from the green allele to the red one 4) coal-- the coalescent rate constant, theta Assumption: Matrix indexes start with n=1, r=0, so Q[0][0] is Q(1,0);(1,0) Q Matrix is given by Equation 15 from: David Bryant, Remco Bouckaert, Joseph Felsenstein, Noah A. Rosenberg, Arindam RoyChoudhury, Inferring Species Trees Directly from Biallelic Genetic Markers: Bypassing Gene Trees in a Full Coalescent Analysis, Molecular Biology and Evolution, Volume 29, Issue 8, August 2012, Pages 1...</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">n: int, u: float, v: float, coal: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize the Q matrix</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>sample count</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">u</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>probability of a lineage going from red to green</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">v</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>probability of a lineage going from green to red</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">coal</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>coal rate, theta.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expt</span>(<span class="params">t: float = 1</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Compute e^(Q*t) efficiently.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>time, generally in coalescent units. Optional, defaults to 1, in which case e^Q is computed.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: e^(Q*t).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">cols</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>return the dimension of the Q matrix</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: the number of columns in the Q matrix</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">getQ</span> <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Retrieve the Q matrix.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: The Q matrix.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="snpstrategy">SNPStrategy</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SNPStrategy</span>(<span class="params">Strategy</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Visitor for the SNP model. Supports both CPU (NumPy) and GPU (CuPy) execution. When use_gpu=True, all tensor operations run on the GPU via CuPy's drop-in NumPy API.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">q: BiMarkersTransition, u: float, v: float, coal: float, sites: int, max_samples: int, site_slice: tuple[int, int] | None = None, use_gpu: bool = False</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">compute_at_leaf</span>(<span class="params">n: LeafNode</span>) <span class="keyword">-&gt;</span> NodeVPI
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the partial likelihoods at a leaf node. The format for the partial likelihoods is a two dimensional array where the first dimension (rows) is the site index and the second dimension (columns) is the number of samples for this leaf. Uses vectorized indexing for GPU efficiency (no Python per-site loop).</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">compute_at_internal</span>(<span class="params">n: InternalNode, x: NodeVPI, y: NodeVPI</span>) <span class="keyword">-&gt;</span> NodeVPI
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the partial likelihoods at an internal node.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">compute_at_reticulation</span>(<span class="params">n: ReticulationNode, x: NodeVPI</span>) <span class="keyword">-&gt;</span> NodeVPI
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the partial likelihoods at a reticulation node. The split creates two new interfaces (one per parent branch). During the two transition steps, we use global per-site rescaling (axis-order agnostic) to prevent intermediate underflow. After both transitions, we do a final per-vector rescale. GPU-compatible via self.xp.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">compute_at_root</span>(<span class="params">n: RootNode, x: NodeVPI, y: NodeVPI</span>) <span class="keyword">-&gt;</span> NodeVPI
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the partial likelihoods at the root node.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">compute_at_aggregator</span>(<span class="params">n: RootAggregatorNode, root: NodeVPI</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the partial likelihoods at a root aggregator node. Uses the accumulated per-vector log_scale factors to recover the true log-likelihood without numerical underflow. The root VPI should have shape (S, d) with log_scale shape (S,) after equalization at the root node. GPU-compatible: pi is built on CPU and transferred; final log-likelihood is brought back to CPU as a Python float.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="snpmodelvisitor">SNPModelVisitor</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SNPModelVisitor</span>(<span class="params">Visitor</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Visitor for the SNP model.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">strategy: SNPStrategy</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">visit_leaf</span>(<span class="params">n: LeafNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">visit_internal</span>(<span class="params">n: InternalNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">visit_reticulation</span>(<span class="params">n: ReticulationNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">visit_root</span>(<span class="params">n: RootNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">visit_aggregator</span>(<span class="params">n: RootAggregatorNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">visit</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Visit a node.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">n_to_index</span>(<span class="params">n: int</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Computes the starting index in computing a linear index for an (n,r) pair. Returns the index, if r is 0. i.e n=1 returns 0, since (1,0) is index 0 i.e n=3 returns 5 since (3,0) is preceded by (1,0), (1,1), (2,0), (2,1), and (2,2)</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>an n value (number of lineages) from an (n,r) pair</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: starting index for that block of n values</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">index_to_nr</span>(<span class="params">index: int</span>) <span class="keyword">-&gt;</span> list[int]
+                            </div>
+                            <div class="function-body">
+                                <p>Takes an index from the linear vector and turns it into an (n,r) pair i.e 7 -&gt; [3,2]</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">index</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>the index</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[int]: a 2-tuple (n,r)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">nr_to_index</span>(<span class="params">n: int, r: int</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Takes an (n,r) pair and maps it to a 1d vector index (1,0) -&gt; 0 (1,1) -&gt; 1 (2,0) -&gt; 2 ...</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>the number of lineages</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">r</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>the number of red lineages (&lt;= n)</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: the index into the linear vector, that represents by (n, r)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">state_dim</span>(<span class="params">m: int</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Return the state-space dimension for *m* lineages. The dimension equals the number of valid ``(n, r)`` pairs where ``1 &lt;= n &lt;= m`` and ``0 &lt;= r &lt;= n``.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">build_split_tensor</span>(<span class="params">m: int, gamma: float</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Build the split coefficient tensor S for a reticulation node with max lineages m and inheritance probability gamma. S[i, j, k] = C(n, n_b) * C(r, r_b) * gamma^{n_b} * (1-gamma)^{n_d} where i ↔ (n, r), j ↔ (n_b, r_b), k ↔ (n_d, r_d) and n = n_b + n_d, r = r_b + r_d (zero otherwise). Shape: [dim(m), dim(m), dim(m)]</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">build_merge_tensor</span>(<span class="params">mx: int, my: int</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Build the merge coefficient tensor M for combining two interfaces with max lineages mx and my. M[i, j, k] = C(rz, rx) * C(nz-rz, nx-rx) / C(nz, nx) where i ↔ (nx, rx), j ↔ (ny, ry), k ↔ (nz, rz) and nz = nx + ny, rz = rx + ry (zero otherwise). Used by both Rule 2 (disjoint merge) and Rule 4 (overlapping merge). Shape: [dim(mx), dim(my), dim(mx + my)]</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">build_sparse_merge</span>(<span class="params">mx: int, my: int</span>) <span class="keyword">-&gt;</span> SparseMerge
+                            </div>
+                            <div class="function-body">
+                                <p>Build sparse COO merge tensor. ~50× less memory and dim_z × faster contraction than the dense version.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mx</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Max lineages for the left interface.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">my</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Max lineages for the right interface.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> SparseMerge with coordinate arrays.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">build_sparse_split</span>(<span class="params">m: int, gamma: float</span>) <span class="keyword">-&gt;</span> SparseSplit
+                            </div>
+                            <div class="function-body">
+                                <p>Build sparse COO split tensor.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">m</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Max lineages at the node being split.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Inheritance probability for the left parent branch.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> SparseSplit with coordinate arrays.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_sparse_merge</span>(<span class="params">mx: int, my: int</span>) <span class="keyword">-&gt;</span> SparseMerge
+                            </div>
+                            <div class="function-body">
+                                <p>Get or build a cached sparse merge tensor.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_sparse_split</span>(<span class="params">m: int, gamma: float</span>) <span class="keyword">-&gt;</span> SparseSplit
+                            </div>
+                            <div class="function-body">
+                                <p>Get or build a cached sparse split tensor.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_sparse_merge_gpu</span>(<span class="params">mx: int, my: int</span>) <span class="keyword">-&gt;</span> SparseMerge
+                            </div>
+                            <div class="function-body">
+                                <p>Get or build a GPU-resident cached sparse merge tensor.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_sparse_split_gpu</span>(<span class="params">m: int, gamma: float</span>) <span class="keyword">-&gt;</span> SparseSplit
+                            </div>
+                            <div class="function-body">
+                                <p>Get or build a GPU-resident cached sparse split tensor.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">deduplicate_vpis</span>(<span class="params">vpis: list[NodeVPI]</span>) <span class="keyword">-&gt;</span> list[NodeVPI]
+                            </div>
+                            <div class="function-body">
+                                <p>Remove duplicates by identity (``is``), preserving order. Uses an ``id()``-based set for O(n) performance instead of O(n^2) linear scans.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">vpis</span></td>
+                                        <td><span class="param-type">list[NodeVPI]</span></td>
+                                        <td>VPI objects, possibly with duplicate references.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[NodeVPI]: De-duplicated list in original order.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">MCMC_BIMARKERS</span>(<span class="params">filename: str, u: float = 0.5, v: float = 0.5, coal: float = 1</span>) <span class="keyword">-&gt;</span> dict[Network, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Given a set of taxa with SNP data, perform a Markov Chain Monte Carlo chain to infer the most likely phylogenetic network that describes the taxa and data.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filename</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>string path destination of a nexus file that contains SNP data</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">u</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Parameter for the probability of an allele changing from red to green. Defaults to .5.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">v</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Parameter for the probability of an allele changing from green to red. Defaults to .5.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">coal</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Parameter for the rate of coalescence. Defaults to 1.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[Network, float]: The log likelihood (a negative number) of the most probable network, along with the network itself that achieved that score.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">SNP_LIKELIHOOD</span>(<span class="params">filename: str, u: float, v: float, coal: float, samples: dict[str, int], max_workers: int = 8, sequential: bool = True, executor: Executor = None</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Given a set of taxa with SNP data and a phylogenetic network, calculate the likelihood of the network given the data using the SNP likelihood algorithm. Automatically selects CPU or GPU execution based on network complexity: - Level-0 (tree): always CPU - Level-1 (1 retic): GPU when taxa &gt; 20 - Level-2 (2 retics): GPU when taxa &gt; 12 Before starting computation, a pre-flight feasibility check predicts peak memory usage and raises SNPResourceError if the computation would exceed GPU VRAM or system RAM.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filename</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>string path destination of a nexus file that contains SNP data and a network</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">u</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Parameter for the probability of an allele changing from red to green.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">v</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Parameter for the probability of an allele changing from green to red.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">coal</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Parameter for the rate of coalescence.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">samples</span></td>
+                                        <td><span class="param-type">dict[str, int]</span></td>
+                                        <td>Mapping from taxon names to sample counts.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_workers</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>The number of workers to use for parallel computation. Only used if sequential is False. Defaults to 8.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sequential</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>Whether to use sequential computation. Defaults to True.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">executor</span></td>
+                                        <td><span class="param-type">Executor, optional</span></td>
+                                        <td>The executor to use. If None, one is auto-selected based on network complexity. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The log likelihood (a negative number) of the network.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SNPResourceError</code>: If the computation would exceed available hardware resources (GPU VRAM or system RAM).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">build_model</span>(<span class="params">filename: str, net: Network</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Build a SNP model from a data file and network.</p>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html" class="current">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#constants">Constants</a></li>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#gpuspecs">GPUSpecs</a></li>
+                <li><a href="#nodevpi">NodeVPI</a></li>
+                <li><a href="#sparsemerge">SparseMerge</a></li>
+                <li><a href="#sparsesplit">SparseSplit</a></li>
+                <li><a href="#bimarkerstransition">BiMarkersTransition</a></li>
+                <li><a href="#snpstrategy">SNPStrategy</a></li>
+                <li><a href="#snpmodelvisitor">SNPModelVisitor</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

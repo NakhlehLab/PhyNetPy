@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IO - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; IO
+                </div>
+                
+                <h1>IO Module <span class="version-badge">v1.1.0</span></h1>
+                
+                <p>Central I/O hub for reading and writing phylogenetic file formats (FASTA, VCF, Newick, Nexus).</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>2/6/26</dd>
+                        <dt>Source:</dt>
+                        <dd>IO.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#constants">Constants</a></li>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="constants">Constants</h2>
+                <div class="constant-def">
+                    <span class="constant-name">FASTA_LINE_WIDTH</span> : <span class="param-type">int</span> = 80
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">IOError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Exception raised when file I/O operations fail within PhyNetPy.</p>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">read_fasta_records</span>(<span class="params">filepath: str</span>) <span class="keyword">-&gt;</span> List[DataSequence]
+                            </div>
+                            <div class="function-body">
+                                <p>Read a FASTA file and return a list of DataSequence objects. This is the lower-level reader that returns raw DataSequence objects without wrapping them in an MSA. Useful for attaching sequences directly to Node objects in an existing Network (via Node.set_seq()). A FASTA file looks like: &gt;sequence_name_1 ATCGATCGATCG... &gt;sequence_name_2 GCTAGCTAGCTA... Each record becomes a DataSequence where: - name = the FASTA header (sequence ID) - seq = list of characters from the sequence string</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to a FASTA file (.fasta, .fas, .fa, .fna, .ffn, .faa).</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[DataSequence]: A list of DataSequence objects, one per FASTA record.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If the file does not exist., <code>IOError</code>: If BioPython cannot parse the file or it contains no valid sequences.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">read_fasta</span>(<span class="params">filepath: str, grouping: Optional[Dict[str, list]] = None, grouping_auto_detect: bool = False</span>) <span class="keyword">-&gt;</span> MSA
+                            </div>
+                            <div class="function-body">
+                                <p>Read a FASTA file and return an MSA object containing all sequences. This function parses a FASTA file, converts each record into a DataSequence, and wraps them in an MSA for downstream phylogenetic analyses such as distance calculations, alignment inspection, or model-based inference.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to a FASTA file (.fasta, .fas, .fa, .fna, .ffn, .faa).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">grouping</span></td>
+                                        <td><span class="param-type">dict[str, list], optional</span></td>
+                                        <td>A mapping from group names to lists of sequence names that belong to that group. If</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">provided</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>sequences will be assigned group IDs accordingly. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">grouping_auto_detect</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If True, attempt to automatically group sequences by name similarity. Defaults to False.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> MSA: A Multiple Sequence Alignment object containing all parsed sequences.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If the file does not exist., <code>IOError</code>: If the file cannot be parsed or contains no valid sequences.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">write_fasta</span>(<span class="params">msa: MSA, filepath: str, line_width: int = FASTA_LINE_WIDTH</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Write an MSA object to a FASTA file. Each DataSequence in the MSA is written as a FASTA record: &gt;sequence_name ATCGATCG... (wrapped at line_width characters)</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">msa</span></td>
+                                        <td><span class="param-type">MSA</span></td>
+                                        <td>The Multiple Sequence Alignment to write.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The output file path. Will be created or overwritten.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">line_width</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>Number of characters per sequence line. Standard FASTA convention is 80. Defaults to 80.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> None</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>IOError</code>: If the MSA has no records to write, or if the file cannot be written., <code>ValueError</code>: If line_width is less than 1.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">write_fasta_from_network</span>(<span class="params">network: Network, filepath: str, line_width: int = FASTA_LINE_WIDTH</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Extract sequences from the leaf nodes of a Network and write them to a FASTA file. Only leaf nodes that have an associated DataSequence (set via Node.set_seq()) will be written. The node label becomes the FASTA header, and the attached sequence becomes the FASTA sequence. This is useful when a Network has been annotated with molecular data and the user wants to export just the sequence data.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">network</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A phylogenetic network whose leaf nodes may carry DataSequence objects.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The output FASTA file path.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">line_width</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>Characters per line for sequence wrapping. Defaults to 80.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> None</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>IOError</code>: If no leaf nodes in the network have sequence data attached, or if the file cannot be written., <code>ValueError</code>: If line_width is less than 1.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">read_vcf</span>(<span class="params">filepath: str, grouping: Optional[Dict[str, list]] = None, missing_value: str = '?'</span>) <span class="keyword">-&gt;</span> MSA
+                            </div>
+                            <div class="function-body">
+                                <p>Read a VCF (Variant Call Format) file and return an MSA object. Each sample in the VCF becomes a DataSequence whose sequence is the vector of ALT allele counts across all variant sites. This maps directly to the SNP/BiMarkers pipeline used in PhyNetPy. A typical VCF file looks like:: ##fileformat=VCFv4.1 ##INFO=&lt;...&gt; #CHROM POS ID REF ALT QUAL FILTER INFO FORMAT Samp1 Samp2 chr1 100 . A T 30 PASS . GT 0/0 0/1 chr1 200 . G C 50 PASS . GT 1/1 0/1 Genotype encoding: - 0/0 -&gt; 0 (homozygous reference, 0 copies of ALT allele) - 0/1 -&gt; 1 (heterozygous, 1 copy of ALT allele) - 1/1 -&gt; 2 (homozygous alternate, 2 copies of ALT allele) - ./. -&gt; missing_value (missing genotype)</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to a VCF file (.vcf).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">grouping</span></td>
+                                        <td><span class="param-type">dict[str, list], optional</span></td>
+                                        <td>A mapping from group/species names to lists of sample names that belong to that group. Used for the BiMarkers pipeline where multiple individuals map to a single species. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">missing_value</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>The character to use for missing genotype data (./.). Defaults to &quot;?&quot;.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> MSA: A Multiple Sequence Alignment where each DataSequence represents one sample's genotype vector across all sites.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If the file does not exist., <code>IOError</code>: If the file cannot be parsed or contains no variant data.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">read_vcf_metadata</span>(<span class="params">filepath: str</span>) <span class="keyword">-&gt;</span> Dict[str, Any]
+                            </div>
+                            <div class="function-body">
+                                <p>Read only the metadata and header from a VCF file without loading all variant data. Useful for inspecting what samples and fields are available before a full parse.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to a VCF file.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[str, Any]: A dictionary containing: - &quot;fileformat&quot;: The VCF version string - &quot;metadata_lines&quot;: List of all ## header lines - &quot;sample_names&quot;: List of sample column names - &quot;info_fields&quot;: List of INFO field IDs - &quot;format_fields&quot;: List of FORMAT field IDs - &quot;filter_fields&quot;: List of FILTER field IDs - &quot;contig_fields&quot;: List of contig IDs</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If the file does not exist., <code>IOError</code>: If the file cannot be read.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">write_vcf</span>(<span class="params">msa: MSA, filepath: str, chrom: str = 'chr1', start_pos: int = 1, ref_allele: str = 'A', alt_allele: str = 'T'</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Write an MSA of SNP/allele-count data to a simplified VCF file. This produces a minimal VCF where each site in the MSA becomes a variant record, and each DataSequence becomes a sample column. The allele count values (0, 1, 2, ...) are converted back to VCF genotype notation (e.g., 0/0, 0/1, 1/1). Note: Because the MSA does not store chromosome position, reference alleles, or other VCF-specific metadata, this output is a simplified reconstruction. It is suitable for round-tripping SNP data or creating test files, but will not preserve full VCF metadata from an original file.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">msa</span></td>
+                                        <td><span class="param-type">MSA</span></td>
+                                        <td>The MSA containing allele count data (values like</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">0</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>1, 2 per site).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The output VCF file path.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">chrom</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>Chromosome name for all records. Defaults to &quot;chr1&quot;.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">start_pos</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>Starting position for the first variant. Each subsequent variant increments by 1. Defaults to 1.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">ref_allele</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>Reference allele character. Defaults to &quot;A&quot;.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alt_allele</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>Alternate allele character. Defaults to &quot;T&quot;.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> None</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>IOError</code>: If the MSA has no records, or the file cannot be written.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">read_newick</span>(<span class="params">newick_str: str</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Parse a single newick/extended-newick string into a PhyNetPy Network. Supports standard newick features (branch lengths, internal node names) as well as the extended newick format for phylogenetic networks (reticulation nodes prefixed with '#', gamma inheritance comments). Examples of accepted strings:: ((A:0.1,B:0.2):0.3,C:0.4); ((A:0.1,(B:0.2)#H1:0.3):0.4,(#H1:0.5,C:0.6):0.7);</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">newick_str</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A newick or extended-newick string. Trailing semicolons are handled automatically.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: A PhyNetPy Network object with the same topology, names, and branch lengths as described in the newick string.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>IOError</code>: If the string cannot be parsed.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">read_newick_file</span>(<span class="params">filepath: str, return_type: Literal['networks', 'genetrees'] = 'networks', species_gene_mapping: Optional[Dict[str, List[str]]] = None, naming_rule: Optional[Callable[..., Any]] = None</span>) <span class="keyword">-&gt;</span> Union[List[Network], GeneTrees]
+                            </div>
+                            <div class="function-body">
+                                <p>Read a file containing one or more newick strings (one per line) and parse each into a PhyNetPy Network. Blank lines and lines starting with '#' are skipped.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to a file containing newick strings.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">return_type</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>``&quot;networks&quot;`` (default) returns a list of Network objects.  ``&quot;genetrees&quot;`` validates each network as a rooted binary tree and wraps them in a GeneTrees object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">species_gene_mapping</span></td>
+                                        <td><span class="param-type">dict, optional</span></td>
+                                        <td>Explicit species -&gt; gene label mapping.  Only used when *return_type* is ``&quot;genetrees&quot;``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">naming_rule</span></td>
+                                        <td><span class="param-type">Callable, optional</span></td>
+                                        <td>Gene-label-to-species callable. Only used when *return_type* is ``&quot;genetrees&quot;`` and no explicit mapping is given.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Network] | GeneTrees: Parsed phylogenetic data.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If the file does not exist., <code>IOError</code>: If no valid newick strings are found, or parsing fails.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">write_newick</span>(<span class="params">network: Network</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Convert a PhyNetPy Network into a newick string. Delegates to the Network's built-in ``newick()`` method, which produces extended-newick notation for networks with reticulation nodes.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">network</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A PhyNetPy Network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: The newick representation of the network, ending with ';'.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">write_newick_file</span>(<span class="params">networks: List[Network], filepath: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Write one or more Networks to a file as newick strings, one per line.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">networks</span></td>
+                                        <td><span class="param-type">list[Network]</span></td>
+                                        <td>Networks to write.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Output file path. Will be created or overwritten.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> None</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>IOError</code>: If the list is empty or the file cannot be written.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">read_nexus</span>(<span class="params">filepath: str, validate_input: bool = False, print_validation_summary: bool = False, return_type: Literal['networks', 'genetrees'] = 'networks', species_gene_mapping: Optional[Dict[str, List[str]]] = None, naming_rule: Optional[Callable[..., Any]] = None</span>) <span class="keyword">-&gt;</span> Union[List[Network], GeneTrees]
+                            </div>
+                            <div class="function-body">
+                                <p>Read a nexus file and parse all trees/networks in the TREES block into PhyNetPy Network objects. This replicates the core functionality of ``NetworkParser`` as a standalone function, making it easy to call without instantiating a class. A typical nexus file looks like:: #NEXUS BEGIN TAXA; DIMENSIONS NTAX=3; TAXALABELS A B C; END; BEGIN TREES; Tree t1 = ((A:0.1,B:0.2):0.3,C:0.4); Tree t2 = ((B:0.1,C:0.2):0.3,A:0.4); END;</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to a nexus file (.nex, .nexus).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">validate_input</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If True, run NexusValidator on the file before parsing. Defaults to False.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">print_validation_summary</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If True and validate_input is True, print the validation summary. Defaults to False.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">return_type</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>``&quot;networks&quot;`` (default) returns a list of Network objects.  ``&quot;genetrees&quot;`` validates each network as a rooted binary tree and wraps them in a GeneTrees object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">species_gene_mapping</span></td>
+                                        <td><span class="param-type">dict, optional</span></td>
+                                        <td>Explicit species -&gt; gene label mapping. Only used when *return_type* is ``&quot;genetrees&quot;``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">naming_rule</span></td>
+                                        <td><span class="param-type">Callable, optional</span></td>
+                                        <td>Gene-label-to-species callable. Only used when *return_type* is ``&quot;genetrees&quot;`` and no explicit mapping is given.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Network] | GeneTrees: Parsed phylogenetic data.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If the file does not exist., <code>IOError</code>: If the file cannot be parsed or contains no trees.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">read_nexus_msa</span>(<span class="params">filepath: str</span>) <span class="keyword">-&gt;</span> MSA
+                            </div>
+                            <div class="function-body">
+                                <p>Read the sequence data (DATA/CHARACTERS block) from a nexus file and return it as an MSA object. This is a convenience wrapper around the MSA constructor's built-in nexus parsing. Use this when you want the alignment data rather than the tree topology.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to a nexus file containing a DATA or CHARACTERS block.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> MSA: The parsed Multiple Sequence Alignment.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If the file does not exist., <code>IOError</code>: If no sequence data is found.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">write_nexus</span>(<span class="params">networks: List[Network], filepath: str, taxa: Optional[Set[str]] = None, tree_prefix: str = 'net', overwrite: bool = True, phylonet_cmds: Optional[List[str]] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Write one or more Networks to a nexus file with TAXA and TREES blocks. This replicates the functionality of the ``NexusTemplate`` class as a standalone function. The generated file follows the standard nexus format:: #NEXUS BEGIN TAXA; DIMENSIONS NTAX=3; TAXALABELS A B C ; END; BEGIN TREES; Tree net1 = ((A:0.1,B:0.2):0.3,C:0.4); Tree net2 = ...; END;</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">networks</span></td>
+                                        <td><span class="param-type">list[Network]</span></td>
+                                        <td>The networks to write.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Output file path.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">taxa</span></td>
+                                        <td><span class="param-type">set[str], optional</span></td>
+                                        <td>An explicit set of taxa labels. If</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">None</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>taxa are inferred from the newick strings. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tree_prefix</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>Label prefix for each tree line. Defaults to &quot;net&quot;.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">overwrite</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If False, raises IOError if the file already exists. Defaults to True.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">phylonet_cmds</span></td>
+                                        <td><span class="param-type">list[str], optional</span></td>
+                                        <td>A list of PhyloNet commands to include in a PHYLONET block. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> None</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>IOError</code>: If the list is empty, or the file cannot be written, or the file already exists and overwrite is False.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">detect_newick_standard</span>(<span class="params">newick_str: str</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Auto-detect which newick convention a string uses based on its formatting. The detection heuristic is: 1. If the string contains ``#Name:len::gamma`` double-colon notation on a reticulation node → **Phylonet** 2. If the string starts with ``[&amp;R]`` or ``[&amp;U]`` → **Beast** 3. If the string contains ``[&amp;...gamma=...]`` → **PhyNetPy** 4. Otherwise (plain newick) → **PhyNetPy** (default)</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">newick_str</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A newick or extended-newick string.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: One of ``&quot;Phylonet&quot;``, ``&quot;Beast&quot;``, or ``&quot;PhyNetPy&quot;``.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">convert_newick</span>(<span class="params">newick_str: str, standard: str = 'PhyNetPy'</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Convert a newick/extended-newick string between different software conventions. The three supported standards differ primarily in how they encode inheritance probabilities (gamma) on reticulation edges: **PhyNetPy** uses BioPython-style bracket comments:: ((C:.1,(B:.05)#H0[&amp;gamma=.7]:.05)I1:.1,(A:.1,#H0:.05)I2:.1)I3; **Phylonet** uses Rich Newick double-colon notation:: ((C:.1,(B:.05)#H0:.05::.7)I1:.1,(A:.1,#H0:.05)I2:.1)I3; **Beast** uses the same annotation as PhyNetPy but prefixes the string with ``[&amp;R]`` for rooted trees (or ``[&amp;U]`` for unrooted):: [&amp;R] ((C:.1,(B:.05)#H0[&amp;gamma=.7]:.05)I1:.1,(A:.1,#H0:.05)I2:.1)I3; The function auto-detects the input convention and converts to the target. Non-gamma metadata (e.g. ``[&amp;posterior=0.95]``) on non-reticulation nodes is preserved in all conversions.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">newick_str</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A newick or extended-newick string in any of the three conventions.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">standard</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>Target convention. One of ``&quot;PhyNetPy&quot;`` (default), ``&quot;Phylonet&quot;``, or ``&quot;Beast&quot;``.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: The newick string reformatted for the target software.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ValueError</code>: If ``standard`` is not one of the three valid options., <code>IOError</code>: If the input string is empty.</div>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html" class="current">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#constants">Constants</a></li>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

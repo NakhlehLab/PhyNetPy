@@ -112,7 +112,6 @@ class Model:
         Returns:
             N/A
         """
-        # Maintain links to various internal structures and bookkeeping data 
         self.network : Network = None
         self.nodetypes = {"leaf": [], "internal": [], "reticulation": [], "root": []}
         self.network_node_map: dict[Node, ModelNode] = {}
@@ -120,6 +119,9 @@ class Model:
         self.rng: np.random.Generator = np.random.default_rng(self.seed)
         self.summary_str = ""
         self.root = None
+        self._likelihood_calculator: Any = None
+        self._dirty: bool = True
+        self._cached_likelihood: float | None = None
   
     
     def get_root(self) -> ModelNode:
@@ -127,6 +129,50 @@ class Model:
         Returns the root node of the model.
         """
         return self.root
+
+    def set_likelihood_calculator(self, calculator: Any) -> None:
+        """
+        Set a callable that computes the model's likelihood/score.
+        
+        The callable should accept a single argument (the Model instance)
+        and return a float.
+
+        Args:
+            calculator: A callable (Model) -> float.
+        Returns:
+            N/A
+        """
+        self._likelihood_calculator = calculator
+
+    def update_network(self) -> None:
+        """
+        Called after any move modifies the network topology.
+        Marks the model as needing recomputation.
+
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
+        self._dirty = True
+
+    def likelihood(self) -> float:
+        """
+        Compute the model likelihood/score using the registered calculator.
+
+        Args:
+            N/A
+        Raises:
+            ModelError: If no likelihood calculator has been set.
+        Returns:
+            float: The model likelihood or score.
+        """
+        if self._likelihood_calculator is None:
+            raise ModelError("No likelihood calculator set on this model")
+        if self._dirty or self._cached_likelihood is None:
+            self._cached_likelihood = self._likelihood_calculator(self)
+            self._dirty = False
+        return self._cached_likelihood
 
     def execute_move(self, move: Move) -> Model:
         """

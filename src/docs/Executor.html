@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executor - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; Executor
+                </div>
+                
+                <h1>Executor Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>Computation backend abstraction layer providing CPU (NumPy) and GPU (CuPy) array operations.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Source:</dt>
+                        <dd>Executor.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#devicetype">DeviceType</a></li>
+                        <li><a href="#executorconfig">ExecutorConfig</a></li>
+                        <li><a href="#executor">Executor</a></li>
+                        <li><a href="#cpuexecutor">CPUExecutor</a></li>
+                        <li><a href="#gpuexecutor">GPUExecutor</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="devicetype">DeviceType</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">DeviceType</span>(<span class="params">Enum</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Supported compute device types.</p>
+                    </div>
+                </div>
+
+                <h2 id="executorconfig">ExecutorConfig</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ExecutorConfig</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Configuration for executor initialization. Attributes: device_type: Target compute device device_id: GPU device ID (for multi-GPU systems) dtype: Default data type for arrays enable_jit: Enable JIT compilation (JAX only) enable_autodiff: Enable automatic differentiation (JAX only) memory_pool_size: GPU memory pool size in bytes (optional) seed: Random seed for reproducibility</p>
+                    </div>
+                </div>
+
+                <h2 id="executor">Executor</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Executor</span>(<span class="params">ABC</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Abstract base class for computation executors. An Executor provides a unified interface for array/matrix operations across different backends (NumPy, CuPy, JAX). Strategies use executors to perform computations without knowing the underlying implementation. Design Principles: - Executors are stateless computation providers - All array operations go through the executor - Strategies receive an executor at construction time - Executors handle device placement and memory management Example: &gt;&gt;&gt; executor = GPUExecutor(ExecutorConfig(device_type=DeviceType.CUDA)) &gt;&gt;&gt; strategy = SNPStrategy(u=0.1, v=0.2, executor=executor) &gt;&gt;&gt; # Strategy now uses GPU for all computations</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">device_name</span> <span class="keyword">-&gt;</span> str <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Human-readable device name.</p>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">config: ExecutorConfig</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize executor with configuration.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">config</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>ExecutorConfig specifying device and options</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">array</span>(<span class="params">data: Any, dtype: Optional[str] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Create an array on the executor's device.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Input data (list, numpy array, etc.)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">dtype</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional dtype override</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Array on the target device</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">zeros</span>(<span class="params">shape: Tuple[int, ...], dtype: Optional[str] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Create zero-filled array.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ones</span>(<span class="params">shape: Tuple[int, ...], dtype: Optional[str] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Create one-filled array.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">empty</span>(<span class="params">shape: Tuple[int, ...], dtype: Optional[str] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Create uninitialized array (faster than zeros).</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">eye</span>(<span class="params">n: int, dtype: Optional[str] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Create identity matrix.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">diag</span>(<span class="params">v: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Create diagonal matrix from vector, or extract diagonal.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">arange</span>(<span class="params">start: int, stop: int, step: int = 1</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Create array with evenly spaced values.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">exp</span>(<span class="params">x: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise exponential.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">log</span>(<span class="params">x: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise natural logarithm.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">sqrt</span>(<span class="params">x: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise square root.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">abs</span>(<span class="params">x: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise absolute value.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">sum</span>(<span class="params">x: ArrayType, axis: Optional[int] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Sum of array elements along axis.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">prod</span>(<span class="params">x: ArrayType, axis: Optional[int] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Product of array elements along axis.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">max</span>(<span class="params">x: ArrayType, axis: Optional[int] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Maximum along axis.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">min</span>(<span class="params">x: ArrayType, axis: Optional[int] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Minimum along axis.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mean</span>(<span class="params">x: ArrayType, axis: Optional[int] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Mean along axis.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clip</span>(<span class="params">x: ArrayType, min_val: float, max_val: float</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Clip values to range.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">matmul</span>(<span class="params">a: ArrayType, b: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Matrix multiplication.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">einsum</span>(<span class="params">subscripts: str, *operands: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Einstein summation - critical for phylogenetic computations. Common patterns: - 'ij,sj-&gt;si': Transform partials through P matrix - 'si,i-&gt;s': Weight by frequencies - 'ij,jk-&gt;ik': Matrix multiply - 'bij,bsj-&gt;bsi': Batched transform</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">outer</span>(<span class="params">a: ArrayType, b: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Outer product of two vectors.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">dot</span>(<span class="params">a: ArrayType, b: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Dot product.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">transpose</span>(<span class="params">x: ArrayType, axes: Optional[Tuple[int, ...]] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Transpose array.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">inv</span>(<span class="params">x: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Matrix inverse.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">eig</span>(<span class="params">x: ArrayType</span>) <span class="keyword">-&gt;</span> Tuple[ArrayType, ArrayType] <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Eigendecomposition.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Tuple of (eigenvalues, eigenvectors)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">solve</span>(<span class="params">a: ArrayType, b: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Solve linear system Ax = b.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expm</span>(<span class="params">Q: ArrayType, t: float</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Matrix exponential: P(t) = exp(Qt) This is THE critical operation for phylogenetic likelihood. Implementations should optimize this heavily.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">Q</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Rate matrix (n_states, n_states)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Branch length (time)</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Transition probability matrix P(t)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">batch_expm</span>(<span class="params">Q: ArrayType, t_values: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Batched matrix exponential for multiple branch lengths. Computes P(t) for all t values simultaneously - critical for GPU.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">Q</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Rate matrix (n_states, n_states)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t_values</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Array of branch lengths (n_branches,)</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Transition matrices (n_branches, n_states, n_states)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">pruning_step</span>(<span class="params">child_partials: List[ArrayType], transition_matrices: List[ArrayType]</span>) <span class="keyword">-&gt;</span> ArrayType
+                            </div>
+                            <div class="function-body">
+                                <p>Standard Felsenstein pruning step. Computes: L_parent[s] = ∏_c ( ∑_t P_c[s,t] × L_c[t] ) Default implementation using einsum. Subclasses may override for optimized versions.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">child_partials</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>List of (n_sites, n_states) arrays</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">transition_matrices</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>List of (n_states, n_states) P matrices</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Parent partial likelihoods (n_sites, n_states)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">batch_pruning_step</span>(<span class="params">child_partials: ArrayType, transition_matrices: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType
+                            </div>
+                            <div class="function-body">
+                                <p>Batched pruning step for multiple nodes or trees.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">child_partials</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>(n_children, n_sites, n_states)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">transition_matrices</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>(n_children, n_states, n_states)</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Combined partials (n_sites, n_states)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">root_likelihood</span>(<span class="params">root_partials: ArrayType, frequencies: ArrayType</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Compute log-likelihood at root.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">root_partials</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>(n_sites, n_states)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">frequencies</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Equilibrium frequencies (n_states,)</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Log-likelihood (scalar)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reshape</span>(<span class="params">x: ArrayType, shape: Tuple[int, ...]</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Reshape array.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">concatenate</span>(<span class="params">arrays: List[ArrayType], axis: int = 0</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Concatenate arrays along axis.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">stack</span>(<span class="params">arrays: List[ArrayType], axis: int = 0</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Stack arrays along new axis.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">split</span>(<span class="params">x: ArrayType, indices: List[int], axis: int = 0</span>) <span class="keyword">-&gt;</span> List[ArrayType] <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Split array at indices.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">squeeze</span>(<span class="params">x: ArrayType, axis: Optional[int] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Remove single-dimensional entries.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expand_dims</span>(<span class="params">x: ArrayType, axis: int</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Add dimension at axis.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">broadcast_to</span>(<span class="params">x: ArrayType, shape: Tuple[int, ...]</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Broadcast array to shape.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">take</span>(<span class="params">x: ArrayType, indices: ArrayType, axis: int = 0</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Take elements along axis.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">where</span>(<span class="params">condition: ArrayType, x: ArrayType, y: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise conditional selection.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">to_numpy</span>(<span class="params">x: ArrayType</span>) <span class="keyword">-&gt;</span> np.ndarray <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Convert array to numpy (CPU).</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_numpy</span>(<span class="params">x: np.ndarray</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Convert numpy array to executor's array type.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">copy</span>(<span class="params">x: ArrayType</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Create a copy of array.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">synchronize</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Synchronize device (wait for pending operations). No-op for CPU. GPU implementations should override.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_uniform</span>(<span class="params">shape: Tuple[int, ...], low: float = 0.0, high: float = 1.0</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Generate uniform random values.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_normal</span>(<span class="params">shape: Tuple[int, ...], mean: float = 0.0, std: float = 1.0</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Generate normal random values.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_choice</span>(<span class="params">a: ArrayType, size: int, p: Optional[ArrayType] = None</span>) <span class="keyword">-&gt;</span> ArrayType <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Random choice from array.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="cpuexecutor">CPUExecutor</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">CPUExecutor</span>(<span class="params">Executor</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>CPU executor using NumPy. This serves as the reference implementation and fallback when GPU is not available.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">config: Optional[ExecutorConfig] = None</span>)
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">array</span>(<span class="params">data, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">zeros</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ones</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">empty</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">eye</span>(<span class="params">n, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">diag</span>(<span class="params">v</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">arange</span>(<span class="params">start, stop, step = 1</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">exp</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">log</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">sqrt</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">abs</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">sum</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">prod</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">max</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">min</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mean</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clip</span>(<span class="params">x, min_val, max_val</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">matmul</span>(<span class="params">a, b</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">einsum</span>(<span class="params">subscripts, *operands</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">outer</span>(<span class="params">a, b</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">dot</span>(<span class="params">a, b</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">transpose</span>(<span class="params">x, axes = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">inv</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">eig</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">solve</span>(<span class="params">a, b</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expm</span>(<span class="params">Q, t</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Matrix exponential using eigendecomposition. P(t) = V @ diag(exp(λt)) @ V^{-1}</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">batch_expm</span>(<span class="params">Q, t_values</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Batch matrix exponential for multiple branch lengths.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reshape</span>(<span class="params">x, shape</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">concatenate</span>(<span class="params">arrays, axis = 0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">stack</span>(<span class="params">arrays, axis = 0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">split</span>(<span class="params">x, indices, axis = 0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">squeeze</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expand_dims</span>(<span class="params">x, axis</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">broadcast_to</span>(<span class="params">x, shape</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">take</span>(<span class="params">x, indices, axis = 0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">where</span>(<span class="params">condition, x, y</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">to_numpy</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_numpy</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">copy</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_uniform</span>(<span class="params">shape, low = 0.0, high = 1.0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_normal</span>(<span class="params">shape, mean = 0.0, std = 1.0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_choice</span>(<span class="params">a, size, p = None</span>)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="gpuexecutor">GPUExecutor</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">GPUExecutor</span>(<span class="params">Executor</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>GPU executor using CuPy (NVIDIA CUDA). Provides significant speedups for: - Large alignment matrices - Batched transition matrix exponentials - Vectorized partial likelihood updates Performance Notes: - Best for n_sites &gt; 1000 (GPU overhead dominates for small data) - Memory transfers are expensive - keep data on GPU - Use batch operations whenever possible Example: &gt;&gt;&gt; config = ExecutorConfig(device_type=DeviceType.CUDA, device_id=0) &gt;&gt;&gt; executor = GPUExecutor(config) &gt;&gt;&gt; strategy = SNPStrategy(u=0.1, v=0.2, executor=executor)</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">config: Optional[ExecutorConfig] = None</span>)
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">array</span>(<span class="params">data, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">zeros</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ones</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">empty</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">eye</span>(<span class="params">n, dtype = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">diag</span>(<span class="params">v</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">arange</span>(<span class="params">start, stop, step = 1</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">exp</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">log</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">sqrt</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">abs</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">sum</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">prod</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">max</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">min</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mean</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clip</span>(<span class="params">x, min_val, max_val</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">matmul</span>(<span class="params">a, b</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">einsum</span>(<span class="params">subscripts, *operands</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">outer</span>(<span class="params">a, b</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">dot</span>(<span class="params">a, b</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">transpose</span>(<span class="params">x, axes = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">inv</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">eig</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">solve</span>(<span class="params">a, b</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expm</span>(<span class="params">Q, t</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>GPU-accelerated matrix exponential. Uses eigendecomposition with caching for repeated Q matrices.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">batch_expm</span>(<span class="params">Q, t_values</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Fully vectorized batch matrix exponential. This is where GPU really shines - computing many P(t) matrices simultaneously. ┌─────────────────────────────────────────────────────────────┐ │ BATCH MATRIX EXPONENTIAL (GPU) │ │ │ │ t_values: [t₁, t₂,..., tₙ] (n_branches,) | │ │ │ │ ▼ │ │ exp(λ·t): [[e^λ₁t₁, e^λ₂t₁, ...], (n_branches, n_states)│ │ [e^λ₁t₂, e^λ₂t₂, ...], │ │ ...] │ │ │ │ │ ▼ (all done in parallel on GPU) │ │ P(t) = V @ diag(exp(λt)) @ V⁻¹ │ │ (n_branches, n_states, n_states) │ └─────────────────────────────────────────────────────────────┘</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">pruning_step</span>(<span class="params">child_partials, transition_matrices</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>GPU-optimized pruning step. For GPU efficiency, we stack inputs and use batched operations.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">batch_pruning_step</span>(<span class="params">child_partials, transition_matrices</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Batched pruning across multiple trees.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">child_partials</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>(n_trees, n_children, n_sites, n_states)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">transition_matrices</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>(n_trees, n_children, n_states, n_states)</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> (n_trees, n_sites, n_states)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">initialize_leaf_partials</span>(<span class="params">sequences, n_states</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>GPU-vectorized leaf partial initialization.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sequences</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>(n_leaves, n_sites) integer sequences</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n_states</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Number of states (2 for SNP, 4 for DNA)</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> (n_leaves, n_sites, n_states) one-hot encoded partials</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reshape</span>(<span class="params">x, shape</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">concatenate</span>(<span class="params">arrays, axis = 0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">stack</span>(<span class="params">arrays, axis = 0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">split</span>(<span class="params">x, indices, axis = 0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">squeeze</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expand_dims</span>(<span class="params">x, axis</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">broadcast_to</span>(<span class="params">x, shape</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">take</span>(<span class="params">x, indices, axis = 0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">where</span>(<span class="params">condition, x, y</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">to_numpy</span>(<span class="params">x</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Transfer array from GPU to CPU.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_numpy</span>(<span class="params">x</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Transfer array from CPU to GPU.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">copy</span>(<span class="params">x</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">synchronize</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Wait for all pending GPU operations to complete.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clear_cache</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Clear eigendecomposition cache and free GPU memory.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_uniform</span>(<span class="params">shape, low = 0.0, high = 1.0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_normal</span>(<span class="params">shape, mean = 0.0, std = 1.0</span>)
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_choice</span>(<span class="params">a, size, p = None</span>)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">create_executor</span>(<span class="params">device: str = 'cpu', **kwargs</span>) <span class="keyword">-&gt;</span> Executor
+                            </div>
+                            <div class="function-body">
+                                <p>Factory function to create an executor.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">device</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>One of 'cpu', 'cuda', 'gpu', 'jax' **kwargs: Additional config options</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Appropriate Executor instance Example: &gt;&gt;&gt; executor = create_executor('cuda', device_id=0) &gt;&gt;&gt; executor = create_executor('cpu')</div>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html" class="current">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#devicetype">DeviceType</a></li>
+                <li><a href="#executorconfig">ExecutorConfig</a></li>
+                <li><a href="#executor">Executor</a></li>
+                <li><a href="#cpuexecutor">CPUExecutor</a></li>
+                <li><a href="#gpuexecutor">GPUExecutor</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

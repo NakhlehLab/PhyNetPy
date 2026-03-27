@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ModelGraph - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; ModelGraph
+                </div>
+                
+                <h1>ModelGraph Module <span class="version-badge">v0.1.0</span></h1>
+                
+                <p>Probabilistic graphical model for phylogenetics with typed model nodes and visitor pattern support.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>ModelGraph.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#model">Model</a></li>
+                        <li><a href="#modelnode">ModelNode</a></li>
+                        <li><a href="#leafnode">LeafNode</a></li>
+                        <li><a href="#internalnode">InternalNode</a></li>
+                        <li><a href="#reticulationnode">ReticulationNode</a></li>
+                        <li><a href="#rootnode">RootNode</a></li>
+                        <li><a href="#rootaggregatornode">RootAggregatorNode</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">ModelError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Class to handle any errors related to building the model or running likelihoods computations on the model.</p>
+                    </div>
+                </div>
+
+                <h2 id="model">Model</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Model</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Class that implements a version of probabilistic graphical modeling, for phylogenetics. Generally, it is made up of a network, along with various parameters and components that are attached to the model in order to compute either a model likelihood or simulate data over a set of model parameters.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a model object.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_root</span> <span class="keyword">-&gt;</span> ModelNode
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the root node of the model.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute_move</span>(<span class="params">move: Move</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>The operator move has asked for permission to work on this model. Pass the move this model and get the model that is the result of the operation on this model.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">move</span></td>
+                                        <td><span class="param-type">Move</span></td>
+                                        <td>A concrete subclass instance of Move.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: This same object. The model will have changed based on the result of the move.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">summary</span>(<span class="params">tree_filename: str, summary_filename: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Writes summary of calculations to a file, and gets the current state of the model and creates a network obj so that the newick format can be output.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tree_filename</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A string that is the name of the file to output a newick string to. If the filename does not</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">exist</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>a new file will be created in the directory in which one is operating in.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">summary_filename</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A string that is the name of the file to output logging information. If the filename does not exist, a new file will be created in the current directory.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="modelnode">ModelNode</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ModelNode</span>(<span class="params">ABC</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Class that defines the graphical structure and shared interactions between any node in the Model.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">children: list = None, parents: list = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a ModelNode object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">children</span></td>
+                                        <td><span class="param-type">list, optional</span></td>
+                                        <td>Children of this node. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">parents</span></td>
+                                        <td><span class="param-type">list, optional</span></td>
+                                        <td>Parents of this node. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node_type</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>A string that describes the type of node.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_child</span>(<span class="params">model_node: ModelNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Adds a successor to this node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model_node</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>A ModelNode to add as a child.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_parent</span>(<span class="params">model_node: ModelNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Adds a predecessor to this node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model_node</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>A ModelNode to add as a parent.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">join</span>(<span class="params">other_node: ModelNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Adds other_node as a parent, and adds this node as a child of other_node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">other_node</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>A ModelNode to join this ModelNode to.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">unjoin</span>(<span class="params">other_node: ModelNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Removes other_node as a parent, and removes this node as a child of other_node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">other_node</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>A ModelNode to unjoin this ModelNode from.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove_child</span>(<span class="params">model_node: ModelNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Removes a child to this node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model_node</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>A ModelNode to remove as a child.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove_parent</span>(<span class="params">model_node: ModelNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Removes a parent to this node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model_node</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>A ModelNode to remove as a parent.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_model_parents</span>(<span class="params">of_type: type = None</span>) <span class="keyword">-&gt;</span> list[ModelNode]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the parent nodes to this node, but only the ModelNodes.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">of_type</span></td>
+                                        <td><span class="param-type">type, optional</span></td>
+                                        <td>A type to filter the parent nodes by.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[ModelNode]: The list of parent nodes to this node</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_model_children</span>(<span class="params">of_type: type = None</span>) <span class="keyword">-&gt;</span> list[ModelNode]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the children nodes to this node, but only the ModelNodes.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">of_type</span></td>
+                                        <td><span class="param-type">type, optional</span></td>
+                                        <td>A type to filter the child nodes by.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[ModelNode]: The list of child nodes to this node</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">in_degree</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Calculates the in degree of the current node (ie number of parents) If 0, this node is a root of the Model.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: The number of parents to this node.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">out_degree</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Calculates the out degree of the current node (ie number of children) If 0, this node is a leaf.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: The number of children to this node.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_node_type</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Get the type of this node.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">accept</span>(<span class="params">visitor: Visitor</span>) <span class="keyword">-&gt;</span> Any
+                            </div>
+                            <div class="function-body">
+                                <p>Accept a visitor and return the result of the visit.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">visitor</span></td>
+                                        <td><span class="param-type">ModelVisitor</span></td>
+                                        <td>A visitor to visit this node.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Any: The result of the visit.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="leafnode">LeafNode</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">LeafNode</span>(<span class="params">ModelNode</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A leaf node in the model graph.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">name: str, branch_length: Branch, data: list[DataSequence] = None, samples: int = 1</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a LeafNode object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The name of this leaf node.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_samples</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the number of samples for this leaf node.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_name</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the name of this leaf node.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">branch</span> <span class="keyword">-&gt;</span> Branch
+                            </div>
+                            <div class="function-body">
+                                <p>Returns information about the branch associated with this leaf node. Since it is a leaf node, there must be exactly one network parent and thus only one branch</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Branch: A Branch object containing information about the branch.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_branch</span>(<span class="params">branch_length: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the branch length of the branch associated with this leaf node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_length</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>The new branch length.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_data</span>(<span class="params">data: list[DataSequence]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the data for this leaf node.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="internalnode">InternalNode</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">InternalNode</span>(<span class="params">ModelNode</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>An internal node in the model graph.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">name: str, branch_length: Branch</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize an InternalNode object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_length</span></td>
+                                        <td><span class="param-type">Branch, optional</span></td>
+                                        <td>The branch associated with this internal node. Defaults to a new Branch object.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">branch</span> <span class="keyword">-&gt;</span> Branch
+                            </div>
+                            <div class="function-body">
+                                <p>Returns information about the branch associated with this internal node. Since it is a internal node, there must be exactly one network parent and thus only one branch</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Branch: A Branch object containing information about the branch.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_branch</span>(<span class="params">branch_length: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the branch length of the branch associated with this leaf node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_length</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>The new branch length.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_name</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the name of this leaf node.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="reticulationnode">ReticulationNode</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ReticulationNode</span>(<span class="params">ModelNode</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A reticulation node in the model graph.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">name: str, branch_1: Branch, branch_2: Branch</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a ReticulationNode object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_1</span></td>
+                                        <td><span class="param-type">Branch, optional</span></td>
+                                        <td>The first branch. Defaults to 0.5.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_2</span></td>
+                                        <td><span class="param-type">Branch, optional</span></td>
+                                        <td>The second branch. Defaults to 0.5.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_name</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the name of this leaf node.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">branches</span> <span class="keyword">-&gt;</span> tuple[Branch, Branch]
+                            </div>
+                            <div class="function-body">
+                                <p>Returns information about the branch associated with this reticulation node. Since it is a reticulation node, there must be exactly two network parents and thus two branches</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[Branch, Branch]: A tuple of Branch objects containing information about the branches.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_branch</span>(<span class="params">parent_id: str, branch_length: float = None, inheritance_probability: float = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the branch length and inheritance probability of the branch associated with this reticulation node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">parent_id</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The id of the parent node.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_length</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>The new branch length. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">inheritance_probability</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>The new inheritance probability. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="rootnode">RootNode</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">RootNode</span>(<span class="params">ModelNode</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A root node in the model graph.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">name: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a RootNode object.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_name</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the name of this leaf node.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="rootaggregatornode">RootAggregatorNode</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">RootAggregatorNode</span>(<span class="params">ModelNode</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A root aggregator node in the model graph.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a RootAggregatorNode object.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_name</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the name of this leaf node.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_result</span> <span class="keyword">-&gt;</span> Any
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the result of this root aggregator node.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">vec_bin_array</span>(<span class="params">arr: np.array, m: int</span>) <span class="keyword">-&gt;</span> np.array
+                            </div>
+                            <div class="function-body">
+                                <p>Convert an array of integers into a binary array of bits.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">arr</span></td>
+                                        <td><span class="param-type">np.array</span></td>
+                                        <td>Numpy array of positive integers</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">m</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Number of bits of each integer to retain (ie DNA, 4)</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> (np.array): a copy of arr with every element replaced with a bit vector. Bits encoded as int8's, read from left to right. [1, 0, 1, 1] is 13.</div>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html" class="current">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#model">Model</a></li>
+                <li><a href="#modelnode">ModelNode</a></li>
+                <li><a href="#leafnode">LeafNode</a></li>
+                <li><a href="#internalnode">InternalNode</a></li>
+                <li><a href="#reticulationnode">ReticulationNode</a></li>
+                <li><a href="#rootnode">RootNode</a></li>
+                <li><a href="#rootaggregatornode">RootAggregatorNode</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

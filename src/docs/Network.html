@@ -21,9 +21,7 @@
                 
                 <h1>Network Module <span class="version-badge">v1.0.0</span></h1>
                 
-                <p>The Network module provides core data structures for representing phylogenetic 
-                networks, including Node, Edge, and Network classes. This is the foundational 
-                module used throughout PhyNetPy.</p>
+                <p>Core phylogenetic network data structures: Node, Edge, and Network classes.</p>
                 
                 <div class="module-info">
                     <dl>
@@ -40,58 +38,69 @@
                     <h4>Contents</h4>
                     <ul>
                         <li><a href="#exceptions">Exceptions</a></li>
-                        <li><a href="#node-class">Node Class</a></li>
-                        <li><a href="#edge-class">Edge Class</a></li>
-                        <li><a href="#network-class">Network Class</a></li>
+                        <li><a href="#node">Node</a></li>
+                        <li><a href="#nodeset">NodeSet</a></li>
+                        <li><a href="#uedge">UEdge</a></li>
+                        <li><a href="#edge">Edge</a></li>
+                        <li><a href="#edgeset">EdgeSet</a></li>
+                        <li><a href="#graph">Graph</a></li>
+                        <li><a href="#network">Network</a></li>
+                        <li><a href="#mul">MUL</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
                     </ul>
                 </div>
-                
+
                 <h2 id="exceptions">Exceptions</h2>
-                
                 <div class="class-def exception-def">
                     <div class="class-header">
                         <span class="keyword">exception</span> <span class="name">NetworkError</span>(<span class="params">Exception</span>)
                     </div>
                     <div class="class-body">
-                        <p>Raised when a network is malformed or a network operation fails.</p>
+                        <p>This exception is raised when a network is malformed, or if a network operation fails.</p>
                     </div>
                 </div>
-                
                 <div class="class-def exception-def">
                     <div class="class-header">
                         <span class="keyword">exception</span> <span class="name">NodeError</span>(<span class="params">Exception</span>)
                     </div>
                     <div class="class-body">
-                        <p>Raised when a Node operation fails.</p>
+                        <p>This exception is raised when a Node operation fails.</p>
                     </div>
                 </div>
-                
                 <div class="class-def exception-def">
                     <div class="class-header">
                         <span class="keyword">exception</span> <span class="name">EdgeError</span>(<span class="params">Exception</span>)
                     </div>
                     <div class="class-body">
-                        <p>Raised when an Edge operation fails.</p>
+                        <p>This exception is raised when an Edge operation fails.</p>
                     </div>
                 </div>
-                
-                <h2 id="node-class">Node Class</h2>
-                
+
+                <h2 id="node">Node</h2>
                 <div class="class-def">
                     <div class="class-header">
                         <span class="keyword">class</span> <span class="name">Node</span>
                     </div>
                     <div class="class-body">
-                        <p>Node class providing support for network constructs like reticulation nodes 
-                        and phylogenetic attributes.</p>
-                        
+                        <p>Node class that provides support for managing network constructs like reticulation nodes and other phylogenetic attributes.</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">label</span> <span class="keyword">-&gt;</span> str <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the name of the node</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: Node label.</div>
+                            </div>
+                        </div>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">self, name: str, is_reticulation: bool = False, attr: dict = {}, seq: DataSequence = None, t: float = None</span>)
+                                <span class="name">__init__</span>(<span class="params">name: str, is_reticulation: bool = False, attr: dict[Union[str, Any], Any] = dict(), seq: Union[DataSequence, None] = None, t: Union[float, None] = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <table class="param-table">
+                                <p>Initialize a node with a name, attribute mapping, and a hybrid flag.</p>
+                                                                <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
                                         <th>Type</th>
@@ -100,133 +109,713 @@
                                     <tr>
                                         <td><span class="param-name">name</span></td>
                                         <td><span class="param-type">str</span></td>
-                                        <td>Node label</td>
+                                        <td>A Node label.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">is_reticulation</span></td>
-                                        <td><span class="param-type">bool</span></td>
-                                        <td>Mark as reticulation node</td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>Flag that marks a node as a reticulation node if set to True. Defaults to False.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">attr</span></td>
-                                        <td><span class="param-type">dict</span></td>
-                                        <td>User-defined attributes</td>
+                                        <td><span class="param-type">dict[Union[str, Any], Any], optional</span></td>
+                                        <td>Fill a mapping with any other user defined values. Defaults to an empty dictionary.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">seq</span></td>
-                                        <td><span class="param-type">DataSequence</span></td>
-                                        <td>Associated sequence data</td>
+                                        <td><span class="param-type">Union[DataSequence, None], optional</span></td>
+                                        <td>A data sequence wrapper.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">t</span></td>
-                                        <td><span class="param-type">float</span></td>
-                                        <td>Speciation time</td>
+                                        <td><span class="param-type">Union[float, None], optional</span></td>
+                                        <td>A speciation time for this node.</td>
                                     </tr>
                                 </table>
                             </div>
                         </div>
-                        
-                        <h4>Core Methods</h4>
-                        
+                        <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">label</span> <span class="keyword">property</span>
+                                <span class="name">get_attributes</span> <span class="keyword">-&gt;</span> dict[Union[str, Any], Any]
                             </div>
                             <div class="function-body">
-                                <p>Returns the name of the node.</p>
+                                <p>Retrieve the attribute mapping.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[Union[str, Any], Any]: A storage of key value pairs that correspond to user defined node attributes. Typically keys are string labels, but they can be anything.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">set_name</span>(<span class="params">self, new_name: str</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">set_attributes</span>(<span class="params">new_attr: dict[Union[str, Any], Any]</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Set a new node label.</p>
+                                <p>Set a node's attributes to a mapping of key labels to attribute values.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_attr</span></td>
+                                        <td><span class="param-type">dict[Union[str, Any], Any]</span></td>
+                                        <td>Attribute storage mapping.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">get_time</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> float
+                                <span class="name">get_time</span> <span class="keyword">-&gt;</span> float
                             </div>
                             <div class="function-body">
-                                <p>Get speciation time (0 = root, larger = present).</p>
+                                <p>Get the speciation time for this node. Closer to 0 implies a time closer to the origin (the root). A larger time implies a time closer to the present (leaves).</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: Speciation time, typically in coalescent units.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">set_time</span>(<span class="params">self, new_t: float</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">set_time</span>(<span class="params">new_t: float</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Set speciation time (must be non-negative).</p>
+                                <p>Set the speciation time for this node. The arg 't' must be a non-negative number.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>The new speciation/hybridization time for this node.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NodeError</code>: If the new time is negative.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">is_reticulation</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> bool
+                                <span class="name">__str__</span> <span class="keyword">-&gt;</span> str
                             </div>
                             <div class="function-body">
-                                <p>Check if node is a reticulation (hybrid) node.</p>
+                                <p>Create a string representation of a node.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: A string representation of the node.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">set_is_reticulation</span>(<span class="params">self, new_is_retic: bool</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">__eq__</span>(<span class="params">other</span>) <span class="keyword">-&gt;</span> bool
                             </div>
                             <div class="function-body">
-                                <p>Set the reticulation flag.</p>
+                                <p>Equality comparison for Node objects. Two nodes are equal if they have the same name (identity). Note: This is based on node identity, not biological distance.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">other</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Another object to compare against</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if both are Node objects with the same name</div>
                             </div>
                         </div>
-                        
-                        <h4>Attribute Methods</h4>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">get_attributes</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> dict
+                                <span class="name">__hash__</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Hash function for Node objects. Uses the node name for hashing to maintain consistency with equality.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: Hash value based on the node name</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">set_attributes</span>(<span class="params">self, new_attr: dict</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">to_string</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Create a description of a node and summarize its attributes.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: A string description of the node.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">add_attribute</span>(<span class="params">self, key, value, append: bool = False</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">set_name</span>(<span class="params">new_name: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Sets the name of the node to new_name.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A new string label for this node.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">attribute_value</span>(<span class="params">self, key</span>) <span class="keyword">-&gt;</span> object
+                                <span class="name">set_is_reticulation</span>(<span class="params">new_is_retic: bool</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Sets whether a node is a reticulation Node (or not).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_is_retic</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Hybrid flag. True if this node is a reticulation node, false otherwise</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">is_reticulation</span> <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Retrieves whether a node is a reticulation Node (or not)</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True, if this node is a reticulation. False otherwise.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_attribute</span>(<span class="params">key: Any, value: Any, append: bool = False</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Put a key and value pair into the node attribute dictionary. If the key is already present, it will overwrite the old value.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">key</span></td>
+                                        <td><span class="param-type">Any</span></td>
+                                        <td>Attribute key.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">value</span></td>
+                                        <td><span class="param-type">Any</span></td>
+                                        <td>Attribute value for the key.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">append</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If True, appends the given value to the existing value for the key. If false, simply replaces. Defaults to False.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">attribute_value</span>(<span class="params">key: Any</span>) <span class="keyword">-&gt;</span> object
+                            </div>
+                            <div class="function-body">
+                                <p>If key is a key in the attributes mapping, then its value will be returned. Otherwise, returns None.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">key</span></td>
+                                        <td><span class="param-type">Any</span></td>
+                                        <td>A lookup key.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> object: The value of key, if key is present.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_seq</span>(<span class="params">new_sequence: DataSequence</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Associate a data sequence with this node, if this node is a leaf in a network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_sequence</span></td>
+                                        <td><span class="param-type">DataSequence</span></td>
+                                        <td>A data sequence wrapper. Grab from MSA object upon parsing.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_seq</span> <span class="keyword">-&gt;</span> DataSequence
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the data sequence associated with this node.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> DataSequence: Data sequence wrapper.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NodeError</code>: If no sequence record has been associated with this node.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">copy</span> <span class="keyword">-&gt;</span> Node
+                            </div>
+                            <div class="function-body">
+                                <p>Duplicate this node by copying all data into a separate Node object. Useful for crafting copies of networks without having to deep copy.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node: An equivalent node to this node, with all the same data but technically are not &quot;==&quot;</div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                <h2 id="edge-class">Edge Class</h2>
-                
+
+                <h2 id="nodeset">NodeSet</h2>
                 <div class="class-def">
                     <div class="class-header">
-                        <span class="keyword">class</span> <span class="name">Edge</span>
+                        <span class="keyword">class</span> <span class="name">NodeSet</span>
                     </div>
                     <div class="class-body">
-                        <p>Edge class representing directed connections between nodes with associated 
-                        attributes like branch length and inheritance probability.</p>
-                        
+                        <p>Data structure that is in charge of managing the nodes that are in a given Network</p>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">self, src: Node, dest: Node, length: float = 0, gamma: float = 1.0, weight: float = 1.0, tag: str = None</span>)
+                                <span class="name">__init__</span>(<span class="params">directed: bool = True</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <table class="param-table">
+                                <p>Initialize an empty set of network nodes</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">directed</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>True if the network is directed, False otherwise. Defaults to True.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__contains__</span>(<span class="params">n: Node</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Check if a node is in the network node set.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A node to check for in the network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if the node is in the network, False otherwise.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add</span>(<span class="params">*nodes: Node | list[Node]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add a list of nodes to the network node set.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node | list[Node]</span></td>
+                                        <td>A list of new nodes to put in the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ready</span>(<span class="params">edge: Union[Edge, UEdge]</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Check if an edge is allowed to be added to the network (both nodes must be in the node set before an edge can be added). A undirected edge is not allowed to be inserted into a directed network, and a directed edge is not allowed to be inserted into an undirected graph. False will be returned in such instances.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edge</span></td>
+                                        <td><span class="param-type">Union[Edge, UEdge]</span></td>
+                                        <td>A potential new network edge.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if edge can be safely added, False otherwise.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">in_deg</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the in degree of a node in this set. Returns 0 if the node has no in edges, or if the node is not in the node set. It is up to the user to make sure the parameter node is in the node set.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>any Node obj</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: the in degree of the node</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">out_deg</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the out degree of a node in this set. Returns 0 if the node has no out edges, or if the node is not in the node set. It is up to the user to make sure the parameter node is in the node set.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>any Node obj</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: the out degree of the node</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">in_edges</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> set[Any]
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the in edges of a node in this set. Returns an empty set if the node has no in edges, or if the node is not in the node set. It is up to the user to make sure the parameter node is in the node set. Note: Returns a reference to the internal set. Copy before iterating if you plan to modify the graph during iteration.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>any Node obj</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> set[Any]: the in edges of the node</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">out_edges</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> set[Any]
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the out edges of a node in this set. Returns an empty set if the node has no out edges, or if the node is not in the node set. It is up to the user to make sure the parameter node is in the node set. Note: Returns a reference to the internal set. Copy before iterating if you plan to modify the graph during iteration.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>any Node obj</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> set[Any]: the out edges of the node</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">process</span>(<span class="params">edge: Union[Edge, UEdge], removal: bool = False</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Keep track of network data (in/out degrees, in/out edge maps) upon the addition or removal of an edge for a network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edge</span></td>
+                                        <td><span class="param-type">Union[Edge, UEdge]</span></td>
+                                        <td>The edge that is being added or removed</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">removal</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>False if edge is being added, True if edge is being removed. Defaults to False.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_set</span> <span class="keyword">-&gt;</span> set[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Grab the set of nodes.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> set[Node]: V, the node set of a network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Remove a node from V, and update necessary mappings.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>Node to remove from the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">update</span>(<span class="params">node: Node, new_name: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Protected method that processes updates to node labels within the NodeSet. You may not set a Node's name to None.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>The Node that is being renamed</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The new name.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NodeError</code>: If @new_name is None or if @node is not present in this NodeSet.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get</span>(<span class="params">name: str</span>) <span class="keyword">-&gt;</span> Union[Node, None]
+                            </div>
+                            <div class="function-body">
+                                <p>Get a node by name.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The name of the node to get.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Union[Node, None]: The node with the given name, or None if the node does not exist.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="uedge">UEdge</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">UEdge</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Undirected dge class that is essentially a wrapper class for a set {a, b} where a and b are Node objects. There is no ordering/direction.</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">n1</span> <span class="keyword">-&gt;</span> Node <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the &quot;first&quot; node in this edge. (No ordering, but for efficient retrieval, we designate one as the first).</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node: The &quot;first&quot; node in this edge.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">n2</span> <span class="keyword">-&gt;</span> Node <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the &quot;second&quot; node in this edge. (No ordering, but for efficient retrieval, we designate one as the second).</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node: The &quot;second&quot; node in this edge.</div>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">n1: Node, n2: Node, length: float | None = None, weight: float | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize an undirected Edge.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n1</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A Node (designated member #1 for efficient retrieval)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n2</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A Node (designated member #2 for efficient retrieval)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">length</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Branch length of this edge. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">weight</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Edge weight value. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>EdgeError</code>: If @length does not match the difference in node times should both n1 and n2 have set time attributes.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__contains__</span>(<span class="params">x: Node</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Check if a node is a member of this edge.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">x</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A node to check for membership in this edge.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if x is a member of this edge, False otherwise.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_length</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the branch length of this edge. If it is not equivalent to the current times of the source and destination nodes, then a warning is raised that the branch lengths are not equivalent, and that either the times are outdated or the branch length field is outdated.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: branch length.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_length</span>(<span class="params">branch_length: float, enforce_times: bool = True</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Sets the branch length of this edge.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_length</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>The new branch length.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">enforce_times</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If True, checks that the branch length is equivalent to the difference in times of the source and destination nodes. Defaults to True.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>EdgeError</code>: If @branch_length is not equivalent to the difference in times of the source and destination nodes</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">copy</span>(<span class="params">new_n1: Node | None = None, new_n2: Node | None = None</span>) <span class="keyword">-&gt;</span> UEdge
+                            </div>
+                            <div class="function-body">
+                                <p>Duplicate this edge by copying all data into a separate UEdge object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_n1</span></td>
+                                        <td><span class="param-type">Node | None, optional</span></td>
+                                        <td>A new node to replace the first node in this edge. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_n2</span></td>
+                                        <td><span class="param-type">Node | None, optional</span></td>
+                                        <td>A new node to replace the second node in this edge. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> UEdge: An equivalent edge to this undirected edge.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">to_directed</span>(<span class="params">src: Node</span>) <span class="keyword">-&gt;</span> Edge
+                            </div>
+                            <div class="function-body">
+                                <p>Convert this edge to a directed edge.</p>
+                                                                <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
                                         <th>Type</th>
@@ -235,336 +824,1658 @@
                                     <tr>
                                         <td><span class="param-name">src</span></td>
                                         <td><span class="param-type">Node</span></td>
-                                        <td>Source (parent) node</td>
+                                        <td>Must be one of the Nodes that is in this edge. Sets this Node as the source node, and the other node as the destination</td>
                                     </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Edge: An equivalent edge to this undirected edge, but with a direction now enforced.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>EdgeError</code>: If 'src' is not a node in this Edge.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_weight</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the weight of this edge.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: Edge weight.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_weight</span>(<span class="params">weight: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Sets the weight of this edge.</p>
+                                                                <table class="param-table">
                                     <tr>
-                                        <td><span class="param-name">dest</span></td>
-                                        <td><span class="param-type">Node</span></td>
-                                        <td>Destination (child) node</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">length</span></td>
-                                        <td><span class="param-type">float</span></td>
-                                        <td>Branch length</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">gamma</span></td>
-                                        <td><span class="param-type">float</span></td>
-                                        <td>Inheritance probability (default 1.0)</td>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">weight</span></td>
                                         <td><span class="param-type">float</span></td>
-                                        <td>Edge weight (for support values)</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">tag</span></td>
-                                        <td><span class="param-type">str</span></td>
-                                        <td>Optional label (e.g., "left", "right")</td>
+                                        <td>The new edge weight.</td>
                                     </tr>
                                 </table>
                             </div>
                         </div>
-                        
-                        <h4>Attributes</h4>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">src</span> <span class="keyword">attribute</span>
+                                <span class="name">to_names</span> <span class="keyword">-&gt;</span> tuple[str, str]
                             </div>
                             <div class="function-body">
-                                <p>Source node of the edge.</p>
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">dest</span> <span class="keyword">attribute</span>
-                            </div>
-                            <div class="function-body">
-                                <p>Destination node of the edge.</p>
-                            </div>
-                        </div>
-                        
-                        <h4>Methods</h4>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">get_length</span>(<span class="params">self</span>) / <span class="name">set_length</span>(<span class="params">self, length: float</span>)
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">get_gamma</span>(<span class="params">self</span>) / <span class="name">set_gamma</span>(<span class="params">self, gamma: float</span>)
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">get_weight</span>(<span class="params">self</span>) / <span class="name">set_weight</span>(<span class="params">self, weight: float</span>)
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">get_tag</span>(<span class="params">self</span>) / <span class="name">set_tag</span>(<span class="params">self, tag: str</span>)
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">copy</span>(<span class="params">self, new_src: Node = None, new_dest: Node = None</span>) <span class="keyword">-&gt;</span> Edge
-                            </div>
-                            <div class="function-body">
-                                <p>Create a copy of the edge (optionally with new endpoints).</p>
+                                <p>Get the names of the nodes in this edge.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[str, str]: A tuple of the names of the nodes in this edge.</div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                <h2 id="network-class">Network Class</h2>
-                
+
+                <h2 id="edge">Edge</h2>
                 <div class="class-def">
                     <div class="class-header">
-                        <span class="keyword">class</span> <span class="name">Network</span>
+                        <span class="keyword">class</span> <span class="name">Edge</span>
                     </div>
                     <div class="class-body">
-                        <p>Main class for representing phylogenetic networks as directed graphs with 
-                        support for reticulation nodes, branch lengths, and inheritance probabilities.</p>
-                        
+                        <p>Class for directed edges. Instead of being a wrapper for a &quot;set&quot; of member nodes, we can now think about an Edge as a wrapper for a tuple of member nodes (a, b), where now the direction is encoded in the ordering (where a is the source, and b the destination).</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">src</span> <span class="keyword">-&gt;</span> Node <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Get the source node of this edge.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node: The source node.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">dest</span> <span class="keyword">-&gt;</span> Node <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Get the destination node of this edge.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node: The destination node.</div>
+                            </div>
+                        </div>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">self</span>)
+                                <span class="name">__init__</span>(<span class="params">source: Node, destination: Node, length: float | None = None, gamma: float | None = None, weight: float | None = None, tag: str | None = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Create an empty network.</p>
+                                <p>An edge has a source (parent) and a destination (child). Edges in a phylogenetic context are *generally* directed. source -----&gt; destination</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">source</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>The parent node.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">destination</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>The child node.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">length</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Branch length value. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Inheritance Probability, MUST be from [0,1]. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">weight</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Edge weight, can be any real number. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tag</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>A name tag for identifiability of hybrid edges should each have a gamma of 0.5. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ValueError</code>: If @gamma is not a probabilistic value between 0 and 1 (inclusive, but if a hybrid edge pair has 0 and 1 then those hybrid edges may as well not exist)., <code>EdgeError</code>: If @length does not match the difference between @source.get_time() and @destination.get_time().</div>
                             </div>
                         </div>
-                        
-                        <h4>Node/Edge Access</h4>
-                        
+                        <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">V</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[Node]
+                                <span class="name">set_tag</span>(<span class="params">new_tag: str</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Get all nodes in the network.</p>
+                                <p>Set the name/identifiability tag of this edge.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_tag</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>a unique string identifier.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">E</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[Edge]
+                                <span class="name">get_tag</span> <span class="keyword">-&gt;</span> str
                             </div>
                             <div class="function-body">
-                                <p>Get all edges in the network.</p>
+                                <p>Get the name/identifiability tag for this edge.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: The name/identifiabity tag for this edge. High change of being None!</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">add_nodes</span>(<span class="params">self, *nodes</span>) <span class="keyword">-&gt;</span> None
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">add_edges</span>(<span class="params">self, *edges</span>) <span class="keyword">-&gt;</span> None
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">remove_nodes</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> None
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">remove_edge</span>(<span class="params">self, edge</span>) <span class="keyword">-&gt;</span> None
-                            </div>
-                        </div>
-                        
-                        <h4>Traversal</h4>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">root</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> Node
+                                <span class="name">set_gamma</span>(<span class="params">gamma: float</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Get the root node (indegree 0).</p>
+                                <p>Set the inheritance probability of this edge. Only applicable to hybrid edges, but no warning will be raised if you attempt to set the probability of a non-hybrid edge.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>A probability (between 0 and 1 inclusive).</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ValueError</code>: If gamma is not between 0 and 1 inclusive.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">get_leaves</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> list[Node]
+                                <span class="name">get_gamma</span> <span class="keyword">-&gt;</span> float
                             </div>
                             <div class="function-body">
-                                <p>Get all leaf nodes (outdegree 0).</p>
+                                <p>Gets the inheritance probability for this edge.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: A probability (between 0 and 1).</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">get_parents</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> list[Node]
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">get_children</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> list[Node]
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">leaf_descendants</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> set[Node]
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">mrca</span>(<span class="params">self, taxa: set</span>) <span class="keyword">-&gt;</span> Node
+                                <span class="name">copy</span>(<span class="params">new_src: Node | None = None, new_dest: Node | None = None</span>) <span class="keyword">-&gt;</span> Edge
                             </div>
                             <div class="function-body">
-                                <p>Find most recent common ancestor of a set of taxa.</p>
+                                <p>Craft an identical edge to this edge object, just in a new object. Useful in building subnetworks of a network that is in hand.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_src</span></td>
+                                        <td><span class="param-type">Node | None, optional</span></td>
+                                        <td>A new source node for this edge.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_dest</span></td>
+                                        <td><span class="param-type">Node | None, optional</span></td>
+                                        <td>A new destination node for this edge.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Edge: An identical edge to this one, with respect to the data they hold.</div>
                             </div>
                         </div>
-                        
-                        <h4>Degree Methods</h4>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">in_degree</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> int
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">out_degree</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> int
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">in_edges</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> list[Edge]
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">out_edges</span>(<span class="params">self, node</span>) <span class="keyword">-&gt;</span> list[Edge]
-                            </div>
-                        </div>
-                        
-                        <h4>Graph Properties</h4>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">is_acyclic</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> bool
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">get_edge</span>(<span class="params">self, src, dest</span>) <span class="keyword">-&gt;</span> Edge
-                            </div>
-                        </div>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">has_node_named</span>(<span class="params">self, name</span>) <span class="keyword">-&gt;</span> Node | None
-                            </div>
-                        </div>
-                        
-                        <h4>Modification</h4>
-                        
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">copy</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> tuple[Network, dict]
+                                <span class="name">set_length</span>(<span class="params">branch_length: float, warn_times: bool = False, enforce_times: bool = False</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Deep copy. Returns (new_network, old_to_new_node_map).</p>
+                                <p>Set the branch length of this edge. If enforce_times is True, then the branch length must be equivalent to the difference in times of the source and destination nodes. If warn_times is True, then a warning will be raised if the branch length is not equivalent to the difference in times of the source and destination nodes.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_length</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>The new branch length.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">warn_times</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If True, raises a warning if the branch length is not equivalent to the difference in times of the source and destination nodes. Defaults to False.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">enforce_times</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If True, raises an error if the branch length is not equivalent to the difference in times of the source and destination nodes. Defaults to False.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>EdgeError</code>: If enforce_times is True and the branch length is not equivalent to the difference in times of the source and destination nodes. Warning: If warn_times is True and the branch length is not equivalent to the difference in times of the source and destination nodes.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">clean</span>(<span class="params">self, flags: list[bool] = [True, True, True]</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">get_length</span> <span class="keyword">-&gt;</span> float
                             </div>
                             <div class="function-body">
-                                <p>Clean up network: remove isolated nodes, degree-1 chains, etc.</p>
+                                <p>Get the branch length of this edge.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The branch length of this edge.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">newick</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> str
+                                <span class="name">set_weight</span>(<span class="params">new_weight: float</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Generate Newick string representation.</p>
+                                <p>Set the weight of this edge.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_weight</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>The new weight of this edge.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_weight</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Get the weight of this edge.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The weight of this edge.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">to_names</span> <span class="keyword">-&gt;</span> tuple[str, str]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the names of the nodes in this edge.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[str, str]: A tuple of the names of the nodes in this edge.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__len__</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Get the length of this edge.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">to_branch</span> <span class="keyword">-&gt;</span> Branch
+                            </div>
+                            <div class="function-body">
+                                <p>Convert this edge to a Branch object for use in phylogenetic computations.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Branch: A Branch with this edge's length, gamma, and source node label.</div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                <h2>Usage Examples</h2>
-                
-                <pre><code>from PhyNetPy.Network import Network, Node, Edge
 
-# Create a simple tree
-net = Network()
-
-# Add nodes
-root = Node("root", t=0)
-a = Node("A", t=1)
-b = Node("B", t=1)
-
-net.add_nodes(root, a, b)
-
-# Add edges
-net.add_edges(Edge(root, a, length=1.0), Edge(root, b, length=1.0))
-
-# Query structure
-print(f"Root: {net.root().label}")
-print(f"Leaves: {[n.label for n in net.get_leaves()]}")
-
-# Create reticulation network
-c = Node("C", t=1)
-hybrid = Node("H", is_reticulation=True, t=0.5)
-net.add_nodes(c, hybrid)
-
-# Hybrid edges with inheritance probabilities
-net.add_edges(
-    Edge(root, hybrid, gamma=0.4),
-    Edge(c, hybrid, gamma=0.6),
-    Edge(hybrid, a)
-)
-
-# Check acyclicity
-print(f"Acyclic: {net.is_acyclic()}")
-
-# Generate Newick
-print(net.newick())
-
-# Copy network
-new_net, node_map = net.copy()
-
-# Find MRCA
-mrca_node = net.mrca({"A", "B"})
-print(f"MRCA of A,B: {mrca_node.label}")</code></pre>
-                
-                <div class="see-also">
-                    <h4>See Also</h4>
-                    <ul>
-                        <li><a href="NetworkParser.html">NetworkParser</a> - Parse networks from files</li>
-                        <li><a href="NetworkMoves.html">NetworkMoves</a> - Network modification operations</li>
-                        <li><a href="GraphUtils.html">GraphUtils</a> - Network analysis utilities</li>
-                    </ul>
+                <h2 id="edgeset">EdgeSet</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">EdgeSet</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Data structure that serves the purpose of keeping track of edges that belong to a network. We call this set E.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">directed: bool = True</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize the set of edges, E, for a network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">directed</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>True if the network is directed, False otherwise. Defaults to True.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__contains__</span>(<span class="params">e: Union[Edge, UEdge]</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>An undirected edge (Edge) is in the EdgeSet if there is an equivalent edge object OR if there is anUEdgeobject with equivalent node members. A directed edge (DiEdge) is in the EdgeSet only if the EdgeSet has a reference to @e.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">e</span></td>
+                                        <td><span class="param-type">Union[Edge, UEdge]</span></td>
+                                        <td>An undirected or directed edge.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: If the Edge @e is represented in the graph</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add</span>(<span class="params">*edges: Union[Edge, UEdge]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add any number of edges to E.</p>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>TypeError</code>: If the edge type (undirected or directed) doesn't match the designated type of network/graph associated with this edge set.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove</span>(<span class="params">edge: Union[Edge, UEdge]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Remove an edge from E.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edge</span></td>
+                                        <td><span class="param-type">Edge</span></td>
+                                        <td>An edge that is currently in E.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get</span>(<span class="params">n1: Node, n2: Node, gamma: float | None = None, tag: str | None = None</span>) <span class="keyword">-&gt;</span> Union[Edge, UEdge]
+                            </div>
+                            <div class="function-body">
+                                <p>Given the nodes that make up the edge and an inheritance probability, get the edge in E that matches the data. Inheritance probability is only required for when a directed network has two edges with the same source and destination nodes, and it is known that a bubble edge is being looked up. Inheritance probabilities are insufficient for identifiability of directed bubble edges should gamma be .5, in which case please tag your edges with some sort of key. If a bubble edge is being looked up and there is no gamma and/or tag provided, then one of the two bubble edges will be returned at random. There are no identifiability problems with undirected graphs, since duplicate edges are not a thing, and there exists only one edge with a given pair of member nodes.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n1</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>If directed, this is &quot;src&quot; / the parent. If undirected, node ordering does not matter.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">destination</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>If directed, this is &quot;dest&quot; / the child. If</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">undirected</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>node ordering does not matter.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Inheritance probability, for bubble identifiability. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tag</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>In the event that gamma is .5 AND THERE IS A</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">BUBBLE</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>then edges should be tagged with a unique identifier string.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Edge: The edge in E that matches the given data.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>EdgeError</code>: If there are any problems looking up the desired edge, or if there is no such edge in the graph/network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_set</span> <span class="keyword">-&gt;</span> set[Union[Edge, UEdge, Any]]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the set, E, for a network.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> set[Union[Edge, UEdge]]: The set of edges in this network.</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <h2 id="graph">Graph</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Graph</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Superclass that defines the general constructs for working with graphs in a phylogenetic context. This object assumes that edges are undirected and the graph is therefore unrooted. Nodes may have as many neighbors as needed, and no topological restrictions are assumed.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">edges: EdgeSet | None = None, nodes: NodeSet | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a Network object. You may initialize with any combination of edges/nodes, or provide none at all.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edges</span></td>
+                                        <td><span class="param-type">EdgeSet, optional</span></td>
+                                        <td>A set of Edges. Defaults to an empty EdgeSet.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">nodes</span></td>
+                                        <td><span class="param-type">NodeSet, optional</span></td>
+                                        <td>A set of Nodes. Defaults to an empty NodeSet.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__contains__</span>(<span class="params">obj: Union[Node, UEdge, Edge]</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Allows a simple pythonic &quot;n in graph&quot; or &quot;e in graph&quot; check.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">obj</span></td>
+                                        <td><span class="param-type">Node | UEdge |Edge</span></td>
+                                        <td>A node or edge.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if obj is a node or edge in the graph</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>TypeError</code>: If @obj is of any type other than Node, Edge, orEdge.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_nodes</span>(<span class="params">*nodes: Node</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add any amount of nodes to this graph (or Network).</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_uid_node</span>(<span class="params">node: Union[Node, None] = None</span>) <span class="keyword">-&gt;</span> Node
+                            </div>
+                            <div class="function-body">
+                                <p>Ensure a node has a unique name that hasn't been used before/is not currently in use for this graph. May be used with a node that is or is not yet an element of V. The node will be added to V as a result of this function.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node | None</span></td>
+                                        <td>Any node object. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node: the added/edited node that has been added to the graph.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove_nodes</span>(<span class="params">*nodes: Node</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Removes any amount of nodes from the list of nodes. Also prunes all edges from the graph that are connected to the removed node(s). Has no effect if a node is not in this network.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove_edge</span>(<span class="params">edge: Union[Edge, UEdge, list[Node]]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Removes an edge from the EdgeSet. Does not delete nodes with no edges Has no effect if 'edge' is not in the graph.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edge</span></td>
+                                        <td><span class="param-type">Edge | UEdge | list[Node]</span></td>
+                                        <td>An edge to remove from the graph, either represented as an Edge/UEdge object or as a list of Nodes (length 2).</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If given as a list, and the list of nodes is malformed in any way.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_edge</span>(<span class="params">n1: Node, n2: Node</span>) <span class="keyword">-&gt;</span> Any
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the edge in the graph with the given members.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n1</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A Node that is a member of an edge with @n2</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n2</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A Node that is a member of an edge with @n1</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Any: The edge in the graph that has @n1 and @n2 as its members.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">V</span> <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Get all nodes in V.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Node]: the set V, in list form.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">E</span> <span class="keyword">-&gt;</span> list[Any]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the set E (in list form).</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Edge]: The list of all edges in the graph</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_item</span>(<span class="params">key: str</span>) <span class="keyword">-&gt;</span> object
+                            </div>
+                            <div class="function-body">
+                                <p>Access the blob storage with a key. CONSIDER REMOVAL OF THIS FUNCTION...</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">key</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>a string key to access the blob storage</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> object: the object stored in the blob storage</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">put_item</span>(<span class="params">key: str, item: Any</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add an item to the blob storage.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">key</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>a string key to access the blob storage</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">item</span></td>
+                                        <td><span class="param-type">Any</span></td>
+                                        <td>the object to store in the blob storage</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">update_node_name</span>(<span class="params">node: Node, name: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Rename a node and update the bookkeeping.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>a node in the graph</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>the new name for the node.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">has_node_named</span>(<span class="params">name: str</span>) <span class="keyword">-&gt;</span> Union[Node, None]
+                            </div>
+                            <div class="function-body">
+                                <p>Check whether the graph has a node with a certain name. Strings must be exactly equal (same white space, capitalization, etc.)</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>the name to search for</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node | None: the node with the given name, or None if there is no such node</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">in_degree</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the in-degree of a node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A node in V</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: the in degree count</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">out_degree</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the out-degree(number of edges where the given node is a parent) of a node in the graph.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>a node in V</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: the out-degree count</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">in_edges</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> list[Any]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the in-edges of a node in V. The in-edges are the edges in E, where the given node is the child.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>a node in V</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Any]: the list of in-edges</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">out_edges</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> list[Any]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the out-edges of a node in V. The out-edges are the edges in E, where the given node is the parent.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>a node in V</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Any]: the list of out-edges</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="network">Network</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Network</span>(<span class="params">Graph</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>This class represents a directed (and potentially acyclic) graph containing nodes and edges. An 'Edge' object is a wrapper class for a tuple of two nodes, (a, b), where a and b are Node objects, and the direction of the edge is from a to b (a is b's parent) -- thus (a, b) is NOT the same as (b, a). Use of 'UEdge' objects is strictly prohibited here. Notes and Allowances: 1) You may create cycles -- however we have provided a method to check if this graph object is acyclic. This method is internally called on methods that assume that a network has no cycles, so be mindful of the state of networks that are passed as arguments. 2) You may have multiple roots. Be mindful of whether this graph is connected and what root you wish to operate on. 3) You may end up with floater nodes/edges, ie this...</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">edges: EdgeSet | set[Edge] = None, nodes: NodeSet | set[Node] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a Network object. You may initialize with any combination of edges/nodes, or provide none at all. If you provide an EdgeSet and no nodes, each node present in the EdgeSet *WILL* be added to the network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edges</span></td>
+                                        <td><span class="param-type">EdgeSet, optional</span></td>
+                                        <td>A set of Edges. Defaults to an empty EdgeSet.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">nodes</span></td>
+                                        <td><span class="param-type">NodeSet, optional</span></td>
+                                        <td>A set of Nodes. Defaults to an empty NodeSet.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_newick</span>(<span class="params">newick: str</span>) <span class="keyword">-&gt;</span> Network <span class="keyword">@classmethod</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Construct a Network object by passing in a newick string and parsing out the topology from there.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">newick</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>An extended newick string.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: An initialized network object</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_edges</span>(<span class="params">edges: Union[Edge, list[Edge]]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>If edges is a list of Edges, then add each Edge to the list of edges. If edges is a singleton Edge then just add to the edge array. Note: Each edge that you attempt to add must be between two nodes that exist in the network. Otherwise, an error will be thrown.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edges</span></td>
+                                        <td><span class="param-type">Edge | list[Edge]</span></td>
+                                        <td>a single edge, or multiple.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: if input edge/edges are malformed in any way</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove_nodes</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Removes node from the list of nodes. Also prunes all edges from the graph that are connected to the node. Has no effect if node is not in this network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>a Node obj</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">remove_edge</span>(<span class="params">edge: Union[Edge, UEdge, list[Node]], gamma: float | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Removes edge from the list of edges. Does not delete nodes with no edges Has no effect if 'edge' is not in the graph.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edge</span></td>
+                                        <td><span class="param-type">Union[Edge, UEdge, list[Node]</span></td>
+                                        <td>an edge to remove from the graph</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>an inheritance probability from [0,1], if the edge is provided as a list of nodes, and there is an identifiability issue that needs resolving (ie, the edge that needs to be removed is a bubble edge). Optional. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_edge</span>(<span class="params">n1: Node, n2: Node, gamma: float | None = None, tag: str | None = None</span>) <span class="keyword">-&gt;</span> Edge
+                            </div>
+                            <div class="function-body">
+                                <p>Note, that in the event of bubbles, 2 edges will exist with the same source and destination. If this is possible, please supply the inheritance probability of the correct branch. If both edges are known to be identical (gamma = 0.5), then one will be chosen at random.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n1</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>parent node</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n2</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>child node</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>inheritance probability. Optional. Defaults to None</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tag</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A name/identifiability tag for hybrid edges should both gammas be = .5. Optional. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Edge: the edge containing n1 and n2 and has the proper gamma value (if applicable).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">root</span> <span class="keyword">-&gt;</span> Node
+                            </div>
+                            <div class="function-body">
+                                <p>Return the root of the Network. Phylogenetic networks only have one root, but for generality and practical use, multiple roots have been allowed. To get all roots, should multiple exist, call the function &quot;roots&quot;. This function only returns 1 root.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node: The root of the network.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If there are no roots in the network (cycle, or empty), or if there are multiple roots in the network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">roots</span> <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Return all root(s) of the Network. Phylogenetic networks typically have one root, but for generality and practical use, multiple roots have been allowed. Use ``root()`` to retrieve a single root.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Node]: A list of all root nodes (nodes with in-degree 0 and out-degree &gt; 0).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_leaves</span> <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the set X (a subset of V), the set of all leaves (nodes with out-degree 0). Only returns the leaves that are connected/reachable from the root.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Node]: the connected elements of X, in list format.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_parents</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Returns a list of the parents of a node. There is no hard cap on the length of this array.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>any node in V.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Node]: the parents of the node.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the node is not in the graph.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_children</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Returns a list of the children of a node. There is no hard cap on the length of this array.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>any node in V.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Node]: the children of the node.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the node is not in the graph.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_branches</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> dict[str, Any]
+                            </div>
+                            <div class="function-body">
+                                <p>Returns a dictionary of branches connected to the node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>a node in the graph.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[str, Any]: a dictionary of branches connected to the node. The keys are &quot;parent_branches&quot; and &quot;child_branches&quot;. The values are lists of branches.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clean</span>(<span class="params">options: list[bool] = [True, True, True]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>All the various ways that the graph can be cleaned up and streamlined while not altering topology or results of algorithms. Algorithm Indeces: 0) Remove nodes that have in/out degree of 0 (floater nodes) 1) Remove a spurious root/root edge (root node with only one out edge) 2) Consolidate all chains of nodes with in/out degree of 1 into 1 edge. Default behavior is to run all three. To not run a certain routine, set the options list at the indeces listed above to False. Ie. To run the first and third algo, use [True, False, True].</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">options</span></td>
+                                        <td><span class="param-type">list[bool], optional</span></td>
+                                        <td>A list of booleans that signal which algorithms to run. Defaults to [True, True, True].</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mrca</span>(<span class="params">set_of_nodes: set[Node] | set[str]</span>) <span class="keyword">-&gt;</span> Node
+                            </div>
+                            <div class="function-body">
+                                <p>Computes the Least Common Ancestor of a set of graph nodes.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">set_of_nodes</span></td>
+                                        <td><span class="param-type">set[Node] | set[str]</span></td>
+                                        <td>A set of Nodes, or node names.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node: The node that is the LCA of the set.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If any node in the set is not in the graph, or if elements are of an unexpected type.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">leaf_descendants</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> set[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the set of all leaf nodes that are descendants of the parameter node. Uses DFS to find paths to leaves.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>The node for which to compute leaf children.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> set[Node]: The set of all leaves that descend from 'node'.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If node is not found in the graph.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">diff_subtree_edges</span>(<span class="params">rng: np.random.Generator</span>) <span class="keyword">-&gt;</span> list[Edge]
+                            </div>
+                            <div class="function-body">
+                                <p>Returns 2 random edges such that there does not exist a directed path from one edge source node to the other edge source node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rng</span></td>
+                                        <td><span class="param-type">np.random.Generator</span></td>
+                                        <td>an rng object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Edge]: a list of 2 edges such that neither edge is reachable from either starting point.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">subgenome_count</span>(<span class="params">n: Node</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Given a node in this graph, return the subgenome count.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>Any node in the graph. It is an error to input a node that is not in the graph.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: subgenome count</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the input node is not in the graph.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">edges_downstream_of_node</span>(<span class="params">n: Node</span>) <span class="keyword">-&gt;</span> list[Edge]
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the set (as a list) of edges that are in the subgraph of a node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A node in a graph.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Edge]: The set of all edges in the subgraph of n.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the input node is not in the graph.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">edges_upstream_of_node</span>(<span class="params">n: Node</span>) <span class="keyword">-&gt;</span> list[Edge]
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the set (as a list) of edges that are in all paths from the root to this node. Useful in avoiding the creation of cycles when adding edges.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A node in a graph.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Edge]: The set of all edges on paths from the root to n.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the input node is not in the graph.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">subgenome_ct_edges</span>(<span class="params">downstream_node: Union[Node, None] = None, delta: float = math.inf, start_node: Union[Node, None] = None</span>) <span class="keyword">-&gt;</span> dict[Edge, int]
+                            </div>
+                            <div class="function-body">
+                                <p>Maps edges to their subgenome counts.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">downstream_node</span></td>
+                                        <td><span class="param-type">Node | None, optional</span></td>
+                                        <td>No edges will be included in the map that are in a subgraph of this node. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">delta</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Only include edges in the mapping that have subgenome counts &lt;= delta. Defaults to math.inf.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">start_node</span></td>
+                                        <td><span class="param-type">Node | None, optional</span></td>
+                                        <td>Provide a node only if you don't want to start at the root. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[Edge, int]: a map from edges to subgenome counts</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the graph has more than one root to start.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">edges_to_subgenome_count</span>(<span class="params">downstream_node: Union[Node, None] = None, delta: float = math.inf, start_node: Union[Node, None] = None</span>) <span class="keyword">-&gt;</span> dict[int, list[Edge]]
+                            </div>
+                            <div class="function-body">
+                                <p>Maps edges to their subgenome counts.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">downstream_node</span></td>
+                                        <td><span class="param-type">Node | None, optional</span></td>
+                                        <td>No edges will be included in the map that are in a subgraph of this node. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">delta</span></td>
+                                        <td><span class="param-type">float, optional</span></td>
+                                        <td>Only include edges in the mapping that have subgenome counts &lt;= delta. Defaults to math.inf.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">start_node</span></td>
+                                        <td><span class="param-type">Node | None, optional</span></td>
+                                        <td>Provide a node only if you don't want to start at the root. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[int, list[Edge]]: a map from edges to subgenome counts</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the graph has more than one root to start.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">leaf_descendants_all</span> <span class="keyword">-&gt;</span> dict[Node, set[Node]]
+                            </div>
+                            <div class="function-body">
+                                <p>Map each node in the graph to its set of leaf descendants</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[Node, set[Node]]: map from graph nodes to their leaf descendants</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">newick</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Generate the newick string of the network.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: The newick representation of the network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">is_acyclic</span> <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Checks if each of this graph's connected components is acyclic</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if acyclic, False if cyclic.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">bfs_dfs</span>(<span class="params">start_node: Union[Node, None] = None, dfs: bool = False, is_connected: bool = False, accumulator: Callable[..., None] | None = None, accumulated: Any = None</span>) <span class="keyword">-&gt;</span> tuple[dict[Node, int], Any]
+                            </div>
+                            <div class="function-body">
+                                <p>General bfs-dfs routine, with the added utility of checking whether or not this graph is made up of multiple connected components.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">start_node</span></td>
+                                        <td><span class="param-type">Node | None, optional</span></td>
+                                        <td>Give a node to start the search from. Defaults to None, in which case the search will start at the root.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">dfs</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>Flag that specifies whether to use bfs or dfs. Defaults to False (bfs), if true is passed, will run dfs.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">is_connected</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>Flag that, if enabled, will check for the connected component status. Defaults to False (won't run).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">accumulator</span></td>
+                                        <td><span class="param-type">Callable[..., None] | None, optional</span></td>
+                                        <td>A function that takes the currently searched Node in the graph and does some sort of bookkeeping.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">accumulated</span></td>
+                                        <td><span class="param-type">Any</span></td>
+                                        <td>Any type of structure that stores the data given by the accumulator function.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[dict[Node, int], Any]: Mapping from nodes to their distance from the start node.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">subnet</span>(<span class="params">retic_node: Node</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Make a copy of a subnetwork of this DAG, rooted at 'retic_node', with unique node names.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">retic_node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A node in this network that is a reticulation node</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: A subnetwork of the DAG being operated on</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">copy</span> <span class="keyword">-&gt;</span> tuple[Network, dict[Node, Node]]
+                            </div>
+                            <div class="function-body">
+                                <p>Copy this network into a new network object, also with new node and edge objects.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[Network, dict[Node, Node]]: A tuple of the copied network and a map from old nodes to new nodes.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">to_networkx</span> <span class="keyword">-&gt;</span> nx.Graph
+                            </div>
+                            <div class="function-body">
+                                <p>Convert this network to a NetworkX graph object.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> nx.Graph: A NetworkX graph object.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">compare_network</span>(<span class="params">net: Network, measure: str</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Compares the topology of this network compared to another network. The following are options for the distance measure: [tree|tri|cluster|luay|rnbs|apd|normapd|wapd|normwapd] If [tree | tri | cluster] is used, the return value will be the average of the false positive and false negative rates. If [luay] is used, the return value will be the distance between the two networks. If [rnbs | apd | normapd | wapd | normwapd] is used, the return value is the dissimilarity between the two networks.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The other network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">measure</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Distance measure to use. One of ``tree``, ``tri``, ``cluster``, ``luay``, ``rnbs``, ``apd``, ``normapd``, ``wapd``, or ``normwapd``.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: Measure of the two networks similarity/distance.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If an unrecognized measure string is provided.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">is_isomorphic</span>(<span class="params">other: Network</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Check if this network is topologically isomorphic to another network. Two networks are isomorphic if they have the same topology, regardless of node labels or branch lengths. This method calls the GraphUtils.is_isomorphic function.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">other</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The other network to compare against.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if the networks are topologically isomorphic, False otherwise.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">nakhleh_distance</span>(<span class="params">other: Network</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Computes the rooted triplet distance (Nakhleh distance) between two networks. This distance measure compares the topological relationships between all triplets of leaves in both networks.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">other</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The other network to compare against.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The Nakhleh distance (0 = identical topology, 1 = completely different).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_subtree_at</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> set[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Collect all nodes in the subtree rooted at the given node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>The root of the subtree.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> set[Node]: A set of nodes in the subtree.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">dist_from_root</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the distance from the root to the given node, measured in edge count (hop count) via BFS.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A node in this network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: The number of edges on the BFS-shortest path from the root to the given node.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">topological_order</span> <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Compute a topological order of nodes in an acyclic network.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Node]: Nodes in topological order from roots to leaves.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the network contains a directed cycle and no valid topological order exists.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">distance_from_root</span>(<span class="params">node: Node, use_time: bool = True</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Compute distance from root to a given node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>The target node</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">use_time</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>If True, use branch lengths/times. If False, use edge count.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: Distance from root (time units or edge count)</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If node is not in the network or no path to root exists</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_node_times_from_root</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set time attributes for all nodes based on their distance from root. Uses cumulative branch lengths from root. Useful for enabling biologically meaningful node comparisons. The root node is assigned time 0.0 and each descendant's time is the sum of branch lengths along the BFS path from the root.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> None</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_node_times_by_edge_count</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set time attributes for all nodes based on their edge count from root. This provides biologically meaningful comparison when actual times are not available. Edge counts are converted to time values for comparison purposes. The root node is assigned time 0.0 and each descendant's time equals the number of edges on the BFS path from the root.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> None</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="mul">MUL</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">MUL</span>(<span class="params">Network</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A subclass of a Network, that is a binary tree that results from the transformation of a standard network into a Multilabeled Species Tree.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">gene_map: dict[str, list[str]], rng: np.random.Generator</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initializes a MUL object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gene_map</span></td>
+                                        <td><span class="param-type">dict[str, list[str]]</span></td>
+                                        <td>A mapping from gene names to a set of gene copy names.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rng</span></td>
+                                        <td><span class="param-type">np.random.Generator</span></td>
+                                        <td>A numpy random number generator.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">network_to_mul_recursive</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Recursively expand reticulations, handling nested reticulations correctly. Each reticulation node with multiple parents is expanded by duplicating the downstream subnetwork for each additional parent, processing the deepest reticulations first.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A phylogenetic network potentially containing reticulation nodes.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: A tree (MUL tree) with all reticulations removed through subnetwork duplication.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">to_mul</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Creates a (MU)lti-(L)abeled Species Tree from a network</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A Network</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: a MUL tree (as a Network obj)</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the network is malformed with regards to ploidy</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">using_cython</span> <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Check if Cython acceleration is enabled.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if the Cython-accelerated NodeSet implementation is available and in use, False if using the pure-Python fallback.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">print_graph</span>(<span class="params">g: Union[Graph, Network]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>For each node in g's V set (node set), print out the node's information and attributes.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">g</span></td>
+                                        <td><span class="param-type">Union[Graph, Network]</span></td>
+                                        <td>A network or graph object.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">pretty_print_edges</span>(<span class="params">g: Union[Graph, Network]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Prints the two node names as a tuple for all the edges in g's E set (edge set).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">g</span></td>
+                                        <td><span class="param-type">Union[Graph, Network]</span></td>
+                                        <td>A network or graph object.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+
                 
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
@@ -581,26 +2492,46 @@ print(f"MRCA of A,B: {mrca_node.label}")</code></pre>
             <h3>Modules</h3>
             <ul>
                 <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
                 <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
                 <li><a href="GeneTrees.html">GeneTrees</a></li>
                 <li><a href="GraphUtils.html">GraphUtils</a></li>
-                <li><a href="GTR.html">GTR</a></li>
-                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
                 <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
                 <li><a href="Network.html" class="current">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
-                <li><a href="NetworkParser.html">NetworkParser</a></li>
                 <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
                 <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
             </ul>
             
             <h3>This Page</h3>
             <ul>
                 <li><a href="#exceptions">Exceptions</a></li>
-                <li><a href="#node-class">Node</a></li>
-                <li><a href="#edge-class">Edge</a></li>
-                <li><a href="#network-class">Network</a></li>
+                <li><a href="#node">Node</a></li>
+                <li><a href="#nodeset">NodeSet</a></li>
+                <li><a href="#uedge">UEdge</a></li>
+                <li><a href="#edge">Edge</a></li>
+                <li><a href="#edgeset">EdgeSet</a></li>
+                <li><a href="#graph">Graph</a></li>
+                <li><a href="#network">Network</a></li>
+                <li><a href="#mul">MUL</a></li>
+                <li><a href="#functions">Module Functions</a></li>
             </ul>
         </div>
     </div>

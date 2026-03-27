@@ -56,3 +56,6 @@ docs/_build/
 
 # Archived modules
 archive/
+
+# PyPI deployment token
+.pypi_token

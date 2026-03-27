@@ -21,9 +21,7 @@
                 
                 <h1>GraphUtils Module <span class="version-badge">v1.0.0</span></h1>
                 
-                <p>The GraphUtils module provides utility functions for manipulating and analyzing 
-                Network objects, including tree extraction, cluster computation, network metrics, 
-                and topology operations.</p>
+                <p>Graph and network utility functions for topology analysis, manipulation, and ASCII rendering.</p>
                 
                 <div class="module-info">
                     <dl>
@@ -39,367 +37,733 @@
                 <div class="toc">
                     <h4>Contents</h4>
                     <ul>
-                        <li><a href="#cluster-functions">Cluster Functions</a></li>
-                        <li><a href="#tree-extraction">Tree Extraction</a></li>
-                        <li><a href="#network-metrics">Network Metrics</a></li>
-                        <li><a href="#validation">Validation Functions</a></li>
-                        <li><a href="#graph-operations">Graph Operations</a></li>
-                        <li><a href="#visualization">Visualization</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
                     </ul>
                 </div>
-                
-                <h2 id="cluster-functions">Cluster Functions</h2>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">get_all_clusters</span>(<span class="params">net: Network, node: Node = None, include_trivial: bool = False</span>) <span class="keyword">-&gt;</span> set[frozenset[Node]]
-                    </div>
-                    <div class="function-body">
-                        <p>Compile all clusters in a graph. For ((A, B)C, D), clusters are {(A,B), (A,B,C)}.</p>
-                        
-                        <table class="param-table">
-                            <tr>
-                                <th>Parameter</th>
-                                <th>Type</th>
-                                <th>Description</th>
-                            </tr>
-                            <tr>
-                                <td><span class="param-name">net</span></td>
-                                <td><span class="param-type">Network</span></td>
-                                <td>The network to operate on</td>
-                            </tr>
-                            <tr>
-                                <td><span class="param-name">node</span></td>
-                                <td><span class="param-type">Node</span></td>
-                                <td>Starting point (defaults to root)</td>
-                            </tr>
-                            <tr>
-                                <td><span class="param-name">include_trivial</span></td>
-                                <td><span class="param-type">bool</span></td>
-                                <td>Include size-1 clusters. Default False.</td>
-                            </tr>
-                        </table>
-                        
-                        <div class="returns">
-                            <span class="returns-label">Returns:</span>
-                            <span class="param-type">set[frozenset[Node]]</span> - Set of all clusters
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_all_clusters</span>(<span class="params">net: Network, node: Union[Node, None] = None, include_trivial: bool = False</span>) <span class="keyword">-&gt;</span> set[frozenset[Node]]
+                            </div>
+                            <div class="function-body">
+                                <p>Compile a list of clusters that make up this graph. Ie: for a graph ((A, B)C, D); , set of all clusters is {(A,B), (A,B,C)}. Can optionally allow the trivial leaf clusters in the set as desired.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>the network to operate on</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>For any user call, this should be the root. For internal calls, it is the starting point for search.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">include_trivial</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>If set to True, includes clusters of size 1. Defaults to False.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> set: A set of all clusters in this graph. Each cluster is represented as a set of either names or nodes.</div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                
-                <h2 id="tree-extraction">Tree Extraction</h2>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">get_all_subtrees</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[Network]
-                    </div>
-                    <div class="function-body">
-                        <p>Generate all possible trees by removing hybrid edges.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">dominant_tree</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> Network
-                    </div>
-                    <div class="function-body">
-                        <p>Generate the dominant tree by retaining only reticulation edges with 
-                        highest inheritance probability.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">sample_displayed_tree</span>(<span class="params">net: Network, rng: np.random.Generator = None</span>) <span class="keyword">-&gt;</span> Network
-                    </div>
-                    <div class="function-body">
-                        <p>Sample one displayed tree by selecting incoming edges proportional to 
-                        inheritance probability.</p>
-                    </div>
-                </div>
-                
-                <h2 id="network-metrics">Network Metrics</h2>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">count_reticulations</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> int
-                    </div>
-                    <div class="function-body">
-                        <p>Count reticulation nodes (indegree >= 2).</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">count_displayed_trees</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> int
-                    </div>
-                    <div class="function-body">
-                        <p>Estimate number of displayed trees (product of inbound edge counts for 
-                        reticulation nodes).</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">level</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> int
-                    </div>
-                    <div class="function-body">
-                        <p>Compute network level (max reticulations in any biconnected component). 
-                        Returns 0 for trees.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">blobs</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[set[Node]]
-                    </div>
-                    <div class="function-body">
-                        <p>Return biconnected components ("blobs") of the underlying undirected graph.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">is_tree</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> bool
-                    </div>
-                    <div class="function-body">
-                        <p>Check if network has no reticulation nodes.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">pairwise_leaf_distance</span>(<span class="params">net: Network, use_branch_lengths: bool = True</span>) <span class="keyword">-&gt;</span> dict[tuple[str, str], float]
-                    </div>
-                    <div class="function-body">
-                        <p>Compute pairwise distances between leaves on the underlying undirected graph.</p>
-                    </div>
-                </div>
-                
-                <h2 id="validation">Validation Functions</h2>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">validate_binary</span>(<span class="params">net: Network, require_tree_nodes: bool = True, require_retic_nodes: bool = True</span>) <span class="keyword">-&gt;</span> tuple[bool, dict[str, list[Node]]]
-                    </div>
-                    <div class="function-body">
-                        <p>Validate standard binary constraints (tree nodes: indegree=1, outdegree=2; 
-                        retic nodes: indegree=2, outdegree=1).</p>
-                        
-                        <div class="returns">
-                            <span class="returns-label">Returns:</span>
-                            <span class="param-type">tuple</span> - (is_valid, violations dict)
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">merge_networks</span>(<span class="params">left: Network, right: Network</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Combine two networks into a single network object by making the roots of each network the children of a new root node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">left</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Left subnetwork</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">right</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Right subnetwork</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: The resulting network object, containing copies of the nodes and edges of the original networks.</div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">validate_times_and_lengths</span>(<span class="params">net: Network, tol: float = 1e-5</span>) <span class="keyword">-&gt;</span> tuple[bool, list[str]]
-                    </div>
-                    <div class="function-body">
-                        <p>Validate consistency of node times and branch lengths.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">detect_bubbles</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[tuple[Edge, Edge]]
-                    </div>
-                    <div class="function-body">
-                        <p>Detect bubble structures (parallel directed edges with same endpoints).</p>
-                    </div>
-                </div>
-                
-                <h2 id="graph-operations">Graph Operations</h2>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">merge_networks</span>(<span class="params">left: Network, right: Network</span>) <span class="keyword">-&gt;</span> Network
-                    </div>
-                    <div class="function-body">
-                        <p>Combine two networks by making their roots children of a new root.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">subnet_given_leaves</span>(<span class="params">net: Network, leaf_set: list[Node]</span>) <span class="keyword">-&gt;</span> Network
-                    </div>
-                    <div class="function-body">
-                        <p>Extract subnetwork containing only specified leaves.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">induced_subnetwork_by_taxa</span>(<span class="params">net: Network, taxa: list[str]</span>) <span class="keyword">-&gt;</span> Network
-                    </div>
-                    <div class="function-body">
-                        <p>Construct subnetwork induced by a set of leaf labels.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">contract_edge</span>(<span class="params">net: Network, edge: Edge, keep: str = "parent"</span>) <span class="keyword">-&gt;</span> None
-                    </div>
-                    <div class="function-body">
-                        <p>Contract an internal edge by merging its endpoints (in-place).</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">reroot</span>(<span class="params">net: Network, new_root: Node</span>) <span class="keyword">-&gt;</span> Network
-                    </div>
-                    <div class="function-body">
-                        <p>Return a copy of the network re-rooted at specified node.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">transitive_reduction</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> Network
-                    </div>
-                    <div class="function-body">
-                        <p>Remove edges for which an alternate directed path exists (requires acyclic).</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">break_cycles</span>(<span class="params">net: Network, strategy: str = "greedy"</span>) <span class="keyword">-&gt;</span> Network
-                    </div>
-                    <div class="function-body">
-                        <p>Produce an acyclic copy by removing cycle-forming edges.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">topological_order</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[Node]
-                    </div>
-                    <div class="function-body">
-                        <p>Compute topological order from roots to leaves (requires acyclic).</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">ancestors_descendants</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> tuple[dict, dict]
-                    </div>
-                    <div class="function-body">
-                        <p>Compute ancestor and descendant sets for each node.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">bridges_and_articulations</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> tuple[list, list]
-                    </div>
-                    <div class="function-body">
-                        <p>Compute bridges and articulation points using Tarjan's algorithm.</p>
-                    </div>
-                </div>
-                
-                <h2>Topology Functions</h2>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">extract_topology</span>(<span class="params">newick_str: str</span>) <span class="keyword">-&gt;</span> str
-                    </div>
-                    <div class="function-body">
-                        <p>Extract topology from Newick string by removing branch lengths and metadata.</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">is_isomorphic</span>(<span class="params">net1: Network, net2: Network</span>) <span class="keyword">-&gt;</span> bool
-                    </div>
-                    <div class="function-body">
-                        <p>Check if two networks are topologically identical (ignoring labels and 
-                        branch lengths).</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">reticulation_parent_pairs</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> dict[Node, list[Edge]]
-                    </div>
-                    <div class="function-body">
-                        <p>Map each reticulation node to its inbound edges, sorted by gamma.</p>
-                    </div>
-                </div>
-                
-                <h2 id="visualization">Visualization</h2>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">ascii</span>(<span class="params">net: Network, show_edge_lengths: bool = False</span>) <span class="keyword">-&gt;</span> str
-                    </div>
-                    <div class="function-body">
-                        <p>Generate ASCII art representation of the network (root at top, leaves at bottom).</p>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">ascii_extended</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> str
-                    </div>
-                    <div class="function-body">
-                        <p>Generate detailed ASCII art with extended connecting lines for wide trees.</p>
-                    </div>
-                </div>
-                
-                <h2>Usage Examples</h2>
-                
-                <pre><code>from PhyNetPy.GraphUtils import *
-from PhyNetPy.NetworkParser import NetworkParser
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">subnet_given_leaves</span>(<span class="params">net: Network, leaf_set: list[Node]</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the minimally sized subnetwork of a network such that the leaf set of the subnetwork is a subset of the original network's leaf set.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">leaf_set</span></td>
+                                        <td><span class="param-type">list[Node]</span></td>
+                                        <td>A set of leaf nodes of the given network</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: A new Network object with node and edge copies of the original.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_all_subtrees</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[Network]
+                            </div>
+                            <div class="function-body">
+                                <p>Generate all possible trees that can be derived from the given network by removing hybrid edges and creating copies with subtrees that start at each non-reticulation node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Network]: A list of network objects, each representing a tree that is derived from the original network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">dominant_tree</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Generate the dominant tree from a given network by retaining only the reticulation edges with the highest inheritance probability and removing all other reticulation edges.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: A new network object representing the dominant tree derived from the original network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">count_reticulations</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Count the number of reticulation nodes in a network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: Number of nodes with indegree &gt;= 2 (reticulations by flag).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">validate_binary</span>(<span class="params">net: Network, require_tree_nodes: bool = True, require_retic_nodes: bool = True</span>) <span class="keyword">-&gt;</span> tuple[bool, dict[str, list[Node]]]
+                            </div>
+                            <div class="function-body">
+                                <p>Validate standard binary constraints. - Tree/internal nodes: indegree=1 (except root with 0), outdegree=2 - Reticulation nodes: indegree=2, outdegree=1 - Leaves: outdegree=0</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">require_tree_nodes</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Enforce tree node constraints.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">require_retic_nodes</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Enforce retic node constraints.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[bool, dict[str, list[Node]]]: (is_valid, violations)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">detect_bubbles</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[tuple[Edge, Edge]]
+                            </div>
+                            <div class="function-body">
+                                <p>Detect bubble structures as parallel directed edges (same (src, dest)).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[tuple[Edge, Edge]]: List of edge pairs representing bubbles.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">sample_displayed_tree</span>(<span class="params">net: Network, rng: Union[np.random.Generator, None] = None</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Sample one displayed tree by selecting, for each reticulation, a single incoming edge with probability proportional to its inheritance probability.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rng</span></td>
+                                        <td><span class="param-type">Union[np.random.Generator, None]</span></td>
+                                        <td>Optional RNG; defaults to new generator.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: A cleaned, displayed tree copy of the input network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">contract_edge</span>(<span class="params">net: Network, edge: Edge, keep: str = 'parent'</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Contract an internal edge by merging its endpoints.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Network to modify in place.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edge</span></td>
+                                        <td><span class="param-type">Edge</span></td>
+                                        <td>The edge (u-&gt;v) to contract.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">keep</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Which endpoint to keep as the merged node: &quot;parent&quot; keeps u, &quot;child&quot; keeps v.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: On invalid keep value.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reroot</span>(<span class="params">net: Network, new_root: Node</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Return a copy of the network re-rooted at `new_root` by orienting edges away from the new root using undirected BFS levels. This preserves node/edge attributes; reticulation indegrees may change depending on topology.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">new_root</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>Node in `net` to be the new root.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: Re-rooted copy.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If `new_root` is not a node in the network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">pairwise_leaf_distance</span>(<span class="params">net: Network, use_branch_lengths: bool = True</span>) <span class="keyword">-&gt;</span> dict[tuple[str, str], float]
+                            </div>
+                            <div class="function-body">
+                                <p>Compute pairwise distances between leaves on the underlying undirected graph. If use_branch_lengths is True, sum edge lengths; otherwise, use unit weights.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">use_branch_lengths</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Whether to sum edge lengths.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[tuple[str, str], float]: Map from sorted (leaf_i, leaf_j) to distance.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">bridges_and_articulations</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> tuple[list[tuple[str, str]], list[str]]
+                            </div>
+                            <div class="function-body">
+                                <p>Compute bridges and articulation points on the underlying undirected graph using Tarjan's algorithm.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[list[tuple[str, str]], list[str]]:  A pair (bridges, articulations) where bridges are (u, v) tuples with u &lt; v by node label, and articulations are node labels.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">transitive_reduction</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the transitive reduction of an acyclic network: remove edges (u,v) for which an alternate directed path u -&gt; ... -&gt; v exists.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Input network (must be acyclic).</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: A reduced network with identical reachability.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the network contains a directed cycle.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">blobs</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[set[Node]]
+                            </div>
+                            <div class="function-body">
+                                <p>Return the biconnected components (&quot;blobs&quot;) of the underlying undirected graph.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[set[Node]]: A list where each element is the node set of one biconnected component in the undirected view of the network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">tree_of_blobs</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[Network]
+                            </div>
+                            <div class="function-body">
+                                <p>Decompose a phylogenetic network into its biconnected components (blobs). Each blob is a maximal biconnected subgraph of the underlying undirected graph. Returns a list of Network objects, one per biconnected component, containing copies of the original nodes and directed edges. Node names are preserved but all objects are distinct from the original network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A phylogenetic network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Network]: One Network per biconnected component (blob).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">level</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the level of a phylogenetic network. The level is the maximum number of reticulation nodes contained in any biconnected component (&quot;blob&quot;) of the underlying undirected graph. Returns 0 for trees.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Input network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: The network level.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">count_displayed_trees</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Estimate the number of displayed trees of a network. Computed as the product, over reticulation nodes, of their inbound edge counts (typically 2). For general networks, this is an upper bound when some choices may be incompatible; for level-1 networks this often matches the exact count.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: Estimated number of displayed trees.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">is_tree</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Check whether a network is a tree (i.e., has no reticulation nodes).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if there are no reticulation nodes, False otherwise.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">validate_times_and_lengths</span>(<span class="params">net: Network, tol: float = 1e-05</span>) <span class="keyword">-&gt;</span> tuple[bool, list[str]]
+                            </div>
+                            <div class="function-body">
+                                <p>Validate node times and branch lengths consistency across the network. For each edge (parent u -&gt; child v), verify: - child_time - parent_time ≈ edge.length within tolerance. - child_time &gt;= parent_time (monotonicity).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tol</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Allowed absolute tolerance for length mismatch.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[bool, list[str]]: (is_valid, diagnostics) where diagnostics is a list of messages describing any violations or missing values encountered.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ancestors_descendants</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> tuple[dict[Node, set[Node]], dict[Node, set[Node]]]
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the ancestor and descendant sets for each node in a network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[dict[Node, set[Node]], dict[Node, set[Node]]]:  A pair (ancestors, descendants) where: - ancestors[n] is the set of all nodes with a directed path to n. - descendants[n] is the set of all nodes reachable from n.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">topological_order</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[Node]
+                            </div>
+                            <div class="function-body">
+                                <p>Compute a topological order of nodes in an acyclic network. Delegates to :pymeth:`Network.topological_order`.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Node]: Nodes in topological order from roots to leaves.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the network contains a directed cycle.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">break_cycles</span>(<span class="params">net: Network, strategy: str = 'greedy'</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Produce an acyclic copy by removing a small set of cycle-forming edges. Strategy 'greedy' removes the first encountered back edge per DFS pass until the graph is acyclic. This is not guaranteed minimal but is fast and effective for cleaning up accidental cycles.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">strategy</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Currently only 'greedy' is supported.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: An acyclic copy of the input network.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If an unsupported strategy is specified.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reticulation_parent_pairs</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> dict[Node, list[Edge]]
+                            </div>
+                            <div class="function-body">
+                                <p>Map each reticulation node to its inbound edges, sorted by gamma.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[Node, list[Edge]]: A mapping from each reticulation node to the list of inbound edges sorted by decreasing inheritance probability (gamma).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">induced_subnetwork_by_taxa</span>(<span class="params">net: Network, taxa: list[str]</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Construct the subnetwork induced by a set of leaf labels. The induced subnetwork is formed by taking the MRCA of the target leaves and retaining only those descendant branches that lead to at least one target leaf. Node/edge attributes (gamma, length) are copied where applicable.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">taxa</span></td>
+                                        <td><span class="param-type">list[str]</span></td>
+                                        <td>List of leaf labels to induce on.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: The induced subnetwork as a new Network object.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If any leaf name is not found in the network.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">extract_topology</span>(<span class="params">newick_str: str</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Extract the topology from a newick string by removing branch lengths, inheritance probabilities, and other metadata. This function handles PhyloNet-style newick strings that may contain: - Branch lengths after single colons (:) - Inheritance probabilities after double colons (::) - Additional metadata after triple colons (:::) - Comments in square brackets [...]</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">newick_str</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>A newick string potentially with PhyloNet extensions</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: A cleaned newick string showing only the topology Examples: &gt;&gt;&gt; extract_topology(&quot;(A:0.1,B:0.2)C:0.3;&quot;) '(A,B)C;' &gt;&gt;&gt; extract_topology(&quot;((A:1.0,B:2.0)#H1:3.0::0.4,C:4.0)D;&quot;) '((A,B)#H1,C)D;' &gt;&gt;&gt; extract_topology(&quot;(A:1.0[&amp;comment],B:2.0)C;&quot;) '(A,B)C;'</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">extract_topology_from_file</span>(<span class="params">filename: str, output_filename: str = None</span>) <span class="keyword">-&gt;</span> list[str]
+                            </div>
+                            <div class="function-body">
+                                <p>Extract topology from all newick strings in a file.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filename</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path to file containing newick strings.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">output_filename</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>Path to save cleaned newick strings. If None, results are only returned without writing to disk.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[str]: List of topology-only newick strings.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If `filename` does not exist., <code>IOError</code>: If reading or writing the file fails.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">is_isomorphic</span>(<span class="params">net1: Network, net2: Network</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Returns True, if net1 and net2 are topologically identical networks. Even if branch lengths are different, or node labels are different, networks can be isomorphic. ie-- all trees with 3 taxa are isomorphic. quartet trees have only a few different variations. Networks of any size, have infinitely many possible topologies. (A,B)C; is isomorphic with (D,E)F; (A,B),(C,D); is not isomorphic with ((A,B)C, D);</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A Network object</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Another Network object</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if the networks are topologically isomorphic, False otherwise</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ascii</span>(<span class="params">net: Network, show_edge_lengths: bool = False</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Prints out an ascii art depiction of this Network object as a vertical tree/network with the root at the top and leaves at the bottom.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A Network</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">show_edge_lengths</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>If True, display edge lengths. Defaults to False.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: The ASCII art representation of the network Example: For newick string &quot;((C,D)A, E)Root;&quot;, outputs:: Root /    \ A      E / \ C   D</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ascii_extended</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Prints a more detailed vertical ASCII art depiction of the Network with extended connecting lines between levels for wide trees.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A Network</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: The ASCII art representation of the network</div>
+                            </div>
+                        </div>
 
-# Load a network
-parser = NetworkParser("network.nex")
-net = parser.get_network(0)
-
-# Get all clusters
-clusters = get_all_clusters(net)
-print(f"Found {len(clusters)} clusters")
-
-# Check network level
-lvl = level(net)
-print(f"Network level: {lvl}")
-
-# Count reticulations
-retics = count_reticulations(net)
-print(f"Reticulations: {retics}")
-
-# Extract displayed trees
-trees = get_all_subtrees(net)
-print(f"Displayed trees: {len(trees)}")
-
-# Get dominant tree
-dom = dominant_tree(net)
-
-# Validate binary structure
-is_valid, violations = validate_binary(net)
-if not is_valid:
-    print("Violations:", violations)
-
-# Compute pairwise distances
-distances = pairwise_leaf_distance(net)
-
-# ASCII visualization
-print(ascii(net))</code></pre>
-                
-                <div class="see-also">
-                    <h4>See Also</h4>
-                    <ul>
-                        <li><a href="Network.html">Network</a> - Core network data structures</li>
-                        <li><a href="NetworkMoves.html">NetworkMoves</a> - Network modification operations</li>
-                        <li><a href="GeneTrees.html">GeneTrees</a> - Uses cluster support functions</li>
-                    </ul>
-                </div>
                 
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
@@ -416,28 +780,37 @@ print(ascii(net))</code></pre>
             <h3>Modules</h3>
             <ul>
                 <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
                 <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
                 <li><a href="GeneTrees.html">GeneTrees</a></li>
                 <li><a href="GraphUtils.html" class="current">GraphUtils</a></li>
-                <li><a href="GTR.html">GTR</a></li>
-                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
                 <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
-                <li><a href="NetworkParser.html">NetworkParser</a></li>
                 <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
                 <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
             </ul>
             
             <h3>This Page</h3>
             <ul>
-                <li><a href="#cluster-functions">Clusters</a></li>
-                <li><a href="#tree-extraction">Trees</a></li>
-                <li><a href="#network-metrics">Metrics</a></li>
-                <li><a href="#validation">Validation</a></li>
-                <li><a href="#graph-operations">Operations</a></li>
-                <li><a href="#visualization">Visualization</a></li>
+                <li><a href="#functions">Module Functions</a></li>
             </ul>
         </div>
     </div>

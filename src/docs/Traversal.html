@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traversal - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; Traversal
+                </div>
+                
+                <h1>Traversal Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>Iterator-based graph traversal for model nodes supporting pre-order, post-order, and level-order.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Source:</dt>
+                        <dd>Traversal.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#traversalorder">TraversalOrder</a></li>
+                        <li><a href="#traversal">Traversal</a></li>
+                        <li><a href="#levelparalleltraversal">LevelParallelTraversal</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="traversalorder">TraversalOrder</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">TraversalOrder</span>(<span class="params">Enum</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Traversal order options.</p>
+                    </div>
+                </div>
+
+                <h2 id="traversal">Traversal</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Traversal</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Iterator-based graph traversal for model nodes. Decouples traversal order from visitation logic, allowing: - Easy switching between pre/post/level order - Use in for-loops or manual next() calls - Clean separation of concerns Example: &gt;&gt;&gt; # Likelihood computation (post-order) &gt;&gt;&gt; for node in Traversal(root, TraversalOrder.POST_ORDER): ... visitor.visit(node) &gt;&gt;&gt; # Simulation (pre-order, root to leaves) &gt;&gt;&gt; for node in ModelTraversal(root, TraversalOrder.PRE_ORDER): ... simulator.simulate_at(node) &gt;&gt;&gt; # Manual iteration &gt;&gt;&gt; traversal = ModelTraversal(root, TraversalOrder.POST_ORDER) &gt;&gt;&gt; first_node = next(traversal) &gt;&gt;&gt; second_node = next(traversal)</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">root: Any, order: TraversalOrder = TraversalOrder.POST_ORDER</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize traversal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">root</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Starting node (root of the network)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">order</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Traversal order (PRE_ORDER, POST_ORDER, or LEVEL_ORDER)</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__iter__</span> <span class="keyword">-&gt;</span> Iterator[ModelNode]
+                            </div>
+                            <div class="function-body">
+                                <p>Return fresh iterator each time.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">as_list</span> <span class="keyword">-&gt;</span> list[ModelNode]
+                            </div>
+                            <div class="function-body">
+                                <p>Return traversal as a list.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">count</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Count nodes in traversal.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="levelparalleltraversal">LevelParallelTraversal</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">LevelParallelTraversal</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Traversal that yields nodes grouped by level (for parallel execution). Unlike ModelTraversal which yields one node at a time, this yields entire levels - all nodes in a level can be processed in parallel. Example: &gt;&gt;&gt; for level_num, nodes in LevelParallelTraversal(root): ... # Process all nodes in this level in parallel ... with ThreadPoolExecutor() as pool: ... pool.map(visitor.visit, nodes)</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">num_levels</span> <span class="keyword">-&gt;</span> int <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Number of levels in the traversal.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">max_parallelism</span> <span class="keyword">-&gt;</span> int <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Maximum nodes at any single level.</p>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">root: ModelNode, bottom_up: bool = True</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize level-parallel traversal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">root</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Root node of the network</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">bottom_up</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>If True, yield leaves first (for likelihood). If False, yield root first (for simulation).</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__iter__</span> <span class="keyword">-&gt;</span> Iterator[tuple[int, list[ModelNode]]]
+                            </div>
+                            <div class="function-body">
+                                <p>Yield (level_number, nodes_at_level) tuples.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html" class="current">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#traversalorder">TraversalOrder</a></li>
+                <li><a href="#traversal">Traversal</a></li>
+                <li><a href="#levelparalleltraversal">LevelParallelTraversal</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

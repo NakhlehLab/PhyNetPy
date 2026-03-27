@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNPSimulator - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; SNPSimulator
+                </div>
+                
+                <h1>SNPSimulator Module <span class="version-badge">v1.1.0</span></h1>
+                
+                <p>SNP data simulator for phylogenetic networks using a forward-in-time 2-state CTMC.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>2/12/26</dd>
+                        <dt>Source:</dt>
+                        <dd>SNPSimulator.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#simulatedsnpdata">SimulatedSNPData</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="simulatedsnpdata">SimulatedSNPData</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SimulatedSNPData</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Container for simulated SNP data and the generating network. Attributes: network (Network): The phylogenetic network used for simulation. data (dict[str, list[int]]): Mapping from taxon name to a list of red allele counts per site. n_taxa (int): Number of leaf taxa. n_sites (int): Number of simulated SNP sites. samples (dict[str, int]): Number of sampled individuals per taxon. u (float): Mutation rate from red to green allele. v (float): Mutation rate from green to red allele. coal (float): Coalescent rate parameter (theta). seed (int): Random seed used for simulation.</p>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">taxa_names</span> <span class="keyword">-&gt;</span> list[str]
+                            </div>
+                            <div class="function-body">
+                                <p>Return sorted list of taxon names.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">write_nexus</span>(<span class="params">filepath: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Write the simulated data and network to a NEXUS file compatible with SNP_LIKELIHOOD. The output file contains: - TAXA block with taxon labels - DATA block with SNP site patterns (0/1 per site for samples=1) - TREES block with the network in extended newick format (including branch lengths and gamma annotations)</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filepath</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Path where the nexus file will be written.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> None</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_network</span>(<span class="params">n: int, level: int = 1, birth_rate: float = 1.0, gamma_range: tuple[float, float] = (0.2, 0.8), seed: int | None = None</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Generate a random phylogenetic network with n taxa and a given number of reticulations. First generates a random tree using a Yule (pure-birth) process, then rebuilds the topology with clean node names. Finally, grafts reticulation edges to reach the desired reticulation count. Note: The ``level`` parameter specifies the number of reticulation nodes to add, not the network level in the strict sense (max reticulations per biconnected component). Depending on placement, the resulting network's true level may be less than this value.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Number of leaf taxa (must be &gt;= 3 for level &gt;= 1).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">level</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Number of reticulation nodes to add. Defaults to 1.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">birth_rate</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Birth rate for the Yule process. Larger values produce shorter branch lengths. Defaults to 1.0.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma_range</span></td>
+                                        <td><span class="param-type">tuple[float, float]</span></td>
+                                        <td>Range from which inheritance probabilities (gamma) are uniformly drawn. Defaults to (0.2, 0.8).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">seed</span></td>
+                                        <td><span class="param-type">int | None</span></td>
+                                        <td>Random seed for reproducibility. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: A phylogenetic network with n leaves and `level` reticulation nodes.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ValueError</code>: If n &lt; 2 or level &lt; 0, or not enough edges to place all reticulations.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">simulate</span>(<span class="params">n: int, s: int, net: Network, samples: dict[str, int] | None = None, u: float = 1.0, v: float = 1.0, coal: float = 0.005, seed: int | None = None</span>) <span class="keyword">-&gt;</span> SimulatedSNPData
+                            </div>
+                            <div class="function-body">
+                                <p>Simulate SNP (biallelic marker) data over a phylogenetic network. Uses a forward-in-time simulation: at the root, an allele state (red or green) is drawn from the stationary distribution. The state is then propagated down the network along each branch using the 2-state CTMC mutation model. At reticulation nodes, the parent lineage is chosen probabilistically based on the inheritance probability (gamma). For samples=1 per taxon, this is an exact simulation under the biallelic mutation model. For samples &gt; 1, the simulation draws each sample independently conditional on the leaf's evolved frequency — this is an approximation (a full coalescent simulation within each population branch would be needed for exact multi-sample simulation).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Expected number of taxa — used only for validation. The actual taxa come from the network's leaves.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">s</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Number of SNP sites to simulate.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The phylogenetic network to simulate data on.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">samples</span></td>
+                                        <td><span class="param-type">dict[str, int] | None</span></td>
+                                        <td>Number of sampled individuals per taxon. Keys must match leaf names. Defaults to 1 per taxon.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">u</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Mutation rate from red allele to green. Defaults to 1.0.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">v</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Mutation rate from green allele to red. Defaults to 1.0.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">coal</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Coalescent rate parameter (theta). Stored in output but not used in the forward simulation. Defaults to 0.005.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">seed</span></td>
+                                        <td><span class="param-type">int | None</span></td>
+                                        <td>Random seed for reproducibility. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> SimulatedSNPData: Container with simulated data, network, and metadata.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ValueError</code>: If the number of leaves in the network doesn't match n, or if sample keys don't match leaf names.</div>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html" class="current">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#simulatedsnpdata">SimulatedSNPData</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

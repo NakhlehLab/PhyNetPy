@@ -21,9 +21,7 @@
                 
                 <h1>GeneTrees Module <span class="version-badge">v2.0.0</span></h1>
                 
-                <p>The GeneTrees module provides a container for managing collections of gene trees 
-                with support for cluster/split support calculations, consensus tree building, 
-                Robinson-Foulds distance computation, and ASTRAL integration.</p>
+                <p>Gene tree container and analysis utilities including consensus tree construction and concordance factors.</p>
                 
                 <div class="module-info">
                     <dl>
@@ -40,13 +38,12 @@
                     <h4>Contents</h4>
                     <ul>
                         <li><a href="#exceptions">Exceptions</a></li>
-                        <li><a href="#helper-functions">Helper Functions</a></li>
-                        <li><a href="#genetrees-class">GeneTrees Class</a></li>
+                        <li><a href="#genetrees">GeneTrees</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
                     </ul>
                 </div>
-                
+
                 <h2 id="exceptions">Exceptions</h2>
-                
                 <div class="class-def exception-def">
                     <div class="class-header">
                         <span class="keyword">exception</span> <span class="name">GeneTreeError</span>(<span class="params">Exception</span>)
@@ -55,51 +52,31 @@
                         <p>Error class for all errors relating to gene trees.</p>
                     </div>
                 </div>
-                
-                <h2 id="helper-functions">Helper Functions</h2>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">phynetpy_naming</span>(<span class="params">taxa_name: str</span>) <span class="keyword">-&gt;</span> str
-                    </div>
-                    <div class="function-body">
-                        <p>Default method for sorting taxa labels into groups. Expects format where 
-                        first 2 characters are numeric and 3rd is alphabetic.</p>
-                        
-                        <div class="returns">
-                            <span class="returns-label">Returns:</span>
-                            <span class="param-type">str</span> - Group key (uppercase letter)
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="function-def">
-                    <div class="function-header">
-                        <span class="keyword">def</span> <span class="name">external_naming</span>(<span class="params">taxa_name: str</span>) <span class="keyword">-&gt;</span> str
-                    </div>
-                    <div class="function-body">
-                        <p>Alternative naming rule that splits on underscore and returns the first part.</p>
-                    </div>
-                </div>
-                
-                <h2 id="genetrees-class">GeneTrees Class</h2>
-                
+
+                <h2 id="genetrees">GeneTrees</h2>
                 <div class="class-def">
                     <div class="class-header">
                         <span class="keyword">class</span> <span class="name">GeneTrees</span>
                     </div>
                     <div class="class-body">
-                        <p>A container for a set of networks that are binary and represent gene trees.</p>
-                        
+                        <p>A container for a set of networks that are binary and represent a gene tree. Supports two strategies for grouping gene labels into species: 1. An explicit ``species_gene_mapping`` dict (species -&gt; gene labels). 2. A ``naming_rule`` callable that derives the species key from a gene label string. When neither is provided every gene label is treated as its own species (identity mapping).</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">species_gene_mapping</span> <span class="keyword">-&gt;</span> Optional[Dict[str, List[str]]] <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Return the explicit species-to-gene mapping, if set.</p>
+                            </div>
+                        </div>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">self, gene_tree_list: list[Network] = None, naming_rule: Callable = phynetpy_naming</span>)
+                                <span class="name">__init__</span>(<span class="params">gene_tree_list: Optional[List[Network]] = None, naming_rule: Optional[Callable[..., Any]] = None, species_gene_mapping: Optional[Dict[str, List[str]]] = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Initialize a GeneTrees collection.</p>
-                                
-                                <table class="param-table">
+                                <p>Wrapper class for a set of networks that represent gene trees.</p>
+                                                                <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
                                         <th>Type</th>
@@ -107,132 +84,254 @@
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">gene_tree_list</span></td>
-                                        <td><span class="param-type">list[Network]</span></td>
-                                        <td>Initial list of gene trees to add</td>
+                                        <td><span class="param-type">list[Network], optional</span></td>
+                                        <td>A list of networks, of the binary tree variety. Defaults to None.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">naming_rule</span></td>
-                                        <td><span class="param-type">Callable</span></td>
-                                        <td>Function for mapping taxa names to groups</td>
+                                        <td><span class="param-type">Callable[..., Any], optional</span></td>
+                                        <td>A function</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">f</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>str -&gt; str that maps a gene label to its species key. Ignored when *species_gene_mapping* is provided. Defaults to None (identity mapping).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">species_gene_mapping</span></td>
+                                        <td><span class="param-type">dict[str, list[str]], optional</span></td>
+                                        <td>Explicit mapping from species name to a list of gene/allele labels. Takes priority over *naming_rule* when both are given.</td>
                                     </tr>
                                 </table>
                             </div>
                         </div>
-                        
-                        <h4>Tree Management</h4>
-                        
+                        <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">add</span>(<span class="params">self, tree: Network</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">add</span>(<span class="params">tree: Network</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Add a gene tree to the collection.</p>
+                                <p>Add a gene tree to the collection. Any new gene labels that belong to this tree will also be added to the collection of all gene tree leaf labels.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tree</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network that is a tree, must be binary.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">mp_allop_map</span>(<span class="params">self</span>) <span class="keyword">-&gt;</span> Dict[str, List[str]]
+                                <span class="name">species_gene_mapping</span>(<span class="params">value: Optional[Dict[str, List[str]]]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mp_allop_map</span> <span class="keyword">-&gt;</span> Dict[str, List[str]]
                             </div>
                             <div class="function-body">
-                                <p>Create a subgenome mapping from the stored gene trees using the naming rule.</p>
+                                <p>Create a subgenome mapping from the stored set of gene trees. Uses the explicit species_gene_mapping if available, otherwise falls back to the naming_rule, and finally to an identity mapping.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[str, list[str]]: subgenome mapping</div>
                             </div>
                         </div>
-                        
-                        <h4>Support Calculations</h4>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">cluster_support</span>(<span class="params">self, include_trivial: bool = False, normalize: bool = True</span>) <span class="keyword">-&gt;</span> Dict[FrozenSet[str], float]
+                                <span class="name">validate_mapping</span> <span class="keyword">-&gt;</span> List[str]
+                            </div>
+                            <div class="function-body">
+                                <p>Check the explicit species_gene_mapping against the actual taxa present in the gene trees.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[str]: A list of warning/error messages. Empty means valid.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">cluster_support</span>(<span class="params">include_trivial: bool = False, normalize: bool = True</span>) <span class="keyword">-&gt;</span> Dict[FrozenSet[str], float]
                             </div>
                             <div class="function-body">
                                 <p>Aggregate support for all rooted clusters across the gene tree set.</p>
-                                
-                                <div class="returns">
-                                    <span class="returns-label">Returns:</span>
-                                    <span class="param-type">Dict[FrozenSet[str], float]</span> - Map of clusters to count/frequency
-                                </div>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">include_trivial</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>include size-1 clusters. Defaults to False.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>return frequencies in [0,1] instead of counts.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[FrozenSet[str], float]: map cluster (as frozenset of leaf labels) to count or frequency.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">split_support</span>(<span class="params">self, normalize: bool = True</span>) <span class="keyword">-&gt;</span> Dict[FrozenSet[str], float]
+                                <span class="name">split_support</span>(<span class="params">normalize: bool = True</span>) <span class="keyword">-&gt;</span> Dict[FrozenSet[str], float]
                             </div>
                             <div class="function-body">
-                                <p>Aggregate support for unrooted splits (bipartitions), canonicalized to the 
-                                smaller side of the split.</p>
+                                <p>Aggregate support for unrooted splits (bipartitions), canonicalized to the smaller side of the split. Note: Only non-trivial splits (both parts size &gt;= 2) are counted.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>return frequencies in [0,1] instead of counts.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[FrozenSet[str], float]: map smaller-side cluster to count/freq.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">support_on_reference</span>(<span class="params">self, ref_tree: Network, include_trivial: bool = False, normalize: bool = True</span>) <span class="keyword">-&gt;</span> Dict[FrozenSet[str], float]
+                                <span class="name">support_on_reference</span>(<span class="params">ref_tree: Network, include_trivial: bool = False, normalize: bool = True</span>) <span class="keyword">-&gt;</span> Dict[FrozenSet[str], float]
                             </div>
                             <div class="function-body">
                                 <p>Compute support of each rooted cluster present in a reference tree.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">ref_tree</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>reference binary tree.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">include_trivial</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>include size-1 clusters. Defaults to False.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>return frequencies in [0,1].</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[FrozenSet[str], float]: map of ref clusters to support.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">annotate_reference_support</span>(<span class="params">self, ref_tree: Network, include_trivial: bool = False, normalize: bool = True</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">annotate_reference_support</span>(<span class="params">ref_tree: Network, include_trivial: bool = False, normalize: bool = True</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Annotate the reference tree's internal edges with support values stored 
-                                in the edge weight field.</p>
+                                <p>Annotate the reference tree's internal edges with support values stored in the edge weight field. For edge (u-&gt;v), the cluster is the set of leaf descendants of v.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">ref_tree</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>reference binary tree to annotate in place.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">include_trivial</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>include size-1 clusters. Defaults to False.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>frequencies vs counts.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
-                        
-                        <h4>Consensus and Distance</h4>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">consensus_clusters</span>(<span class="params">self, threshold: float = 0.5, include_trivial: bool = False</span>) <span class="keyword">-&gt;</span> List[Set[str]]
+                                <span class="name">consensus_clusters</span>(<span class="params">threshold: float = 0.5, include_trivial: bool = False</span>) <span class="keyword">-&gt;</span> List[Set[str]]
                             </div>
                             <div class="function-body">
-                                <p>Return clusters with support >= threshold.</p>
+                                <p>Return the set of rooted clusters whose support &gt;= threshold. Note: This does not resolve incompatibilities; it is a simple filter.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">threshold</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>minimum frequency in [0,1].</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">include_trivial</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>include size-1 clusters.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Set[str]]: clusters passing threshold.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">build_majority_rule_consensus_tree</span>(<span class="params">self, threshold: float = 0.5</span>) <span class="keyword">-&gt;</span> Network
+                                <span class="name">rf_distance</span>(<span class="params">ref_tree: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> float
                             </div>
                             <div class="function-body">
-                                <p>Construct a majority-rule consensus tree using greedy compatibility.</p>
+                                <p>Compute the average Robinson-Foulds distance (rooted, using clusters) between each gene tree and the reference.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">ref_tree</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>reference tree.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>if True, divide by the maximum possible RF for the shared taxon set of each comparison.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: average RF distance across the gene trees.</div>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">rf_distance</span>(<span class="params">self, ref_tree: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> float
+                                <span class="name">build_majority_rule_consensus_tree</span>(<span class="params">threshold: float = 0.5</span>) <span class="keyword">-&gt;</span> Network
                             </div>
                             <div class="function-body">
-                                <p>Compute average Robinson-Foulds distance between each gene tree and a 
-                                reference tree.</p>
+                                <p>Construct a majority-rule (or threshold) consensus tree from the gene trees. Greedy compatibility: sort clusters by support descending; add if compatible with current set; then realize the set into a (possibly multifurcating) tree over the union of taxa.</p>
                             </div>
                         </div>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">gene_concordance_factors</span>(<span class="params">self, ref_tree: Network</span>) <span class="keyword">-&gt;</span> Dict[Tuple[str, str], float]
+                                <span class="name">gene_concordance_factors</span>(<span class="params">ref_tree: Network</span>) <span class="keyword">-&gt;</span> Dict[Tuple[str, str], float]
                             </div>
                             <div class="function-body">
-                                <p>Compute split-based concordance factor per internal edge of the reference.</p>
+                                <p>Compute a split-based concordance factor per internal edge of the reference. For each edge (u-&gt;v) with split (A | B), count across gene trees the fraction of informative trees (with at least one taxon from A and B) that contain the induced split on their leaf set. Returns a map keyed by (min(child_label), max(child_label)) of the edge child cluster's name representative to gCF. If the child is an internal node, the key uses a canonical name derived from its cluster (string-joined).</p>
                             </div>
                         </div>
-                        
-                        <h4>Species Tree Inference</h4>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">astral</span>(<span class="params">self, astral_jar_path: str, mapping_rule: Callable = external_naming, extra_args: List[str] = None</span>) <span class="keyword">-&gt;</span> Network
+                                <span class="name">astral</span>(<span class="params">astral_jar_path: str, mapping_rule: Optional[Callable[[str], str]] = None, extra_args: Optional[List[str]] = None</span>) <span class="keyword">-&gt;</span> Network
                             </div>
                             <div class="function-body">
-                                <p>Infer a species tree using ASTRAL from the stored gene trees.</p>
-                                
-                                <table class="param-table">
+                                <p>Infer a species tree using ASTRAL from the stored gene trees. Requires a path to the ASTRAL .jar. We write trees to a temp file and a multi-allele mapping, then call ASTRAL and parse the result. The mapping is resolved in this order: 1. The instance-level ``species_gene_mapping`` (if set). 2. The *mapping_rule* argument passed here. 3. The instance-level ``naming_rule``. 4. Identity mapping (each gene = its own species).</p>
+                                                                <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
                                         <th>Type</th>
@@ -241,89 +340,65 @@
                                     <tr>
                                         <td><span class="param-name">astral_jar_path</span></td>
                                         <td><span class="param-type">str</span></td>
-                                        <td>Path to the ASTRAL JAR file</td>
+                                        <td>Path to the ASTRAL jar file.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">mapping_rule</span></td>
-                                        <td><span class="param-type">Callable</span></td>
-                                        <td>Function to map gene names to species</td>
+                                        <td><span class="param-type">Callable, optional</span></td>
+                                        <td>Override callable for deriving species from gene labels.  Ignored when an explicit species_gene_mapping is available.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">extra_args</span></td>
-                                        <td><span class="param-type">List[str]</span></td>
-                                        <td>Additional ASTRAL command-line arguments</td>
+                                        <td><span class="param-type">list[str], optional</span></td>
+                                        <td>Additional CLI args for ASTRAL.</td>
                                     </tr>
                                 </table>
                             </div>
                         </div>
-                        
-                        <h4>Duplication-Loss Analysis</h4>
-                        
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">duplication_loss_summary</span>(<span class="params">self, species_tree: Network, naming_rule: Callable = external_naming</span>) <span class="keyword">-&gt;</span> Dict[str, Any]
+                                <span class="name">duplication_loss_summary</span>(<span class="params">species_tree: Network, naming_rule: Optional[Callable[[str], str]] = None</span>) <span class="keyword">-&gt;</span> Dict[str, Any]
                             </div>
                             <div class="function-body">
-                                <p>Reconcile each gene tree against a species tree using LCA mapping and 
-                                report total duplications and losses.</p>
-                                
-                                <div class="returns">
-                                    <span class="returns-label">Returns:</span>
-                                    <span class="param-type">Dict</span> - Contains "totals" and "per_tree" breakdowns
-                                </div>
+                                <p>Reconcile each gene tree against a species tree using LCA mapping and report total duplications and losses (parsimony-based estimate). The gene-to-species mapping is resolved in the same priority order as :meth:`_resolve_mapping`: 1. Explicit ``species_gene_mapping``. 2. *naming_rule* argument (if provided and no explicit mapping). 3. Instance ``naming_rule``. 4. Identity mapping.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict with ``&quot;totals&quot;`` and ``&quot;per_tree&quot;`` breakdowns.</div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                <h2>Usage Examples</h2>
-                
-                <pre><code>from PhyNetPy.GeneTrees import GeneTrees, external_naming
-from PhyNetPy.NetworkParser import NetworkParser
 
-# Load gene trees
-parser = NetworkParser("gene_trees.nex")
-trees = parser.get_all_networks()
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">phynetpy_naming</span>(<span class="params">taxa_name: str</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>The default method for sorting taxa labels into groups</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">taxa_name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>a taxa label from a nexus file</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: a string that is the key for this label</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>GeneTreeError</code>: if there is a problem applying the naming rule</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">external_naming</span>(<span class="params">taxa_name: str</span>) <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>TODO: Examine the need for this function and remove if not needed.</p>
+                            </div>
+                        </div>
 
-# Create GeneTrees collection
-gt = GeneTrees(trees, naming_rule=external_naming)
-
-# Compute cluster support
-support = gt.cluster_support(normalize=True)
-for cluster, freq in support.items():
-    if freq >= 0.5:
-        print(f"{cluster}: {freq:.2%}")
-
-# Build majority-rule consensus tree
-consensus = gt.build_majority_rule_consensus_tree(threshold=0.5)
-print(consensus.newick())
-
-# Compute Robinson-Foulds distance to a reference
-ref_tree = parser.get_network(0)
-avg_rf = gt.rf_distance(ref_tree, normalize=True)
-print(f"Average RF distance: {avg_rf:.4f}")
-
-# Annotate reference tree with support values
-gt.annotate_reference_support(ref_tree)
-for edge in ref_tree.E():
-    print(f"{edge}: support = {edge.get_weight():.2%}")
-
-# Infer species tree with ASTRAL
-species_tree = gt.astral("/path/to/astral.jar")
-
-# Duplication-loss analysis
-dl_summary = gt.duplication_loss_summary(species_tree)
-print(f"Total duplications: {dl_summary['totals']['duplications']}")
-print(f"Total losses: {dl_summary['totals']['losses']}")</code></pre>
-                
-                <div class="see-also">
-                    <h4>See Also</h4>
-                    <ul>
-                        <li><a href="Network.html">Network</a> - Network data structures</li>
-                        <li><a href="GraphUtils.html">GraphUtils</a> - Cluster calculation utilities</li>
-                        <li><a href="NetworkParser.html">NetworkParser</a> - Parse gene tree files</li>
-                    </ul>
-                </div>
                 
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
@@ -340,25 +415,39 @@ print(f"Total losses: {dl_summary['totals']['losses']}")</code></pre>
             <h3>Modules</h3>
             <ul>
                 <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
                 <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
                 <li><a href="GeneTrees.html" class="current">GeneTrees</a></li>
                 <li><a href="GraphUtils.html">GraphUtils</a></li>
-                <li><a href="GTR.html">GTR</a></li>
-                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
                 <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
-                <li><a href="NetworkParser.html">NetworkParser</a></li>
                 <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
                 <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
             </ul>
             
             <h3>This Page</h3>
             <ul>
                 <li><a href="#exceptions">Exceptions</a></li>
-                <li><a href="#helper-functions">Functions</a></li>
-                <li><a href="#genetrees-class">GeneTrees Class</a></li>
+                <li><a href="#genetrees">GeneTrees</a></li>
+                <li><a href="#functions">Module Functions</a></li>
             </ul>
         </div>
     </div>

@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ModelMove - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; ModelMove
+                </div>
+                
+                <h1>ModelMove Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>Network topology move operations for MCMC search (add/remove/flip reticulation, SPR).</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>ModelMove.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#move">Move</a></li>
+                        <li><a href="#addreticulation">AddReticulation</a></li>
+                        <li><a href="#removereticulation">RemoveReticulation</a></li>
+                        <li><a href="#flipreticulation">FlipReticulation</a></li>
+                        <li><a href="#switchparentage">SwitchParentage</a></li>
+                        <li><a href="#spr">SPR</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">MoveError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>This exception is raised whenever there is a fatal error in executing a network move.</p>
+                    </div>
+                </div>
+
+                <h2 id="move">Move</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Move</span>(<span class="params">ABC</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Abstract superclass for all model move types. A move can be executed on a model that is passed in, and edits an aspect of the model.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Moves in general do not require any parameters</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>A Model obj</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: A new Model obj that is the result of this operation on model</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>A function that will undo what &quot;execute&quot; did.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>A phylogenetic network model object.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Applies the exact move as execute, on a different but identical (with respect to topology) Model object to a model that has had &quot;execute&quot; called on it.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>A phylogenetic network model obj.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">hastings_ratio</span> <span class="keyword">-&gt;</span> float <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the hastings-ratio for a move-- that is the ratio of valid states to return to post-move, to the number of valid states to transition to pre-move.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: Hastings Ratio. For symmetric moves, this is 1.0.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="addreticulation">AddReticulation</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">AddReticulation</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A move that adds a reticulation to a network.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initializes a move that adds a reticulation to a network.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Adds a reticulation to a network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: The modified model with the added reticulation.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Undoes the addition of a reticulation to a network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Applies the same addition of a reticulation to another model.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">hastings_ratio</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the Hastings ratio for the addition move.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The Hastings ratio.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="removereticulation">RemoveReticulation</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">RemoveReticulation</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A move that removes a reticulation from a network.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initializes a move that removes a reticulation from a network.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">hastings_ratio</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="flipreticulation">FlipReticulation</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">FlipReticulation</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A move that flips the direction of a reticulation edge.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initializes a move that flips the direction of a reticulation edge.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Removes a reticulation edge from the network</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: The modified model with the flipped reticulation</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Undoes the flipping of the reticulation edge.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Applies the same flipping of the reticulation edge to another model.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">hastings_ratio</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Return the hastings ratio for this move</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The hastings ratio for the flip reticulation move</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="switchparentage">SwitchParentage</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SwitchParentage</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>For use in Infer_MP_Allop, this move alters the genetic parentage of an entire subnetwork, while maintaining the same ploidy values for each leaf.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">debug_id: int = 0</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initializes a move that switches the parentage of a subnetwork.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">debug_id</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>The debug id for the move.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_object</span>(<span class="params">mylist: list, rng: np.random.Generator</span>) <span class="keyword">-&gt;</span> object
+                            </div>
+                            <div class="function-body">
+                                <p>Selects a random object from a list.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mylist</span></td>
+                                        <td><span class="param-type">list</span></td>
+                                        <td>The list of objects to select from.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rng</span></td>
+                                        <td><span class="param-type">np.random.Generator</span></td>
+                                        <td>The random number generator.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> object: The randomly selected object.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Executes the Swap-Parentage Move.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>A model object, for which there must be a populated network field</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: A modified model, with a newly proposed network topology</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Undoes the Swap-Parentage Move</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Executes the same topology change on another model</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">hastings_ratio</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the Hastings ratio for the Swap-Parentage Move.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The Hastings ratio.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">delete_edge</span>(<span class="params">net: Network, edge: Edge</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Deletes an edge from the network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The network object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edge</span></td>
+                                        <td><span class="param-type">Edge</span></td>
+                                        <td>The edge to delete.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="spr">SPR</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SPR</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A move that performs a Subtree Prune and Regraft operation on a network.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">debug_id: int = 0</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initializes a move that performs a Subtree Prune and Regraft operation.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">debug_id</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>The debug id for the move.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">random_object</span>(<span class="params">mylist: list, rng: np.random.Generator</span>) <span class="keyword">-&gt;</span> object
+                            </div>
+                            <div class="function-body">
+                                <p>Selects a random object from a list.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mylist</span></td>
+                                        <td><span class="param-type">list</span></td>
+                                        <td>The list of objects to select from.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rng</span></td>
+                                        <td><span class="param-type">np.random.Generator</span></td>
+                                        <td>The random number generator.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> object: The randomly selected object.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Executes the Subtree Prune and Regraft move.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: The modified model with the Subtree Prune and Regraft move executed.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Undoes the Subtree Prune and Regraft move.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Perform the same Subtree Prune and Regraft move on another model.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model object containing the network.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">hastings_ratio</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Returns the Hastings ratio for the Subtree Prune and Regraft move.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The Hastings ratio.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">insert_node_in_edge</span>(<span class="params">edge: Edge, node: Node, net: Network</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Given an edge, a -&gt; b, place a node c, such that a -&gt; c -&gt; b. This requires the deletion of edge a -&gt; b, then the addition of edges a -&gt; c and c -&gt; b.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edge</span></td>
+                                        <td><span class="param-type">Edge</span></td>
+                                        <td>An edge, a -&gt; b</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A node, c.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The network that contains nodes a, b, and c</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">connect_nodes</span>(<span class="params">src: Node, dest: Node, net: Network</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Given two nodes in a network, connect them and check whether or not a reticulation is created.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">src</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>The parent of the new edge</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">dest</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>The child of the new edge</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Network for which to add the edge</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html" class="current">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#move">Move</a></li>
+                <li><a href="#addreticulation">AddReticulation</a></li>
+                <li><a href="#removereticulation">RemoveReticulation</a></li>
+                <li><a href="#flipreticulation">FlipReticulation</a></li>
+                <li><a href="#switchparentage">SwitchParentage</a></li>
+                <li><a href="#spr">SPR</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

@@ -48,10 +48,17 @@ from .SNPSimulator import simulate as simulate_snp, random_network, SimulatedSNP
 # Old architecture (v1) - for CUDA BiMarkers support
 from .ModelGraph import *
 from .ModelFactory import *
-from .MetropolisHastings import MetropolisHastings, HillClimbing, ProposalKernel
+from .MetropolisHastings import MetropolisHastings, HillClimbing, SimulatedAnnealing, ProposalKernel
 from .State import State
-from .ModelMove import Move, SwitchParentage, AddReticulation, RemoveReticulation, FlipReticulation
+from .ModelMove import Move, SwitchParentage, AddReticulation, RemoveReticulation, FlipReticulation, SPR
 from .Logger import Logger
+
+# Inference methods
+from .Infer_MP_Allop import (
+    INFER_MP_ALLOP, INFER_MP_ALLOP_BOOTSTRAP, ALLOP_SCORE,
+    InferMPAllop, MPAllopComponent, MPAllopScorer,
+    Allop_MUL, AlleleMap,
+)
 
 # CUDA-accelerated BiMarkers (optional)
 # CUDA_AVAILABLE: True if CuPy can access GPU (works with CUDA 13.x)

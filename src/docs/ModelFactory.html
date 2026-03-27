@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ModelFactory - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; ModelFactory
+                </div>
+                
+                <h1>ModelFactory Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>Component-based model building factory for constructing probabilistic phylogenetic models.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>ModelFactory.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#modelcomponent">ModelComponent</a></li>
+                        <li><a href="#networkcomponent">NetworkComponent</a></li>
+                        <li><a href="#msacomponent">MSAComponent</a></li>
+                        <li><a href="#modelfactory">ModelFactory</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="modelcomponent">ModelComponent</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ModelComponent</span>(<span class="params">ABC</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Abstract class (do not instantiate this), that represents the behavior for any phylogenetic network model component that gets fed into a ModelFactory.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">dependencies: set[type] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a model component that has a set of dependencies (component types) that must be added to the model before this component can be built.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">dependencies</span></td>
+                                        <td><span class="param-type">set[type]</span></td>
+                                        <td>A set of model component types that need to be built first before this component can be added.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">build</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Given a model, hook up this component to it.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model currently being built.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="networkcomponent">NetworkComponent</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">NetworkComponent</span>(<span class="params">ModelComponent</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Network Component Description: This component should be the first component built into the model, as most other components will be connected to the network in some way.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">dependencies: set[type] = None, net: Network = None, node_constructor: Callable = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Builder for the network component of a phylogenetic model.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">dependencies</span></td>
+                                        <td><span class="param-type">set[type]</span></td>
+                                        <td>list of component dependencies</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A network</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node_constructor</span></td>
+                                        <td><span class="param-type">Callable</span></td>
+                                        <td>A construction method for custom model network nodes.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">build</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Attaches a network to the given Model</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>A Model object, most likely completely empty.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="msacomponent">MSAComponent</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">MSAComponent</span>(<span class="params">ModelComponent</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Component that links network leaves with taxon data from a MSA object.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">dependencies: set[type] = None, aln: MSA = None, grouping: dict[str, str] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize this MSA component.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">dependencies</span></td>
+                                        <td><span class="param-type">set[type]</span></td>
+                                        <td>list of component dependencies</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">aln</span></td>
+                                        <td><span class="param-type">MSA</span></td>
+                                        <td>MSA object that is associated with the network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">grouping</span></td>
+                                        <td><span class="param-type">dict[str, str], optional</span></td>
+                                        <td>A dictionary that maps sequence names to group names.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">build</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Attach the MSA object to the model by setting the data field for each leaf node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model that is being built.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="modelfactory">ModelFactory</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ModelFactory</span>
+                    </div>
+                    <div class="class-body">
+                        <p>A factory class that builds a phylogenetic model from a set of model components.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">*items: ModelComponent</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize the model factory with a set of model components.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">put</span>(<span class="params">item: ModelComponent</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Submit a model component to the factory.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">item</span></td>
+                                        <td><span class="param-type">ModelComponent</span></td>
+                                        <td>A model component to be built.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">build</span> <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Build the model from the components.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: The model that was built from the components.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html" class="current">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#modelcomponent">ModelComponent</a></li>
+                <li><a href="#networkcomponent">NetworkComponent</a></li>
+                <li><a href="#msacomponent">MSAComponent</a></li>
+                <li><a href="#modelfactory">ModelFactory</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

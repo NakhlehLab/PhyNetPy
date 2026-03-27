@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NetworkMoves - PhyNetPy Documentation</title>
+    <title>Logger - PhyNetPy Documentation</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,36 +16,43 @@
         <div class="documentwrapper">
             <div class="body">
                 <div class="breadcrumb">
-                    <a href="index.html">Home</a> &raquo; NetworkMoves
+                    <a href="index.html">Home</a> &raquo; Logger
                 </div>
                 
-                <h1>NetworkMoves Module <span class="version-badge">v1.0.0</span></h1>
+                <h1>Logger Module <span class="version-badge">v1.1.0</span></h1>
                 
-                <p>Network topology modification operations for MCMC search (add/remove hybrid, NNI, node height).</p>
+                <p>Simple debug logger for internal model move compatibility.</p>
                 
                 <div class="module-info">
                     <dl>
                         <dt>Author:</dt>
                         <dd>Mark Kessler</dd>
                         <dt>Source:</dt>
-                        <dd>NetworkMoves.py</dd>
+                        <dd>Logger.py</dd>
                     </dl>
                 </div>
                 
                 <div class="toc">
                     <h4>Contents</h4>
                     <ul>
-                        <li><a href="#functions">Module Functions</a></li>
+                        <li><a href="#logger">Logger</a></li>
                     </ul>
                 </div>
 
-                <h2 id="functions">Module Functions</h2>
+                <h2 id="logger">Logger</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Logger</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Simple debug logger stub for ModelMove compatibility. This is a minimal implementation that satisfies the import requirements of ModelMove.py. Can be extended with actual logging functionality if needed.</p>
+                        <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">add_hybrid</span>(<span class="params">net: Network, source: Edge, destination: Edge, t_src: float = None, t_dest: float = None</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">__init__</span>(<span class="params">debug_id: str = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Add a hybrid (reticulation) edge between *source* and *destination*. Two new internal nodes are inserted -- one splitting *source* and one splitting *destination* -- and a directed edge is created from the source-side node to the destination-side node (which is marked as a reticulation). If *source* and *destination* are the same edge, a bubble (parallel pair of edges) is created instead.</p>
+                                <p>Initialize a Logger instance.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -53,39 +60,20 @@
                                         <th>Description</th>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">net</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The network to modify in place.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">source</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The edge on which to place the new outgoing node.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">destination</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The edge on which to place the new reticulation node.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">t_src</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>Optional time at which to place the source-side node.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">t_dest</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>Optional time at which to place the destination-side node.</td>
+                                        <td><span class="param-name">debug_id</span></td>
+                                        <td><span class="param-type">str, optional</span></td>
+                                        <td>Identifier for debugging. Defaults to None.</td>
                                     </tr>
                                 </table>
                             </div>
                         </div>
+                        <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">remove_hybrid</span>(<span class="params">net: Network, hybrid_edge: Edge</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">log</span>(<span class="params">message: str</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Removes a hybrid edge from a network. src: dest: a x | | | | | | v v n1- - - - - - - - -&gt;n2 | | | | v v b y</p>
+                                <p>Log a message (no-op by default).</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -93,24 +81,19 @@
                                         <th>Description</th>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">net</span></td>
-                                        <td><span class="param-type">Network</span></td>
-                                        <td>A network.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">hybrid_edge</span></td>
-                                        <td><span class="param-type">Edge</span></td>
-                                        <td>An edge in E, whose destination node is a reticulation node.</td>
+                                        <td><span class="param-name">message</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The message to log.</td>
                                     </tr>
                                 </table>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">nni</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">debug</span>(<span class="params">message: str</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Perform a nearest neighbor interchange (NNI) on the network.</p>
+                                <p>Log a debug message.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -118,19 +101,19 @@
                                         <th>Description</th>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">net</span></td>
-                                        <td><span class="param-type">Network</span></td>
-                                        <td>A network.</td>
+                                        <td><span class="param-name">message</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The debug message.</td>
                                     </tr>
                                 </table>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">node_height_change</span>(<span class="params">n: Node, net: Network, height: float, extend: bool = False</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">info</span>(<span class="params">message: str</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Alter the node height of a node in a network, without altering the node heights of any surrounding nodes (parents, children). A node height can be moved up or down within the range min child height &lt; new h &lt; max parent height (refer to assumptions.txt). It is an error to attempt to move a node outside of these bounds -- the operation will abort and no changes to the network will be made. If extend is set (True), then the subtree branch lengths will be retained instead of altered. The new height of 'n', then, must not be closer to the root than the parent of 'n' whose height is furthest from the root. Attempting this is an error -- the operation will abort and no changes to the network will be made.</p>
+                                <p>Log an info message.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -138,28 +121,72 @@
                                         <th>Description</th>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">n</span></td>
-                                        <td><span class="param-type">Node</span></td>
-                                        <td>A node whose height needs to be changed.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">net</span></td>
-                                        <td><span class="param-type">Network</span></td>
-                                        <td>The network that contains node n.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">height</span></td>
-                                        <td><span class="param-type">float</span></td>
-                                        <td>The new height of node n.</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">extend</span></td>
-                                        <td><span class="param-type">bool, optional</span></td>
-                                        <td>Flag to retain subtree branch lengths. Defaults to False.</td>
+                                        <td><span class="param-name">message</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The info message.</td>
                                     </tr>
                                 </table>
                             </div>
                         </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">warning</span>(<span class="params">message: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Log a warning message.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">message</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The warning message.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">error</span>(<span class="params">message: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Log an error message.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">message</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The error message.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_messages</span> <span class="keyword">-&gt;</span> list[str]
+                            </div>
+                            <div class="function-body">
+                                <p>Get all logged messages.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[str]: List of logged messages.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clear</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Clear all logged messages.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 
                 <div class="footer">
@@ -184,7 +211,7 @@
                 <li><a href="GeneTrees.html">GeneTrees</a></li>
                 <li><a href="GraphUtils.html">GraphUtils</a></li>
                 <li><a href="IO.html">IO</a></li>
-                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="Logger.html" class="current">Logger</a></li>
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
@@ -192,7 +219,7 @@
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
                 <li><a href="Network.html">Network</a></li>
-                <li><a href="NetworkMoves.html" class="current">NetworkMoves</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
                 <li><a href="Phylo.html">Phylo</a></li>
                 <li><a href="PhyloNet.html">PhyloNet</a></li>
@@ -207,7 +234,7 @@
             
             <h3>This Page</h3>
             <ul>
-                <li><a href="#functions">Module Functions</a></li>
+                <li><a href="#logger">Logger</a></li>
             </ul>
         </div>
     </div>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>State - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; State
+                </div>
+                
+                <h1>State Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>State management for MCMC accept/reject decisions with model validation.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>State.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#state">State</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="state">State</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">State</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Class that implements accept/reject functionality for the Metropolis-Hastings algorithm. There are 2 model objects, one of which is the current state, and the other is the model used to test changes and moves to the current accepted version. Rejection is implemented by reverting the change on the proposed model (like git revert). Acceptance is implemented by duplicating the move on the current model (like git merge).</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">model: Model | None = None, validate: Callable[[Model], bool] = acyclic_routine</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a State. A State contains two models-- one current model, and one proposed model that contains one singular edit to the current model. At the very beginning of the State and before the execution of a method, the two models will be carbon copies of each other.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model | None, optional</span></td>
+                                        <td>A Phylogenetic Model. Defaults to</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">None</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>only used for if bootstrapping is to be used.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">validate</span></td>
+                                        <td><span class="param-type">Callable[[Model], bool]</span></td>
+                                        <td>A callable function that checks for model validity. The parameter for such a function should be a Model object, and return True if the Model is</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">valid</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>False if not. Defaults to 'acyclic_routine', which checks that the Model's phylogenetic network is free of cycles.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">likelihood</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Calculates the likelihood of the current model</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">Returns</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>a float that is the model likelihood for the current accepted state</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">generate_next</span>(<span class="params">move: Move</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Set the proposed model to a new model that is the result of applying one move to the former proposed model</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">move</span></td>
+                                        <td><span class="param-type">Move</span></td>
+                                        <td>Any instantiated subclass of Move.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if the network associated with the model is valid, False otherwise.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">revert</span>(<span class="params">move: Move</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the proposed model to the former proposed model, the move that was made was not a beneficial one.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">move</span></td>
+                                        <td><span class="param-type">Move</span></td>
+                                        <td>Any instantiated subclass of Move.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">commit</span>(<span class="params">move: Move</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>The proposed change was beneficial. Make the same move on the current model as was made to the proposed model.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">move</span></td>
+                                        <td><span class="param-type">Move</span></td>
+                                        <td>Any instantiated subclass of Move.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">proposed</span> <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Grab the proposed model.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: The proposed / edited Model.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">bootstrap</span>(<span class="params">data: Matrix, submodel: GTR</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Generate an initial state by 1) simulating a network 2) building a model based on that network and some input data. Currently only in use for the simplest case, a DNA/Felsenstein model.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type">Matrix</span></td>
+                                        <td>The nexus file data that has been preprocessed by the Matrix class.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">submodel</span></td>
+                                        <td><span class="param-type">GTR</span></td>
+                                        <td>Any substitution model (can be subtype of GTR)</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">write_line_to_summary</span>(<span class="params">line: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Accumulate log output by appending line to the end of the current string. 'line' need not be new line terminated.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">line</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>logging information, plain text.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">validate_proposed_network</span>(<span class="params">prev_move: Move</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Check certain conditions on a network to check for validity.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">prev_move</span></td>
+                                        <td><span class="param-type">Move</span></td>
+                                        <td>the move obj that was imposed on the current model</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if valid, False otherwise.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">acyclic_routine</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Checks the Model's network for cycles.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>A Model with a phylogenetic network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if the model's network is free of cycles, False if it contains cycles.</div>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html" class="current">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#state">State</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
