@@ -6,7 +6,45 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased] (targeting 0.3.1)
+## [0.3.2] -- 2026-04-02
+
+### Added
+
+- **Maximum Pseudo-Likelihood (MPL) scoring** module (`MPL`):
+  Implements Yu & Nakhleh (2015) log pseudo-likelihood for phylogenetic
+  network inference from gene-tree triplet frequencies. Includes
+  `GeneTreeTripletResult` container, `compute_gene_tree_triplets` for
+  extracting rho values from gene trees, and `mpl_score` for scoring a
+  network against observed triplet data.
+- **`Sync` context manager** (`Sync`): provides atomic model/network
+  reconciliation -- topology moves executed inside a `with Sync(model):`
+  block are automatically rolled back on error and reconciled on success.
+- **`Infer_MP_Allop`** module: refactored maximum-parsimony allopolyploid
+  inference with `InferMPAllop`, `MPAllopComponent`, `MPAllopScorer`,
+  `Allop_MUL`, and `AlleleMap` classes; bootstrapping support via
+  `INFER_MP_ALLOP_BOOTSTRAP`.
+- **`Infer_MP_Allop_Kernel`** in `MetropolisHastings`: dedicated proposal
+  kernel for MP allopolyploid hill-climbing search.
+- **`SimulatedAnnealing`** search algorithm in `MetropolisHastings`.
+- **Automated deployment script** (`deploy.py`): version bumping, test
+  running, package building, and PyPI upload in one command.
+- New example scripts: `mpl_demo.py`, `quickstart.py`, `tree_of_blobs.py`.
+- Expanded test suite: MPL scoring tests, network-moves stress tests
+  (15,000+ move attempts), scenario-based validation (D, D_sa, J_sa800),
+  and 20-taxon MPL benchmarks.
+
+### Changed
+
+- **`NetworkMoves`** significantly refactored: improved documentation,
+  cleaner move implementations for `add_hybrid`, `remove_hybrid`,
+  `switch_parentage`, and tail/head moves.
+- **`ModelMove`** and **`ModelGraph`** updated to support the `Sync`
+  reconciliation workflow and the new inference methods.
+- Regenerated HTML documentation for all modules.
+
+---
+
+## [0.3.1] -- 2026
 
 ### Added
 

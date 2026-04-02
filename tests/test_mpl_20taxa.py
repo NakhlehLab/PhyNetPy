@@ -21,7 +21,7 @@ import pytest
 
 from phynetpy.Network import Network
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL_reference import MPL, compute_gene_tree_triplets
+from phynetpy.MPL import MPL, compute_gene_tree_triplets
 from phynetpy.IO import convert_newick
 
 TESTFILES = os.path.join(os.path.dirname(__file__), "testfiles")

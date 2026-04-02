@@ -482,7 +482,9 @@ def spr(net: Network) -> None:
     prune_candidates = [
         e
         for e in net.E()
-        if e.dest is not root and _has_host_outside(net.get_subtree_at(e.dest))
+        if e.src is not root
+        and e.dest is not root
+        and _has_host_outside(net.get_subtree_at(e.dest))
     ]
     if not prune_candidates:
         raise NetworkError(

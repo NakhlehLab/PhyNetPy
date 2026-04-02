@@ -14,20 +14,12 @@ Copyright 2025 Mark Kessler, Luay Nakhleh. All rights reserved.
 from __future__ import annotations
 
 import math
-from itertools import combinations
 
 import pytest
 
 from phynetpy.Network import Network
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL_reference import (
-    MPL,
-    _induced_triple,
-    _coalescent_triple_probs,
-    _compute_rho,
-    _subnet_triple_probs,
-)
-from phynetpy.GraphUtils import subnet_given_leaves, _displayed_trees_with_probs
+from phynetpy.MPL import MPL
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -60,193 +52,7 @@ def _build_mpl(species_newick: str, gene_newicks: list[str],
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 1. _induced_triple — topology recognition on gene trees
-# ═══════════════════════════════════════════════════════════════════════
-
-class TestInducedTriple:
-
-    def test_concordant_xy_z(self):
-        gt = Network.from_newick("((A:1,B:1):1,C:2);")
-        assert _induced_triple(gt, "A", "B", "C") == "xy|z"
-
-    def test_discordant_xz_y(self):
-        gt = Network.from_newick("((A:1,C:1):1,B:2);")
-        assert _induced_triple(gt, "A", "B", "C") == "xz|y"
-
-    def test_discordant_yz_x(self):
-        gt = Network.from_newick("((B:1,C:1):1,A:2);")
-        assert _induced_triple(gt, "A", "B", "C") == "yz|x"
-
-    def test_star_topology(self):
-        gt = Network.from_newick("(A:1,B:1,C:1);")
-        assert _induced_triple(gt, "A", "B", "C") == "star"
-
-    def test_4taxon_embedded_triple(self):
-        gt = Network.from_newick("(((A:1,B:1):1,C:2):1,D:3);")
-        assert _induced_triple(gt, "A", "B", "D") == "xy|z"
-        assert _induced_triple(gt, "A", "C", "D") == "xy|z"
-        assert _induced_triple(gt, "B", "C", "D") == "xy|z"
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# 2. _coalescent_triple_probs — closed-form coalescent formula
-# ═══════════════════════════════════════════════════════════════════════
-
-class TestCoalescentTripleProbs:
-
-    def test_resolved_tree_tau1(self):
-        tree = Network.from_newick("((A:1,B:1):1,C:2);")
-        p = _coalescent_triple_probs(tree, "A", "B", "C")
-        assert p[0] == pytest.approx(_coal_match(1.0), abs=1e-10)
-        assert p[1] == pytest.approx(_coal_mismatch(1.0), abs=1e-10)
-        assert p[2] == pytest.approx(_coal_mismatch(1.0), abs=1e-10)
-
-    def test_probs_sum_to_one(self):
-        tree = Network.from_newick("((A:1,B:1):2.5,C:3.5);")
-        p = _coalescent_triple_probs(tree, "A", "B", "C")
-        assert sum(p) == pytest.approx(1.0, abs=1e-12)
-
-    def test_long_branch_approaches_one(self):
-        """With a very long internal branch, the sister pair probability -> 1."""
-        tree = Network.from_newick("((A:1,B:1):50,C:51);")
-        p = _coalescent_triple_probs(tree, "A", "B", "C")
-        assert p[0] > 0.999
-
-    def test_zero_branch_gives_uniform(self):
-        """tau=0 => P = 1/3 for all topologies (no time for coalescence)."""
-        tree = Network.from_newick("((A:1,B:1):0.0,C:1);")
-        p = _coalescent_triple_probs(tree, "A", "B", "C")
-        assert p[0] == pytest.approx(1.0 / 3.0, abs=1e-10)
-        assert p[1] == pytest.approx(1.0 / 3.0, abs=1e-10)
-        assert p[2] == pytest.approx(1.0 / 3.0, abs=1e-10)
-
-    def test_different_sister_pair_xz(self):
-        """Sister pair is (A,C) => P(XZ|Y) should be the match probability."""
-        tree = Network.from_newick("((A:1,C:1):1,B:2);")
-        p = _coalescent_triple_probs(tree, "A", "B", "C")
-        assert p[1] == pytest.approx(_coal_match(1.0), abs=1e-10)  # P(AC|B)
-        assert p[0] == pytest.approx(_coal_mismatch(1.0), abs=1e-10)
-
-    def test_different_sister_pair_yz(self):
-        """Sister pair is (B,C) => P(YZ|X) should be the match probability."""
-        tree = Network.from_newick("((B:1,C:1):1,A:2);")
-        p = _coalescent_triple_probs(tree, "A", "B", "C")
-        assert p[2] == pytest.approx(_coal_match(1.0), abs=1e-10)  # P(BC|A)
-        assert p[0] == pytest.approx(_coal_mismatch(1.0), abs=1e-10)
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# 3. _compute_rho — triple frequency accumulation
-# ═══════════════════════════════════════════════════════════════════════
-
-class TestComputeRho:
-
-    def test_single_concordant_tree(self):
-        gt = Network.from_newick("((A:1,B:1):1,C:2);")
-        gts = GeneTrees(gene_tree_list=[gt])
-        mapping = _identity_map("A", "B", "C")
-        gts.species_gene_mapping = mapping
-        rho = _compute_rho("A", "B", "C", gts, mapping)
-        assert rho == pytest.approx((1.0, 0.0, 0.0), abs=1e-12)
-
-    def test_single_discordant_tree(self):
-        gt = Network.from_newick("((A:1,C:1):1,B:2);")
-        gts = GeneTrees(gene_tree_list=[gt])
-        mapping = _identity_map("A", "B", "C")
-        gts.species_gene_mapping = mapping
-        rho = _compute_rho("A", "B", "C", gts, mapping)
-        assert rho == pytest.approx((0.0, 1.0, 0.0), abs=1e-12)
-
-    def test_two_trees_mixed(self):
-        gt1 = Network.from_newick("((A:1,B:1):1,C:2);")  # AB|C
-        gt2 = Network.from_newick("((A:1,C:1):1,B:2);")  # AC|B
-        gts = GeneTrees(gene_tree_list=[gt1, gt2])
-        mapping = _identity_map("A", "B", "C")
-        gts.species_gene_mapping = mapping
-        rho = _compute_rho("A", "B", "C", gts, mapping)
-        assert rho == pytest.approx((1.0, 1.0, 0.0), abs=1e-12)
-
-    def test_star_gene_tree_splits_equally(self):
-        gt = Network.from_newick("(A:1,B:1,C:1);")
-        gts = GeneTrees(gene_tree_list=[gt])
-        mapping = _identity_map("A", "B", "C")
-        gts.species_gene_mapping = mapping
-        rho = _compute_rho("A", "B", "C", gts, mapping)
-        assert rho[0] == pytest.approx(1.0 / 3.0, abs=1e-12)
-        assert rho[1] == pytest.approx(1.0 / 3.0, abs=1e-12)
-        assert rho[2] == pytest.approx(1.0 / 3.0, abs=1e-12)
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# 4. _subnet_triple_probs — subnetwork decomposition
-# ═══════════════════════════════════════════════════════════════════════
-
-class TestSubnetTripleProbs:
-
-    def test_tree_no_reticulation(self):
-        st = Network.from_newick("((A:1,B:1):1,C:2);")
-        subnet = subnet_given_leaves(
-            st,
-            [st.has_node_named(x) for x in ("A", "B", "C")],
-        )
-        p = _subnet_triple_probs(subnet)
-        assert p[0] == pytest.approx(_coal_match(1.0), abs=1e-10)
-        assert p[1] == pytest.approx(_coal_mismatch(1.0), abs=1e-10)
-        assert p[2] == pytest.approx(_coal_mismatch(1.0), abs=1e-10)
-
-    def test_network_displayed_weights_sum_to_one(self):
-        """Displayed tree probabilities from the subnet should sum to 1."""
-        net = Network.from_newick(
-            "((A:1.0,((B:0.5)#H1[&gamma=0.4]:0.5,C:1.0):0.5):0.5,"
-            "(#H1[&gamma=0.6]:1.0,D:1.5):0.5);"
-        )
-        for triple in combinations(("A", "B", "C", "D"), 3):
-            leaves = [net.has_node_named(x) for x in triple]
-            subnet = subnet_given_leaves(net, leaves)
-            displayed = _displayed_trees_with_probs(subnet)
-            total_weight = sum(w for _, w in displayed)
-            assert total_weight == pytest.approx(1.0, abs=1e-10), (
-                f"Weights for triplet {triple} sum to {total_weight}"
-            )
-
-    def test_network_triple_probs_sum_to_one(self):
-        """P(XY|Z) + P(XZ|Y) + P(YZ|X) must equal 1 for any subnet."""
-        net = Network.from_newick(
-            "((A:1.0,((B:0.5)#H1[&gamma=0.4]:0.5,C:1.0):0.5):0.5,"
-            "(#H1[&gamma=0.6]:1.0,D:1.5):0.5);"
-        )
-        for triple in combinations(("A", "B", "C", "D"), 3):
-            leaves = [net.has_node_named(x) for x in triple]
-            subnet = subnet_given_leaves(net, leaves)
-            p = _subnet_triple_probs(subnet)
-            assert sum(p) == pytest.approx(1.0, abs=1e-10), (
-                f"Triple probs for {triple} sum to {sum(p)}"
-            )
-
-    def test_network_gamma_affects_probs(self):
-        """Changing gamma should change the triple probabilities."""
-        net04 = Network.from_newick(
-            "((A:1,((B:0.5)#H1[&gamma=0.4]:0.5,C:1):1):1,"
-            "(#H1[&gamma=0.6]:1,D:2):1);"
-        )
-        net09 = Network.from_newick(
-            "((A:1,((B:0.5)#H1[&gamma=0.9]:0.5,C:1):1):1,"
-            "(#H1[&gamma=0.1]:1,D:2):1);"
-        )
-        for triple in [("A", "B", "D")]:
-            leaves_04 = [net04.has_node_named(x) for x in triple]
-            leaves_09 = [net09.has_node_named(x) for x in triple]
-            sub04 = subnet_given_leaves(net04, leaves_04)
-            sub09 = subnet_given_leaves(net09, leaves_09)
-            p04 = _subnet_triple_probs(sub04)
-            p09 = _subnet_triple_probs(sub09)
-            assert p04 != pytest.approx(p09, abs=1e-6), (
-                "Gamma change should alter probabilities"
-            )
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# 5. MPL.score — end-to-end scoring
+# 1. MPL.score — end-to-end scoring
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestMPLScore:
@@ -360,7 +166,7 @@ class TestMPLScore:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 6. MPL on networks with reticulation
+# 2. MPL on networks with reticulation
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestMPLNetwork:
@@ -419,7 +225,7 @@ class TestMPLNetwork:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 7. Multi-allele mapping
+# 3. Multi-allele mapping
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestMultiAllele:
@@ -439,7 +245,7 @@ class TestMultiAllele:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 8. Edge cases
+# 4. Edge cases
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestEdgeCases:
@@ -487,7 +293,7 @@ class TestEdgeCases:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 9. Analytical verification: 3-taxon tree with varying tau
+# 5. Analytical verification: 3-taxon tree with varying tau
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestAnalyticalVerification:

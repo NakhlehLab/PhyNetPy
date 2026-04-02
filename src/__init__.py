@@ -92,6 +92,6 @@ except ImportError:
         print("CUDA BiMarkers not available. Install with: pip install phynetpy[cuda]")
         return False
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __author__ = "Mark Kessler"
 
