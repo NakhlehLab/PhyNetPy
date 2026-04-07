@@ -55,6 +55,51 @@ def acyclic_routine(model: Model) -> bool:
     return False
 
 
+def network_invariants_routine(model: Model) -> bool:
+    """Validate that a network satisfies phylogenetic invariants.
+
+    Checks:
+      1. Exactly one root (in-degree 0, out-degree >= 2)
+      2. Every leaf has (in=1, out=0)
+      3. Every reticulation has (in=2, out=1)
+      4. Every other internal node has (in=1, out >= 2)
+      5. The graph is a DAG (acyclic)
+
+    Args:
+        model: A Model whose ``network`` attribute is the phylogenetic network.
+
+    Returns:
+        True when all invariants hold, False otherwise.
+    """
+    net = model.network
+    if net is None:
+        return False
+
+    root_count = 0
+    for n in net.V():
+        ind = net.in_degree(n)
+        outd = net.out_degree(n)
+
+        if ind == 0:
+            root_count += 1
+            if outd < 2:
+                return False
+        elif outd == 0:
+            if ind != 1:
+                return False
+        elif n.is_reticulation():
+            if ind != 2 or outd != 1:
+                return False
+        else:
+            if ind != 1 or outd < 2:
+                return False
+
+    if root_count != 1:
+        return False
+
+    return net.is_acyclic()
+
+
 class State:
     """
     Class that implements accept/reject functionality for the 
@@ -71,7 +116,7 @@ class State:
 
     def __init__(self, 
                  model: Model | None = None,
-                 validate: Callable[[Model], bool] = acyclic_routine) -> None:
+                 validate: Callable[[Model], bool] = network_invariants_routine) -> None:
         """
         Initialize a State. A State contains two models-- one current model, 
         and one proposed model that contains one singular edit to the current 
@@ -128,8 +173,18 @@ class State:
             bool: True if the network associated with the model is valid, False
                   otherwise.
         """
-        self.proposed_model = self.proposed_model.execute_move(move)
-        return self.validate_proposed_network(move)
+        import copy
+        snapshot = copy.deepcopy(self.proposed_model)
+        try:
+            self.proposed_model = self.proposed_model.execute_move(move)
+            valid = self.validate_proposed_network(move)
+        except Exception:
+            self.proposed_model = snapshot
+            return False
+        if not valid:
+            self.proposed_model = snapshot
+            return False
+        return True
 
     def revert(self, move: Move) -> None:
         """

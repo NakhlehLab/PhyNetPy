@@ -207,343 +207,217 @@ ALL OF THE FOLLOWING NETWORK MOVES HAVE VARIABLE NAMES THAT ARE BASED OFF OF THI
 class AddReticulation(Move):
     """
     A move that adds a reticulation to a network.
+
+    Host edges are split at a random point so their original branch
+    length is preserved across the two halves.  The new reticulation
+    edge is given a short length drawn from Exp(mean=0.1*min_host_len)
+    and both parent edges of the new reticulation node receive
+    gamma = 0.5.
+
+    Uses deep-copy for undo/same_move to guarantee correctness.
     """
-    
-    def __init__(self) -> None:
-        """
-        Initializes a move that adds a reticulation to a network.
-        
-        Args:
-            N/A
-        Returns:
-            N/A
-        """
+
+    def __init__(self, max_reticulations: int | None = None) -> None:
         super().__init__()
+        self._max_retics = max_reticulations
 
     def execute(self, model: Model) -> Model:
-        """
-        Adds a reticulation to a network.
-
-        Args:
-            model (Model): The model object containing the network.
-
-        Returns:
-            Model: The modified model with the added reticulation.
-        """
         net: Network = model.network
-        
-        # Select random two edges
+
+        if self._max_retics is not None:
+            cur_retics = sum(1 for n in net.V() if n.is_reticulation())
+            if cur_retics >= self._max_retics:
+                return model
+
+        self.undo_info = copy.deepcopy(net)
+
         src_e = random.choice(net.E())
         avoid_these_edges = net.edges_upstream_of_node(src_e.src)
-        dest_e = random.choice([e for e in net.E() if e not in avoid_these_edges])
-        
+        eligible = [e for e in net.E() if e not in avoid_these_edges]
+        if not eligible:
+            model.update_network()
+            return model
+        dest_e = random.choice(eligible)
+
         a: Node = src_e.src
         b: Node = src_e.dest
         x: Node = dest_e.src
         y: Node = dest_e.dest
-        z: Node = net.add_uid_node()  # in branch a->b
-        c: Node = net.add_uid_node()  # in branch x->y
+        len_ab: float = src_e.get_length() or 1.0
+        len_xy: float = dest_e.get_length() or 1.0
+
+        z: Node = net.add_uid_node()
+        c: Node = net.add_uid_node()
         c.set_is_reticulation(True)
-        
-        if a == x and b == y: 
+
+        split_ab = random.random()
+        split_xy = random.random()
+        retic_len = random.expovariate(1.0 / max(0.1 * min(len_ab, len_xy), 1e-6))
+
+        if a == x and b == y:
             # Bubble
             insert_node_in_edge(net.get_edge(a, b), z, net)
+            net.get_edge(a, z).set_length(len_ab * split_ab)
+            remaining = len_ab * (1.0 - split_ab)
+            net.get_edge(z, b).set_length(remaining)
+
             insert_node_in_edge(net.get_edge(z, b), c, net)
-            connect_nodes(z, c, net)  
-        else: 
-            # Not a bubble
+            tree_zc = net.get_edge(z, c)
+            tree_zc.set_length(remaining * split_xy)
+            tree_zc.set_gamma(0.5)
+            net.get_edge(c, b).set_length(remaining * (1.0 - split_xy))
+
+            net.add_edges(Edge(z, c, length=retic_len, gamma=0.5))
+            c.set_is_reticulation(True)
+        else:
+            # Standard case
             insert_node_in_edge(net.get_edge(x, y), c, net)
+            net.get_edge(x, c).set_length(len_xy * split_xy)
+            net.get_edge(c, y).set_length(len_xy * (1.0 - split_xy))
+            net.get_edge(x, c).set_gamma(0.5)
+
             insert_node_in_edge(net.get_edge(a, b), z, net)
-            connect_nodes(z, c, net)
-            
-        self.undo_info = [a, b, x, y, c, z]
-        self.same_move_info = [node.label for node in self.undo_info]
-        
+            net.get_edge(a, z).set_length(len_ab * split_ab)
+            net.get_edge(z, b).set_length(len_ab * (1.0 - split_ab))
+
+            retic_edge = Edge(z, c, length=retic_len, gamma=0.5)
+            net.add_edges(retic_edge)
+            c.set_is_reticulation(True)
+
+        self.same_move_info = copy.deepcopy(net)
         model.update_network()
         return model
 
     def undo(self, model: Model) -> None:
-        """
-        Undoes the addition of a reticulation to a network.
-
-        Args:
-            model (Model): The model object containing the network.
-        Returns:
-            N/A
-        """
-        net: Network = model.network
-        
         if self.undo_info is not None:
-            a: Node = self.undo_info[0]
-            b: Node = self.undo_info[1]
-            x: Node = self.undo_info[2]
-            y: Node = self.undo_info[3]
-            c: Node = self.undo_info[4]
-            z: Node = self.undo_info[5]
-            
-            net.remove_nodes(c)
-            net.remove_nodes(z)
-            connect_nodes(a, b, net)
-            connect_nodes(x, y, net)
-
+            model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
-        """
-        Applies the same addition of a reticulation to another model.
-
-        Args:
-            model (Model): The model object containing the network.
-        Returns:
-            N/A
-        """
-        net: Network = model.network
-        
         if self.same_move_info is not None:
-            nodes: list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
-            
-            a: Node = nodes[0]
-            b: Node = nodes[1]
-            x: Node = nodes[2]
-            y: Node = nodes[3]
-            c: Node = Node(name=self.same_move_info[4], is_reticulation=True)
-            z: Node = Node(name=self.same_move_info[5])
-            
-            net.add_nodes(z)
-            net.add_nodes(c)
-            
-            insert_node_in_edge(Edge(a, b), z, net)
-            insert_node_in_edge(Edge(x, y), c, net)
-            connect_nodes(z, c, net)
-        
+            model.network = copy.deepcopy(self.same_move_info)
         model.update_network()
-    
+
     def hastings_ratio(self) -> float:
-        """
-        Returns the Hastings ratio for the addition move.
-        
-        Args:
-            N/A 
-        Returns:
-            float: The Hastings ratio.
-        """
         return 1.0
 
 
 class RemoveReticulation(Move):
+    """Remove a reticulation node from the network.
+
+    Algorithm:
+      1. Pick a random reticulation node c (in=2, out=1).
+      2. Randomly choose one of its two parent edges to delete.
+      3. Remove that parent edge.  c now has (in=1, out=1) -- suppress c.
+      4. The source of the deleted edge may now be degree-2 -- suppress it.
+
+    Uses deep-copy for undo/same_move to guarantee correctness.
     """
-    A move that removes a reticulation from a network.
-    """
+
     def __init__(self) -> None:
-        """
-        Initializes a move that removes a reticulation from a network.
-        
-        Args:
-            N/A
-        Returns:
-            N/A
-        """
         super().__init__()
-    
+
     def execute(self, model: Model) -> Model:
         net: Network = model.network
-        
-        # Select a random reticulation edge to remove
-        retic_edges = [e for e in net.E() if e.dest.is_reticulation()]
-        if not retic_edges:
+        self.undo_info = copy.deepcopy(net)
+
+        retic_nodes = [n for n in net.V()
+                       if n.is_reticulation() and net.in_degree(n) == 2]
+        if not retic_nodes:
             return model
-            
-        retic_edge: Edge = random.choice(retic_edges)
-        
-        c: Node = retic_edge.dest
-        z: Node = retic_edge.src
-        
-        c_children = net.get_children(c)
-        c_parents = c.get_parents() if hasattr(c, 'get_parents') else net.get_parents(c)
-        z_children = net.get_children(z)
-        z_parent = z.get_parent() if hasattr(z, 'get_parent') else None
-        
-        if not c_children or not z_children:
+
+        c: Node = random.choice(retic_nodes)
+        parents = net.get_parents(c)
+        if len(parents) != 2:
             return model
-            
-        a: Node = c_children[0]
-        b: Node = [node for node in c_parents if node != z][0] if len(c_parents) > 1 else None
-        x: Node = [node for node in z_children if node != c][0] if len(z_children) > 1 else None
-        y: Node = z_parent
-        
-        if b is None or x is None or y is None:
-            return model
-        
-        if a != x or b != y:  # Not a bubble
-            net.remove_edge(retic_edge)
-            net.remove_nodes(c, True)
-            net.remove_nodes(z, True)
-            
-            connect_nodes(a, b, net)
-            connect_nodes(x, y, net)
-            
-            self.undo_info = [c, z, a, b, x, y]
-            self.same_move_info = [node.label for node in self.undo_info]
-        
+
+        drop_parent: Node = random.choice(parents)
+        drop_edge = net.get_edge(drop_parent, c)
+
+        net.remove_edge(drop_edge)
+
+        c.set_is_reticulation(False)
+        _suppress_deg2(net, c)
+
+        _suppress_deg2(net, drop_parent)
+
+        self.same_move_info = copy.deepcopy(net)
         model.update_network()
         return model
 
     def undo(self, model: Model) -> None:
-        net: Network = model.network
         if self.undo_info is not None:
-            c: Node = self.undo_info[0]
-            z: Node = self.undo_info[1]
-            a: Node = self.undo_info[2]
-            b: Node = self.undo_info[3]
-            x: Node = self.undo_info[4]
-            y: Node = self.undo_info[5]
-            
-            net.add_nodes(c)
-            net.add_nodes(z)
-            net.add_edges(Edge(z, c))
-            insert_node_in_edge(Edge(b, a), c, net)
-            insert_node_in_edge(Edge(y, x), z, net)
-        
+            model.network = self.undo_info
         model.update_network()
-    
+
     def same_move(self, model: Model) -> None:
-        net: Network = model.network
         if self.same_move_info is not None:
-            nodes: list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
-            c: Node = nodes[0]
-            z: Node = nodes[1]
-            a: Node = nodes[2]
-            b: Node = nodes[3]
-            x: Node = nodes[4]
-            y: Node = nodes[5]
-            
-            net.remove_edge(Edge(z, c))
-            net.remove_nodes(c, True)
-            net.remove_nodes(z, True)
-            connect_nodes(a, b, net)
-            connect_nodes(x, y, net)
-        
+            model.network = copy.deepcopy(self.same_move_info)
         model.update_network()
-    
+
     def hastings_ratio(self) -> float:
         return 1.0
 
 
 class FlipReticulation(Move):
+    """Flip the direction of one reticulation edge, keeping degree constraints.
+
+    Picks a random reticulation edge (z -> c) and reverses it to (c -> z),
+    provided the result is still a valid DAG and doesn't violate degree
+    constraints.  The source ``z`` becomes a reticulation (in-degree 2)
+    and ``c`` may lose its reticulation status.
+
+    Uses deep-copy for undo/same_move to guarantee correctness.
     """
-    A move that flips the direction of a reticulation edge.
-    """
-    
+
     def __init__(self) -> None:
-        """
-        Initializes a move that flips the direction of a reticulation edge.
-        
-        Args:
-            N/A
-        Returns:
-            N/A
-        """
         super().__init__()
-    
+
     def execute(self, model: Model) -> Model:
-        """
-        Removes a reticulation edge from the network
-        
-        Args:
-            model (Model): The model object containing the network.
-        Returns:
-            Model: The modified model with the flipped reticulation
-        """
         net: Network = model.network
-        
-        # Select a random reticulation edge to remove
-        retic_edges = [e for e in net.E() if e.dest.is_reticulation()]
+        self.undo_info = copy.deepcopy(net)
+
+        root = net.root()
+        retic_edges = [e for e in net.E()
+                       if e.dest.is_reticulation() and e.src != root]
         if not retic_edges:
             return model
-            
+
         retic_edge: Edge = random.choice(retic_edges)
-        
-        c: Node = retic_edge.dest
         z: Node = retic_edge.src
-       
+        c: Node = retic_edge.dest
+        saved_gamma = retic_edge.get_gamma()
+        saved_length = retic_edge.get_length()
+
         net.remove_edge(retic_edge)
-        net.add_edges(Edge(c, z))
-        
-        if hasattr(c, 'remove_parent'):
-            c.remove_parent(z)
-        if hasattr(z, 'add_parent'):
-            z.add_parent(c)
-        c.set_is_reticulation(False)
-        z.set_is_reticulation(True)
-        
-        self.undo_info = [c, z]
-        self.same_move_info = [c.label, z.label]
-        
+        net.add_edges(Edge(c, z, length=saved_length, gamma=saved_gamma))
+
+        if net.in_degree(c) <= 1:
+            c.set_is_reticulation(False)
+        if net.in_degree(z) > 1:
+            z.set_is_reticulation(True)
+
+        if not net.is_acyclic():
+            model.network = self.undo_info
+            self.undo_info = None
+            model.update_network()
+            return model
+
+        self.same_move_info = copy.deepcopy(net)
         model.update_network()
         return model
 
     def undo(self, model: Model) -> None:
-        """
-        Undoes the flipping of the reticulation edge.
-
-        Args:
-            model (Model): The model object containing the network.
-        Returns:
-            N/A
-        """
-        net: Network = model.network
         if self.undo_info is not None:
-            c: Node = self.undo_info[0]
-            z: Node = self.undo_info[1]
-            
-            net.remove_edge(Edge(c, z))
-            net.add_edges(Edge(z, c))
-            
-            if hasattr(z, 'remove_parent'):
-                z.remove_parent(c)
-            if hasattr(c, 'add_parent'):
-                c.add_parent(z)
-            
-            c.set_is_reticulation(True)
-            z.set_is_reticulation(False)
-        
+            model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
-        """
-        Applies the same flipping of the reticulation edge to another model.
-
-        Args:
-            model (Model): The model object containing the network.
-        Returns:
-            N/A
-        """
-        net: Network = model.network
         if self.same_move_info is not None:
-            nodes: list[Node] = [net.has_node_named(nodename) for nodename in self.same_move_info]
-            c: Node = nodes[0]
-            z: Node = nodes[1]
-            
-            net.remove_edge(Edge(z, c))
-            net.add_edges(Edge(c, z))
-            
-            if hasattr(c, 'remove_parent'):
-                c.remove_parent(z)
-            if hasattr(z, 'add_parent'):
-                z.add_parent(c)
-            c.set_is_reticulation(False)
-            z.set_is_reticulation(True)
+            model.network = copy.deepcopy(self.same_move_info)
         model.update_network()
-            
+
     def hastings_ratio(self) -> float:
-        """
-        Return the hastings ratio for this move
-        
-        Args:
-            N/A
-        Returns:
-            float: The hastings ratio for the flip reticulation move
-        """
         return 1.0
     
 
@@ -798,132 +672,433 @@ class SwitchParentage(Move):
 
 
 class SPR(Move):
-    """
-    A move that performs a Subtree Prune and Regraft operation on a network.
-    """
-    def __init__(self, debug_id: int = 0) -> None:
-        """
-        Initializes a move that performs a Subtree Prune and Regraft operation.
+    """Subtree Prune and Regraft on a phylogenetic network.
 
-        Args:
-            debug_id (int): The debug id for the move.
-        Returns:
-            N/A
-        """
+    Network-safe algorithm:
+      1. Select a random edge (u -> v) to prune, subject to:
+         - v is not a leaf
+         - v is not a reticulation (we don't detach reticulation children)
+         - u is not a reticulation with out-degree 1 (would leave it (2,0))
+         - u is not root with out-degree 2 (would leave root with 1 child)
+      2. Remove the edge (u -> v).
+      3. Repair u: if u becomes (1,1), suppress u (merge incident edges).
+      4. Collect subtree nodes rooted at v (used to prevent cycles).
+      5. Select a target edge (a -> b) where neither endpoint is in the
+         subtree (prevents cycles).
+      6. Subdivide (a -> b) by inserting a new node w:
+         a -> w -> b, with split branch lengths.
+      7. Attach: w -> v.  w is now (1,2) -- a valid internal node.
+
+    Uses deep-copy for undo/same_move to guarantee correctness.
+    """
+
+    def __init__(self, debug_id: int = 0) -> None:
         super().__init__()
-        self.logger = Logger(str(debug_id))
         self.undo_info = None
         self.same_move_info = None
 
-    def random_object(self, mylist: list, rng: np.random.Generator) -> object:    
-        """
-        Selects a random object from a list.
-
-        Args:
-            mylist (list): The list of objects to select from.
-            rng (np.random.Generator): The random number generator.
-
-        Returns:
-            object: The randomly selected object.
-        """
-        if len(mylist) == 0:
-            return None
-        rand_index = rng.integers(0, len(mylist))
-        return mylist[rand_index]
-
     def execute(self, model: Model) -> Model:
-        """
-        Executes the Subtree Prune and Regraft move.
-
-        Args:
-            model (Model): The model object containing the network.
-        Returns:
-            Model: The modified model with the Subtree Prune and Regraft 
-                   move executed.
-        """
         net: Network = model.network
         self.undo_info = copy.deepcopy(net)
 
-        edges = net.E()
-        if not edges:
+        root = net.root()
+        prunable = []
+        for e in net.E():
+            u, v = e.src, e.dest
+            if v in net.get_leaves():
+                continue
+            if v.is_reticulation():
+                continue
+            if u == root and net.out_degree(root) <= 2:
+                continue
+            if u.is_reticulation() and net.out_degree(u) <= 1:
+                continue
+            prunable.append(e)
+
+        if not prunable:
             return model
-            
-        # Select a random edge to cut
-        edge_to_cut: Edge = self.random_object(edges, model.rng)
-        if edge_to_cut is None:
-            return model
-            
-        src, dest = edge_to_cut.src, edge_to_cut.dest
 
-        # Remove the selected edge
-        net.remove_edge(edge_to_cut)
+        prune_edge: Edge = random.choice(prunable)
+        prune_parent: Node = prune_edge.src
+        subtree_root: Node = prune_edge.dest
+        prune_len: float = prune_edge.get_length() or 1.0
 
-        # Collect the subtree rooted at dest
-        subtree_nodes = net.get_subtree_at(dest) if hasattr(net, 'get_subtree_at') else [dest]
-        subtree_edges = net.edges_downstream_of_node(dest) if hasattr(net, 'edges_downstream_of_node') else []
+        subtree_nodes = net.get_subtree_at(subtree_root)
 
-        # Remove the subtree from the network
-        for edge in subtree_edges:
-            net.remove_edge(edge)
-        for node in subtree_nodes:
-            net.remove_nodes(node)
+        net.remove_edge(prune_edge)
 
-        # Select a random edge to reattach the subtree
-        remaining_edges = net.E()
-        if not remaining_edges:
+        _suppress_deg2(net, prune_parent)
+
+        forbidden = subtree_nodes
+        eligible = [e for e in net.E()
+                    if e.src not in forbidden and e.dest not in forbidden]
+        if not eligible:
+            model.network = self.undo_info
+            self.undo_info = None
             model.update_network()
             return model
-            
-        reattachment_edge: Edge = self.random_object(remaining_edges, model.rng)
-        if reattachment_edge is None:
-            model.update_network()
-            return model
-            
-        reattachment_src, reattachment_dest = reattachment_edge.src, reattachment_edge.dest
 
-        # Insert the subtree back into the network
-        net.add_edges(Edge(reattachment_src, dest))
-        for edge in subtree_edges:
-            net.add_edges(edge)
+        target_edge: Edge = random.choice(eligible)
+        a: Node = target_edge.src
+        b: Node = target_edge.dest
+        target_len: float = target_edge.get_length() or 1.0
 
-        model.update_network()
+        new_node: Node = net.add_uid_node()
+        split = random.random()
+        insert_node_in_edge(target_edge, new_node, net)
+        net.get_edge(a, new_node).set_length(target_len * split)
+        net.get_edge(new_node, b).set_length(target_len * (1.0 - split))
+
+        net.add_edges(Edge(new_node, subtree_root, length=prune_len))
+
         self.same_move_info = copy.deepcopy(net)
+        model.update_network()
         return model
 
-    def undo(self, model: Model) -> None: 
-        """
-        Undoes the Subtree Prune and Regraft move.
-
-        Args:
-            model (Model): The model object containing the network.
-        Returns:
-            N/A
-        """
+    def undo(self, model: Model) -> None:
         if self.undo_info is not None:
             model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
-        """
-        Perform the same Subtree Prune and Regraft move on another model.
-
-        Args:
-            model (Model): The model object containing the network.
-        Returns:
-            N/A
-        """
         if self.same_move_info is not None:
             model.network = copy.deepcopy(self.same_move_info)
         model.update_network()
 
     def hastings_ratio(self) -> float:
-        """
-        Returns the Hastings ratio for the Subtree Prune and Regraft move.
+        return 1.0
 
-        Args:
-            N/A
-        Returns:
-            float: The Hastings ratio.
-        """
+
+################################
+#### PARAMETER-LEVEL MOVES #####
+################################
+
+def _suppress_deg2(net: Network, node: Node) -> None:
+    """Suppress a node that has become a degree-2 passthrough (in=1, out=1).
+
+    The two incident edges are merged into one whose branch length is the
+    sum of the originals. Gamma is inherited from the child-side edge.
+    """
+    if net.in_degree(node) != 1 or net.out_degree(node) != 1:
+        return
+    parent = net.get_parents(node)[0]
+    child = net.get_children(node)[0]
+    e_up = net.get_edge(parent, node)
+    e_dn = net.get_edge(node, child)
+    len_up = e_up.get_length() or 0.0
+    len_dn = e_dn.get_length() or 0.0
+    new_gamma = e_dn.get_gamma() if e_dn.get_gamma() else e_up.get_gamma()
+    net.remove_edge(e_up)
+    net.remove_edge(e_dn)
+    net.remove_nodes(node)
+    net.add_edges(Edge(parent, child, length=len_up + len_dn, gamma=new_gamma))
+
+
+class ChangeNodeHeight(Move):
+    """Slide an internal node up or down by adjusting incident branch lengths.
+
+    A random internal (non-root, non-leaf) node is chosen and shifted by
+    a uniform delta.  The valid range is bounded so that no incident
+    branch length drops below a small epsilon.
+    """
+
+    _EPSILON = 1e-6
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def execute(self, model: Model) -> Model:
+        net: Network = model.network
+
+        candidates = [
+            n for n in net.V()
+            if net.out_degree(n) > 0 and net.in_degree(n) > 0
+        ]
+        if not candidates:
+            model.update_network()
+            return model
+
+        node = random.choice(candidates)
+        parent_edges = list(net.in_edges(node))
+        child_edges = list(net.out_edges(node))
+
+        if not parent_edges or not child_edges:
+            model.update_network()
+            return model
+
+        min_parent_len = min(e.get_length() for e in parent_edges)
+        min_child_len = min(e.get_length() for e in child_edges)
+
+        lower = -(min_parent_len - self._EPSILON)
+        upper = min_child_len - self._EPSILON
+
+        if lower >= upper:
+            model.update_network()
+            return model
+
+        delta = random.uniform(lower, upper)
+
+        edge_changes: list[tuple[str, str, float, float]] = []
+        for e in parent_edges:
+            old_len = e.get_length()
+            new_len = old_len + delta
+            edge_changes.append((e.src.label, e.dest.label, old_len, new_len))
+            e.set_length(new_len)
+        for e in child_edges:
+            old_len = e.get_length()
+            new_len = old_len - delta
+            edge_changes.append((e.src.label, e.dest.label, old_len, new_len))
+            e.set_length(new_len)
+
+        self.undo_info = edge_changes
+        self.same_move_info = edge_changes
+        model.update_network()
+        return model
+
+    def undo(self, model: Model) -> None:
+        net: Network = model.network
+        if self.undo_info is not None:
+            for src_lbl, dest_lbl, old_len, _new_len in self.undo_info:
+                src = net.has_node_named(src_lbl)
+                dest = net.has_node_named(dest_lbl)
+                if src is not None and dest is not None:
+                    net.get_edge(src, dest).set_length(old_len)
+        model.update_network()
+
+    def same_move(self, model: Model) -> None:
+        net: Network = model.network
+        if self.same_move_info is not None:
+            for src_lbl, dest_lbl, _old_len, new_len in self.same_move_info:
+                src = net.has_node_named(src_lbl)
+                dest = net.has_node_named(dest_lbl)
+                if src is not None and dest is not None:
+                    net.get_edge(src, dest).set_length(new_len)
+        model.update_network()
+
+    def hastings_ratio(self) -> float:
+        return 1.0
+
+
+class ChangeInheritanceProb(Move):
+    """Propose a new inheritance probability for a random reticulation node.
+
+    The two parent edges of a reticulation always carry complementary
+    gammas (gamma and 1-gamma).  This move draws a new value uniformly
+    from (0, 1) and updates both edges accordingly.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def execute(self, model: Model) -> Model:
+        net: Network = model.network
+
+        retic_nodes = [
+            n for n in net.V() if net.in_degree(n) == 2 and n.is_reticulation()
+        ]
+        if not retic_nodes:
+            model.update_network()
+            return model
+
+        node = random.choice(retic_nodes)
+        parent_edges = list(net.in_edges(node))
+        if len(parent_edges) != 2:
+            model.update_network()
+            return model
+
+        e1, e2 = parent_edges
+        old_g1 = e1.get_gamma()
+        old_g2 = e2.get_gamma()
+
+        new_g1 = random.random()
+        e1.set_gamma(new_g1)
+        e2.set_gamma(1.0 - new_g1)
+
+        self.undo_info = (e1.src.label, e1.dest.label, old_g1,
+                          e2.src.label, e2.dest.label, old_g2)
+        self.same_move_info = (e1.src.label, e1.dest.label, new_g1,
+                               e2.src.label, e2.dest.label, 1.0 - new_g1)
+        model.update_network()
+        return model
+
+    def undo(self, model: Model) -> None:
+        net: Network = model.network
+        if self.undo_info is not None:
+            s1, d1, g1, s2, d2, g2 = self.undo_info
+            n_s1, n_d1 = net.has_node_named(s1), net.has_node_named(d1)
+            n_s2, n_d2 = net.has_node_named(s2), net.has_node_named(d2)
+            if n_s1 is not None and n_d1 is not None:
+                net.get_edge(n_s1, n_d1).set_gamma(g1)
+            if n_s2 is not None and n_d2 is not None:
+                net.get_edge(n_s2, n_d2).set_gamma(g2)
+        model.update_network()
+
+    def same_move(self, model: Model) -> None:
+        net: Network = model.network
+        if self.same_move_info is not None:
+            s1, d1, g1, s2, d2, g2 = self.same_move_info
+            n_s1, n_d1 = net.has_node_named(s1), net.has_node_named(d1)
+            n_s2, n_d2 = net.has_node_named(s2), net.has_node_named(d2)
+            if n_s1 is not None and n_d1 is not None:
+                net.get_edge(n_s1, n_d1).set_gamma(g1)
+            if n_s2 is not None and n_d2 is not None:
+                net.get_edge(n_s2, n_d2).set_gamma(g2)
+        model.update_network()
+
+    def hastings_ratio(self) -> float:
+        return 1.0
+
+
+class ChangeReticSource(Move):
+    """Move the source (tail / parent) of a reticulation edge to a new location.
+
+    Picks a random reticulation edge z->c, detaches the source end,
+    suppresses z if it becomes degree-2, then reattaches from a
+    freshly-inserted node on a randomly chosen edge (avoiding edges
+    downstream of c to prevent cycles).
+
+    Uses deep-copy for undo/same_move to guarantee correctness.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def execute(self, model: Model) -> Model:
+        net: Network = model.network
+        self.undo_info = copy.deepcopy(net)
+
+        retic_edges = [e for e in net.E() if e.dest.is_reticulation()]
+        if not retic_edges:
+            model.update_network()
+            return model
+
+        retic_edge = random.choice(retic_edges)
+        z: Node = retic_edge.src
+        c: Node = retic_edge.dest
+        saved_gamma = retic_edge.get_gamma()
+        saved_length = retic_edge.get_length()
+
+        net.remove_edge(retic_edge)
+
+        if net.in_degree(z) == 1 and net.out_degree(z) == 1:
+            _suppress_deg2(net, z)
+
+        forbidden = set(net.edges_downstream_of_node(c))
+        forbidden.update(net.in_edges(c))
+        forbidden.update(net.out_edges(c))
+        eligible = [e for e in net.E() if e not in forbidden]
+
+        if not eligible:
+            model.network = self.undo_info
+            model.update_network()
+            self.undo_info = None
+            return model
+
+        host = random.choice(eligible)
+        a, b = host.src, host.dest
+        z_new = net.add_uid_node()
+        host_len = host.get_length()
+        split = random.random()
+
+        net.remove_edge(host)
+        net.add_edges(Edge(a, z_new, length=host_len * split))
+        net.add_edges(Edge(z_new, b, length=host_len * (1.0 - split)))
+        net.add_edges(Edge(z_new, c, length=saved_length, gamma=saved_gamma))
+
+        if net.in_degree(c) > 1:
+            c.set_is_reticulation(True)
+
+        self.same_move_info = copy.deepcopy(net)
+        model.update_network()
+        return model
+
+    def undo(self, model: Model) -> None:
+        if self.undo_info is not None:
+            model.network = self.undo_info
+        model.update_network()
+
+    def same_move(self, model: Model) -> None:
+        if self.same_move_info is not None:
+            model.network = copy.deepcopy(self.same_move_info)
+        model.update_network()
+
+    def hastings_ratio(self) -> float:
+        return 1.0
+
+
+class ChangeReticDest(Move):
+    """Move the destination (head) of a reticulation edge to a new location.
+
+    Picks a random reticulation edge z->c, detaches the destination end,
+    suppresses c if it becomes degree-2 (it loses its reticulation status),
+    then reattaches to a freshly-inserted reticulation node on a randomly
+    chosen edge (avoiding edges upstream of z to prevent cycles).
+
+    Uses deep-copy for undo/same_move to guarantee correctness.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def execute(self, model: Model) -> Model:
+        net: Network = model.network
+        self.undo_info = copy.deepcopy(net)
+
+        retic_edges = [e for e in net.E() if e.dest.is_reticulation()]
+        if not retic_edges:
+            model.update_network()
+            return model
+
+        retic_edge = random.choice(retic_edges)
+        z: Node = retic_edge.src
+        c: Node = retic_edge.dest
+        saved_gamma = retic_edge.get_gamma()
+        saved_length = retic_edge.get_length()
+
+        net.remove_edge(retic_edge)
+
+        if net.in_degree(c) <= 1:
+            c.set_is_reticulation(False)
+        if net.in_degree(c) == 1 and net.out_degree(c) == 1:
+            _suppress_deg2(net, c)
+
+        forbidden = set(net.edges_upstream_of_node(z))
+        forbidden.update(net.in_edges(z))
+        forbidden.update(net.out_edges(z))
+        eligible = [e for e in net.E() if e not in forbidden]
+
+        if not eligible:
+            model.network = self.undo_info
+            model.update_network()
+            self.undo_info = None
+            return model
+
+        host = random.choice(eligible)
+        a, b = host.src, host.dest
+        c_new = net.add_uid_node()
+        c_new.set_is_reticulation(True)
+        host_len = host.get_length()
+        split = random.random()
+
+        net.remove_edge(host)
+        net.add_edges(Edge(a, c_new, length=host_len * split))
+        net.add_edges(Edge(c_new, b, length=host_len * (1.0 - split)))
+        net.add_edges(Edge(z, c_new, length=saved_length, gamma=saved_gamma))
+
+        self.same_move_info = copy.deepcopy(net)
+        model.update_network()
+        return model
+
+    def undo(self, model: Model) -> None:
+        if self.undo_info is not None:
+            model.network = self.undo_info
+        model.update_network()
+
+    def same_move(self, model: Model) -> None:
+        if self.same_move_info is not None:
+            model.network = copy.deepcopy(self.same_move_info)
+        model.update_network()
+
+    def hastings_ratio(self) -> float:
         return 1.0
 

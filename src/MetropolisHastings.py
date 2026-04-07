@@ -121,6 +121,17 @@ class ProposalKernel(ABC):
         """
         raise NotImplementedError("Calling abstract method from the "
                                   "ProposalKernel superclass.")
+
+    def report_outcome(self, accepted: bool, delta: float = 0.0) -> None:
+        """Report whether the last generated move was accepted or rejected.
+
+        Subclasses may override this to implement adaptive weight tuning.
+
+        Args:
+            accepted: True if the move improved the score and was committed.
+            delta: Score change (proposed - current).  Positive means
+                   the proposal was better (for a maximisation problem).
+        """
     
 
 class Infer_MP_Allop_Kernel(ProposalKernel):
@@ -225,31 +236,46 @@ class HillClimbing:
         
         leaderboard: dict[Network, float] = {}
         no_progress = 0
+        cached_cur: float | None = None
         
         while iter_no < self.num_iter:
             if no_progress == 150:
                 break
             
-            # propose a new state
             next_move = self.kernel.generate()
-          
             is_valid: bool = self.current_state.generate_next(next_move)
             
             if is_valid:
-                cur: float = self.current_state.likelihood()
-                proposed: float = self.current_state.proposed().likelihood()
+                try:
+                    if cached_cur is None:
+                        cached_cur = self.current_state.likelihood()
+                    cur = cached_cur
+                    proposed: float = self.current_state.proposed().likelihood()
+                except Exception:
+                    try:
+                        self.current_state.revert(next_move)
+                    except Exception:
+                        pass
+                    self.kernel.report_outcome(False, delta=0.0)
+                    if self.enhanced_stop:
+                        no_progress += 1
+                    iter_no += 1
+                    continue
                 
                 delta: float = cur - proposed
                 accepted: bool = True 
                 
                 if delta < 0:
                     self.current_state.commit(next_move)  
+                    cached_cur = proposed
                     no_progress = 0
                 else:
                     accepted = False
                     self.current_state.revert(next_move)
                     if self.enhanced_stop:
                         no_progress += 1
+
+                self.kernel.report_outcome(accepted, delta=proposed - cur)
                 
                 cur_net = self.current_state.current_model.network
         
@@ -517,19 +543,31 @@ class SimulatedAnnealing:
                 temp *= self.alpha
                 continue
 
-            cur = state.likelihood()
-            proposed = state.proposed().likelihood()
+            try:
+                cur = state.likelihood()
+                proposed = state.proposed().likelihood()
+            except Exception:
+                state.revert(next_move)
+                self.kernel.report_outcome(False, delta=0.0)
+                temp *= self.alpha
+                continue
+
             delta = cur - proposed
 
+            was_accepted = False
             if delta < 0:
                 state.commit(next_move)
                 accepted += 1
+                was_accepted = True
             elif temp > 0 and self.rng.random() < math.exp(-delta / temp):
                 state.commit(next_move)
                 accepted += 1
                 uphill_accepted += 1
+                was_accepted = True
             else:
                 state.revert(next_move)
+
+            self.kernel.report_outcome(was_accepted, delta=proposed - cur)
 
             score_now = state.likelihood()
             if score_now > best_run_score:

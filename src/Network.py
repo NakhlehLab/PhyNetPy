@@ -3087,11 +3087,15 @@ class Network(Graph):
         
         q : deque[Node] = deque()
         q.appendleft(n)
+        visited: set[Node] = set()
         
         edges : list[Edge] = list()
         
         while len(q) != 0:
-            cur = q.pop() #pop right for bfs
+            cur = q.pop()
+            if cur in visited:
+                continue
+            visited.add(cur)
 
             edge : Edge
             for edge in self.out_edges(cur):
@@ -3119,11 +3123,15 @@ class Network(Graph):
         
         q : deque[Node] = deque()
         q.appendleft(n)
+        visited: set[Node] = set()
         
         edges : list[Edge] = list()
         
         while len(q) != 0:
-            cur = q.pop() #pop right for bfs
+            cur = q.pop()
+            if cur in visited:
+                continue
+            visited.add(cur)
 
             edge : Edge
             for edge in self.in_edges(cur):
@@ -3773,10 +3781,12 @@ class Network(Graph):
         Returns:
             set[Node]: A set of nodes in the subtree.
         """
-        subtree_nodes = set()
-        q = deque([node])
+        subtree_nodes: set[Node] = set()
+        q: deque[Node] = deque([node])
         while q:
             current = q.popleft()
+            if current in subtree_nodes:
+                continue
             subtree_nodes.add(current)
             for child in self.get_children(current):
                 q.append(child)

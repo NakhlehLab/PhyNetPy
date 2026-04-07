@@ -41,7 +41,9 @@ Implements the scoring function from:
  
 from __future__ import annotations
  
+import copy
 import math
+import random
 from collections import deque
 from itertools import combinations
 from typing import Optional
@@ -49,6 +51,9 @@ from typing import Optional
 from .Network import Network, Node
 from .GeneTrees import GeneTrees
 from . import IO as io
+from .ModelGraph import Model
+from .MetropolisHastings import ProposalKernel, HillClimbing, SimulatedAnnealing
+from .ModelMove import *
  
 _LOG_FLOOR = math.log(1e-200)
  
@@ -991,6 +996,163 @@ def score_species_network_triplets(species_net: Network,
     )
 
 
+##############################
+#### SCORER AND KERNEL #######
+##############################
+
+
+class MPLScorer:
+    """Callable scorer for use with ``Model.set_likelihood_calculator()``.
+
+    Holds the precomputed gene-tree rho values (constant across the search)
+    and rebuilds the species-network DP engine on every call, since topology
+    moves change the articulation-node structure.
+    """
+
+    def __init__(self,
+                 rho: dict[tuple[str, str, str], tuple[float, float, float]],
+                 triplets: list[tuple[str, str, str]]) -> None:
+        """
+        Args:
+            rho: Mapping triplet -> (rho_xy_z, rho_xz_y, rho_yz_x).
+            triplets: Canonical species triplets to iterate over.
+        """
+        self._rho = rho
+        self._triplets = triplets
+
+    def __call__(self, model: Model) -> float:
+        """Compute log pseudo-likelihood for the current network in *model*.
+
+        Args:
+            model: A Model whose ``network`` attribute is the species network.
+        Returns:
+            Log pseudo-likelihood score (negative; higher = better).
+        """
+        engine = _TripleDPEngine(model.network)
+        total = 0.0
+        for triplet in self._triplets:
+            x, y, z = triplet
+            p_xy = engine.calculate_triple_probability((x, y, z))
+            p_xz = engine.calculate_triple_probability((x, z, y))
+            probs = (p_xy, p_xz, max(1.0 - p_xy - p_xz, 0.0))
+            rho = self._rho[triplet]
+            for rho_i, p_i in zip(rho, probs):
+                if rho_i > 0.0:
+                    total += rho_i * (math.log(p_i) if p_i > 0.0 else _LOG_FLOOR)
+        return total
+
+
+class MPLKernel(ProposalKernel):
+    """Proposal kernel that randomly selects a topology move for MPL search.
+
+    When *adaptive=True* (the default), selection weights are tuned
+    online using a sliding window of recent outcomes.  Each move class
+    is scored by ``acceptance_rate * mean_abs_improvement``.  A minimum
+    weight floor prevents any move from being starved entirely.
+    """
+
+    def __init__(self,
+                 move_types: list[type[Move]] | None = None,
+                 weights: list[float] | None = None,
+                 max_reticulations: int | None = None,
+                 adaptive: bool = True,
+                 window_size: int = 50,
+                 min_weight: float = 0.02) -> None:
+        """
+        Args:
+            move_types: Move classes to sample from.
+            weights: Fixed selection weights.  Setting this disables
+                     adaptive tuning even when *adaptive=True*.
+            max_reticulations: Cap on the number of reticulation nodes.
+            adaptive: Enable online weight tuning based on acceptance
+                      rates and score improvements.
+            window_size: Number of recent outcomes to consider per
+                         move class when computing adaptive weights.
+            min_weight: Floor weight so no move is ever fully starved.
+        """
+        super().__init__()
+        self._moves: list[type[Move]] = move_types or [
+            AddReticulation,
+            RemoveReticulation,
+            FlipReticulation,
+            SPR,
+            ChangeNodeHeight,
+            ChangeReticSource,
+            ChangeReticDest,
+            ChangeInheritanceProb
+        ]
+        self._fixed_weights: list[float] | None = weights
+        self._max_retics: int | None = max_reticulations
+
+        self._adaptive: bool = adaptive and (weights is None)
+        self._window_size: int = window_size
+        self._min_weight: float = min_weight
+
+        from collections import deque
+        self._history: dict[type[Move], deque] = {
+            cls: deque(maxlen=window_size) for cls in self._moves
+        }
+        self._last_cls: type[Move] | None = None
+        self._warmup: int = 3
+
+    def generate(self) -> Move:
+        """Return a freshly instantiated random move.
+
+        When adaptive tuning is active, selection weights are recomputed
+        from the sliding window before each draw.
+        """
+        if self._adaptive:
+            weights = self._compute_weights()
+        else:
+            weights = self._fixed_weights
+
+        cls = random.choices(self._moves, weights=weights, k=1)[0]
+        self._last_cls = cls
+
+        if cls is AddReticulation and self._max_retics is not None:
+            return AddReticulation(max_reticulations=self._max_retics)
+        return cls()
+
+    def report_outcome(self, accepted: bool, delta: float = 0.0) -> None:
+        """Record the outcome of the last generated move."""
+        if self._last_cls is not None and self._last_cls in self._history:
+            self._history[self._last_cls].append((accepted, delta))
+
+    def _compute_weights(self) -> list[float]:
+        """Derive selection weights from the sliding window.
+
+        Score per move class = acceptance_rate * mean_abs_improvement.
+        Falls back to uniform for classes with fewer than ``_warmup``
+        data points.
+        """
+        weights: list[float] = []
+        for cls in self._moves:
+            history = self._history[cls]
+            if len(history) < self._warmup:
+                weights.append(1.0)
+                continue
+
+            n_accepted = sum(1 for a, _ in history if a)
+            acc_rate = n_accepted / len(history)
+
+            improvements = [abs(d) for a, d in history if a and d > 0]
+            mean_improvement = (sum(improvements) / len(improvements)
+                                if improvements else 1.0)
+
+            score = acc_rate * mean_improvement
+            weights.append(max(score, self._min_weight))
+
+        return weights
+
+    def get_weights(self) -> dict[str, float]:
+        """Return the current adaptive weights (for diagnostics)."""
+        weights = self._compute_weights() if self._adaptive else (
+            self._fixed_weights or [1.0] * len(self._moves))
+        total = sum(weights)
+        return {cls.__name__: w / total for cls, w in
+                zip(self._moves, weights)}
+
+
 ###################
 #### MPL CLASS ####
 ###################
@@ -1113,6 +1275,64 @@ class MPL:
         for triplet in self._triplets:
             total += self._score_triplet(triplet)
         return total
+    
+    def search(self,
+               method: str = "hc",
+               num_iter: int = 700,
+               kernel: MPLKernel | None = None,
+               max_reticulations: int | None = None,
+               **kwargs) -> float:
+        """Search the network space for the species network that maximises
+        the pseudo-likelihood of the observed gene trees.
+
+        Args:
+            method: ``"hc"`` for Hill Climbing (default) or ``"sa"`` for
+                    Simulated Annealing.
+            num_iter: Number of topology moves to evaluate.
+            kernel: Custom :class:`MPLKernel` instance. When ``None`` a
+                    default kernel is used.
+            max_reticulations: Upper bound on reticulation nodes allowed.
+                    ``None`` means unlimited.  Ignored if a custom *kernel*
+                    is supplied.
+            **kwargs: Forwarded to the search constructor.  For SA these
+                      include ``t_start``, ``t_end``, ``n_restarts``, ``seed``.
+
+        Returns:
+            Log pseudo-likelihood of the best network found.  The MPL
+            instance's network (``self.net``) is updated in-place with the
+            result.
+        """
+        scorer = MPLScorer(self._rho, self._triplets)
+
+        model = Model()
+        model.network = copy.deepcopy(self.net)
+        model.set_likelihood_calculator(scorer)
+
+        if kernel is None:
+            kernel = MPLKernel(max_reticulations=max_reticulations)
+
+        if method == "hc":
+            searcher = HillClimbing(
+                pkernel=kernel,
+                model=model,
+                num_iter=num_iter,
+                **kwargs,
+            )
+        elif method == "sa":
+            searcher = SimulatedAnnealing(
+                pkernel=kernel,
+                model=model,
+                num_iter=num_iter,
+                **kwargs,
+            )
+        else:
+            raise ValueError(f"Unknown search method {method!r}; use 'hc' or 'sa'")
+
+        end_state = searcher.run()
+
+        self.net = end_state.current_model.network
+        self._triple_engine = _TripleDPEngine(self.net)
+        return end_state.likelihood()
     
     def _score_triplet(self, triplet: tuple[str, str, str]) -> float:
         """

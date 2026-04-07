@@ -483,7 +483,7 @@ class GeneTrees:
             if len(subtaxa) == 1:
                 label = next(iter(subtaxa))
                 if label not in name_to_node:
-                    from Network import Node  # local import to avoid cycles
+                    from .Network import Node  # local import to avoid cycles
                     n = Node(label)
                     net.add_nodes(n)
                     name_to_node[label] = n
@@ -502,7 +502,7 @@ class GeneTrees:
             for x in subtaxa.difference(covered):
                 maximal.append({x})
 
-            from Network import Node
+            from .Network import Node
             parent = Node(f"Internal_{len(net.V())}")
             net.add_nodes(parent)
             for block in maximal:
