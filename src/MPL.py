@@ -1043,70 +1043,180 @@ class MPLScorer:
 
 
 class MPLKernel(ProposalKernel):
-    """Proposal kernel that randomly selects a topology move for MPL search.
+    """Phase-aware proposal kernel for MPL network search.
 
-    When *adaptive=True* (the default), selection weights are tuned
-    online using a sliding window of recent outcomes.  Each move class
-    is scored by ``acceptance_rate * mean_abs_improvement``.  A minimum
-    weight floor prevents any move from being starved entirely.
+    Cycles between two complementary search phases:
+
+      **TOPOLOGY** -- Explores tree space via SPR and branch-length
+      adjustments (ChangeNodeHeight), with ChangeInheritanceProb
+      mixed in for gamma tuning.
+
+      **RETICULATION** -- Searches for hybridization events via
+      Add/Remove/Flip reticulation and source/dest moves, with
+      ChangeInheritanceProb and ChangeNodeHeight for local
+      refinement after reticulation changes.
+
+    Phase transitions fire after ``phase_patience`` consecutive
+    proposals without accepted improvement.  Within each phase,
+    selection weights adapt from phase-specific base distributions
+    using a sliding window of recent acceptance rates.
+
+    When explicit *weights* are supplied, the kernel falls back to
+    flat (non-phased) mode for backward compatibility.
     """
+
+    TOPOLOGY = "topology"
+    RETICULATION = "reticulation"
+
+    _TOPOLOGY_BASE: dict[type, float] = {
+        SPR: 5.0,
+        ChangeNodeHeight: 3.0,
+        ChangeInheritanceProb: 1.0,
+    }
+
+    _RETICULATION_BASE: dict[type, float] = {
+        AddReticulation: 3.0,
+        RemoveReticulation: 2.0,
+        FlipReticulation: 1.5,
+        ChangeReticSource: 1.5,
+        ChangeReticDest: 1.5,
+        ChangeInheritanceProb: 1.5,
+        ChangeNodeHeight: 1.0,
+    }
+
+    _PHASE_ORDER = [TOPOLOGY, RETICULATION]
 
     def __init__(self,
                  move_types: list[type[Move]] | None = None,
                  weights: list[float] | None = None,
                  max_reticulations: int | None = None,
                  adaptive: bool = True,
-                 window_size: int = 50,
-                 min_weight: float = 0.02) -> None:
+                 window_size: int = 30,
+                 min_weight: float = 0.05,
+                 phase_patience: int = 25,
+                 warmup: int = 8) -> None:
         """
         Args:
-            move_types: Move classes to sample from.
-            weights: Fixed selection weights.  Setting this disables
-                     adaptive tuning even when *adaptive=True*.
-            max_reticulations: Cap on the number of reticulation nodes.
-            adaptive: Enable online weight tuning based on acceptance
-                      rates and score improvements.
-            window_size: Number of recent outcomes to consider per
-                         move class when computing adaptive weights.
-            min_weight: Floor weight so no move is ever fully starved.
+            move_types: Move classes available to the kernel.  When
+                ``None`` the full default set is used.
+            weights: Fixed per-move selection weights.  Supplying this
+                disables phased cycling and adaptive tuning.
+            max_reticulations: Cap on reticulation nodes.
+            adaptive: Enable within-phase adaptive weight scaling.
+            window_size: Sliding-window length for acceptance stats.
+            min_weight: Minimum scale factor (fraction of base weight)
+                to prevent any move from being fully starved.
+            phase_patience: Consecutive non-improving proposals before
+                the kernel switches to the next phase.
+            warmup: Minimum observations per move class before the
+                adaptive scaling activates for that class.
         """
         super().__init__()
-        self._moves: list[type[Move]] = move_types or [
+        self._max_retics: int | None = max_reticulations
+        self._all_moves: list[type[Move]] = move_types or [
+            SPR,
+            ChangeNodeHeight,
+            ChangeInheritanceProb,
             AddReticulation,
             RemoveReticulation,
             FlipReticulation,
-            SPR,
-            ChangeNodeHeight,
             ChangeReticSource,
             ChangeReticDest,
-            ChangeInheritanceProb
         ]
-        self._fixed_weights: list[float] | None = weights
-        self._max_retics: int | None = max_reticulations
 
+        self._fixed_weights: list[float] | None = weights
+        self._phased: bool = (weights is None)
         self._adaptive: bool = adaptive and (weights is None)
+
+        self._phase: str = self.TOPOLOGY
+        self._phase_patience: int = phase_patience
+        self._stagnation: int = 0
+        self._phase_switches: int = 0
+
         self._window_size: int = window_size
         self._min_weight: float = min_weight
+        self._warmup: int = warmup
 
         from collections import deque
         self._history: dict[type[Move], deque] = {
-            cls: deque(maxlen=window_size) for cls in self._moves
+            cls: deque(maxlen=window_size) for cls in self._all_moves
         }
         self._last_cls: type[Move] | None = None
-        self._warmup: int = 3
+
+    # ── phase helpers ───────────────────────────────────────────
+
+    def _phase_base_map(self) -> dict[type, float]:
+        """Base weight map for the current phase."""
+        if self._phase == self.TOPOLOGY:
+            return self._TOPOLOGY_BASE
+        return self._RETICULATION_BASE
+
+    def _active_moves_and_base(self) -> tuple[list[type[Move]], list[float]]:
+        """Active move classes and base weights for the current phase."""
+        base = self._phase_base_map()
+        moves: list[type[Move]] = []
+        weights: list[float] = []
+        for cls in self._all_moves:
+            if cls in base:
+                moves.append(cls)
+                weights.append(base[cls])
+        return moves, weights
+
+    def _maybe_switch_phase(self) -> None:
+        """Advance to the next phase when stagnation exceeds patience."""
+        if self._stagnation < self._phase_patience:
+            return
+        idx = self._PHASE_ORDER.index(self._phase)
+        for offset in range(1, len(self._PHASE_ORDER) + 1):
+            candidate = self._PHASE_ORDER[
+                (idx + offset) % len(self._PHASE_ORDER)
+            ]
+            base = (self._TOPOLOGY_BASE if candidate == self.TOPOLOGY
+                    else self._RETICULATION_BASE)
+            if any(cls in base for cls in self._all_moves):
+                self._phase = candidate
+                self._phase_switches += 1
+                break
+        self._stagnation = 0
+
+    # ── adaptive tuning ─────────────────────────────────────────
+
+    def _adapt_weights(self,
+                       moves: list[type[Move]],
+                       base_weights: list[float]) -> list[float]:
+        """Scale base weights by recent acceptance rate.
+
+        Scaling is linear from ``min_weight`` of the base (at 0%
+        acceptance) to 2x the base (at 100% acceptance).  Moves with
+        fewer than ``warmup`` observations keep their full base weight.
+        """
+        floor = self._min_weight
+        weights: list[float] = []
+        for cls, base_w in zip(moves, base_weights):
+            hist = self._history[cls]
+            if len(hist) < self._warmup:
+                weights.append(base_w)
+                continue
+            n_acc = sum(1 for accepted, _ in hist if accepted)
+            acc_rate = n_acc / len(hist)
+            scale = floor + (2.0 - floor) * acc_rate
+            weights.append(base_w * scale)
+        return weights
+
+    # ── public interface ────────────────────────────────────────
 
     def generate(self) -> Move:
-        """Return a freshly instantiated random move.
-
-        When adaptive tuning is active, selection weights are recomputed
-        from the sliding window before each draw.
-        """
-        if self._adaptive:
-            weights = self._compute_weights()
+        """Sample a move from the current phase's weighted distribution."""
+        if self._phased:
+            self._maybe_switch_phase()
+            moves, base_weights = self._active_moves_and_base()
+            weights = (self._adapt_weights(moves, base_weights)
+                       if self._adaptive else base_weights)
         else:
+            moves = self._all_moves
             weights = self._fixed_weights
 
-        cls = random.choices(self._moves, weights=weights, k=1)[0]
+        cls = random.choices(moves, weights=weights, k=1)[0]
         self._last_cls = cls
 
         if cls is AddReticulation and self._max_retics is not None:
@@ -1114,43 +1224,36 @@ class MPLKernel(ProposalKernel):
         return cls()
 
     def report_outcome(self, accepted: bool, delta: float = 0.0) -> None:
-        """Record the outcome of the last generated move."""
+        """Record move outcome and update phase-stagnation counter."""
         if self._last_cls is not None and self._last_cls in self._history:
             self._history[self._last_cls].append((accepted, delta))
-
-    def _compute_weights(self) -> list[float]:
-        """Derive selection weights from the sliding window.
-
-        Score per move class = acceptance_rate * mean_abs_improvement.
-        Falls back to uniform for classes with fewer than ``_warmup``
-        data points.
-        """
-        weights: list[float] = []
-        for cls in self._moves:
-            history = self._history[cls]
-            if len(history) < self._warmup:
-                weights.append(1.0)
-                continue
-
-            n_accepted = sum(1 for a, _ in history if a)
-            acc_rate = n_accepted / len(history)
-
-            improvements = [abs(d) for a, d in history if a and d > 0]
-            mean_improvement = (sum(improvements) / len(improvements)
-                                if improvements else 1.0)
-
-            score = acc_rate * mean_improvement
-            weights.append(max(score, self._min_weight))
-
-        return weights
+        if accepted and delta > 0:
+            self._stagnation = 0
+        else:
+            self._stagnation += 1
 
     def get_weights(self) -> dict[str, float]:
-        """Return the current adaptive weights (for diagnostics)."""
-        weights = self._compute_weights() if self._adaptive else (
-            self._fixed_weights or [1.0] * len(self._moves))
+        """Return current effective selection weights (normalized)."""
+        if self._phased:
+            moves, base = self._active_moves_and_base()
+            weights = (self._adapt_weights(moves, base)
+                       if self._adaptive else base)
+        else:
+            moves = self._all_moves
+            weights = self._fixed_weights or [1.0] * len(moves)
         total = sum(weights)
         return {cls.__name__: w / total for cls, w in
-                zip(self._moves, weights)}
+                zip(moves, weights)}
+
+    @property
+    def phase(self) -> str:
+        """Current search phase name."""
+        return self._phase
+
+    @property
+    def phase_switches(self) -> int:
+        """Total number of phase transitions so far."""
+        return self._phase_switches
 
 
 ###################

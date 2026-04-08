@@ -299,6 +299,7 @@ class HillClimbing:
                     f"ITER #{iter_no} LIKELIHOOD = {cur}"
                 )
             else:
+                self.kernel.report_outcome(False, delta=0.0)
                 if self.enhanced_stop:
                     no_progress += 1
             
@@ -540,6 +541,7 @@ class SimulatedAnnealing:
             is_valid = state.generate_next(next_move)
 
             if not is_valid:
+                self.kernel.report_outcome(False, delta=0.0)
                 temp *= self.alpha
                 continue
 

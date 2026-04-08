@@ -684,7 +684,9 @@ class SPR(Move):
       3. Repair u: if u becomes (1,1), suppress u (merge incident edges).
       4. Collect subtree nodes rooted at v (used to prevent cycles).
       5. Select a target edge (a -> b) where neither endpoint is in the
-         subtree (prevents cycles).
+         subtree (prevents cycles).  Edges are weighted by inverse
+         topological distance from the prune point so that nearby
+         regraft locations are strongly preferred.
       6. Subdivide (a -> b) by inserting a new node w:
          a -> w -> b, with split branch lengths.
       7. Attach: w -> v.  w is now (1,2) -- a valid internal node.
@@ -692,10 +694,28 @@ class SPR(Move):
     Uses deep-copy for undo/same_move to guarantee correctness.
     """
 
+    _DISTANCE_DECAY = 2.0
+
     def __init__(self, debug_id: int = 0) -> None:
         super().__init__()
         self.undo_info = None
         self.same_move_info = None
+
+    @staticmethod
+    def _hop_distances(net: Network, origin: Node,
+                       forbidden: set[Node]) -> dict[Node, int]:
+        """BFS hop-distance from *origin* ignoring forbidden nodes."""
+        dist: dict[Node, int] = {origin: 0}
+        q: deque[Node] = deque([origin])
+        while q:
+            cur = q.popleft()
+            d = dist[cur] + 1
+            for nbr in list(net.get_children(cur)) + list(net.get_parents(cur)):
+                if nbr in forbidden or nbr in dist:
+                    continue
+                dist[nbr] = d
+                q.append(nbr)
+        return dist
 
     def execute(self, model: Model) -> Model:
         net: Network = model.network
@@ -738,7 +758,15 @@ class SPR(Move):
             model.update_network()
             return model
 
-        target_edge: Edge = random.choice(eligible)
+        hop = self._hop_distances(net, prune_parent, forbidden)
+        weights: list[float] = []
+        for e in eligible:
+            d_src = hop.get(e.src, len(hop))
+            d_dst = hop.get(e.dest, len(hop))
+            d = min(d_src, d_dst) + 1
+            weights.append(1.0 / (d ** self._DISTANCE_DECAY))
+
+        target_edge: Edge = random.choices(eligible, weights=weights, k=1)[0]
         a: Node = target_edge.src
         b: Node = target_edge.dest
         target_len: float = target_edge.get_length() or 1.0
@@ -883,12 +911,21 @@ class ChangeInheritanceProb(Move):
     """Propose a new inheritance probability for a random reticulation node.
 
     The two parent edges of a reticulation always carry complementary
-    gammas (gamma and 1-gamma).  This move draws a new value uniformly
-    from (0, 1) and updates both edges accordingly.
+    gammas (gamma and 1-gamma).  The new value is drawn from a
+    Gaussian centered on the current gamma, truncated to (epsilon,
+    1-epsilon), so proposals stay close to the current value and
+    accept more often than a flat Uniform(0, 1) draw.
     """
 
-    def __init__(self) -> None:
+    _SIGMA = 0.1
+    _EPS = 0.01
+
+    def __init__(self, sigma: float | None = None) -> None:
         super().__init__()
+        if sigma is not None:
+            self._sigma = sigma
+        else:
+            self._sigma = self._SIGMA
 
     def execute(self, model: Model) -> Model:
         net: Network = model.network
@@ -910,7 +947,9 @@ class ChangeInheritanceProb(Move):
         old_g1 = e1.get_gamma()
         old_g2 = e2.get_gamma()
 
-        new_g1 = random.random()
+        current = old_g1 if old_g1 is not None else 0.5
+        new_g1 = random.gauss(current, self._sigma)
+        new_g1 = max(self._EPS, min(1.0 - self._EPS, new_g1))
         e1.set_gamma(new_g1)
         e2.set_gamma(1.0 - new_g1)
 
