@@ -164,7 +164,10 @@ class State:
     def generate_next(self, move: Move) -> bool:
         """
         Set the proposed model to a new model that is the result of applying
-        one move to the former proposed model
+        one move to the former proposed model.
+
+        Relies on the move's own undo() for rollback instead of deep-copying
+        the entire model as a snapshot.
 
         Args:
             move (Move): Any instantiated subclass of Move.
@@ -173,16 +176,16 @@ class State:
             bool: True if the network associated with the model is valid, False
                   otherwise.
         """
-        import copy
-        snapshot = copy.deepcopy(self.proposed_model)
         try:
             self.proposed_model = self.proposed_model.execute_move(move)
             valid = self.validate_proposed_network(move)
         except Exception:
-            self.proposed_model = snapshot
+            try:
+                move.undo(self.proposed_model)
+            except Exception:
+                pass
             return False
         if not valid:
-            self.proposed_model = snapshot
             return False
         return True
 
@@ -200,15 +203,18 @@ class State:
 
     def commit(self, move: Move) -> None:
         """
-        The proposed change was beneficial. Make the same move on the current
-        model as was made to the proposed model.
+        The proposed change was beneficial.  Synchronise the current model
+        by copying the proposed network (cheaper than replaying the move).
         
         Args:
             move (Move): Any instantiated subclass of Move.
         Returns:
             N/A
         """
-        move.same_move(self.current_model)
+        self.current_model.network = copy.deepcopy(
+            self.proposed_model.network
+        )
+        self.current_model.update_network()
 
     def proposed(self) -> Model:
         """

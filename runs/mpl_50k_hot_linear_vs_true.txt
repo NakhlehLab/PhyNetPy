@@ -1,0 +1,48 @@
+=== MPL reference comparison ===
+Found score:     -383514.7620
+Reference score: -378093.4891
+Gap (ref - found): 5421.2729  (positive => reference is better)
+
+Found reticulations: 1
+  UID_1189: parents=['UID_1314', 'UID_1319'], subtree_leaves=['t52']
+Reference reticulations: 2
+  #H185: parents=['node_101', 'node_95'], subtree_leaves=['t52']
+  #H192: parents=['node_109', 'node_110'], subtree_leaves=['t109', 't84']
+
+Clades: shared=16, only_found=2, only_reference=3
+Clades only in reference (sample up to 12):
+  ['t1', 't109', 't111', 't84']
+  ['t109', 't38', 't83', 't84']
+  ['t109', 't38', 't52', 't83', 't84']
+Clades only in found (sample up to 12):
+  ['t38', 't52', 't83']
+  ['t1', 't111', 't130', 't4']
+
+Top 25 triplets where reference beats found (largest LL gap):
+                     triplet        gap
+                 t43,t74,t94     134.58
+                 t49,t74,t94     134.58
+                t124,t74,t94     132.78
+                 t74,t85,t94     132.78
+                 t1,t130,t84     120.02
+               t111,t130,t84     119.56
+                   t1,t4,t84     114.45
+                 t111,t4,t84     111.43
+                t1,t109,t130     104.22
+                  t1,t38,t84     102.82
+                t111,t38,t84     102.82
+                  t38,t4,t84     102.78
+                 t1,t109,t38     102.06
+               t109,t111,t38     102.06
+                 t109,t38,t4     102.03
+                  t1,t109,t4     101.87
+                t130,t38,t84     101.14
+               t109,t130,t38     100.39
+                  t1,t83,t84      98.72
+                t111,t83,t84      98.72
+                  t4,t83,t84      98.70
+              t109,t111,t130      98.03
+                 t1,t109,t83      97.96
+               t109,t111,t83      97.96
+                 t109,t4,t83      97.94
+=== end comparison ===

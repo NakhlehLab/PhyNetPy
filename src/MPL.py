@@ -40,13 +40,17 @@ Implements the scoring function from:
 """
  
 from __future__ import annotations
- 
+
 import copy
 import math
+import os
 import random
 from collections import deque
 from itertools import combinations
+from pathlib import Path
 from typing import Optional
+
+import numpy as np
 
 from .Network import Network, Node
 from .GeneTrees import GeneTrees
@@ -56,6 +60,12 @@ from .MetropolisHastings import ProposalKernel, HillClimbing, SimulatedAnnealing
 from .ModelMove import *
  
 _LOG_FLOOR = math.log(1e-200)
+
+try:
+    from .cython.mpl_engine_cy import score_all_triplets as _cy_score
+    _HAS_CYTHON_MPL = True
+except ImportError:
+    _HAS_CYTHON_MPL = False
  
  
 class GeneTreeTripletResult:
@@ -104,6 +114,124 @@ class SpeciesNetworkTripletResult:
         self.triplets : list[tuple[str, str, str]] = triplets
         self.probs_by_triplet : dict[tuple[str, str, str], tuple[float, float, float]] = probs_by_triplet
         self.log_pseudo_likelihood : float = log_pseudo_likelihood
+
+
+def _subtree_leaf_labels(net: Network, node: Node, visited: set[Node] | None = None) -> set[str]:
+    """Leaves reachable from *node* following child edges (for comparison reports)."""
+    if visited is None:
+        visited = set()
+    if node in visited:
+        return set()
+    visited.add(node)
+    if net.out_degree(node) == 0:
+        return {node.label}
+    out: set[str] = set()
+    for c in net.get_children(node):
+        out |= _subtree_leaf_labels(net, c, visited)
+    return out
+
+
+def _nontrivial_clades(net: Network) -> set[frozenset[str]]:
+    """All multisets of leaf labels induced by non-leaf nodes (for clade comparison)."""
+    clades: set[frozenset[str]] = set()
+    for node in net.V():
+        if net.out_degree(node) == 0:
+            continue
+        leaves = _subtree_leaf_labels(net, node)
+        if len(leaves) > 1:
+            clades.add(frozenset(leaves))
+    return clades
+
+
+def format_mpl_reference_comparison(
+    found: Network,
+    reference: Network,
+    rho: dict[tuple[str, str, str], tuple[float, float, float]],
+    triplets: list[tuple[str, str, str]],
+    *,
+    top_k: int = 25,
+) -> str:
+    """Build a text report: scores, retic summaries, clade diff, top triplet LL gaps.
+
+    Uses the same rho and triplet list as :class:`MPL` (gene-tree statistics).
+    """
+    scorer = MPLScorer(rho, triplets)
+    m_found = Model()
+    m_found.network = found
+    m_ref = Model()
+    m_ref.network = reference
+    s_found = scorer(m_found)
+    s_ref = scorer(m_ref)
+    gap = s_ref - s_found
+
+    lines: list[str] = []
+    lines.append("=== MPL reference comparison ===")
+    lines.append(f"Found score:     {s_found:.4f}")
+    lines.append(f"Reference score: {s_ref:.4f}")
+    lines.append(f"Gap (ref - found): {gap:.4f}  (positive => reference is better)")
+    lines.append("")
+
+    def _retic_lines(net: Network, label: str) -> None:
+        retics = [n for n in net.V() if net.in_degree(n) > 1]
+        lines.append(f"{label} reticulations: {len(retics)}")
+        for r in retics:
+            sub = sorted(_subtree_leaf_labels(net, r))
+            pars = [p.label for p in net.get_parents(r)]
+            lines.append(f"  {r.label}: parents={pars}, subtree_leaves={sub}")
+
+    _retic_lines(found, "Found")
+    _retic_lines(reference, "Reference")
+    lines.append("")
+
+    cf = _nontrivial_clades(found)
+    cr = _nontrivial_clades(reference)
+    shared = cf & cr
+    only_f = cf - cr
+    only_r = cr - cf
+    lines.append(f"Clades: shared={len(shared)}, only_found={len(only_f)}, only_reference={len(only_r)}")
+    if only_r:
+        lines.append("Clades only in reference (sample up to 12):")
+        for c in sorted(only_r, key=len)[:12]:
+            lines.append(f"  {sorted(c)}")
+    if only_f:
+        lines.append("Clades only in found (sample up to 12):")
+        for c in sorted(only_f, key=len)[:12]:
+            lines.append(f"  {sorted(c)}")
+    lines.append("")
+
+    eng_f = _TripleDPEngine(found)
+    eng_r = _TripleDPEngine(reference)
+    trip_list = [t for t in triplets if any(rho[t][i] > 0.0 for i in range(3))]
+    diffs: list[tuple[tuple[str, str, str], float]] = []
+    for trip in trip_list:
+        x, y, z = trip
+        r_xy, r_xz, r_yz = rho[trip]
+        pf_xy = eng_f.calculate_triple_probability((x, y, z))
+        pf_xz = eng_f.calculate_triple_probability((x, z, y))
+        pf_yz = max(0.0, 1.0 - pf_xy - pf_xz)
+        pr_xy = eng_r.calculate_triple_probability((x, y, z))
+        pr_xz = eng_r.calculate_triple_probability((x, z, y))
+        pr_yz = max(0.0, 1.0 - pr_xy - pr_xz)
+        ll_f = ll_r = 0.0
+        for rr, a, b in [(r_xy, pf_xy, pr_xy), (r_xz, pf_xz, pr_xz), (r_yz, pf_yz, pr_yz)]:
+            if rr > 0:
+                ll_f += rr * math.log(max(a, 1e-300))
+                ll_r += rr * math.log(max(b, 1e-300))
+        diffs.append((trip, ll_r - ll_f))
+    diffs.sort(key=lambda x: x[1], reverse=True)
+    lines.append(f"Top {top_k} triplets where reference beats found (largest LL gap):")
+    lines.append(f"{'triplet':>28} {'gap':>10}")
+    for trip, d in diffs[:top_k]:
+        lines.append(f"{','.join(trip):>28} {d:>10.2f}")
+    lines.append("=== end comparison ===")
+    return "\n".join(lines)
+
+
+def save_mpl_network_newick(net: Network, path: str | os.PathLike[str]) -> None:
+    """Write *net* as a Newick string to *path* (UTF-8)."""
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(net.newick() + "\n", encoding="utf-8")
 
 
 ###################################
@@ -385,137 +513,74 @@ class _TripleDPEngine:
     }
 
     class _Configuration:
-        """
-        One DP configuration for a single ancestral state.
+        """One DP configuration using a tuple for the reticulation-choice vector.
 
-        A configuration stores:
-        1) total_prob: Probability mass for this configuration.
-        2) net_node_index: Which parent edge was chosen at each reticulation.
+        Tuples are hashable natively, cheaper to copy (no list alloc), and
+        compare faster than lists.
         """
+
+        __slots__ = ('total_prob', '_idx')
 
         def __init__(self,
                      net_node_num: int,
                      total_prob: float = 1.0,
-                     net_node_index: Optional[list[int]] = None) -> None:
-            """
-            Build a configuration object.
-
-            Args:
-                net_node_num (int): Number of reticulation nodes in the network.
-                total_prob (float, optional): Probability mass for this state.
-                                            Defaults to 1.0.
-                net_node_index (Optional[list[int]], optional): Existing list of
-                                            reticulation choices. If None, a zero
-                                            initialized choice vector is created.
-            Returns:
-                N/A
-            """
+                     net_node_index: tuple[int, ...] | None = None) -> None:
             self.total_prob = total_prob
-            self.net_node_index = (
-                net_node_index.copy()
-                if net_node_index is not None
-                else [0] * net_node_num
+            self._idx: tuple[int, ...] = (
+                net_node_index if net_node_index is not None
+                else (0,) * net_node_num
             )
+
+        @property
+        def net_node_index(self) -> tuple[int, ...]:
+            return self._idx
 
         def copy(self) -> "_TripleDPEngine._Configuration":
-            """
-            Create a deep-enough copy for DP branching.
-
-            Returns:
-                _TripleDPEngine._Configuration: Copied configuration.
-            """
-            return _TripleDPEngine._Configuration(
-                len(self.net_node_index),
-                total_prob=self.total_prob,
-                net_node_index=self.net_node_index,
-            )
+            c = _TripleDPEngine._Configuration.__new__(_TripleDPEngine._Configuration)
+            c.total_prob = self.total_prob
+            c._idx = self._idx
+            return c
 
         @classmethod
         def merge(cls,
                   c1: "_TripleDPEngine._Configuration",
                   c2: "_TripleDPEngine._Configuration") -> "_TripleDPEngine._Configuration":
-            """
-            Merge two compatible configurations from sibling branches.
-
-            Args:
-                c1 (_TripleDPEngine._Configuration): First configuration.
-                c2 (_TripleDPEngine._Configuration): Second configuration.
-            Returns:
-                _TripleDPEngine._Configuration: Merged configuration whose
-                    probability is the product of both input probabilities.
-            """
-            merged_idx = [
-                max(a, b) for a, b in zip(c1.net_node_index, c2.net_node_index)
-            ]
-            return cls(
-                len(merged_idx),
-                total_prob=max(0.0, c1.total_prob * c2.total_prob),
-                net_node_index=merged_idx,
+            merged = tuple(
+                max(a, b) for a, b in zip(c1._idx, c2._idx)
             )
+            c = cls.__new__(cls)
+            c.total_prob = max(0.0, c1.total_prob * c2.total_prob)
+            c._idx = merged
+            return c
 
         def is_compatible(self, other: "_TripleDPEngine._Configuration") -> bool:
-            """
-            Check whether two configurations can be merged.
-
-            Two configurations conflict when both assigned different non-zero
-            choices for the same reticulation.
-
-            Args:
-                other (_TripleDPEngine._Configuration): Candidate configuration.
-            Returns:
-                bool: True if configurations are compatible.
-            """
-            for mine, theirs in zip(self.net_node_index, other.net_node_index):
+            for mine, theirs in zip(self._idx, other._idx):
                 if mine != theirs and mine != 0 and theirs != 0:
                     return False
             return True
 
         def add_choice(self, net_id: int, choice: int) -> None:
-            """
-            Record one reticulation parent choice.
-
-            Args:
-                net_id (int): Reticulation index.
-                choice (int): Chosen split identifier.
-            Returns:
-                N/A
-            """
-            self.net_node_index[net_id] = choice
+            lst = list(self._idx)
+            lst[net_id] = choice
+            self._idx = tuple(lst)
 
         def clear_choices(self) -> None:
-            """
-            Clear reticulation choices after articulation-point compression.
-
-            Returns:
-                N/A
-            """
-            self.net_node_index[:] = [0] * len(self.net_node_index)
+            self._idx = (0,) * len(self._idx)
 
         def __hash__(self) -> int:
-            """
-            Hash by reticulation-choice vector.
-
-            Returns:
-                int: Hash value.
-            """
-            return hash(tuple(self.net_node_index))
+            return hash(self._idx)
 
         def __eq__(self, other: object) -> bool:
-            """
-            Equality by reticulation-choice vector.
-
-            Args:
-                other (object): Candidate object.
-            Returns:
-                bool: True when other is a configuration with same choices.
-            """
             if not isinstance(other, _TripleDPEngine._Configuration):
                 return False
-            return self.net_node_index == other.net_node_index
+            return self._idx == other._idx
 
     def __init__(self, network: Network) -> None:
         """
         Initialize the DP engine for one fixed species network.
+
+        Pre-caches all topology info so the per-triplet DP never touches
+        Network methods.
 
         Args:
             network (Network): Species network that will be queried for
@@ -530,6 +595,38 @@ class _TripleDPEngine:
         self.articulation_nodes: set[Node] = set()
         self.lowest_articulation_nodes: set[Node] = set()
         self._compute_articulation_nodes()
+        self._topo_leaf_to_root: list[Node] = list(
+            reversed(self.network.topological_order())
+        )
+
+        # --- Pre-cache per-node topology for hot DP loop ---
+        self._node_is_leaf: dict[Node, bool] = {}
+        self._node_is_retic: dict[Node, bool] = {}
+        self._node_children: dict[Node, list[Node]] = {}
+        self._node_parents: dict[Node, list[Node]] = {}
+        self._node_label: dict[Node, str] = {}
+        # edge key -> (branch_length, gamma)
+        self._edge_info: dict[tuple[Node, Node], tuple[float, float]] = {}
+
+        for node in self._topo_leaf_to_root:
+            out_d = network.out_degree(node)
+            in_d = network.in_degree(node)
+            self._node_is_leaf[node] = (out_d == 0)
+            self._node_is_retic[node] = (in_d > 1)
+            children = network.get_children(node)
+            self._node_children[node] = children
+            parents = network.get_parents(node)
+            self._node_parents[node] = parents
+            self._node_label[node] = node.label
+
+            for parent in parents:
+                edge = network.get_edge(parent, node)
+                bl = edge.get_length()
+                gamma = edge.get_gamma()
+                self._edge_info[(parent, node)] = (bl, gamma)
+
+        # --- Memoize _gij for the distinct branch lengths in this network ---
+        self._gij_cache: dict[tuple[float, int, int], float] = {}
 
     @staticmethod
     def _fact(start: int, end: int) -> float:
@@ -547,22 +644,9 @@ class _TripleDPEngine:
             result *= i
         return result
 
-    @classmethod
-    def _gij(cls, length: float, i: int, j: int) -> float:
-        """
-        Probability of i lineages reducing to j over branch length.
-
-        This is the coalescent transition term used in the DP recurrence.
-        Edge-case behavior matches PhyloNet for missing branch lengths.
-
-        Args:
-            length (float): Branch length.
-            i (int): Lineages entering branch.
-            j (int): Lineages leaving branch.
-        Returns:
-            float: Transition probability.
-        """
-        # Match PhyloNet special handling of missing branch lengths.
+    @staticmethod
+    def _gij_raw(length: float, i: int, j: int) -> float:
+        """Compute coalescent transition probability (uncached)."""
         if length is None or length == -1:
             return 1.0 if j == 1 else 0.0
         if length == 0:
@@ -570,18 +654,29 @@ class _TripleDPEngine:
         if i == 0:
             return 1.0
 
+        _fact = _TripleDPEngine._fact
         result = 0.0
         for k in range(j, i + 1):
             temp = (
                 math.exp(0.5 * k * (1.0 - k) * length)
                 * (2.0 * k - 1.0)
                 * ((-1.0) ** (k - j))
-                * cls._fact(j, j + k - 2)
-                * cls._fact(i - k + 1, i)
+                * _fact(j, j + k - 2)
+                * _fact(i - k + 1, i)
             )
-            denom = cls._fact(1, j) * cls._fact(1, k - j) * cls._fact(i, i + k - 1)
+            denom = _fact(1, j) * _fact(1, k - j) * _fact(i, i + k - 1)
             result += temp / denom
         return result
+
+    def _gij(self, length: float, i: int, j: int) -> float:
+        """Memoized coalescent transition probability."""
+        key = (length, i, j)
+        cached = self._gij_cache.get(key)
+        if cached is not None:
+            return cached
+        val = self._gij_raw(length, i, j)
+        self._gij_cache[key] = val
+        return val
 
     def _is_valid_network(self, ignore_node: Node) -> bool:
         """
@@ -782,8 +877,8 @@ class _TripleDPEngine:
         """
         Compute P(AB|C)-style probability for one ordered triplet.
 
-        The input order matters:
-            (X, Y, Z) computes P(XY|Z)
+        Uses pre-cached topology lookups so the inner DP loop never touches
+        Network methods.
 
         Args:
             triple (tuple[str, str, str]): Ordered species labels.
@@ -798,33 +893,43 @@ class _TripleDPEngine:
         net_node_id = 0
         total_prob = 0.0
 
-        # Bottom-up dynamic program over the network DAG.
-        for node in reversed(self.network.topological_order()):
-            cacs: Optional[dict[int, list[_TripleDPEngine._Configuration]]] = None
-            is_leaf = self.network.out_degree(node) == 0
-            is_network_node = self.network.in_degree(node) > 1
+        _Cfg = self._Configuration
+        nnn = self.net_node_num
+        node_is_leaf = self._node_is_leaf
+        node_is_retic = self._node_is_retic
+        node_children = self._node_children
+        node_parents = self._node_parents
+        node_label = self._node_label
+        edge_info = self._edge_info
+        lowest_art = self.lowest_articulation_nodes
+        art_nodes = self.articulation_nodes
+        MERGING = self._MERGING_MAP
+
+        for node in self._topo_leaf_to_root:
+            cacs = None
+            is_leaf = node_is_leaf[node]
+            is_retic = node_is_retic[node]
 
             if is_leaf:
-                if node.label in triple_list:
-                    idx = triple_list.index(node.label)
-                    cacs = {idx + 1: [self._Configuration(self.net_node_num)]}
+                lbl = node_label[node]
+                if lbl in triple_list:
+                    idx = triple_list.index(lbl)
+                    cacs = {idx + 1: [_Cfg(nnn)]}
 
-            elif is_network_node:
-                # Reticulation has one child in this bottom-up traversal state.
-                children = self.network.get_children(node)
+            elif is_retic:
+                children = node_children[node]
                 if children:
                     cacs = edge_to_ac_minus.get((node, children[0]))
 
             else:
-                # Tree node merges ancestry from up to two child branches.
-                children = self.network.get_children(node)
+                children = node_children[node]
                 if len(children) >= 2:
                     ac1 = edge_to_ac_minus.get((node, children[0]))
                     ac2 = edge_to_ac_minus.get((node, children[1]))
 
                     if (ac1 is None) ^ (ac2 is None):
                         cacs = ac2 if ac1 is None else ac1
-                        if node in self.lowest_articulation_nodes:
+                        if node in lowest_art:
                             for state, config_list in list(cacs.items()):
                                 if not config_list:
                                     continue
@@ -835,30 +940,29 @@ class _TripleDPEngine:
                                 cacs[state] = [merged]
                     elif ac1 is not None and ac2 is not None:
                         cacs = {}
-                        is_articulation = node in self.lowest_articulation_nodes
+                        is_articulation = node in lowest_art
                         for state1, cfgs1 in ac1.items():
                             for state2, cfgs2 in ac2.items():
                                 can_merge = state1 == 0 or state2 == 0
                                 target_state = state1 if state1 != 0 else state2
                                 if not can_merge:
                                     key = (state1, state2) if state1 < state2 else (state2, state1)
-                                    if key in self._MERGING_MAP:
-                                        target_state = self._MERGING_MAP[key]
+                                    ts = MERGING.get(key)
+                                    if ts is not None:
+                                        target_state = ts
                                         can_merge = True
                                 if not can_merge:
                                     continue
 
                                 merged_list = cacs.setdefault(target_state, [])
-                                merged_articulation_cfg: Optional[
-                                    _TripleDPEngine._Configuration
-                                ] = None
+                                merged_articulation_cfg = None
                                 for cfg1 in cfgs1:
                                     for cfg2 in cfgs2:
                                         if not cfg1.is_compatible(cfg2):
                                             continue
                                         if is_articulation:
                                             if not merged_list:
-                                                merged_articulation_cfg = self._Configuration.merge(
+                                                merged_articulation_cfg = _Cfg.merge(
                                                     cfg1, cfg2
                                                 )
                                                 merged_articulation_cfg.clear_choices()
@@ -870,7 +974,7 @@ class _TripleDPEngine:
                                                     0.0, cfg1.total_prob * cfg2.total_prob
                                                 )
                                         else:
-                                            merged_list.append(self._Configuration.merge(cfg1, cfg2))
+                                            merged_list.append(_Cfg.merge(cfg1, cfg2))
 
                                 if not merged_list:
                                     cacs.pop(target_state, None)
@@ -878,8 +982,7 @@ class _TripleDPEngine:
             if cacs is None:
                 continue
 
-            # If all three lineages are present at an articulation, extract total.
-            if 7 in cacs and node in self.articulation_nodes:
+            if 7 in cacs and node in art_nodes:
                 total_prob = cacs[7][0].total_prob / 3.0
                 if 9 in cacs:
                     total_prob += cacs[9][0].total_prob
@@ -887,39 +990,153 @@ class _TripleDPEngine:
                     total_prob += cacs[10][0].total_prob
                 break
 
-            if is_network_node:
-                # Split at reticulation and propagate to each parent edge.
+            if is_retic:
                 ac_plus_1, ac_plus_2 = self._split_at_network_node(cacs, net_node_id)
                 net_node_id += 1
-                parents = self.network.get_parents(node)
+                parents = node_parents[node]
                 for idx, parent in enumerate(parents):
-                    edge = self.network.get_edge(parent, node)
-                    branch_length = edge.get_length()
-                    inheritance_prob = edge.get_gamma()
-                    if inheritance_prob is None:
-                        inheritance_prob = 1.0 / len(parents)
+                    bl, gamma = edge_info[(parent, node)]
+                    inheritance_prob = gamma if gamma is not None else 1.0 / len(parents)
 
                     ac_plus = ac_plus_1 if idx == 0 else ac_plus_2
                     ac_minus = self._compute_ac_minus(
                         ac_plus,
-                        branch_length=branch_length,
+                        branch_length=bl,
                         inheritance_prob=inheritance_prob,
                     )
                     edge_to_ac_minus[(parent, node)] = ac_minus
             else:
-                # Tree nodes have one parent; no inheritance split.
-                parents = self.network.get_parents(node)
+                parents = node_parents[node]
                 if parents:
                     parent = parents[0]
-                    edge = self.network.get_edge(parent, node)
+                    bl, _gamma = edge_info[(parent, node)]
                     ac_minus = self._compute_ac_minus(
                         cacs,
-                        branch_length=edge.get_length(),
+                        branch_length=bl,
                         inheritance_prob=1.0,
                     )
                     edge_to_ac_minus[(parent, node)] = ac_minus
 
         return total_prob
+
+
+_CY_MAX_CHILDREN = 4
+_CY_MAX_PARENTS = 2
+
+
+def _extract_topology_for_cython(engine: _TripleDPEngine) -> dict:
+    """Convert a _TripleDPEngine's cached topology into flat numpy arrays.
+
+    Returns a dict consumed by mpl_engine_cy.score_all_triplets.
+    """
+    nodes = engine._topo_leaf_to_root
+    n_nodes = len(nodes)
+    node_to_idx: dict[Node, int] = {node: i for i, node in enumerate(nodes)}
+
+    is_leaf = np.zeros(n_nodes, dtype=np.intc)
+    is_retic = np.zeros(n_nodes, dtype=np.intc)
+    in_art = np.zeros(n_nodes, dtype=np.intc)
+    in_low_art = np.zeros(n_nodes, dtype=np.intc)
+    n_ch = np.zeros(n_nodes, dtype=np.intc)
+    ch = np.full((n_nodes, _CY_MAX_CHILDREN), -1, dtype=np.intc)
+    n_pa = np.zeros(n_nodes, dtype=np.intc)
+    pa = np.full((n_nodes, _CY_MAX_PARENTS), -1, dtype=np.intc)
+    pa_bl = np.ones((n_nodes, _CY_MAX_PARENTS), dtype=np.float64)
+    pa_gamma = np.ones((n_nodes, _CY_MAX_PARENTS), dtype=np.float64)
+    ch_pa_slot = np.full((n_nodes, _CY_MAX_CHILDREN), 0, dtype=np.intc)
+
+    label_to_idx: dict[str, int] = {}
+
+    for i, node in enumerate(nodes):
+        is_leaf[i] = 1 if engine._node_is_leaf[node] else 0
+        is_retic[i] = 1 if engine._node_is_retic[node] else 0
+        in_art[i] = 1 if node in engine.articulation_nodes else 0
+        in_low_art[i] = 1 if node in engine.lowest_articulation_nodes else 0
+
+        children = engine._node_children[node]
+        n_ch[i] = len(children)
+        for j, child in enumerate(children[:_CY_MAX_CHILDREN]):
+            ch[i, j] = node_to_idx[child]
+
+        parents = engine._node_parents[node]
+        n_pa[i] = len(parents)
+        for j, parent in enumerate(parents[:_CY_MAX_PARENTS]):
+            pa[i, j] = node_to_idx[parent]
+            bl, gamma = engine._edge_info.get((parent, node), (1.0, None))
+            pa_bl[i, j] = bl if bl is not None else -1.0
+            if engine._node_is_retic[node]:
+                if gamma is not None and gamma > 0:
+                    pa_gamma[i, j] = gamma
+                else:
+                    pa_gamma[i, j] = 1.0 / len(parents)
+            else:
+                pa_gamma[i, j] = 1.0
+
+        if is_leaf[i]:
+            label_to_idx[engine._node_label[node]] = i
+
+    for i, node in enumerate(nodes):
+        children = engine._node_children[node]
+        for j, child in enumerate(children[:_CY_MAX_CHILDREN]):
+            child_idx = node_to_idx[child]
+            child_parents = engine._node_parents[child]
+            for k, p in enumerate(child_parents[:_CY_MAX_PARENTS]):
+                if node_to_idx[p] == i:
+                    ch_pa_slot[i, j] = k
+                    break
+
+    return {
+        "n_nodes": n_nodes,
+        "net_node_num": engine.net_node_num,
+        "is_leaf": is_leaf,
+        "is_retic": is_retic,
+        "in_art": in_art,
+        "in_low_art": in_low_art,
+        "n_children": n_ch,
+        "children": ch,
+        "n_parents": n_pa,
+        "parents": pa,
+        "pa_bl": pa_bl,
+        "pa_gamma": pa_gamma,
+        "ch_pa_slot": ch_pa_slot,
+        "label_to_idx": label_to_idx,
+    }
+
+
+def _score_with_cython(
+    engine: _TripleDPEngine,
+    triplets: list[tuple[str, str, str]],
+    rho: dict[tuple[str, str, str], tuple[float, float, float]],
+) -> float:
+    """Fast scoring path using the Cython DP engine."""
+    topo = _extract_topology_for_cython(engine)
+    lbl_idx = topo["label_to_idx"]
+
+    trip_idx: list[tuple[int, int, int]] = []
+    rho_vals: list[tuple[float, float, float]] = []
+    for t in triplets:
+        x, y, z = t
+        if x in lbl_idx and y in lbl_idx and z in lbl_idx:
+            trip_idx.append((lbl_idx[x], lbl_idx[y], lbl_idx[z]))
+            rho_vals.append(rho[t])
+
+    return _cy_score(
+        topo["n_nodes"],
+        topo["net_node_num"],
+        topo["is_leaf"],
+        topo["is_retic"],
+        topo["in_art"],
+        topo["in_low_art"],
+        topo["n_children"],
+        topo["children"],
+        topo["n_parents"],
+        topo["parents"],
+        topo["pa_bl"],
+        topo["pa_gamma"],
+        topo["ch_pa_slot"],
+        trip_idx,
+        rho_vals,
+    )
 
 
 def compute_gene_tree_triplets(gene_trees: GeneTrees,
@@ -1018,7 +1235,10 @@ class MPLScorer:
             triplets: Canonical species triplets to iterate over.
         """
         self._rho = rho
-        self._triplets = triplets
+        # Skip triplets never observed in gene trees (zero contribution).
+        self._triplets = [
+            t for t in triplets if any(rho[t][i] > 0.0 for i in range(3))
+        ]
 
     def __call__(self, model: Model) -> float:
         """Compute log pseudo-likelihood for the current network in *model*.
@@ -1029,6 +1249,10 @@ class MPLScorer:
             Log pseudo-likelihood score (negative; higher = better).
         """
         engine = _TripleDPEngine(model.network)
+
+        if _HAS_CYTHON_MPL:
+            return _score_with_cython(engine, self._triplets, self._rho)
+
         total = 0.0
         for triplet in self._triplets:
             x, y, z = triplet
@@ -1080,6 +1304,7 @@ class MPLKernel(ProposalKernel):
         FlipReticulation: 1.5,
         ChangeReticSource: 1.5,
         ChangeReticDest: 1.5,
+        RelocateReticulation: 2.5,
         ChangeInheritanceProb: 1.5,
         ChangeNodeHeight: 1.0,
     }
@@ -1122,6 +1347,7 @@ class MPLKernel(ProposalKernel):
             FlipReticulation,
             ChangeReticSource,
             ChangeReticDest,
+            RelocateReticulation,
         ]
 
         self._fixed_weights: list[float] | None = weights
@@ -1303,6 +1529,10 @@ class MPL:
         )
         self._triplets = precomputed.triplets
         self._rho = precomputed.rho_by_triplet
+        self._active_triplets = [
+            t for t in self._triplets
+            if any(self._rho[t][i] > 0.0 for i in range(3))
+        ]
 
         # Match PhyloNet semantics: compute each triplet on the full network.
         self._triple_engine = _TripleDPEngine(self.net)
@@ -1374,8 +1604,13 @@ class MPL:
         Returns:
             float: Total log pseudo-likelihood.
         """
+        if _HAS_CYTHON_MPL:
+            return _score_with_cython(
+                self._triple_engine, self._active_triplets, self._rho,
+            )
+
         total = 0.0
-        for triplet in self._triplets:
+        for triplet in self._active_triplets:
             total += self._score_triplet(triplet)
         return total
     
@@ -1384,6 +1619,12 @@ class MPL:
                num_iter: int = 700,
                kernel: MPLKernel | None = None,
                max_reticulations: int | None = None,
+               *,
+               save_best_path: str | os.PathLike[str] | None = None,
+               reference_network: Network | None = None,
+               comparison_report_path: str | os.PathLike[str] | None = None,
+               comparison_top_k: int = 25,
+               print_comparison: bool = True,
                **kwargs) -> float:
         """Search the network space for the species network that maximises
         the pseudo-likelihood of the observed gene trees.
@@ -1397,15 +1638,26 @@ class MPL:
             max_reticulations: Upper bound on reticulation nodes allowed.
                     ``None`` means unlimited.  Ignored if a custom *kernel*
                     is supplied.
+            save_best_path: If set, write the best-found network as Newick
+                to this path after the search completes.
+            reference_network: If set (e.g. a simulator ground truth),
+                compare found vs reference MPL score, reticulations, clades,
+                and top triplet log-likelihood gaps.
+            comparison_report_path: If set with *reference_network*, also
+                write the comparison report to this file (UTF-8).
+            comparison_top_k: Number of triplets listed in the report.
+            print_comparison: When *reference_network* is set, print the
+                report to stdout unless this is ``False``.
             **kwargs: Forwarded to the search constructor.  For SA these
-                      include ``t_start``, ``t_end``, ``n_restarts``, ``seed``.
+                      include ``t_start``, ``t_end``, ``n_restarts``, ``seed``,
+                      ``plateau_frac``.
 
         Returns:
             Log pseudo-likelihood of the best network found.  The MPL
             instance's network (``self.net``) is updated in-place with the
             result.
         """
-        scorer = MPLScorer(self._rho, self._triplets)
+        scorer = MPLScorer(self._rho, self._active_triplets)
 
         model = Model()
         model.network = copy.deepcopy(self.net)
@@ -1435,6 +1687,23 @@ class MPL:
 
         self.net = end_state.current_model.network
         self._triple_engine = _TripleDPEngine(self.net)
+
+        if save_best_path is not None:
+            save_mpl_network_newick(self.net, save_best_path)
+
+        if reference_network is not None:
+            report = format_mpl_reference_comparison(
+                self.net,
+                reference_network,
+                self._rho,
+                self._active_triplets,
+                top_k=comparison_top_k,
+            )
+            if print_comparison:
+                print(report, flush=True)
+            if comparison_report_path is not None:
+                Path(comparison_report_path).write_text(report + "\n", encoding="utf-8")
+
         return end_state.likelihood()
     
     def _score_triplet(self, triplet: tuple[str, str, str]) -> float:

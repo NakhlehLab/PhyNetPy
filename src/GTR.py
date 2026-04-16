@@ -506,8 +506,12 @@ class JC(GTR):
         Returns:
             N/A
         """
-        bases = np.ones((4, 1)) * .25 
-        super().__init__(list(bases), np.ones((6, 1)))
+        # Use plain Python floats: list(np.ndarray((4,1))) yields nested arrays
+        # on some NumPy versions and breaks buildQ().
+        super().__init__(
+            [0.25, 0.25, 0.25, 0.25],
+            [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        )
                
 class HKY(GTR):
     """

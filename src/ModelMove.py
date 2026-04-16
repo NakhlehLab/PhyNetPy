@@ -284,7 +284,6 @@ class AddReticulation(Move):
             net.add_edges(retic_edge)
             c.set_is_reticulation(True)
 
-        self.same_move_info = copy.deepcopy(net)
         model.update_network()
         return model
 
@@ -294,9 +293,7 @@ class AddReticulation(Move):
         model.update_network()
 
     def same_move(self, model: Model) -> None:
-        if self.same_move_info is not None:
-            model.network = copy.deepcopy(self.same_move_info)
-        model.update_network()
+        pass
 
     def hastings_ratio(self) -> float:
         return 1.0
@@ -341,7 +338,6 @@ class RemoveReticulation(Move):
 
         _suppress_deg2(net, drop_parent)
 
-        self.same_move_info = copy.deepcopy(net)
         model.update_network()
         return model
 
@@ -351,9 +347,7 @@ class RemoveReticulation(Move):
         model.update_network()
 
     def same_move(self, model: Model) -> None:
-        if self.same_move_info is not None:
-            model.network = copy.deepcopy(self.same_move_info)
-        model.update_network()
+        pass
 
     def hastings_ratio(self) -> float:
         return 1.0
@@ -403,7 +397,6 @@ class FlipReticulation(Move):
             model.update_network()
             return model
 
-        self.same_move_info = copy.deepcopy(net)
         model.update_network()
         return model
 
@@ -413,9 +406,7 @@ class FlipReticulation(Move):
         model.update_network()
 
     def same_move(self, model: Model) -> None:
-        if self.same_move_info is not None:
-            model.network = copy.deepcopy(self.same_move_info)
-        model.update_network()
+        pass
 
     def hastings_ratio(self) -> float:
         return 1.0
@@ -779,7 +770,6 @@ class SPR(Move):
 
         net.add_edges(Edge(new_node, subtree_root, length=prune_len))
 
-        self.same_move_info = copy.deepcopy(net)
         model.update_network()
         return model
 
@@ -789,9 +779,7 @@ class SPR(Move):
         model.update_network()
 
     def same_move(self, model: Model) -> None:
-        if self.same_move_info is not None:
-            model.network = copy.deepcopy(self.same_move_info)
-        model.update_network()
+        pass
 
     def hastings_ratio(self) -> float:
         return 1.0
@@ -1047,7 +1035,6 @@ class ChangeReticSource(Move):
         if net.in_degree(c) > 1:
             c.set_is_reticulation(True)
 
-        self.same_move_info = copy.deepcopy(net)
         model.update_network()
         return model
 
@@ -1057,9 +1044,144 @@ class ChangeReticSource(Move):
         model.update_network()
 
     def same_move(self, model: Model) -> None:
-        if self.same_move_info is not None:
-            model.network = copy.deepcopy(self.same_move_info)
+        pass
+
+    def hastings_ratio(self) -> float:
+        return 1.0
+
+
+class RelocateReticulation(Move):
+    """Simultaneously move both parent edges of a reticulation node.
+
+    Picks a random reticulation node, detaches both incoming edges
+    (suppressing any degree-2 passthrough nodes left behind), then
+    reattaches them from two randomly chosen edges in the resulting
+    network.  This is equivalent to ChangeReticSource + ChangeReticDest
+    in a single atomic step, avoiding the deep likelihood valley that
+    arises from the intermediate partially-detached state.
+
+    Uses deep-copy for undo to guarantee correctness.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def execute(self, model: Model) -> Model:
+        net: Network = model.network
+        self.undo_info = copy.deepcopy(net)
+
+        retic_nodes = [n for n in net.V() if n.is_reticulation()]
+        if not retic_nodes:
+            model.update_network()
+            return model
+
+        retic = random.choice(retic_nodes)
+        in_edges = list(net.in_edges(retic))
+        if len(in_edges) != 2:
+            model.update_network()
+            return model
+
+        children = net.get_children(retic)
+        if not children:
+            model.update_network()
+            return model
+        child = children[0]
+
+        e_child = net.get_edge(retic, child)
+        saved_child_len = e_child.get_length() if e_child else None
+
+        saved_gammas = [e.get_gamma() for e in in_edges]
+        saved_lengths = [e.get_length() for e in in_edges]
+        old_parents = [e.src for e in in_edges]
+
+        net.remove_edge(e_child)
+        for e in in_edges:
+            net.remove_edge(e)
+
+        retic.set_is_reticulation(False)
+        net.remove_nodes(retic)
+
+        for p in old_parents:
+            if net.in_degree(p) == 1 and net.out_degree(p) == 1:
+                _suppress_deg2(net, p)
+
+        if net.in_degree(child) == 1 and net.out_degree(child) == 1:
+            if not child.is_reticulation():
+                _suppress_deg2(net, child)
+
+        all_edges = list(net.E())
+        if len(all_edges) < 2:
+            model.network = self.undo_info
+            model.update_network()
+            self.undo_info = None
+            return model
+
+        host1 = random.choice(all_edges)
+        a1, b1 = host1.src, host1.dest
+
+        downstream_of_b1 = set(net.edges_downstream_of_node(b1))
+        downstream_of_b1.add(host1)
+        eligible2 = [e for e in all_edges if e not in downstream_of_b1
+                      and e is not host1]
+
+        if not eligible2:
+            model.network = self.undo_info
+            model.update_network()
+            self.undo_info = None
+            return model
+
+        host2 = random.choice(eligible2)
+        a2, b2 = host2.src, host2.dest
+
+        new_retic = net.add_uid_node()
+        new_retic.set_is_reticulation(True)
+
+        z1 = net.add_uid_node()
+        h1_len = host1.get_length()
+        split1 = random.random()
+        net.remove_edge(host1)
+        net.add_edges(Edge(a1, z1, length=(h1_len or 0) * split1))
+        net.add_edges(Edge(z1, b1, length=(h1_len or 0) * (1 - split1)))
+
+        all_edges_now = list(net.E())
+        if host2 not in all_edges_now:
+            z2 = net.add_uid_node()
+            h2_len = host2.get_length()
+            split2 = random.random()
+            try:
+                net.remove_edge(host2)
+            except Exception:
+                model.network = self.undo_info
+                model.update_network()
+                self.undo_info = None
+                return model
+            net.add_edges(Edge(a2, z2, length=(h2_len or 0) * split2))
+            net.add_edges(Edge(z2, b2, length=(h2_len or 0) * (1 - split2)))
+        else:
+            z2 = net.add_uid_node()
+            h2_len = host2.get_length()
+            split2 = random.random()
+            net.remove_edge(host2)
+            net.add_edges(Edge(a2, z2, length=(h2_len or 0) * split2))
+            net.add_edges(Edge(z2, b2, length=(h2_len or 0) * (1 - split2)))
+
+        net.add_edges(Edge(z1, new_retic,
+                           length=saved_lengths[0], gamma=saved_gammas[0]))
+        net.add_edges(Edge(z2, new_retic,
+                           length=saved_lengths[1], gamma=saved_gammas[1]))
+
+        net.add_edges(Edge(new_retic, child, length=saved_child_len))
+
         model.update_network()
+        return model
+
+    def undo(self, model: Model) -> None:
+        if self.undo_info is not None:
+            model.network = self.undo_info
+        model.update_network()
+
+    def same_move(self, model: Model) -> None:
+        pass
 
     def hastings_ratio(self) -> float:
         return 1.0
@@ -1124,7 +1246,6 @@ class ChangeReticDest(Move):
         net.add_edges(Edge(c_new, b, length=host_len * (1.0 - split)))
         net.add_edges(Edge(z, c_new, length=saved_length, gamma=saved_gamma))
 
-        self.same_move_info = copy.deepcopy(net)
         model.update_network()
         return model
 
@@ -1134,9 +1255,7 @@ class ChangeReticDest(Move):
         model.update_network()
 
     def same_move(self, model: Model) -> None:
-        if self.same_move_info is not None:
-            model.network = copy.deepcopy(self.same_move_info)
-        model.update_network()
+        pass
 
     def hastings_ratio(self) -> float:
         return 1.0

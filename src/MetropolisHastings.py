@@ -500,7 +500,8 @@ class SimulatedAnnealing:
                  t_start: float = 10.0,
                  t_end: float = 0.01,
                  n_restarts: int = 1,
-                 seed: int = 42) -> None:
+                 seed: int = 42,
+                 plateau_frac: float = 0.0) -> None:
         """
         Args:
             pkernel: Proposal kernel that generates moves.
@@ -510,6 +511,8 @@ class SimulatedAnnealing:
             t_end: Final temperature (cooling stops here).
             n_restarts: Number of independent restarts.
             seed: RNG seed for reproducibility.
+            plateau_frac: Fraction of iterations to hold at t_start
+                before beginning exponential cooling (0.0-1.0).
         """
         self.kernel = pkernel
         self.init_model = model
@@ -518,9 +521,11 @@ class SimulatedAnnealing:
         self.t_end = t_end
         self.n_restarts = n_restarts
         self.rng = np.random.default_rng(seed)
+        self.plateau_frac = max(0.0, min(plateau_frac, 0.99))
 
-        if num_iter > 1:
-            self.alpha = (t_end / t_start) ** (1.0 / (num_iter - 1))
+        cool_iters = max(1, int(num_iter * (1.0 - self.plateau_frac)))
+        if cool_iters > 1:
+            self.alpha = (t_end / t_start) ** (1.0 / (cool_iters - 1))
         else:
             self.alpha = 1.0
 
@@ -531,6 +536,7 @@ class SimulatedAnnealing:
     def _single_run(self, state: State) -> dict:
         """Execute one SA cooling run, returning per-run statistics."""
         temp = self.t_start
+        plateau_end = int(self.num_iter * self.plateau_frac)
         accepted = 0
         uphill_accepted = 0
         best_run_score = state.likelihood()
@@ -542,7 +548,8 @@ class SimulatedAnnealing:
 
             if not is_valid:
                 self.kernel.report_outcome(False, delta=0.0)
-                temp *= self.alpha
+                if i >= plateau_end:
+                    temp *= self.alpha
                 continue
 
             try:
@@ -551,7 +558,8 @@ class SimulatedAnnealing:
             except Exception:
                 state.revert(next_move)
                 self.kernel.report_outcome(False, delta=0.0)
-                temp *= self.alpha
+                if i >= plateau_end:
+                    temp *= self.alpha
                 continue
 
             delta = cur - proposed
@@ -576,7 +584,8 @@ class SimulatedAnnealing:
                 best_run_score = score_now
                 best_run_network = copy.deepcopy(state.current_model.network)
 
-            temp *= self.alpha
+            if i >= plateau_end:
+                temp *= self.alpha
 
         return {
             "accepted": accepted,

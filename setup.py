@@ -26,6 +26,11 @@ if USE_CYTHON:
                 ["src/cython/graph_core_cy.pyx"],
                 extra_compile_args=["-O3"] if os.name != 'nt' else [],
             ),
+            Extension(
+                "phynetpy.cython.mpl_engine_cy",
+                ["src/cython/mpl_engine_cy.pyx"],
+                extra_compile_args=["-O3"] if os.name != 'nt' else [],
+            ),
         ]
         
         ext_modules = cythonize(
@@ -146,7 +151,7 @@ setup(
     #
     #   py_modules=["my_module"],
     #
-    packages= ["phynetpy"], #find_packages(where="src"),  # Required
+    packages= ["phynetpy", "phynetpy.cython"],  # Required
     ext_modules=ext_modules,  # Cython extensions (empty list if Cython unavailable)
     # Specify which Python versions you support. In contrast to the
     # 'Programming Language' classifiers above, 'pip install' will check this
