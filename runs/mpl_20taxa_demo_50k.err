@@ -1,0 +1,2 @@
+C:\Users\Marky\Documents\PhyNetPy\src\Network.py:1702: UserWarning: No gamma provided, but a bubble is being                                 looked up. Returning a random bubble edge!
+  warnings.warn("No gamma provided, but a bubble is being \

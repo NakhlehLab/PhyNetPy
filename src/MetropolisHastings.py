@@ -31,6 +31,8 @@ import math
 import time
 import random
 from abc import ABC, abstractmethod
+from typing import Literal, Optional
+
 import numpy as np
 
 # Relative imports
@@ -483,11 +485,23 @@ class SimulatedAnnealing:
     """
     Simulated annealing search for phylogenetic network optimization.
 
-    Uses an exponential cooling schedule: T(i) = T0 * alpha^i.
-    At each step, a worse move is accepted with probability
-    exp(-delta / T) where delta = proposed_score - current_score
-    (positive delta means the proposal is worse for a maximization
-    problem, i.e. the negated parsimony score is lower).
+    Temperature follows an exponential schedule from ``t_start`` toward ``t_end``
+    over (1 - plateau_frac) * num_iter adjustment steps.
+
+    * ``schedule="cool"`` (default): ``t_start`` should exceed ``t_end`` so T
+      drops (classic SA: explore early, exploit late).
+    * ``schedule="heat"``: ``t_end`` should exceed ``t_start`` so T rises
+      (greedy / hill-climbing when T is tiny, then more uphill acceptance later
+      to escape local maxima).
+    * ``schedule="geometric_reheat"``: Hold T for ``steps_per_temp`` iterations,
+      then multiply by ``cooling_alpha`` (geometric cooling) down to ``t_min``.
+      If the run-best score has not improved for ``reheat_threshold``
+      iterations, multiply T by ``reheat_factor`` (capped at ``t_start``) to
+      escape local maxima.
+
+    At each step, a worse move is accepted with probability exp(-delta / T)
+    where ``delta = cur - proposed`` for the current vs proposed likelihood
+    (maximization: negative delta means improving).
 
     Tracks the best network seen across the entire run and restores
     it at the end, so the returned state always holds the global best.
@@ -501,18 +515,40 @@ class SimulatedAnnealing:
                  t_end: float = 0.01,
                  n_restarts: int = 1,
                  seed: int = 42,
-                 plateau_frac: float = 0.0) -> None:
+                 plateau_frac: float = 0.0,
+                 progress_every: int = 0,
+                 schedule: Literal["cool", "heat", "geometric_reheat"] = "cool",
+                 *,
+                 t_min: Optional[float] = None,
+                 cooling_alpha: float = 0.93,
+                 steps_per_temp: int = 100,
+                 reheat_threshold: int = 1000,
+                 reheat_factor: float = 2.0) -> None:
         """
         Args:
             pkernel: Proposal kernel that generates moves.
             model: Initial Model object (network + scorer).
             num_iter: Iterations per annealing run.
-            t_start: Starting temperature.
-            t_end: Final temperature (cooling stops here).
+            t_start: Initial temperature (T0). For ``geometric_reheat``, also
+                the ceiling when reheating.
+            t_end: For ``cool``/``heat``, target temperature. For
+                ``geometric_reheat`` ignored unless ``t_min`` is omitted, then
+                used as the floor temperature (same role as T_min).
             n_restarts: Number of independent restarts.
             seed: RNG seed for reproducibility.
-            plateau_frac: Fraction of iterations to hold at t_start
-                before beginning exponential cooling (0.0-1.0).
+            plateau_frac: Fraction of iterations to hold at ``t_start``
+                before beginning exponential cool/heat (0.0-1.0). Ignored for
+                ``geometric_reheat``.
+            progress_every: If > 0, print a progress line every this many
+                iterations (current log score, temperature, best-so-far in run).
+            schedule: ``"cool"`` / ``"heat"`` as above, or ``"geometric_reheat"``.
+            t_min: Floor temperature for ``geometric_reheat`` (default: ``t_end``).
+            cooling_alpha: Geometric factor applied every ``steps_per_temp``
+                iterations (0 < alpha < 1).
+            steps_per_temp: Iterations at a given T before cooling by alpha.
+            reheat_threshold: If run-best has not improved in this many
+                iterations, multiply T by ``reheat_factor`` (capped at ``t_start``).
+            reheat_factor: Factor applied to T on reheat (> 1).
         """
         self.kernel = pkernel
         self.init_model = model
@@ -522,9 +558,43 @@ class SimulatedAnnealing:
         self.n_restarts = n_restarts
         self.rng = np.random.default_rng(seed)
         self.plateau_frac = max(0.0, min(plateau_frac, 0.99))
+        self.progress_every = max(0, int(progress_every))
+        self.schedule = schedule
+
+        self.t_min_floor: float = float(t_min if t_min is not None else t_end)
+        self.cooling_alpha = float(cooling_alpha)
+        self.steps_per_temp = max(1, int(steps_per_temp))
+        self.reheat_threshold = max(1, int(reheat_threshold))
+        self.reheat_factor = float(reheat_factor)
 
         cool_iters = max(1, int(num_iter * (1.0 - self.plateau_frac)))
-        if cool_iters > 1:
+        if schedule == "cool" and not (t_start > t_end):
+            raise ValueError(
+                'SimulatedAnnealing schedule="cool" requires t_start > t_end '
+                f"(got t_start={t_start}, t_end={t_end}).",
+            )
+        if schedule == "heat" and not (t_end > t_start):
+            raise ValueError(
+                'SimulatedAnnealing schedule="heat" requires t_end > t_start '
+                f"(got t_start={t_start}, t_end={t_end}).",
+            )
+        if schedule == "geometric_reheat":
+            if not (t_start > self.t_min_floor):
+                raise ValueError(
+                    'SimulatedAnnealing schedule="geometric_reheat" requires '
+                    f"t_start > t_min (got t_start={t_start}, t_min={self.t_min_floor}).",
+                )
+            if not (0.0 < self.cooling_alpha < 1.0):
+                raise ValueError(
+                    "cooling_alpha must be in (0, 1) for geometric_reheat, "
+                    f"got {self.cooling_alpha}.",
+                )
+            if self.reheat_factor <= 1.0:
+                raise ValueError(
+                    f"reheat_factor must be > 1, got {self.reheat_factor}.",
+                )
+            self.alpha = 1.0  # unused; kept for any code reading .alpha
+        elif cool_iters > 1:
             self.alpha = (t_end / t_start) ** (1.0 / (cool_iters - 1))
         else:
             self.alpha = 1.0
@@ -534,7 +604,10 @@ class SimulatedAnnealing:
         self.run_stats: list[dict] = []
 
     def _single_run(self, state: State) -> dict:
-        """Execute one SA cooling run, returning per-run statistics."""
+        """Execute one SA run (cooling, heating, or geometric+reheat), return stats."""
+        if self.schedule == "geometric_reheat":
+            return self._single_run_geometric_reheat(state)
+
         temp = self.t_start
         plateau_end = int(self.num_iter * self.plateau_frac)
         accepted = 0
@@ -543,49 +616,61 @@ class SimulatedAnnealing:
         best_run_network = copy.deepcopy(state.current_model.network)
 
         for i in range(self.num_iter):
-            next_move = self.kernel.generate()
-            is_valid = state.generate_next(next_move)
-
-            if not is_valid:
-                self.kernel.report_outcome(False, delta=0.0)
-                if i >= plateau_end:
-                    temp *= self.alpha
-                continue
-
             try:
-                cur = state.likelihood()
-                proposed = state.proposed().likelihood()
-            except Exception:
-                state.revert(next_move)
-                self.kernel.report_outcome(False, delta=0.0)
+                next_move = self.kernel.generate()
+                is_valid = state.generate_next(next_move)
+
+                if not is_valid:
+                    self.kernel.report_outcome(False, delta=0.0)
+                    if i >= plateau_end:
+                        temp *= self.alpha
+                    continue
+
+                try:
+                    cur = state.likelihood()
+                    proposed = state.proposed().likelihood()
+                except Exception:
+                    state.revert(next_move)
+                    self.kernel.report_outcome(False, delta=0.0)
+                    if i >= plateau_end:
+                        temp *= self.alpha
+                    continue
+
+                delta = cur - proposed
+
+                was_accepted = False
+                if delta < 0:
+                    state.commit(next_move)
+                    accepted += 1
+                    was_accepted = True
+                elif temp > 0 and self.rng.random() < math.exp(-delta / temp):
+                    state.commit(next_move)
+                    accepted += 1
+                    uphill_accepted += 1
+                    was_accepted = True
+                else:
+                    state.revert(next_move)
+
+                self.kernel.report_outcome(was_accepted, delta=proposed - cur)
+
+                score_now = state.likelihood()
+                if score_now > best_run_score:
+                    best_run_score = score_now
+                    best_run_network = copy.deepcopy(state.current_model.network)
+
                 if i >= plateau_end:
                     temp *= self.alpha
-                continue
-
-            delta = cur - proposed
-
-            was_accepted = False
-            if delta < 0:
-                state.commit(next_move)
-                accepted += 1
-                was_accepted = True
-            elif temp > 0 and self.rng.random() < math.exp(-delta / temp):
-                state.commit(next_move)
-                accepted += 1
-                uphill_accepted += 1
-                was_accepted = True
-            else:
-                state.revert(next_move)
-
-            self.kernel.report_outcome(was_accepted, delta=proposed - cur)
-
-            score_now = state.likelihood()
-            if score_now > best_run_score:
-                best_run_score = score_now
-                best_run_network = copy.deepcopy(state.current_model.network)
-
-            if i >= plateau_end:
-                temp *= self.alpha
+            finally:
+                if self.progress_every and (i + 1) % self.progress_every == 0:
+                    try:
+                        cur_sc = state.likelihood()
+                    except Exception:
+                        cur_sc = float("nan")
+                    print(
+                        f"  SA {i + 1}/{self.num_iter}  log_PL={cur_sc:.6f}  "
+                        f"T={temp:.6g}  best_run={best_run_score:.6f}",
+                        flush=True,
+                    )
 
         return {
             "accepted": accepted,
@@ -594,6 +679,126 @@ class SimulatedAnnealing:
             "best_score": best_run_score,
             "best_network": best_run_network,
         }
+
+    def _single_run_geometric_reheat(self, state: State) -> dict:
+        """Geometric cooling with reheats when the run-best score stalls."""
+        temp = self.t_start
+        t_floor = self.t_min_floor
+
+        accepted = 0
+        uphill_accepted = 0
+        best_run_score = state.likelihood()
+        best_run_network = copy.deepcopy(state.current_model.network)
+
+        steps_at_level = 0
+        since_best_improve = 0
+        reheat_count = 0
+
+        for i in range(self.num_iter):
+            try:
+                next_move = self.kernel.generate()
+                is_valid = state.generate_next(next_move)
+
+                if not is_valid:
+                    self.kernel.report_outcome(False, delta=0.0)
+                    since_best_improve += 1
+                    steps_at_level += 1
+                    temp, since_best_improve, steps_at_level, reheat_count = (
+                        self._tick_geometric_reheat(
+                            temp, since_best_improve, steps_at_level,
+                            reheat_count, t_floor,
+                        )
+                    )
+                    continue
+
+                try:
+                    cur = state.likelihood()
+                    proposed = state.proposed().likelihood()
+                except Exception:
+                    state.revert(next_move)
+                    self.kernel.report_outcome(False, delta=0.0)
+                    since_best_improve += 1
+                    steps_at_level += 1
+                    temp, since_best_improve, steps_at_level, reheat_count = (
+                        self._tick_geometric_reheat(
+                            temp, since_best_improve, steps_at_level,
+                            reheat_count, t_floor,
+                        )
+                    )
+                    continue
+
+                delta = cur - proposed
+
+                was_accepted = False
+                if delta < 0:
+                    state.commit(next_move)
+                    accepted += 1
+                    was_accepted = True
+                elif temp > 0 and self.rng.random() < math.exp(-delta / temp):
+                    state.commit(next_move)
+                    accepted += 1
+                    uphill_accepted += 1
+                    was_accepted = True
+                else:
+                    state.revert(next_move)
+
+                self.kernel.report_outcome(was_accepted, delta=proposed - cur)
+
+                score_now = state.likelihood()
+                if score_now > best_run_score:
+                    best_run_score = score_now
+                    best_run_network = copy.deepcopy(state.current_model.network)
+                    since_best_improve = 0
+                else:
+                    since_best_improve += 1
+
+                steps_at_level += 1
+                temp, since_best_improve, steps_at_level, reheat_count = (
+                    self._tick_geometric_reheat(
+                        temp, since_best_improve, steps_at_level,
+                        reheat_count, t_floor,
+                    )
+                )
+            finally:
+                if self.progress_every and (i + 1) % self.progress_every == 0:
+                    try:
+                        cur_sc = state.likelihood()
+                    except Exception:
+                        cur_sc = float("nan")
+                    print(
+                        f"  SA {i + 1}/{self.num_iter}  log_PL={cur_sc:.6f}  "
+                        f"T={temp:.6g}  best_run={best_run_score:.6f}  "
+                        f"reheats={reheat_count}",
+                        flush=True,
+                    )
+
+        return {
+            "accepted": accepted,
+            "uphill": uphill_accepted,
+            "final_score": state.likelihood(),
+            "best_score": best_run_score,
+            "best_network": best_run_network,
+            "reheat_count": reheat_count,
+        }
+
+    def _tick_geometric_reheat(
+        self,
+        temp: float,
+        since_best_improve: int,
+        steps_at_level: int,
+        reheat_count: int,
+        t_floor: float,
+    ) -> tuple[float, int, int, int]:
+        """One iteration of schedule: reheat if stalled, else geometric cool."""
+        if since_best_improve >= self.reheat_threshold:
+            temp = min(temp * self.reheat_factor, self.t_start)
+            since_best_improve = 0
+            steps_at_level = 0
+            reheat_count += 1
+        elif steps_at_level >= self.steps_per_temp:
+            temp = max(temp * self.cooling_alpha, t_floor)
+            steps_at_level = 0
+        return temp, since_best_improve, steps_at_level, reheat_count
 
     def run(self) -> State:
         """

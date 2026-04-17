@@ -1650,7 +1650,14 @@ class MPL:
                 report to stdout unless this is ``False``.
             **kwargs: Forwarded to the search constructor.  For SA these
                       include ``t_start``, ``t_end``, ``n_restarts``, ``seed``,
-                      ``plateau_frac``.
+                      ``plateau_frac``, ``progress_every`` (print every *n*
+                      iterations; ``0`` disables), and ``schedule``: ``"cool"``
+                      (high-to-low T), ``"heat"`` (low-to-high T), or
+                      ``"geometric_reheat"`` (geometric cooling every
+                      ``steps_per_temp`` steps down to ``t_min``, with reheats
+                      when the run-best stalls; see ``cooling_alpha``,
+                      ``steps_per_temp``, ``reheat_threshold``, ``reheat_factor``,
+                      ``t_min``).
 
         Returns:
             Log pseudo-likelihood of the best network found.  The MPL
