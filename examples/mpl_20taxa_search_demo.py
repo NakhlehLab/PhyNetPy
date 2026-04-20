@@ -79,6 +79,7 @@ def main() -> None:
     print(f"  {len(gene_trees.trees)} trees after pruning", flush=True)
 
     print("Starting species tree (majority-rule consensus from pruned gene trees)…", flush=True)
+    #Most common gene tree
     start_net = gene_trees.build_majority_rule_consensus_tree()
     leaves = sorted(n.label for n in start_net.get_leaves())
     print(
