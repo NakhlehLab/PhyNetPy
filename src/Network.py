@@ -1399,12 +1399,13 @@ class Edge:
         """
         return (self._src.label, self._dest.label)
     
-    def __len__(self) -> float:
-        """
-        Get the length of this edge.
-        """
-        return self.__length
-    
+    # NOTE: ``Edge`` deliberately does NOT implement ``__len__``.  Python's
+    # data model requires ``__len__`` to return a non-negative integer;
+    # returning the branch length (a float) caused ``bool(edge)`` and
+    # ``if edge:`` expressions to raise ``TypeError`` wherever an ``Edge``
+    # was truth-tested.  Use ``edge.get_length()`` for the branch length
+    # and ``edge is not None`` for identity tests.
+
     def to_branch(self) -> Branch:
         """
         Convert this edge to a Branch object for use in phylogenetic

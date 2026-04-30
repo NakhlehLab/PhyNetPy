@@ -1,8 +1,8 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
- 
+
 ##############################################################################
-##  -- PhyNetPy --                                                              
+##  -- PhyNetPy --
 ##  Library for the Development and use of Phylogenetic Network Methods
 ##
 ##  Copyright 2025 Mark Kessler, Luay Nakhleh.
@@ -16,27 +16,86 @@
 ##     Mark Kessler, Luay Nakhleh. 2025.
 ##
 ##############################################################################
- 
-""" 
+
+"""
 Author : Mark Kessler
-Last Stable Edit : 3/26/26
+Last Stable Edit : 4/24/26
 First Included in Version : 0.3.2
- 
-Docs   - [ ]
+
+Docs   - [x]
 Tests  - [ ]
 Design - [x]
- 
+
 Maximum pseudo-likelihood (MPL) for phylogenetic network inference.
- 
-Implements the scoring function from:
+
+Implements the scoring function of
+
     Yu, Y. & Nakhleh, L. (2015). "A maximum pseudo-likelihood approach
     for phylogenetic networks." BMC Genomics, 16(S10), S10.
- 
+
+whose objective (to maximise) is
+
     log L(Psi, gamma | G)
-        = sum over {X,Y,Z} of
-          [ rho(XY|Z) * log P(XY|Z | Psi, gamma)
-          + rho(XZ|Y) * log P(XZ|Y | Psi, gamma)
-          + rho(YZ|X) * log P(YZ|X | Psi, gamma) ]
+        = sum_{X,Y,Z} [
+              rho(XY|Z) * log P(XY|Z | Psi, gamma)
+            + rho(XZ|Y) * log P(XZ|Y | Psi, gamma)
+            + rho(YZ|X) * log P(YZ|X | Psi, gamma)
+          ]
+
+where Psi is the candidate species network, gamma is the vector of
+reticulation inheritance probabilities, G is the input gene-tree set,
+rho(·|·) are empirical triplet frequencies computed from G, and
+P(·|·) are expected triplet probabilities under the coalescent model
+on Psi.
+
+Pipeline overview
+-----------------
+End-to-end control flow when a user runs ``MPL.search(...)``:
+
+    1. Enumerate all 3-taxon species triplets from the species labels.
+
+    2. Precompute rho (triplet frequencies from gene trees) once.
+       Driver:  ``compute_gene_tree_triplets`` -> ``_compute_all_rhos_fast``
+                -> ``_process_tree_batch`` (optionally parallel via
+                ``ProcessPoolExecutor``).  Uses ``_GeneTreeLCAIndex``
+                for O(1) topology queries per triplet per tree.
+
+    3. Build an initial ``Model`` wrapping the starting species network.
+       Attach an ``MPLScorer`` so the search driver can call
+       ``score(model)`` to get log-pseudo-likelihood.
+
+    4. Run the search driver (``HillClimbing`` or ``SimulatedAnnealing``)
+       using ``MPLKernel`` to propose moves.  Each accepted proposal
+       mutates the model's network in place; the kernel adapts move
+       weights and continuous proposal sigmas from rolling per-move
+       statistics.
+
+    5. After the search, report final score, move-kernel stats, and
+       (optionally) a reference-network comparison.
+
+Scoring path (per call to ``MPLScorer.__call__``):
+
+    Model.network  ->  _TripleDPEngine(network)  ->  either
+      - _score_with_cython(engine, triplets, rho)  (fast path), or
+      - Python fallback: engine.calculate_triple_probability(triplet)
+        summed over all active triplets.
+
+The Cython path and the Python path compute the same quantity; the
+Python path is the reference implementation kept for portability and
+debugging.  ``_HAS_CYTHON_MPL`` gates which one is used.
+
+Module layout
+-------------
+Sections are marked with banner comments.  Top-to-bottom:
+
+    (A) Result containers                  (GeneTreeTripletResult, ...)
+    (B) Reference-comparison helpers       (format_mpl_reference_comparison)
+    (C) Rho precomputation                 (_GeneTreeLCAIndex, _compute_all_rhos_fast)
+    (D) Subnetwork probability DP engine   (_TripleDPEngine)
+    (E) Cython bridge                      (_extract_topology_for_cython)
+    (F) Public triplet API                 (compute_gene_tree_triplets, score_species_network_triplets)
+    (G) Scorer + adaptive proposal kernel  (MPLScorer, _AdaptiveConfig, MPLKernel)
+    (H) Orchestration class                (MPL)
 """
  
 from __future__ import annotations
@@ -44,7 +103,6 @@ from __future__ import annotations
 import copy
 import math
 import os
-import random
 from collections import deque
 from itertools import combinations
 from pathlib import Path
@@ -59,65 +117,132 @@ from .ModelGraph import Model
 from .MetropolisHastings import ProposalKernel, HillClimbing, SimulatedAnnealing
 from .ModelMove import *
  
+# log(p) for zero-probability triplet outcomes is replaced by this
+# floor to keep the score finite.  math.log(1e-200) ≈ -460; any triplet
+# the DP engine assigns probability 0 is effectively penalised by this
+# amount per unit of observed rho mass.  Chosen large enough that the
+# search is strongly deterred from such topologies but not so large
+# that it single-handedly dominates the score.
 _LOG_FLOOR = math.log(1e-200)
 
+# Cython backend detection.  The ``.so`` must be built for the
+# interpreter's ABI; see README for the one-liner
+# ``python setup.py build_ext --inplace``.  When the import fails,
+# the pure-Python DP path in ``_TripleDPEngine`` is used instead -- both
+# paths compute the same score.
 try:
     from .cython.mpl_engine_cy import score_all_triplets as _cy_score
     _HAS_CYTHON_MPL = True
 except ImportError:
     _HAS_CYTHON_MPL = False
- 
- 
-class GeneTreeTripletResult:
-    """
-    Container for gene-tree triplet frequencies (rho values).
 
-    This object is returned by compute_gene_tree_triplets and then consumed
-    by score_species_network_triplets.
+
+# ======================================================================
+# (A) Result containers
+# ======================================================================
+
+class GeneTreeTripletResult:
+    """Container for precomputed gene-tree triplet frequencies (rho values).
+
+    Returned by :func:`compute_gene_tree_triplets` and consumed by
+    :func:`score_species_network_triplets` (or stored on :class:`MPL`
+    for repeated scoring against varying species networks).  Encodes
+    the "gene-tree side" of the MPL inputs: all rho values are
+    functions of the observed gene trees only and never change during
+    a network search.
+
+    Attributes:
+        triplets: Canonical ordered species triplets, e.g.
+            ``[('A', 'B', 'C'), ('A', 'B', 'D'), ...]``.
+        rho_by_triplet: For each triplet ``(X, Y, Z)``, the empirical
+            frequencies of the three rooted resolutions as a tuple
+            ``(rho_XY|Z, rho_XZ|Y, rho_YZ|X)``.  Values sum to
+            approximately the number of gene trees that covered all
+            three taxa (ties contribute 1/3 to each resolution).
     """
-    def __init__(self, 
-                 triplets: list[tuple[str, str, str]],
-                 rho_by_triplet: dict[tuple[str, str, str], tuple[float, float, float]]) -> None:
-        """
-        Initialize container values.
+
+    def __init__(
+        self,
+        triplets: list[tuple[str, str, str]],
+        rho_by_triplet: dict[tuple[str, str, str], tuple[float, float, float]],
+    ) -> None:
+        """Initialise the container.
 
         Args:
-            triplets (list[tuple[str, str, str]]): Canonical species triplets.
-            rho_by_triplet (dict[tuple[str, str, str], tuple[float, float, float]]): 
-                            Mapping from triplet -> (rho_xy_z, rho_xz_y, rho_yz_x).
-        Returns:
-            N/A
+            triplets: Canonical species triplets.
+            rho_by_triplet: Mapping ``triplet -> (rho_XY|Z, rho_XZ|Y,
+                rho_YZ|X)``.
         """
-        self.triplets : list[tuple[str, str, str]] = triplets
-        self.rho_by_triplet : dict[tuple[str, str, str], tuple[float, float, float]] = rho_by_triplet
+        self.triplets: list[tuple[str, str, str]] = triplets
+        self.rho_by_triplet: dict[
+            tuple[str, str, str], tuple[float, float, float]
+        ] = rho_by_triplet
 
 
 class SpeciesNetworkTripletResult:
+    """Container for species-network triplet probabilities and final score.
+
+    Returned by :func:`score_species_network_triplets`.  Holds the
+    "species-network side" of the scoring call: per-triplet predicted
+    probabilities plus the summed log-pseudo-likelihood.
+
+    Attributes:
+        triplets: Canonical ordered species triplets (matching the
+            order used during scoring).
+        probs_by_triplet: For each triplet, predicted probabilities
+            ``(P(XY|Z), P(XZ|Y), P(YZ|X))`` under the DP model.
+        log_pseudo_likelihood: Total MPL score (higher is better;
+            always <= 0 since it is a sum of ``rho * log(p)`` terms).
     """
-    Container for species-network triplet probabilities and final MPL score.
-    """
-    def __init__(self, 
-                 triplets: list[tuple[str, str, str]],
-                 probs_by_triplet: dict[tuple[str, str, str], tuple[float, float, float]],
-                 log_pseudo_likelihood: float) -> None:
-        """
-        Initialize container values.
+
+    def __init__(
+        self,
+        triplets: list[tuple[str, str, str]],
+        probs_by_triplet: dict[tuple[str, str, str], tuple[float, float, float]],
+        log_pseudo_likelihood: float,
+    ) -> None:
+        """Initialise the container.
 
         Args:
-            triplets (list[tuple[str, str, str]]): Canonical species triplets.
-            probs_by_triplet (dict[tuple[str, str, str], tuple[float, float, float]]): 
-                            Mapping from triplet -> (P(XY|Z), P(XZ|Y), P(YZ|X)).
-            log_pseudo_likelihood (float): Final pseudo-likelihood score.
-        Returns:
-            N/A
+            triplets: Canonical species triplets.
+            probs_by_triplet: Mapping ``triplet -> (P(XY|Z), P(XZ|Y),
+                P(YZ|X))`` under the DP model.
+            log_pseudo_likelihood: Final pseudo-likelihood score.
         """
-        self.triplets : list[tuple[str, str, str]] = triplets
-        self.probs_by_triplet : dict[tuple[str, str, str], tuple[float, float, float]] = probs_by_triplet
-        self.log_pseudo_likelihood : float = log_pseudo_likelihood
+        self.triplets: list[tuple[str, str, str]] = triplets
+        self.probs_by_triplet: dict[
+            tuple[str, str, str], tuple[float, float, float]
+        ] = probs_by_triplet
+        self.log_pseudo_likelihood: float = log_pseudo_likelihood
 
 
-def _subtree_leaf_labels(net: Network, node: Node, visited: set[Node] | None = None) -> set[str]:
-    """Leaves reachable from *node* following child edges (for comparison reports)."""
+# ======================================================================
+# (B) Reference-comparison helpers
+#
+# These are only used when ``MPL.search(reference_network=...)`` is set
+# (e.g. when benchmarking against a simulator ground truth).  They
+# don't participate in the scoring path.
+# ======================================================================
+
+def _subtree_leaf_labels(
+    net: Network,
+    node: Node,
+    visited: set[Node] | None = None,
+) -> set[str]:
+    """Return the set of leaf labels reachable from ``node`` via child edges.
+
+    Used for comparison reports (clade overlap, reticulation-subtree
+    footprints).  Not used on the scoring hot path.
+
+    Args:
+        net: Network containing ``node``.
+        node: Starting node.
+        visited: Internal visited set (pass ``None`` when calling).
+
+    Returns:
+        Set of leaf labels under ``node`` (inclusive of ``node`` if
+        ``node`` itself is a leaf).
+    """
     if visited is None:
         visited = set()
     if node in visited:
@@ -132,7 +257,19 @@ def _subtree_leaf_labels(net: Network, node: Node, visited: set[Node] | None = N
 
 
 def _nontrivial_clades(net: Network) -> set[frozenset[str]]:
-    """All multisets of leaf labels induced by non-leaf nodes (for clade comparison)."""
+    """Return the set of non-trivial clades induced by internal nodes.
+
+    A "clade" here is simply the frozenset of leaf labels below an
+    internal node.  Trivial singleton clades (leaves) are excluded.
+    Used for the clade-overlap section of the comparison report.
+
+    Args:
+        net: Network to inspect.
+
+    Returns:
+        Set of leaf-label frozensets, one per internal node with at
+        least two descendant leaves.
+    """
     clades: set[frozenset[str]] = set()
     for node in net.V():
         if net.out_degree(node) == 0:
@@ -151,9 +288,31 @@ def format_mpl_reference_comparison(
     *,
     top_k: int = 25,
 ) -> str:
-    """Build a text report: scores, retic summaries, clade diff, top triplet LL gaps.
+    """Build a text report comparing a found network against a reference.
 
-    Uses the same rho and triplet list as :class:`MPL` (gene-tree statistics).
+    The report covers four sections:
+
+      1. Final MPL scores for both networks and the signed gap.
+      2. Per-network reticulation summary (parent labels, subtree
+         leaves) to eyeball where each reticulation sits.
+      3. Clade-level Venn counts: shared, only-in-found, only-in-reference.
+      4. Top ``top_k`` triplets where the reference outperforms the
+         found network, ranked by log-likelihood gap -- useful for
+         diagnosing *why* the found topology under-fits.
+
+    Uses the same ``rho`` and ``triplets`` passed to :class:`MPL` so
+    the reference is scored against the same observed gene-tree
+    statistics.
+
+    Args:
+        found: Best network returned by the search.
+        reference: Ground-truth or baseline network.
+        rho: Triplet frequency table (gene-tree side).
+        triplets: Canonical triplets to iterate over.
+        top_k: How many worst-performing triplets to list.
+
+    Returns:
+        Multi-line formatted report string (no trailing newline).
     """
     scorer = MPLScorer(rho, triplets)
     m_found = Model()
@@ -172,6 +331,7 @@ def format_mpl_reference_comparison(
     lines.append("")
 
     def _retic_lines(net: Network, label: str) -> None:
+        """Append one line per reticulation describing parents + subtree."""
         retics = [n for n in net.V() if net.in_degree(n) > 1]
         lines.append(f"{label} reticulations: {len(retics)}")
         for r in retics:
@@ -228,27 +388,64 @@ def format_mpl_reference_comparison(
 
 
 def save_mpl_network_newick(net: Network, path: str | os.PathLike[str]) -> None:
-    """Write *net* as a Newick string to *path* (UTF-8)."""
+    """Serialize ``net`` as Newick to ``path`` (UTF-8, newline-terminated).
+
+    Parent directories are created if they don't exist.
+
+    Args:
+        net: Network to serialise.
+        path: Output path (str or ``os.PathLike``).
+    """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(net.newick() + "\n", encoding="utf-8")
 
 
-###################################
-#### RHO PRECOMPUTATION ###########
-###################################
+# ======================================================================
+# (C) Rho precomputation
+#
+# "rho" = triplet frequency statistic derived from the gene-tree set.
+# For each species triplet (X, Y, Z), we walk every gene tree that
+# covers all three taxa, determine the induced rooted topology via
+# LCA depths, and accumulate a weight into one of the three
+# resolution buckets (XY|Z, XZ|Y, YZ|X).  Each tree contributes a
+# unit of mass (split 1/3 across ties if the triplet is a soft
+# polytomy).  The resulting rho table is constant for the duration
+# of a search, so it's computed once up front.
+# ======================================================================
 
 class _GeneTreeLCAIndex:
     """Precomputed LCA index for O(1) triplet topology queries on a gene tree.
 
-    One BFS from the root builds depth and parent maps. Pairwise LCA depths
-    for all relevant leaf pairs (allele labels) are then computed via
-    parent-climbing and cached in a flat dict for instant lookup.
+    Construction is O(L^2) where L is the number of relevant leaves
+    (BFS to build depth + parent maps, then pairwise LCA via parent
+    climbing).  After construction, each triplet topology query is
+    three dict lookups plus a few comparisons -- no BFS per query.
+
+    For a dataset with T trees and K triplets, naive re-walking costs
+    O(T * K * L).  Indexing trades a one-time O(T * L^2) construction
+    for O(T * K) queries, which is a big win when K >> L.
+
+    Attributes:
+        _pair_depth: ``dict[(label_a, label_b)] -> lca_depth``, stored
+            symmetrically in both orderings.
+        _leaf_labels: Relevant leaves actually present in this tree
+            (the tree may be missing taxa compared to the full set).
     """
 
     __slots__ = ('_pair_depth', '_leaf_labels')
 
     def __init__(self, tree: Network, relevant_labels: frozenset[str]) -> None:
+        """Index ``tree`` for fast triplet queries over ``relevant_labels``.
+
+        Args:
+            tree: A gene tree.
+            relevant_labels: Frozen set of allele labels that will
+                actually be queried (typically the union of alleles
+                across all species in the mapping).  Leaves whose
+                labels fall outside this set are skipped, so a tree
+                missing some taxa still indexes cleanly.
+        """
         root = tree.root()
         depth: dict[Node, int] = {}
         parent: dict[Node, Node | None] = {}
@@ -297,7 +494,21 @@ class _GeneTreeLCAIndex:
         self._pair_depth = pair_depth
 
     def induced_triple_fast(self, x: str, y: str, z: str) -> str:
-        """Determine induced triple topology via 3 cached lookups."""
+        """Classify the induced topology of ``{x, y, z}`` via cached LCA depths.
+
+        The deepest pairwise LCA names the two taxa that are siblings
+        in the induced triplet; the third is the outgroup.  Ties in
+        all three pair depths indicate a soft polytomy.
+
+        Args:
+            x: Taxon label.
+            y: Taxon label.
+            z: Taxon label.
+
+        Returns:
+            One of ``"xy|z"``, ``"xz|y"``, ``"yz|x"`` (rooted resolution
+            strings) or ``"star"`` (polytomy).
+        """
         pd = self._pair_depth
         d_xy = pd[(x, y)]
         d_xz = pd[(x, z)]
@@ -317,15 +528,44 @@ class _GeneTreeLCAIndex:
         return "yz|x"
 
 
-def _process_tree_batch(batch: list[Network],
-                        relevant: frozenset[str],
-                        mapping: dict[str, list[str]],
-                        triplets: list[tuple[str, str, str]],
-                        identity_mapping: bool) -> dict[tuple[str, str, str], list[float]]:
-    """Process a batch of gene trees, returning partial rho accumulators.
+def _process_tree_batch(
+    batch: list[Network],
+    relevant: frozenset[str],
+    mapping: dict[str, list[str]],
+    triplets: list[tuple[str, str, str]],
+    identity_mapping: bool,
+) -> dict[tuple[str, str, str], list[float]]:
+    """Accumulate partial rho counts over a batch of gene trees.
 
-    Separated from the main function so it can be dispatched to a
-    ``concurrent.futures`` worker.
+    Separated from :func:`_compute_all_rhos_fast` so it can be
+    dispatched to a ``concurrent.futures`` worker without closing
+    over non-picklable state.
+
+    Two code paths are kept for performance:
+
+      * ``identity_mapping=True``: each species maps to exactly one
+        allele (no within-species ambiguity), and triplet lookup is a
+        straight dict read.  This is the common case on empirical
+        datasets that haven't been resampled.
+
+      * ``identity_mapping=False``: species can map to multiple
+        alleles, so each species triplet expands to the Cartesian
+        product of allele triplets.  Counts are weighted by
+        ``1 / (|ax| * |ay| * |az|)`` to give each species triplet
+        unit mass regardless of allele count.
+
+    Args:
+        batch: Gene trees to process.
+        relevant: Flattened set of allele labels used anywhere in the
+            mapping (for :class:`_GeneTreeLCAIndex` filtering).
+        mapping: Species -> list of allele labels.
+        triplets: Canonical species triplets to accumulate over.
+        identity_mapping: True iff all species map to a single allele.
+
+    Returns:
+        ``dict`` mapping each triplet to a 3-element list
+        ``[count_XY|Z, count_XZ|Y, count_YZ|X]``.  The caller merges
+        partials across batches.
     """
     partial: dict[tuple[str, str, str], list[float]] = {
         t: [0.0, 0.0, 0.0] for t in triplets
@@ -398,31 +638,55 @@ def _process_tree_batch(batch: list[Network],
     return partial
 
 
-def _compute_all_rhos_fast(gene_trees: GeneTrees,
-                           mapping: dict[str, list[str]],
-                           triplets: list[tuple[str, str, str]],
-                           n_workers: int = 1) -> dict[tuple[str, str, str], tuple[float, float, float]]:
-    """Compute rho for every triplet in one pass over gene trees.
+def _compute_all_rhos_fast(
+    gene_trees: GeneTrees,
+    mapping: dict[str, list[str]],
+    triplets: list[tuple[str, str, str]],
+    n_workers: int = 1,
+) -> dict[tuple[str, str, str], tuple[float, float, float]]:
+    """Compute the full rho table in one pass over ``gene_trees``.
 
-    Flips the loop order to tree-first so each gene tree is indexed
-    once and reused across all 816+ triplets.  Uses _GeneTreeLCAIndex
-    for O(1) topology queries instead of 4 × BFS per query.
+    Flips the naive "triplet outer, tree inner" loop to "tree outer,
+    triplet inner".  Each gene tree is indexed exactly once and the
+    index is reused for all triplets -- a large win when the triplet
+    count (cubic in species count) dominates the tree count.
 
-    When *n_workers* > 1 the gene-tree list is split into batches and
-    processed in parallel with ``concurrent.futures.ProcessPoolExecutor``.
+    When ``n_workers > 1`` the tree list is split into batches and
+    processed with ``ProcessPoolExecutor``; partial rho counts are
+    summed across workers.
+
+    Args:
+        gene_trees: Collection of gene trees.
+        mapping: Species -> list of allele labels.
+        triplets: Canonical species triplets.
+        n_workers: Worker-process count for the parallel path.  Set
+            to 1 (default) for the single-process path, which is
+            preferred for small datasets where process-spawn overhead
+            dwarfs the compute.
+
+    Returns:
+        ``dict`` mapping each triplet to a tuple
+        ``(rho_XY|Z, rho_XZ|Y, rho_YZ|X)``.
     """
+    # Universe of allele labels that will ever be queried.  Leaves
+    # outside this set are skipped by the LCA index constructor.
     relevant = frozenset(a for alleles in mapping.values() for a in alleles)
 
+    # Detect the common "one allele per species" case so the inner
+    # loop can skip the allele-product expansion entirely.
     identity_mapping = all(len(v) == 1 for v in mapping.values())
 
     trees = gene_trees.trees
+
+    # Single-process fast path.  Preferred for small datasets where
+    # process-spawn overhead dwarfs the compute.
     if n_workers <= 1 or len(trees) < 4:
         merged = _process_tree_batch(
             trees, relevant, mapping, triplets, identity_mapping
         )
         return {t: tuple(merged[t]) for t in triplets}
 
-    # Split trees into batches for parallel processing.
+    # Parallel path: split trees into roughly equal batches, fan out.
     from concurrent.futures import ProcessPoolExecutor
     batch_size = max(1, (len(trees) + n_workers - 1) // n_workers)
     batches = [
@@ -440,7 +704,7 @@ def _compute_all_rhos_fast(gene_trees: GeneTrees,
                 )
             )
 
-    # Merge partial results.
+    # Merge partial rho counts from each worker.
     merged: dict[tuple[str, str, str], list[float]] = {
         t: [0.0, 0.0, 0.0] for t in triplets
     }
@@ -456,23 +720,57 @@ def _compute_all_rhos_fast(gene_trees: GeneTrees,
     return {t: tuple(merged[t]) for t in triplets}
 
 
-#####################################
-#### SUBNETWORK PROBABILITY LOGIC ###
-#####################################
- 
+# ======================================================================
+# (D) Subnetwork probability DP engine
+#
+# Computes P(resolution | Psi, gamma) for a single rooted triplet
+# against a fixed species network Psi.  The algorithm mirrors
+# PhyloNet's pseudo-likelihood code path, which itself follows Yu &
+# Nakhleh (2015).
+#
+# State-space encoding:
+#   Each DP state is a small integer 0..10 representing which of the
+#   three triplet lineages are present at a node and how they have
+#   coalesced so far.  The three transition maps below
+#   (_MERGING_MAP / _SPLITTING_MAP / _COALESCING_MAP) encode the
+#   combinatorics of lineage merges (tree-node children join up),
+#   lineage splits (reticulation node sends each lineage up one of
+#   two parent edges), and within-branch coalescent transitions.
+#
+# State legend (triplet lineages labelled 1, 2, 3):
+#    0  nothing                             1  lineage 1 only
+#    2  lineage 2 only                      3  lineage 3 only
+#    4  lineages 1+2                        5  lineages 1+3
+#    6  lineages 2+3                        7  lineages 1+2+3
+#    8, 9, 10  intermediate states used when 3 lineages have partially
+#              coalesced; differ in how many common ancestors are still
+#              distinct.  State 10 (single lineage from triplet) is a
+#              terminal articulation state.
+#
+# Each _Configuration additionally tracks the sequence of
+# reticulation-parent choices made so far (indexed by
+# reticulation-node id).  Two configurations are "compatible" iff
+# they never disagree on any retic-node choice, which is how
+# independent lineages avoid double-counting reticulation decisions.
+# ======================================================================
+
 class _TripleDPEngine:
+    """Dynamic-programming engine for 3-taxon triplet probabilities.
+
+    Each instance is bound to one fixed species network ``Psi``.
+    Construction caches topology info (adjacency, articulation nodes,
+    branch lengths, inheritance probabilities) so the per-triplet DP
+    never has to touch :class:`Network` methods again.
+
+    The engine is called thousands of times during a search (once per
+    triplet resolution per score evaluation), so all hot-path data
+    structures are kept as plain ``dict`` s keyed by :class:`Node`.
     """
-    Dynamic-programming engine for 3-taxon triplet probabilities.
 
-    The implementation follows the same state-space approach used in
-    PhyloNet's pseudo-likelihood code path. Each DP state encodes which
-    lineages are currently present, and each configuration tracks reticulation
-    choices made so far while moving from leaves up to the root.
-
-    This class is intentionally low-level because it mirrors the mathematics.
-    The surrounding helper methods in this module expose a simpler public API.
-    """
-
+    # Tree-node merge rules.  When a tree node has two children whose
+    # DP subtrees currently carry states s1 and s2 (with s1 < s2),
+    # (s1, s2) -> target_state gives the merged state.  The state
+    # names above describe which lineages each bit pattern encodes.
     _MERGING_MAP = {
         (1, 2): 4,
         (1, 3): 5,
@@ -483,6 +781,11 @@ class _TripleDPEngine:
         (3, 8): 9,
     }
 
+    # Reticulation-node split rules.  When a reticulation is processed
+    # (moving from child toward parents), the current state splits
+    # into two sub-states, one for each parent edge.  The list of
+    # (split1, split2) pairs enumerates all ways the lineages can be
+    # partitioned between the two parents.
     _SPLITTING_MAP = {
         0: [(0, 0)],
         1: [(0, 1)],
@@ -497,7 +800,13 @@ class _TripleDPEngine:
         10: [(0, 10)],
     }
 
-    # target_state -> (lineages_in, lineages_out) for gij branch transition
+    # Within-branch coalescent rules.  ``target_state ->
+    # [(source_state, (lineages_in, lineages_out))]`` lists every way
+    # ``source_state`` can transition to ``target_state`` on a single
+    # branch, paired with the number of ancestral lineages entering
+    # the branch (``lineages_in``) and the number leaving it
+    # (``lineages_out``).  The coalescent probability per branch is
+    # computed by ``_gij`` using (length, lineages_in, lineages_out).
     _COALESCING_MAP = {
         0: [(0, (0, 0))],
         1: [(1, (1, 1))],
@@ -513,18 +822,41 @@ class _TripleDPEngine:
     }
 
     class _Configuration:
-        """One DP configuration using a tuple for the reticulation-choice vector.
+        """One DP configuration: total probability + retic-choice vector.
 
-        Tuples are hashable natively, cheaper to copy (no list alloc), and
-        compare faster than lists.
+        The retic-choice vector has one slot per reticulation in the
+        network; each slot is 0 (unvisited) or a positive index
+        identifying which parent edge the lineage ascending through
+        this reticulation took.  Two configurations can only be
+        combined (by :meth:`merge`) if they agree on every shared
+        reticulation choice -- that's what :meth:`is_compatible`
+        verifies.
+
+        Using a tuple (vs a list) for the index vector matters here:
+        tuples are hashable natively, cheaper to copy, and compare
+        faster -- all of which show up in the DP hot loop.
         """
 
         __slots__ = ('total_prob', '_idx')
 
-        def __init__(self,
-                     net_node_num: int,
-                     total_prob: float = 1.0,
-                     net_node_index: tuple[int, ...] | None = None) -> None:
+        def __init__(
+            self,
+            net_node_num: int,
+            total_prob: float = 1.0,
+            net_node_index: tuple[int, ...] | None = None,
+        ) -> None:
+            """Create a new configuration.
+
+            Args:
+                net_node_num: Total number of reticulation nodes in
+                    the engine's network (i.e. the length of the
+                    retic-choice vector).
+                total_prob: Accumulated probability mass.  Starts at
+                    1.0 at the leaves and is multiplied by branch
+                    transition probabilities on the way up.
+                net_node_index: Explicit retic-choice vector; when
+                    ``None`` a zero vector is allocated.
+            """
             self.total_prob = total_prob
             self._idx: tuple[int, ...] = (
                 net_node_index if net_node_index is not None
@@ -533,18 +865,29 @@ class _TripleDPEngine:
 
         @property
         def net_node_index(self) -> tuple[int, ...]:
+            """Retic-choice vector (read-only view)."""
             return self._idx
 
         def copy(self) -> "_TripleDPEngine._Configuration":
+            """Return a shallow copy sharing the retic-choice tuple."""
             c = _TripleDPEngine._Configuration.__new__(_TripleDPEngine._Configuration)
             c.total_prob = self.total_prob
             c._idx = self._idx
             return c
 
         @classmethod
-        def merge(cls,
-                  c1: "_TripleDPEngine._Configuration",
-                  c2: "_TripleDPEngine._Configuration") -> "_TripleDPEngine._Configuration":
+        def merge(
+            cls,
+            c1: "_TripleDPEngine._Configuration",
+            c2: "_TripleDPEngine._Configuration",
+        ) -> "_TripleDPEngine._Configuration":
+            """Merge two compatible configurations at a tree node.
+
+            The merged retic-choice vector is the element-wise max
+            (since one of each pair is guaranteed to be 0 when the
+            pair is compatible).  The merged probability is the
+            product -- two independent lineages joining.
+            """
             merged = tuple(
                 max(a, b) for a, b in zip(c1._idx, c2._idx)
             )
@@ -554,20 +897,36 @@ class _TripleDPEngine:
             return c
 
         def is_compatible(self, other: "_TripleDPEngine._Configuration") -> bool:
+            """True iff ``self`` and ``other`` never disagree on a retic choice.
+
+            Two configurations are compatible when, for every
+            reticulation-index slot, at least one of them is 0
+            (unvisited) or both agree on the parent-edge choice.
+            """
             for mine, theirs in zip(self._idx, other._idx):
                 if mine != theirs and mine != 0 and theirs != 0:
                     return False
             return True
 
         def add_choice(self, net_id: int, choice: int) -> None:
+            """Record a parent-edge choice at reticulation ``net_id``."""
             lst = list(self._idx)
             lst[net_id] = choice
             self._idx = tuple(lst)
 
         def clear_choices(self) -> None:
+            """Zero out every slot in the retic-choice vector.
+
+            Used at articulation nodes where the downstream choices
+            no longer matter for the remaining DP (the articulation
+            collapses the subtree's retic history).
+            """
             self._idx = (0,) * len(self._idx)
 
         def __hash__(self) -> int:
+            # Hash only by retic-choice vector so dedup/merge uses
+            # the choice vector as the identity key; probabilities
+            # of equal configurations are summed by the caller.
             return hash(self._idx)
 
         def __eq__(self, other: object) -> bool:
@@ -576,17 +935,24 @@ class _TripleDPEngine:
             return self._idx == other._idx
 
     def __init__(self, network: Network) -> None:
-        """
-        Initialize the DP engine for one fixed species network.
+        """Bind the engine to a fixed species network.
 
-        Pre-caches all topology info so the per-triplet DP never touches
-        Network methods.
+        Performs all one-time topology caching up front so the
+        per-triplet DP in :meth:`calculate_triple_probability` can
+        run without touching :class:`Network` methods.  Includes:
+
+          * a reversed topological order (leaves to root),
+          * per-node flags (is-leaf, is-retic),
+          * adjacency lists (children, parents),
+          * articulation / lowest-articulation node sets,
+          * per-edge ``(branch_length, gamma)`` tuples,
+          * an empty memoization cache for :meth:`_gij`.
 
         Args:
-            network (Network): Species network that will be queried for
-                                triplet probabilities.
-        Returns:
-            N/A
+            network: Species network to be scored.  Must already
+                have valid branch lengths and gamma values on its
+                edges -- the engine does not touch :class:`Network`
+                for any of that data after ``__init__`` returns.
         """
         self.network = network
         self.net_node_num = sum(
@@ -630,14 +996,18 @@ class _TripleDPEngine:
 
     @staticmethod
     def _fact(start: int, end: int) -> float:
-        """
-        Compute multiplicative range start * ... * end.
+        """Return the product ``start * (start+1) * ... * end``.
+
+        Used by :meth:`_gij_raw` to evaluate the closed-form
+        coalescent transition probability.  Empty ranges
+        (``start > end``) return 1.0.
 
         Args:
-            start (int): Lower bound (inclusive).
-            end (int): Upper bound (inclusive).
+            start: Lower bound (inclusive).
+            end: Upper bound (inclusive).
+
         Returns:
-            float: Product over range.
+            Product of integers in the closed range.
         """
         result = 1.0
         for i in range(start, end + 1):
@@ -646,7 +1016,28 @@ class _TripleDPEngine:
 
     @staticmethod
     def _gij_raw(length: float, i: int, j: int) -> float:
-        """Compute coalescent transition probability (uncached)."""
+        """Closed-form coalescent transition probability g_{ij}(t).
+
+        Computes the probability that ``i`` lineages entering a
+        branch of length ``t = length`` coalesce down to ``j`` by the
+        top of the branch, under the standard Kingman coalescent.
+
+        Special cases:
+          * ``length is None`` or ``length == -1`` are treated as an
+            infinite branch: every ancestral lineage count eventually
+            coalesces down to one, so return 1.0 iff ``j == 1``.
+          * ``length == 0`` means no coalescence can happen; return
+            1.0 iff ``i == j``.
+          * ``i == 0`` is a no-op (no lineages to coalesce).
+
+        Args:
+            length: Branch length (in coalescent units).
+            i: Lineages entering the branch.
+            j: Lineages exiting the branch (``1 <= j <= i``).
+
+        Returns:
+            Transition probability in [0, 1].
+        """
         if length is None or length == -1:
             return 1.0 if j == 1 else 0.0
         if length == 0:
@@ -669,7 +1060,12 @@ class _TripleDPEngine:
         return result
 
     def _gij(self, length: float, i: int, j: int) -> float:
-        """Memoized coalescent transition probability."""
+        """Memoized wrapper around :meth:`_gij_raw`.
+
+        Real phylogenetic networks typically have only a handful of
+        distinct (length, i, j) triples, so memoisation cuts the
+        per-triplet work significantly.
+        """
         key = (length, i, j)
         cached = self._gij_cache.get(key)
         if cached is not None:
@@ -679,13 +1075,24 @@ class _TripleDPEngine:
         return val
 
     def _is_valid_network(self, ignore_node: Node) -> bool:
-        """
-        Check structural validity after temporarily removing an edge.
+        """Structural-validity probe used during articulation discovery.
+
+        A network is considered valid here when every reachable node
+        has in-degree + out-degree compatible with "either leaf, or
+        internal non-degree-2 (unless it's the exempted node)", and
+        no reachable node refers to a parent/child that isn't itself
+        reachable.
+
+        This is called after temporarily removing a tree-edge in
+        :meth:`_compute_articulation_nodes` to see whether its
+        removal disconnects the subtree below; a disconnection means
+        the edge's endpoint is an articulation node.
 
         Args:
-            ignore_node (Node): Node exempted from degree-2 check.
+            ignore_node: Node exempted from the degree-2 filter.
+
         Returns:
-            bool: True if network remains structurally valid.
+            True iff the probed network remains structurally valid.
         """
         roots = self.network.roots()
         if not roots:
@@ -715,14 +1122,17 @@ class _TripleDPEngine:
         return len(visited) == len(referenced)
 
     def _compute_articulation_nodes(self) -> None:
-        """
-        Identify articulation and lowest-articulation nodes in the network.
+        """Populate ``self.articulation_nodes`` / ``self.lowest_articulation_nodes``.
 
-        These sets are used to compress compatible configurations during DP,
-        which keeps state growth manageable and matches PhyloNet semantics.
+        An articulation node is a tree node whose removal would
+        disconnect one or more leaves from the root.  A "lowest"
+        articulation node is an articulation whose children are not
+        all themselves articulations -- these are exactly the nodes
+        at which the DP can collapse compatible configurations
+        (matching PhyloNet's semantics).
 
-        Returns:
-            N/A
+        Called once from ``__init__``; results are cached on the
+        instance and read during :meth:`calculate_triple_probability`.
         """
         self.articulation_nodes.clear()
         self.lowest_articulation_nodes.clear()
@@ -760,23 +1170,35 @@ class _TripleDPEngine:
                         self.lowest_articulation_nodes.add(node)
                         self.articulation_nodes.add(node)
 
-    def _compute_ac_minus(self,
-                          cacs: dict[int, list["_TripleDPEngine._Configuration"]],
-                          branch_length: float,
-                          inheritance_prob: float) -> dict[int, list["_TripleDPEngine._Configuration"]]:
-        """
-        Propagate DP configurations through one branch upward.
+    def _compute_ac_minus(
+        self,
+        cacs: dict[int, list["_TripleDPEngine._Configuration"]],
+        branch_length: float,
+        inheritance_prob: float,
+    ) -> dict[int, list["_TripleDPEngine._Configuration"]]:
+        """Propagate DP configurations through one branch, bottom to top.
 
-        This is the AC+ -> AC- transition in PhyloNet notation.
+        Implements the ``AC+ -> AC-`` transition in PhyloNet
+        notation: given the configurations at the child end of a
+        branch (``cacs``), compute the configurations at the parent
+        end after applying both the inheritance-probability factor
+        (on reticulation edges) and the coalescent reduction factor
+        (on any branch where multiple lineages entered).
+
+        For each source state, :data:`_COALESCING_MAP` lists the
+        ``(target_state, (lineages_in, lineages_out))`` transitions
+        available on this branch.  We loop over them, multiply each
+        configuration's probability by
+        ``gamma**lineages_in * g_{in,out}(length)``, and aggregate
+        identical retic-choice vectors by summing probabilities.
 
         Args:
-            cacs (dict[int, list[_Configuration]]): State/config map before
-                        branch transition.
-            branch_length (float): Length of the current branch.
-            inheritance_prob (float): Inheritance gamma for retic edges
-                        (1.0 for tree edges).
+            cacs: State/config map at the bottom of the branch.
+            branch_length: Branch length (coalescent units).
+            inheritance_prob: Reticulation gamma (1.0 on tree edges).
+
         Returns:
-            dict[int, list[_Configuration]]: New state/config map after branch.
+            State/config map at the top of the branch.
         """
         ac_minus_map: dict[
             int,
@@ -819,19 +1241,36 @@ class _TripleDPEngine:
             ac_minus[state_id] = list(cfg_map.keys())
         return ac_minus
 
-    def _split_at_network_node(self,
-                               cacs: dict[int, list["_TripleDPEngine._Configuration"]],
-                               net_node_id: int) -> tuple[dict[int, list["_TripleDPEngine._Configuration"]],
-                                                          dict[int, list["_TripleDPEngine._Configuration"]]]:
-        """
-        Split configurations at a reticulation into two parent directions.
+    def _split_at_network_node(
+        self,
+        cacs: dict[int, list["_TripleDPEngine._Configuration"]],
+        net_node_id: int,
+    ) -> tuple[
+        dict[int, list["_TripleDPEngine._Configuration"]],
+        dict[int, list["_TripleDPEngine._Configuration"]],
+    ]:
+        """Split configurations at a reticulation into its two parent edges.
+
+        At a reticulation node with lineage state ``s``,
+        :data:`_SPLITTING_MAP` lists each way ``s`` can be partitioned
+        into ``(s1, s2)`` across the two parent edges.  For each
+        (config, partition) pair we emit two new configurations,
+        annotate each with the parent-edge choice (via
+        :meth:`_Configuration.add_choice`), and multiply the
+        probability by ``sqrt(total)`` -- this is the symmetric split
+        of the joint mass, which is later completed by the
+        inheritance-probability multiplier applied in
+        :meth:`_compute_ac_minus`.
 
         Args:
-            cacs (dict[int, list[_Configuration]]): Incoming state/config map.
-            net_node_id (int): Index of reticulation currently being processed.
+            cacs: Incoming state/config map (at the reticulation).
+            net_node_id: Index of the reticulation currently being
+                processed; used to slot the parent-edge choice into
+                the retic-choice vector.
+
         Returns:
-            tuple[dict[int, list[_Configuration]], dict[int, list[_Configuration]]]:
-                Configuration maps for parent-1 and parent-2 branches.
+            ``(ac_plus_1, ac_plus_2)``: configuration maps for the
+            first and second parent-edge branches, respectively.
         """
         ac_plus_1: dict[int, list[_TripleDPEngine._Configuration]] = {}
         ac_plus_2: dict[int, list[_TripleDPEngine._Configuration]] = {}
@@ -874,16 +1313,38 @@ class _TripleDPEngine:
         return ac_plus_1, ac_plus_2
 
     def calculate_triple_probability(self, triple: tuple[str, str, str]) -> float:
-        """
-        Compute P(AB|C)-style probability for one ordered triplet.
+        """Compute ``P(xy|z)`` for one ordered triplet against this network.
 
-        Uses pre-cached topology lookups so the inner DP loop never touches
-        Network methods.
+        The triplet is interpreted as "x and y are siblings, z is the
+        outgroup".  To get ``P(xz|y)`` or ``P(yz|x)`` call this method
+        again with the taxa reordered.
+
+        Algorithm (leaves to root pass):
+
+          1. Initialise DP at each leaf whose label is in the triple
+             (assigning lineage-state 1, 2, or 3 depending on position
+             in ``triple``).
+          2. Walk :attr:`_topo_leaf_to_root`.  For each internal tree
+             node, merge child configurations using
+             :data:`_MERGING_MAP` (and collapse at articulation
+             nodes).  For each reticulation node, split
+             configurations across both parent edges via
+             :meth:`_split_at_network_node`.
+          3. Propagate through each parent branch via
+             :meth:`_compute_ac_minus`, which applies the
+             inheritance-probability factor and the coalescent
+             reduction.
+          4. Terminate early at the root (or at any articulation that
+             has fully collapsed the triplet): sum probabilities in
+             the "fully coalesced" states (7 / 9 / 10) to get the
+             final triplet probability.
 
         Args:
-            triple (tuple[str, str, str]): Ordered species labels.
+            triple: Ordered species labels ``(x, y, z)``; see above for
+                how ordering maps to the returned resolution.
+
         Returns:
-            float: Probability for the corresponding triplet resolution.
+            ``P(xy|z)`` under the species network.
         """
         triple_list = list(triple)
         edge_to_ac_minus: dict[
@@ -910,23 +1371,34 @@ class _TripleDPEngine:
             is_leaf = node_is_leaf[node]
             is_retic = node_is_retic[node]
 
+            # --- Seed DP at each relevant leaf ---------------------
             if is_leaf:
                 lbl = node_label[node]
                 if lbl in triple_list:
                     idx = triple_list.index(lbl)
+                    # Lineage state = 1, 2, or 3 depending on the
+                    # leaf's position in the input ``triple``.
                     cacs = {idx + 1: [_Cfg(nnn)]}
 
+            # --- Reticulations: inherit one child's config ----------
             elif is_retic:
+                # Reticulations always have a single child edge; the
+                # AC- from that child becomes the incoming state.
                 children = node_children[node]
                 if children:
                     cacs = edge_to_ac_minus.get((node, children[0]))
 
+            # --- Internal tree nodes: merge children -----------------
             else:
                 children = node_children[node]
                 if len(children) >= 2:
                     ac1 = edge_to_ac_minus.get((node, children[0]))
                     ac2 = edge_to_ac_minus.get((node, children[1]))
 
+                    # Only one child carries any DP state: adopt its
+                    # configurations directly, collapsing at lowest
+                    # articulation nodes where retic-choice histories
+                    # no longer need to be distinguished.
                     if (ac1 is None) ^ (ac2 is None):
                         cacs = ac2 if ac1 is None else ac1
                         if node in lowest_art:
@@ -938,6 +1410,8 @@ class _TripleDPEngine:
                                     merged.total_prob += config.total_prob
                                 merged.clear_choices()
                                 cacs[state] = [merged]
+                    # Both children carry DP state: merge every
+                    # compatible (cfg1, cfg2) pair via _MERGING_MAP.
                     elif ac1 is not None and ac2 is not None:
                         cacs = {}
                         is_articulation = node in lowest_art
@@ -982,6 +1456,11 @@ class _TripleDPEngine:
             if cacs is None:
                 continue
 
+            # --- Early termination at articulation w/ full coalescence ---
+            # State 7 means all three lineages are present but not yet
+            # fully coalesced (divide by 3 to select the target
+            # resolution); states 9 and 10 represent progressively more
+            # coalesced configurations that already pin the resolution.
             if 7 in cacs and node in art_nodes:
                 total_prob = cacs[7][0].total_prob / 3.0
                 if 9 in cacs:
@@ -990,7 +1469,10 @@ class _TripleDPEngine:
                     total_prob += cacs[10][0].total_prob
                 break
 
+            # --- Propagate through parent branch(es) ---------------
             if is_retic:
+                # Reticulation: split state across the two parent
+                # edges, then independently propagate each half.
                 ac_plus_1, ac_plus_2 = self._split_at_network_node(cacs, net_node_id)
                 net_node_id += 1
                 parents = node_parents[node]
@@ -1006,6 +1488,7 @@ class _TripleDPEngine:
                     )
                     edge_to_ac_minus[(parent, node)] = ac_minus
             else:
+                # Tree node: single parent, no inheritance factor.
                 parents = node_parents[node]
                 if parents:
                     parent = parents[0]
@@ -1020,14 +1503,42 @@ class _TripleDPEngine:
         return total_prob
 
 
+# ======================================================================
+# (E) Cython bridge
+#
+# The Cython implementation mirrors :meth:`_TripleDPEngine.calculate_triple_probability`
+# but operates on flat numpy arrays instead of Python dicts, which is
+# where most of the 10-20x speedup comes from.  When the ``.so`` isn't
+# available the Python DP is used instead; both compute the same
+# quantity to full floating-point accuracy.
+# ======================================================================
+
+# These caps bound the node arity assumed by the Cython extension.
+# Phylogenetic networks in the wild almost always have binary internal
+# nodes with at most two parents per reticulation, so these are
+# generous upper bounds.
 _CY_MAX_CHILDREN = 4
 _CY_MAX_PARENTS = 2
 
 
 def _extract_topology_for_cython(engine: _TripleDPEngine) -> dict:
-    """Convert a _TripleDPEngine's cached topology into flat numpy arrays.
+    """Flatten a :class:`_TripleDPEngine`'s topology into numpy arrays.
 
-    Returns a dict consumed by mpl_engine_cy.score_all_triplets.
+    The Cython engine can't accept Python :class:`Node` objects
+    directly, so this helper walks the engine's cached topology and
+    produces a ``dict`` of numpy arrays keyed by flat node indices
+    (0..n_nodes-1, matching the engine's leaves-to-root traversal
+    order).  The resulting dict is shaped exactly the way
+    ``mpl_engine_cy.score_all_triplets`` expects.
+
+    Args:
+        engine: Python DP engine already initialised on the target
+            network (and thus holding all cached topology data).
+
+    Returns:
+        ``dict`` with numpy arrays for adjacency, branch lengths,
+        gammas, articulation flags, and a ``label_to_idx`` map so
+        callers can translate species labels into flat indices.
     """
     nodes = engine._topo_leaf_to_root
     n_nodes = len(nodes)
@@ -1108,7 +1619,20 @@ def _score_with_cython(
     triplets: list[tuple[str, str, str]],
     rho: dict[tuple[str, str, str], tuple[float, float, float]],
 ) -> float:
-    """Fast scoring path using the Cython DP engine."""
+    """Score a network against all triplets via the Cython DP engine.
+
+    Triplets whose taxa are not all present in the engine's network
+    are silently dropped -- this mirrors the Python path's behaviour
+    and keeps the pruned-taxa case working.
+
+    Args:
+        engine: Python DP engine already bound to the target network.
+        triplets: Canonical species triplets to evaluate.
+        rho: Gene-tree triplet frequency table (constant for the run).
+
+    Returns:
+        Log pseudo-likelihood across all evaluable triplets.
+    """
     topo = _extract_topology_for_cython(engine)
     lbl_idx = topo["label_to_idx"]
 
@@ -1139,19 +1663,39 @@ def _score_with_cython(
     )
 
 
-def compute_gene_tree_triplets(gene_trees: GeneTrees,
-                               mapping: dict[str, list[str]],
-                               species_labels: Optional[list[str]] = None) -> GeneTreeTripletResult:
-    """
-    Compute rho values for every species triplet represented in the input.
+# ======================================================================
+# (F) Public triplet API
+#
+# These two functions are the entry points for users who want to
+# bring-their-own-search-driver: enumerate triplets, precompute rho,
+# then call score_species_network_triplets against any number of
+# candidate species networks.  :class:`MPL` wraps both for the
+# common case.
+# ======================================================================
+
+def compute_gene_tree_triplets(
+    gene_trees: GeneTrees,
+    mapping: dict[str, list[str]],
+    species_labels: Optional[list[str]] = None,
+) -> GeneTreeTripletResult:
+    """Enumerate triplets and precompute rho from ``gene_trees``.
+
+    Gene-tree statistics are constant across a network search, so
+    this is called exactly once up front.
 
     Args:
-        gene_trees (GeneTrees): A GeneTrees object with one or many trees.
-        mapping (dict[str, list[str]]): Species to allele labels map.
-        species_labels (Optional[list[str]], optional): Explicit list of species
-                    labels to use instead of mapping keys. Defaults to None.
+        gene_trees: Collection of gene trees.
+        mapping: Species -> list of allele labels.
+        species_labels: Optional explicit species list; defaults to
+            ``sorted(mapping.keys())``.  Provide this when scoring
+            against a reduced taxon set (e.g. sub-sample experiments).
+
     Returns:
-        GeneTreeTripletResult: triplet list + rho values for each triplet.
+        :class:`GeneTreeTripletResult` carrying triplets and rho.
+
+    Raises:
+        ValueError: If fewer than three species labels are available
+            (triplets require at least three taxa).
     """
     if species_labels is None:
         species_labels = sorted(mapping.keys())
@@ -1167,18 +1711,30 @@ def compute_gene_tree_triplets(gene_trees: GeneTrees,
     return GeneTreeTripletResult(triplets=triplets, rho_by_triplet=rho_by_triplet)
 
 
-def score_species_network_triplets(species_net: Network,
-                                   gene_triplet_result: GeneTreeTripletResult) -> SpeciesNetworkTripletResult:
-    """
-    Compute all species-network triplet probabilities and final MPL score.
+def score_species_network_triplets(
+    species_net: Network,
+    gene_triplet_result: GeneTreeTripletResult,
+) -> SpeciesNetworkTripletResult:
+    """Score a species network against precomputed triplet frequencies.
+
+    Builds a fresh :class:`_TripleDPEngine` bound to ``species_net``
+    and walks every triplet, computing both predicted probabilities
+    and the MPL log-sum.
 
     Args:
-        species_net (Network): Species network to evaluate.
-        gene_triplet_result (GeneTreeTripletResult): Output from
-                    compute_gene_tree_triplets().
+        species_net: Species network to evaluate.
+        gene_triplet_result: Output of
+            :func:`compute_gene_tree_triplets` (same gene-tree set).
+
     Returns:
-        SpeciesNetworkTripletResult: triplets, per-triplet probabilities,
-                    and total log pseudo-likelihood.
+        :class:`SpeciesNetworkTripletResult` with per-triplet
+        probabilities and the final log pseudo-likelihood.
+
+    Raises:
+        ValueError: If a network triplet isn't present in
+            ``gene_triplet_result`` (which indicates the rho table was
+            built over a different species set than the network's
+            leaves).
     """
     # Use network leaves as the scoring universe.
     triplets = list(combinations(sorted(n.label for n in species_net.get_leaves()), 3))
@@ -1213,40 +1769,67 @@ def score_species_network_triplets(species_net: Network,
     )
 
 
-##############################
-#### SCORER AND KERNEL #######
-##############################
+# ======================================================================
+# (G) Scorer + adaptive proposal kernel
+#
+# :class:`MPLScorer` is the objective function (a thin callable that
+# rebuilds the DP engine per call).  :class:`MPLKernel` is the
+# proposal distribution driving the search (phased move selection +
+# adaptive weights + adaptive sigmas for continuous proposals).
+# :class:`_AdaptiveConfig` is a private dataclass-style container for
+# the empirically-chosen tuning scalars that the kernel reads.
+# ======================================================================
 
 
 class MPLScorer:
-    """Callable scorer for use with ``Model.set_likelihood_calculator()``.
+    """Callable likelihood evaluator for use with :class:`Model`.
 
-    Holds the precomputed gene-tree rho values (constant across the search)
-    and rebuilds the species-network DP engine on every call, since topology
-    moves change the articulation-node structure.
+    Registered via ``model.set_likelihood_calculator(scorer)``.  On
+    each call, rebuilds a fresh :class:`_TripleDPEngine` for the
+    current network (topology moves invalidate the previous engine's
+    cached articulation sets) and returns the log pseudo-likelihood.
+
+    Gene-tree rho values never change during a search, so they are
+    stored once on the instance.  Triplets whose gene-tree rho is
+    identically zero contribute nothing to the score and are pruned
+    at construction time to avoid redundant DP calls.
+
+    Attributes:
+        _rho: Full triplet -> rho table (kept even for pruned
+            triplets in case the scorer is reused against a network
+            with a different triplet mask).
+        _triplets: Active (non-zero-rho) triplet list used by
+            ``__call__``.
     """
 
-    def __init__(self,
-                 rho: dict[tuple[str, str, str], tuple[float, float, float]],
-                 triplets: list[tuple[str, str, str]]) -> None:
-        """
+    def __init__(
+        self,
+        rho: dict[tuple[str, str, str], tuple[float, float, float]],
+        triplets: list[tuple[str, str, str]],
+    ) -> None:
+        """Initialise the scorer from precomputed gene-tree statistics.
+
         Args:
-            rho: Mapping triplet -> (rho_xy_z, rho_xz_y, rho_yz_x).
+            rho: Mapping ``triplet -> (rho_XY|Z, rho_XZ|Y, rho_YZ|X)``.
             triplets: Canonical species triplets to iterate over.
         """
         self._rho = rho
-        # Skip triplets never observed in gene trees (zero contribution).
         self._triplets = [
             t for t in triplets if any(rho[t][i] > 0.0 for i in range(3))
         ]
 
     def __call__(self, model: Model) -> float:
-        """Compute log pseudo-likelihood for the current network in *model*.
+        """Return log pseudo-likelihood of ``model.network``.
+
+        Uses the Cython DP path when available, otherwise falls back
+        to the Python DP.  Both compute the same score.
 
         Args:
-            model: A Model whose ``network`` attribute is the species network.
+            model: :class:`Model` whose ``network`` attribute is the
+                current species network.
+
         Returns:
-            Log pseudo-likelihood score (negative; higher = better).
+            Log pseudo-likelihood (higher is better; always <= 0).
         """
         engine = _TripleDPEngine(model.network)
 
@@ -1266,6 +1849,76 @@ class MPLScorer:
         return total
 
 
+class _AdaptiveConfig:
+    """Internal adaptive-tuning constants for :class:`MPLKernel`.
+
+    Grouped here so the kernel's class-level surface stays focused on
+    its structural pieces (phase order, base-weight maps) rather than
+    buried under fifteen tuning scalars.  None of these values are
+    user-facing knobs; they're empirically-chosen defaults for the
+    adaptive machinery.  Moving them here is a pure refactor -- the
+    numbers are identical to the previous ``MPLKernel`` class
+    constants.  When you want to tune the adaptive layer, this is the
+    single place to look.
+    """
+
+    # ── Robbins-Monro continuous-sigma tuning ──────────────────────
+    # Applied to ChangeNodeHeight and ChangeInheritanceProb.  The
+    # scheme nudges ``log(sigma)`` toward the target acceptance rate;
+    # step size shrinks as ``1 / (n + shift)**exp`` so later updates
+    # make smaller corrections.
+    SIGMA_TARGET_ACCEPT = 0.35           # Roberts-Rosenthal heuristic
+    SIGMA_TUNE_DELAY = 20                # warm-up observations per move
+    SIGMA_TUNE_EXPONENT = 0.6            # step decay rate (1/n^exp)
+    SIGMA_TUNE_DENOM_SHIFT = 50          # dampen very early updates
+
+    # ── ChangeNodeHeight sigma_frac bounds ─────────────────────────
+    # sigma_frac is a *fraction of the feasible half-range*, so these
+    # bounds are dimensionless.  0.4 gives a tighter proposal than the
+    # prior uniform draw (which was effectively ~0.58).
+    NH_SIGMA_INIT = 0.4
+    NH_SIGMA_MIN = 0.02
+    NH_SIGMA_MAX = 1.5
+
+    # ── ChangeInheritanceProb sigma bounds ─────────────────────────
+    # sigma acts directly on the gamma scale (inheritance probability).
+    # Bounds keep proposals from degenerating to delta spikes or flat
+    # uniforms.
+    CIP_SIGMA_INIT = 0.1
+    CIP_SIGMA_MIN = 0.005
+    CIP_SIGMA_MAX = 0.4
+
+    # ── SPR adaptive regraft radius ────────────────────────────────
+    # ``SPR`` weights each candidate regraft edge by
+    # ``1 / d**distance_decay``.  MAX keeps the move strongly local
+    # (exploit current basin); MIN makes it near-flat (broad hops
+    # across the network).  Decay interpolates from MAX -> MIN as
+    # ``stagnation / phase_patience`` climbs toward 1.
+    SPR_DECAY_MAX = 2.5
+    SPR_DECAY_MIN = 0.5
+
+    # ── Post-reheat wide-SPR window ────────────────────────────────
+    # After each reheat notification, the next N SPR proposals are
+    # forced to ``SPR_DECAY_MIN`` regardless of phase switches or
+    # stagnation resets.  Without this, the phase switch triggered
+    # by the reheat hook zeroes ``_stagnation`` before a single
+    # broad SPR fires, cancelling the reheat's exploration intent
+    # entirely.  Sized to roughly cover one post-reheat SA cooling
+    # window (~250 iters at ~8% SPR density).
+    SPR_BROAD_MODE_PROPOSALS = 20
+
+    # ── efficiency-aware weight scaler blend ───────────────────────
+    # Composite score = ACC_WEIGHT * acc_rate + EFF_WEIGHT * efficiency
+    # where efficiency = imp_rate / max(acc_rate, EFF_EPSILON).  The
+    # 0.4/0.6 split weights exploitation slightly over exploration --
+    # SA itself handles exploration via temperature-driven uphill
+    # accepts, so the adaptive layer focuses on "which move is
+    # actually moving the needle".
+    SCALER_ACC_WEIGHT = 0.4
+    SCALER_EFF_WEIGHT = 0.6
+    SCALER_EFF_EPSILON = 0.01
+
+
 class MPLKernel(ProposalKernel):
     """Phase-aware proposal kernel for MPL network search.
 
@@ -1280,6 +1933,11 @@ class MPLKernel(ProposalKernel):
       ChangeInheritanceProb and ChangeNodeHeight for local
       refinement after reticulation changes.
 
+    Both phases keep a small bleed of the complementary phase's moves
+    active (~10-15% weight) so the chain stays ergodic across phase
+    flips and the adaptive scaler always has fresh observations for
+    every class.
+
     Phase transitions fire after ``phase_patience`` consecutive
     proposals without accepted improvement.  Within each phase,
     selection weights adapt from phase-specific base distributions
@@ -1292,24 +1950,55 @@ class MPLKernel(ProposalKernel):
     TOPOLOGY = "topology"
     RETICULATION = "reticulation"
 
+    # Phase base weights.  Each phase keeps a low-rate bleed of the
+    # complementary phase's moves so the chain is never strictly
+    # topology-only or strictly reticulation-only.
     _TOPOLOGY_BASE: dict[type, float] = {
         SPR: 5.0,
         ChangeNodeHeight: 3.0,
         ChangeInheritanceProb: 1.0,
+        # Bleed: ~10% aggregate weight on retic moves keeps Add/Remove
+        # warm and lets small retic corrections happen mid-topology-phase.
+        AddReticulation: 0.30,
+        RemoveReticulation: 0.20,
+        RelocateReticulation: 0.25,
+        ChangeReticSource: 0.10,
+        ChangeReticDest: 0.10,
+        # FlipReticulation is deliberately weighted tiny.  Empirically
+        # (see P4 50k run) it has a ~0.5% strict-improvement rate --
+        # ~25x lower than other retic moves -- while its ~27% accept
+        # rate (mostly uphill SA accepts) trips the adaptive scaler
+        # into over-proposing it.  Keep it alive (not zero) so the
+        # reticulation-orientation corner case is still reachable, but
+        # don't let it consume a large slice of the proposal budget.
+        FlipReticulation: 0.03,
     }
 
     _RETICULATION_BASE: dict[type, float] = {
         AddReticulation: 3.0,
         RemoveReticulation: 2.0,
-        FlipReticulation: 1.5,
+        # FlipReticulation base weight: see TOPOLOGY_BASE comment.
+        # Previously 1.5 (equal to source/dest moves); dropped to 0.5
+        # based on observed improvement rate ~25x lower than peers.
+        FlipReticulation: 0.5,
         ChangeReticSource: 1.5,
         ChangeReticDest: 1.5,
         RelocateReticulation: 2.5,
         ChangeInheritanceProb: 1.5,
         ChangeNodeHeight: 1.0,
+        # Bleed: keep SPR alive in retic phase so local topology
+        # adjustments can accompany reticulation placement.
+        SPR: 1.5,
     }
 
     _PHASE_ORDER = [TOPOLOGY, RETICULATION]
+
+    # All empirically-chosen adaptive-tuning scalars live on
+    # ``_AdaptiveConfig`` (defined below this class) so the kernel's
+    # visible surface stays focused on structural design decisions
+    # (phases, base weights) rather than buried under a dozen magic
+    # numbers.  Instance attributes below pull initial values from
+    # that config at construction time.
 
     def __init__(self,
                  move_types: list[type[Move]] | None = None,
@@ -1318,23 +2007,47 @@ class MPLKernel(ProposalKernel):
                  adaptive: bool = True,
                  window_size: int = 30,
                  min_weight: float = 0.05,
-                 phase_patience: int = 25,
-                 warmup: int = 8) -> None:
+                 phase_patience: int = 150,
+                 warmup: int = 8,
+                 stagnation_reset_delta: float = 1.0,
+                 rng: np.random.Generator | None = None) -> None:
         """
         Args:
             move_types: Move classes available to the kernel.  When
                 ``None`` the full default set is used.
             weights: Fixed per-move selection weights.  Supplying this
                 disables phased cycling and adaptive tuning.
-            max_reticulations: Cap on reticulation nodes.
+            max_reticulations: Cap on reticulation nodes.  When the
+                current network is at the cap, ``AddReticulation`` is
+                dropped from the active move set so we don't waste
+                proposals on guaranteed no-ops.
             adaptive: Enable within-phase adaptive weight scaling.
             window_size: Sliding-window length for acceptance stats.
             min_weight: Minimum scale factor (fraction of base weight)
                 to prevent any move from being fully starved.
             phase_patience: Consecutive non-improving proposals before
-                the kernel switches to the next phase.
+                the kernel switches to the next phase.  Default 150
+                keeps phase flips roughly aligned with the SA
+                ``steps_per_temp`` cadence.
             warmup: Minimum observations per move class before the
                 adaptive scaling activates for that class.
+            stagnation_reset_delta: Minimum strict-improvement
+                magnitude (in log-PL units) that counts as "real
+                progress" for stagnation-reset purposes.  Any
+                ``delta > stagnation_reset_delta`` resets the
+                stagnation counter; smaller wiggles are ignored.
+                Default 1.0 filters out the O(0.01-0.1) tweaks that
+                late-stage NH/CIP moves generate, so the counter
+                actually climbs during genuine plateaus.  Setting to
+                0.0 restores the prior "any strict improvement resets"
+                behaviour.  Required for phase cycling and adaptive
+                SPR radius to track true plateaus rather than
+                micro-noise.
+            rng: ``numpy.random.Generator`` used to sample the move
+                class.  When ``None``, a fresh generator is created
+                from OS entropy; callers that care about
+                reproducibility (e.g. ``MPL.search``) should pass one
+                seeded from the search-wide ``SeedSequence``.
         """
         super().__init__()
         self._max_retics: int | None = max_reticulations
@@ -1362,12 +2075,63 @@ class MPLKernel(ProposalKernel):
         self._window_size: int = window_size
         self._min_weight: float = min_weight
         self._warmup: int = warmup
+        self._stagnation_reset_delta: float = float(stagnation_reset_delta)
+
+        # Diagnostics for phase/SPR plumbing -- filled in as the run
+        # progresses; surfaced via ``format_stats`` at the end.
+        self._reheat_signals: int = 0
+        self._stagnation_peak: int = 0
+
+        self.rng: np.random.Generator = (
+            rng if rng is not None else np.random.default_rng()
+        )
 
         from collections import deque
         self._history: dict[type[Move], deque] = {
             cls: deque(maxlen=window_size) for cls in self._all_moves
         }
         self._last_cls: type[Move] | None = None
+
+        # Lifetime counters for end-of-run diagnostics.  ``proposed`` counts
+        # every draw of a move class (regardless of validity).  ``accepted``
+        # counts every draw that the SA/HC driver later committed to the
+        # chain (strict improvement OR uphill-accepted).  ``improved``
+        # counts strict-improvement commits (delta > 0 in maximisation).
+        self._proposed: dict[type[Move], int] = {cls: 0 for cls in self._all_moves}
+        self._accepted: dict[type[Move], int] = {cls: 0 for cls in self._all_moves}
+        self._improved: dict[type[Move], int] = {cls: 0 for cls in self._all_moves}
+
+        # Adaptive sigmas for the two continuous proposals.  They are
+        # driven toward ``_SIGMA_TARGET_ACCEPT`` by a Robbins-Monro-style
+        # update in ``report_outcome``.  ``_sigma_obs`` counts the
+        # observations each move class has contributed so the step size
+        # decays like 1/n^exponent.
+        self._nh_sigma: float = _AdaptiveConfig.NH_SIGMA_INIT
+        self._cip_sigma: float = _AdaptiveConfig.CIP_SIGMA_INIT
+        self._sigma_obs: dict[type[Move], int] = {
+            ChangeNodeHeight: 0,
+            ChangeInheritanceProb: 0,
+        }
+
+        # SPR decay tracking.  ``_last`` holds the decay used on the most
+        # recent SPR draw; ``_min_seen``/``_max_seen`` record the
+        # realised range so ``format_stats`` can show how often the
+        # kernel actually opened the SPR radius during the run.
+        self._spr_decay_last: float = _AdaptiveConfig.SPR_DECAY_MAX
+        self._spr_decay_min_seen: float = _AdaptiveConfig.SPR_DECAY_MAX
+        self._spr_decay_max_seen: float = _AdaptiveConfig.SPR_DECAY_MAX
+
+        # Post-reheat wide-SPR window.  ``on_reheat`` sets this to
+        # ``SPR_BROAD_MODE_PROPOSALS``; each SPR draw decrements it.
+        # While positive, ``_current_spr_decay`` returns ``SPR_DECAY_MIN``
+        # regardless of the stagnation-derived decay.  This decouples
+        # SPR radius adaptation from phase-switch stagnation resets:
+        # even if the reheat triggers a phase switch (which zeroes
+        # ``_stagnation``), the broad-mode counter still forces broad
+        # regrafts for the next N SPR calls.  See ``_AdaptiveConfig``.
+        self._spr_broad_remaining: int = 0
+        self._spr_broad_activations: int = 0
+        self._spr_broad_proposals: int = 0
 
     # ── phase helpers ───────────────────────────────────────────
 
@@ -1377,15 +2141,33 @@ class MPLKernel(ProposalKernel):
             return self._TOPOLOGY_BASE
         return self._RETICULATION_BASE
 
-    def _active_moves_and_base(self) -> tuple[list[type[Move]], list[float]]:
-        """Active move classes and base weights for the current phase."""
+    def _at_retic_cap(self, network: Network | None) -> bool:
+        """True when the current network already holds ``max_reticulations``."""
+        if self._max_retics is None or network is None:
+            return False
+        current = sum(1 for n in network.V() if n.is_reticulation())
+        return current >= self._max_retics
+
+    def _active_moves_and_base(
+        self, network: Network | None = None,
+    ) -> tuple[list[type[Move]], list[float]]:
+        """Active move classes and base weights for the current phase.
+
+        When the caller supplies a ``network`` and we're at the
+        reticulation cap, ``AddReticulation`` is omitted entirely so
+        proposals aren't wasted on a guaranteed no-op.
+        """
         base = self._phase_base_map()
+        at_cap = self._at_retic_cap(network)
         moves: list[type[Move]] = []
         weights: list[float] = []
         for cls in self._all_moves:
-            if cls in base:
-                moves.append(cls)
-                weights.append(base[cls])
+            if cls not in base:
+                continue
+            if at_cap and cls is AddReticulation:
+                continue
+            moves.append(cls)
+            weights.append(base[cls])
         return moves, weights
 
     def _maybe_switch_phase(self) -> None:
@@ -1405,16 +2187,99 @@ class MPLKernel(ProposalKernel):
                 break
         self._stagnation = 0
 
+    # ── adaptive SPR regraft radius ─────────────────────────────
+
+    def _current_spr_decay(self) -> float:
+        """SPR distance-decay for the current stagnation level.
+
+        Returns a value in ``[SPR_DECAY_MIN, SPR_DECAY_MAX]``.  Normal
+        path: decay drops linearly from MAX (just improved / fresh)
+        toward MIN (fully stuck) as ``stagnation / phase_patience``
+        climbs.  Post-reheat path: while ``_spr_broad_remaining > 0``
+        (set by :meth:`on_reheat`), decay is forced to MIN so the
+        next ``SPR_BROAD_MODE_PROPOSALS`` SPR draws get broad hops
+        regardless of intervening phase switches.  This is the fix
+        for the "reheat triggers phase switch, phase switch zeroes
+        stagnation, next SPR sees stuckness=0, wide mode never fires"
+        pathology seen in long runs.
+        """
+        if self._spr_broad_remaining > 0:
+            return _AdaptiveConfig.SPR_DECAY_MIN
+        if self._phase_patience <= 0:
+            return _AdaptiveConfig.SPR_DECAY_MAX
+        stuckness = min(1.0, self._stagnation / float(self._phase_patience))
+        span = _AdaptiveConfig.SPR_DECAY_MAX - _AdaptiveConfig.SPR_DECAY_MIN
+        return _AdaptiveConfig.SPR_DECAY_MAX - stuckness * span
+
+    # ── adaptive sigma (continuous proposals) ───────────────────
+
+    def _tune_sigma(self,
+                    current: float,
+                    n_obs: int,
+                    accepted: bool,
+                    sigma_min: float,
+                    sigma_max: float) -> float:
+        """One Robbins-Monro step toward the acceptance-rate target.
+
+        ``log(sigma)`` drifts by ``step * (accept_indicator - target)``,
+        where ``step`` shrinks as ``1/(n + shift)^exponent``.  This is
+        the standard adaptive Metropolis update (Roberts & Rosenthal,
+        2009): accept > target widens proposals, accept < target
+        tightens them.  Because SA also cools over time, ``sigma``
+        tends to contract alongside temperature -- which is exactly
+        what we want in the exploitation phase.
+        """
+        if n_obs < _AdaptiveConfig.SIGMA_TUNE_DELAY:
+            return current
+        step = 1.0 / ((n_obs + _AdaptiveConfig.SIGMA_TUNE_DENOM_SHIFT)
+                      ** _AdaptiveConfig.SIGMA_TUNE_EXPONENT)
+        indicator = 1.0 if accepted else 0.0
+        log_adjust = step * (indicator - _AdaptiveConfig.SIGMA_TARGET_ACCEPT)
+        new_sigma = current * math.exp(log_adjust)
+        return max(sigma_min, min(sigma_max, new_sigma))
+
     # ── adaptive tuning ─────────────────────────────────────────
 
     def _adapt_weights(self,
                        moves: list[type[Move]],
                        base_weights: list[float]) -> list[float]:
-        """Scale base weights by recent acceptance rate.
+        """Scale base weights by an efficiency-aware accept/improve blend.
 
-        Scaling is linear from ``min_weight`` of the base (at 0%
-        acceptance) to 2x the base (at 100% acceptance).  Moves with
-        fewer than ``warmup`` observations keep their full base weight.
+        A pure acceptance-rate scaler over-rewards moves that get
+        accepted often via uphill SA accepts but rarely make strict
+        progress (e.g. ``RelocateReticulation`` or ``FlipReticulation``
+        at cold T).  Meanwhile it starves moves that accept rarely but
+        whose accepts are almost always strict improvements (e.g.
+        ``SPR`` at cold T, ``AddReticulation`` when below cap).  That
+        is the opposite of what we want for an MPL *optimiser*.
+
+        The formula below reads two signals from each move's rolling
+        ``window_size`` history:
+
+            acc_rate        = accepts / window                # explore credit
+            imp_rate        = strict_improvements / window    # exploit credit
+            efficiency      = imp_rate / max(acc_rate, 0.01)  # per-accept quality
+
+        ``efficiency`` is the probability that, given the move
+        accepted, the accept was a strict improvement.  It's capped at
+        1.0 to keep the math bounded when a warmup-era window happens
+        to have only improvements.
+
+        The composite score
+
+            composite = 0.4 * acc_rate + 0.6 * efficiency
+
+        then drives the same ``floor .. 2x`` multiplicative scale the
+        old formula used -- so the knob count is unchanged; only the
+        signal feeding it is different.  The 0.4 / 0.6 split
+        deliberately weights exploitation (progress) more heavily than
+        exploration (acceptance): SA itself already handles exploration
+        through its temperature-driven uphill accepts.  We want the
+        adaptive layer focused on "which move is actually moving the
+        needle right now".
+
+        Moves with fewer than ``warmup`` observations keep their full
+        base weight (avoids early-window noise swinging the scaler).
         """
         floor = self._min_weight
         weights: list[float] = []
@@ -1423,43 +2288,206 @@ class MPLKernel(ProposalKernel):
             if len(hist) < self._warmup:
                 weights.append(base_w)
                 continue
+            n = len(hist)
             n_acc = sum(1 for accepted, _ in hist if accepted)
-            acc_rate = n_acc / len(hist)
-            scale = floor + (2.0 - floor) * acc_rate
+            n_imp = sum(1 for accepted, delta in hist
+                        if accepted and delta > 0.0)
+            acc_rate = n_acc / n
+            imp_rate = n_imp / n
+            efficiency = min(
+                1.0,
+                imp_rate / max(acc_rate, _AdaptiveConfig.SCALER_EFF_EPSILON),
+            )
+            composite = (
+                _AdaptiveConfig.SCALER_ACC_WEIGHT * acc_rate
+                + _AdaptiveConfig.SCALER_EFF_WEIGHT * efficiency
+            )
+            scale = floor + (2.0 - floor) * composite
             weights.append(base_w * scale)
         return weights
 
     # ── public interface ────────────────────────────────────────
 
-    def generate(self) -> Move:
-        """Sample a move from the current phase's weighted distribution."""
+    def generate(self, model: "Model | None" = None) -> Move:
+        """Sample a move from the current phase's weighted distribution.
+
+        Args:
+            model: Optional current model.  Used only for cap-aware
+                filtering (``AddReticulation`` is dropped when the
+                network is already at ``max_reticulations``).  Callers
+                from ``SimulatedAnnealing``/``HillClimbing`` pass the
+                live model; the abstract base signature keeps the
+                parameter optional for back-compat.
+        """
+        network = model.network if model is not None else None
+
+        # --- Decide which moves are eligible and their weights -----
         if self._phased:
             self._maybe_switch_phase()
-            moves, base_weights = self._active_moves_and_base()
+            moves, base_weights = self._active_moves_and_base(network)
             weights = (self._adapt_weights(moves, base_weights)
                        if self._adaptive else base_weights)
         else:
             moves = self._all_moves
             weights = self._fixed_weights
 
-        cls = random.choices(moves, weights=weights, k=1)[0]
-        self._last_cls = cls
+        if not moves:
+            # Defensive fallback: with cap filtering active and a weird
+            # phase base, we might have no eligible moves.  Fall back to
+            # the full move list so the search keeps progressing.
+            moves = list(self._all_moves)
+            weights = [1.0] * len(moves)
 
+        # --- Sample a move class from the effective distribution ---
+        w = np.asarray(weights, dtype=float)
+        total = float(w.sum())
+        if not np.isfinite(total) or total <= 0.0:
+            # Degenerate weights (all zero or NaN): fall back to
+            # uniform sampling so the chain doesn't stall.
+            idx = int(self.rng.integers(0, len(moves)))
+        else:
+            idx = int(self.rng.choice(len(moves), p=w / total))
+        cls = moves[idx]
+        self._last_cls = cls
+        self._proposed[cls] = self._proposed.get(cls, 0) + 1
+
+        # --- Instantiate the move with its current tuning knobs ----
         if cls is AddReticulation and self._max_retics is not None:
             return AddReticulation(max_reticulations=self._max_retics)
+        if cls is ChangeNodeHeight:
+            return ChangeNodeHeight(sigma_frac=self._nh_sigma)
+        if cls is ChangeInheritanceProb:
+            return ChangeInheritanceProb(sigma=self._cip_sigma)
+        if cls is SPR:
+            decay = self._current_spr_decay()
+            # Decrement the broad-mode window.  A single SPR draw
+            # consumes one slot of post-reheat broad-radius credit
+            # regardless of whether the move ultimately commits.
+            # Tracking consumed slots separately from activations
+            # lets format_stats distinguish "broad mode fired N
+            # times" vs "M reheats activated it".
+            if self._spr_broad_remaining > 0:
+                self._spr_broad_remaining -= 1
+                self._spr_broad_proposals += 1
+            # Keep a trailing record so end-of-run stats can show the
+            # realised decay range without sampling every tick.
+            self._spr_decay_last = decay
+            self._spr_decay_min_seen = min(self._spr_decay_min_seen, decay)
+            self._spr_decay_max_seen = max(self._spr_decay_max_seen, decay)
+            return SPR(distance_decay=decay)
         return cls()
 
     def report_outcome(self, accepted: bool, delta: float = 0.0) -> None:
-        """Record move outcome and update phase-stagnation counter."""
-        if self._last_cls is not None and self._last_cls in self._history:
-            self._history[self._last_cls].append((accepted, delta))
-        if accepted and delta > 0:
+        """Record a move outcome and update adaptive state.
+
+        Called by the search driver (HC / SA) immediately after each
+        ``generate()`` -> propose -> score pair, regardless of
+        accept/reject.  Updates:
+
+          * The rolling per-move history window (fed back to
+            :meth:`_adapt_weights`).
+          * Lifetime accepted/improved counters (for
+            :meth:`format_stats`).
+          * The Robbins-Monro sigma for the last move class when it
+            was a continuous proposal (NH / CIP).
+          * The magnitude-aware stagnation counter driving phase
+            switching and adaptive SPR radius.
+
+        Args:
+            accepted: True iff the driver committed this move.
+            delta: Score change ``new - old``; positive means strict
+                improvement on the search objective (maximisation).
+        """
+        cls = self._last_cls
+        if cls is not None and cls in self._history:
+            self._history[cls].append((accepted, delta))
+        if cls is not None:
+            if accepted:
+                self._accepted[cls] = self._accepted.get(cls, 0) + 1
+            if accepted and delta > 0:
+                self._improved[cls] = self._improved.get(cls, 0) + 1
+
+            if cls is ChangeNodeHeight:
+                self._sigma_obs[cls] += 1
+                self._nh_sigma = self._tune_sigma(
+                    self._nh_sigma,
+                    self._sigma_obs[cls],
+                    accepted,
+                    _AdaptiveConfig.NH_SIGMA_MIN,
+                    _AdaptiveConfig.NH_SIGMA_MAX,
+                )
+            elif cls is ChangeInheritanceProb:
+                self._sigma_obs[cls] += 1
+                self._cip_sigma = self._tune_sigma(
+                    self._cip_sigma,
+                    self._sigma_obs[cls],
+                    accepted,
+                    _AdaptiveConfig.CIP_SIGMA_MIN,
+                    _AdaptiveConfig.CIP_SIGMA_MAX,
+                )
+
+        # Magnitude-aware reset: only genuine improvements reset
+        # stagnation.  Tiny +0.01 tweaks from late-stage NH/CIP moves
+        # don't count, so the counter actually climbs when the chain
+        # is truly plateauing (which is what phase switching and
+        # adaptive SPR radius need to see).
+        if accepted and delta > self._stagnation_reset_delta:
             self._stagnation = 0
         else:
             self._stagnation += 1
+            if self._stagnation > self._stagnation_peak:
+                self._stagnation_peak = self._stagnation
+
+    def on_reheat(self) -> None:
+        """Notify the kernel that the driver just fired a reheat.
+
+        Reheats are the SA layer's explicit "we're stuck" signal --
+        they're computed from rolling improvement over a window, which
+        is a *stronger* plateau signal than anything the kernel's own
+        stagnation counter can see.  On notification we:
+
+        1. Force ``_stagnation`` up to ``phase_patience`` so the next
+           ``generate()`` call triggers a phase switch (if we aren't
+           in the opposite phase already).  This flips to retic-focused
+           moves to try a structurally different escape route.
+        2. Arm the post-reheat broad-SPR window: the next
+           ``SPR_BROAD_MODE_PROPOSALS`` SPR draws are forced to
+           ``SPR_DECAY_MIN`` (near-flat, large hops) regardless of
+           intervening phase switches or stagnation resets.
+
+        The broad-SPR window is the critical half: without it, the
+        phase switch from (1) resets ``_stagnation`` to 0 before a
+        single broad SPR fires, reverting the move to local-only mode
+        and cancelling the reheat's entire exploration intent.  With
+        it, reheats actually reach the basin-escape topology moves
+        they were fired to attempt.
+
+        No-ops for the non-phased kernel (custom ``weights`` path).
+        """
+        self._reheat_signals += 1
+        if not self._phased:
+            return
+        self._stagnation = max(self._stagnation, self._phase_patience)
+        if self._stagnation > self._stagnation_peak:
+            self._stagnation_peak = self._stagnation
+        # Arm the broad-SPR window independently of the stagnation
+        # counter.  If a prior reheat's window hasn't fully drained,
+        # refresh to the full budget rather than accumulating -- the
+        # cascade guard already limits how often this can happen.
+        self._spr_broad_remaining = _AdaptiveConfig.SPR_BROAD_MODE_PROPOSALS
+        self._spr_broad_activations += 1
 
     def get_weights(self) -> dict[str, float]:
-        """Return current effective selection weights (normalized)."""
+        """Return the current effective selection probabilities.
+
+        Honours the active phase (when phased) and the adaptive
+        scaler (when enabled); falls back to the fixed weight list
+        otherwise.  Useful for quick introspection or logging.
+
+        Returns:
+            ``dict`` mapping move class name to probability in [0, 1]
+            (summing to 1).
+        """
         if self._phased:
             moves, base = self._active_moves_and_base()
             weights = (self._adapt_weights(moves, base)
@@ -1470,6 +2498,88 @@ class MPLKernel(ProposalKernel):
         total = sum(weights)
         return {cls.__name__: w / total for cls, w in
                 zip(moves, weights)}
+
+    def get_stats(self) -> dict[str, dict[str, int | float]]:
+        """Lifetime per-move statistics across the search.
+
+        Returns:
+            Mapping ``move_class_name -> {proposed, accepted, improved,
+            acceptance_rate, improvement_rate}``.  ``acceptance_rate``
+            is accepted / proposed (fraction of draws that were
+            committed to the chain, including uphill-accepted moves).
+            ``improvement_rate`` is improved / proposed (strict
+            log-PL gain).  Both rates default to 0 when a move was
+            never sampled.
+        """
+        stats: dict[str, dict[str, int | float]] = {}
+        for cls in self._all_moves:
+            n_prop = self._proposed.get(cls, 0)
+            n_acc = self._accepted.get(cls, 0)
+            n_imp = self._improved.get(cls, 0)
+            stats[cls.__name__] = {
+                "proposed": n_prop,
+                "accepted": n_acc,
+                "improved": n_imp,
+                "acceptance_rate": (n_acc / n_prop) if n_prop else 0.0,
+                "improvement_rate": (n_imp / n_prop) if n_prop else 0.0,
+            }
+        return stats
+
+    def format_stats(self) -> str:
+        """Return a human-readable summary of lifetime kernel statistics.
+
+        Intended for printing at the end of a search.  Includes
+        per-move proposal / accept / improve counts, phase-switch
+        summary, adaptive sigma end-state, SPR radius range, and the
+        post-reheat broad-SPR window activation count.
+        """
+        stats = self.get_stats()
+        name_width = max((len(k) for k in stats), default=8)
+        lines = [
+            f"{'move':<{name_width}}  {'proposed':>9}  {'accepted':>9}  "
+            f"{'improved':>9}  {'accept%':>8}  {'improve%':>9}"
+        ]
+        total_prop = sum(s["proposed"] for s in stats.values())
+        for name, s in sorted(
+            stats.items(), key=lambda kv: -kv[1]["proposed"],
+        ):
+            lines.append(
+                f"{name:<{name_width}}  "
+                f"{s['proposed']:>9d}  "
+                f"{s['accepted']:>9d}  "
+                f"{s['improved']:>9d}  "
+                f"{100.0 * s['acceptance_rate']:>7.2f}%  "
+                f"{100.0 * s['improvement_rate']:>8.3f}%"
+            )
+        lines.append(f"  total proposals: {total_prop}")
+        lines.append(
+            f"  phase switches: {self._phase_switches}"
+            f" (reheat notifications: {self._reheat_signals};"
+            f" stagnation peak: {self._stagnation_peak}/{self._phase_patience})"
+        )
+        lines.append(
+            "  adaptive sigma -- "
+            f"ChangeNodeHeight.sigma_frac={self._nh_sigma:.4f} "
+            f"(n={self._sigma_obs.get(ChangeNodeHeight, 0)}), "
+            f"ChangeInheritanceProb.sigma={self._cip_sigma:.4f} "
+            f"(n={self._sigma_obs.get(ChangeInheritanceProb, 0)})"
+        )
+        lines.append(
+            "  adaptive SPR radius -- "
+            f"distance_decay last={self._spr_decay_last:.3f}, "
+            f"range=[{self._spr_decay_min_seen:.3f}, "
+            f"{self._spr_decay_max_seen:.3f}] "
+            f"(max={_AdaptiveConfig.SPR_DECAY_MAX}, "
+            f"min={_AdaptiveConfig.SPR_DECAY_MIN}; "
+            "low=broad, high=local)"
+        )
+        lines.append(
+            "  post-reheat broad-SPR window -- "
+            f"activated={self._spr_broad_activations}x, "
+            f"SPR draws in broad mode={self._spr_broad_proposals} "
+            f"(window size={_AdaptiveConfig.SPR_BROAD_MODE_PROPOSALS})"
+        )
+        return "\n".join(lines)
 
     @property
     def phase(self) -> str:
@@ -1482,46 +2592,69 @@ class MPLKernel(ProposalKernel):
         return self._phase_switches
 
 
-###################
-#### MPL CLASS ####
-###################
- 
-class MPL:
-    """Maximum pseudo-likelihood scorer for a species network.
-    
-    Precomputes rho (triple frequencies from gene trees) once at init.
-    Call :meth:`score` to evaluate the current species network; only the
-    network-side probabilities are recomputed.
-    
-    Example::
-    
-        >>> mpl = MPL(species_net, gene_trees, mapping)
-        >>> log_pl = mpl.score()
-    """
-    
-    def __init__(self,
-                 species_net: Network,
-                 gene_trees: GeneTrees,
-                 mapping: dict[str, list[str]]) -> None:
-        """
-        Initialize MPL scorer state for one species network.
+# ======================================================================
+# (H) Orchestration class
+#
+# :class:`MPL` is the user-facing entry point.  It couples the
+# gene-tree precomputation, the scorer, and a search driver behind a
+# small and consistent API: ``MPL(net, gts, mapping).score()`` /
+# ``.search(...)``.  The static-method wrappers below simply forward
+# to the module-level public functions so existing callers don't have
+# to import them separately.
+# ======================================================================
 
-        Initialization performs only the gene-tree side precomputation
-        (rho values). Network-side probabilities are computed when score()
-        is called.
+
+class MPL:
+    """Maximum pseudo-likelihood scorer and search driver for a species network.
+
+    At construction time, rho values are precomputed from the input
+    gene trees (constant for the run) and a DP engine is built for
+    the initial species network.  Subsequent :meth:`score` calls
+    reuse the cached rho values and rebuild only the network-side DP.
+    :meth:`search` wires the scorer into a search driver (HC or SA)
+    with an :class:`MPLKernel` and returns the best log-PL found.
+
+    Typical use::
+
+        mpl = MPL(species_net, gene_trees, mapping)
+        log_pl = mpl.score()                    # one-off score
+        best_log_pl = mpl.search(method="sa", num_iter=20000)
+
+    Attributes:
+        net: Current species network.  Updated in place by
+            :meth:`search` to the best network found.
+        gene_trees: Input gene-tree collection.
+        mapping: Species -> allele labels mapping.
+    """
+
+    def __init__(
+        self,
+        species_net: Network,
+        gene_trees: GeneTrees,
+        mapping: dict[str, list[str]],
+    ) -> None:
+        """Initialise rho precomputation and the initial DP engine.
+
+        Gene-tree-side work (rho table, active-triplet filter) runs
+        exactly once here.  Network-side DP is rebuilt on every
+        :meth:`score` call because topology moves invalidate the
+        engine's cached articulation sets.
 
         Args:
-            species_net (Network): Species network to evaluate.
-            gene_trees (GeneTrees): Input gene trees.
-            mapping (dict[str, list[str]]): Species -> allele labels map.
-        Returns:
-            N/A
+            species_net: Initial species network topology.  Branch
+                lengths and gammas should already be populated.
+            gene_trees: Gene-tree collection to score against.
+            mapping: Species -> list of allele labels (identity
+                mappings, i.e. ``{species: [species]}``, are fine).
         """
         self.net = species_net
         self.gene_trees = gene_trees
         self.mapping = mapping
 
-        # Enumerate triplets and precompute rho (constant for fixed gene trees)
+        # Precompute rho (constant across any search that reuses this
+        # object).  Triplets missing from the gene trees will still
+        # appear in self._triplets but have all-zero rho, so the
+        # active-triplet filter below skips them for scoring.
         precomputed = compute_gene_tree_triplets(
             gene_trees=self.gene_trees,
             mapping=self.mapping,
@@ -1534,39 +2667,47 @@ class MPL:
             if any(self._rho[t][i] > 0.0 for i in range(3))
         ]
 
-        # Match PhyloNet semantics: compute each triplet on the full network.
+        # Initial DP engine for the starting network.  Replaced by
+        # :meth:`search` once the driver finishes (so ``self.net`` and
+        # this engine always agree).
         self._triple_engine = _TripleDPEngine(self.net)
-    
+
     @classmethod
-    def from_nexus(cls, gt_file: str, st_file: str, mapping: dict[str, list[str]]):
-        """
-        Instantiate instead from nexus file paths.
+    def from_nexus(
+        cls,
+        gt_file: str,
+        st_file: str,
+        mapping: dict[str, list[str]],
+    ) -> "MPL":
+        """Construct an :class:`MPL` from two NEXUS files.
 
         Args:
-            gt_file (str): Path to the gene tree file.
-            st_file (str): Path to the species tree file.
-            mapping (dict[str, list[str]]): Mapping of genes to allele labels.
+            gt_file: Path to a NEXUS file holding the gene trees.
+            st_file: Path to a NEXUS file holding the starting species
+                network.
+            mapping: Species -> list of allele labels.
+
         Returns:
-            MPL: A MPL object.
+            A fully initialised :class:`MPL` ready to be scored or
+            searched.
         """
-        st : Network = io.read_nexus(st_file, return_type="networks")
-        gts : GeneTrees = io.read_nexus(gt_file, return_type="genetrees")
+        st: Network = io.read_nexus(st_file, return_type="networks")
+        gts: GeneTrees = io.read_nexus(gt_file, return_type="genetrees")
         gts.species_gene_mapping(mapping)
         return cls(st, gts, mapping)
 
     @staticmethod
-    def compute_gene_tree_triplets(gene_trees: GeneTrees,
-                                   mapping: dict[str, list[str]],
-                                   species_labels: Optional[list[str]] = None) -> GeneTreeTripletResult:
-        """
-        Wrapper for the module-level compute_gene_tree_triplets function.
+    def compute_gene_tree_triplets(
+        gene_trees: GeneTrees,
+        mapping: dict[str, list[str]],
+        species_labels: Optional[list[str]] = None,
+    ) -> GeneTreeTripletResult:
+        """Thin wrapper around module-level :func:`compute_gene_tree_triplets`.
 
-        Args:
-            gene_trees (GeneTrees): Gene tree collection.
-            mapping (dict[str, list[str]]): Species to allele map.
-            species_labels (Optional[list[str]], optional): Explicit species list.
-        Returns:
-            GeneTreeTripletResult: precomputed triplet frequencies.
+        Provided so callers that only have the :class:`MPL` class
+        handy don't have to separately import the module-level
+        function.  See that function's docstring for parameter
+        details.
         """
         return compute_gene_tree_triplets(
             gene_trees=gene_trees,
@@ -1575,17 +2716,13 @@ class MPL:
         )
 
     @staticmethod
-    def score_species_network_triplets(species_net: Network,
-                                       gene_triplet_result: GeneTreeTripletResult) -> SpeciesNetworkTripletResult:
-        """
-        Wrapper for module-level score_species_network_triplets.
+    def score_species_network_triplets(
+        species_net: Network,
+        gene_triplet_result: GeneTreeTripletResult,
+    ) -> SpeciesNetworkTripletResult:
+        """Thin wrapper around module-level :func:`score_species_network_triplets`.
 
-        Args:
-            species_net (Network): Species network to score.
-            gene_triplet_result (GeneTreeTripletResult): Triplet frequencies from
-                            gene trees.
-        Returns:
-            SpeciesNetworkTripletResult: per-triplet probabilities and final score.
+        See that function's docstring for parameter details.
         """
         return score_species_network_triplets(
             species_net=species_net,
@@ -1593,16 +2730,12 @@ class MPL:
         )
 
     # ── Scoring ───────────────────────────────────────────────────
-    
-    def score(self) -> float:
-        """
-        Compute total log pseudo-likelihood for the current species network.
 
-        This loops over all species triplets and sums their individual
-        contributions.
+    def score(self) -> float:
+        """Compute the total log pseudo-likelihood for ``self.net``.
 
         Returns:
-            float: Total log pseudo-likelihood.
+            Log pseudo-likelihood (always <= 0, higher is better).
         """
         if _HAS_CYTHON_MPL:
             return _score_with_cython(
@@ -1613,66 +2746,128 @@ class MPL:
         for triplet in self._active_triplets:
             total += self._score_triplet(triplet)
         return total
-    
-    def search(self,
-               method: str = "hc",
-               num_iter: int = 700,
-               kernel: MPLKernel | None = None,
-               max_reticulations: int | None = None,
-               *,
-               save_best_path: str | os.PathLike[str] | None = None,
-               reference_network: Network | None = None,
-               comparison_report_path: str | os.PathLike[str] | None = None,
-               comparison_top_k: int = 25,
-               print_comparison: bool = True,
-               **kwargs) -> float:
-        """Search the network space for the species network that maximises
-        the pseudo-likelihood of the observed gene trees.
+
+    # ── Search ────────────────────────────────────────────────────
+
+    def search(
+        self,
+        method: str = "hc",
+        num_iter: int = 700,
+        kernel: MPLKernel | None = None,
+        max_reticulations: int | None = None,
+        *,
+        save_best_path: str | os.PathLike[str] | None = None,
+        reference_network: Network | None = None,
+        comparison_report_path: str | os.PathLike[str] | None = None,
+        comparison_top_k: int = 25,
+        print_comparison: bool = True,
+        **kwargs,
+    ) -> float:
+        """Search the network space for the highest-scoring topology.
+
+        Builds an :class:`MPLScorer`, wires RNG seeds through the
+        model/kernel/driver trio for reproducibility, and runs either
+        a Hill Climbing or Simulated Annealing driver against the
+        starting network ``self.net``.  ``self.net`` and
+        ``self._triple_engine`` are updated in place to the best
+        network found.
+
+        End-of-run diagnostics (move kernel stats) are printed
+        unconditionally.
 
         Args:
-            method: ``"hc"`` for Hill Climbing (default) or ``"sa"`` for
-                    Simulated Annealing.
-            num_iter: Number of topology moves to evaluate.
-            kernel: Custom :class:`MPLKernel` instance. When ``None`` a
-                    default kernel is used.
-            max_reticulations: Upper bound on reticulation nodes allowed.
-                    ``None`` means unlimited.  Ignored if a custom *kernel*
-                    is supplied.
-            save_best_path: If set, write the best-found network as Newick
-                to this path after the search completes.
-            reference_network: If set (e.g. a simulator ground truth),
-                compare found vs reference MPL score, reticulations, clades,
-                and top triplet log-likelihood gaps.
-            comparison_report_path: If set with *reference_network*, also
-                write the comparison report to this file (UTF-8).
-            comparison_top_k: Number of triplets listed in the report.
-            print_comparison: When *reference_network* is set, print the
-                report to stdout unless this is ``False``.
-            **kwargs: Forwarded to the search constructor.  For SA these
-                      include ``t_start``, ``t_end``, ``n_restarts``, ``seed``,
-                      ``plateau_frac``, ``progress_every`` (print every *n*
-                      iterations; ``0`` disables), and ``schedule``: ``"cool"``
-                      (high-to-low T), ``"heat"`` (low-to-high T), or
-                      ``"geometric_reheat"`` (geometric cooling every
-                      ``steps_per_temp`` steps down to ``t_min``, with reheats
-                      when the run-best stalls; see ``cooling_alpha``,
-                      ``steps_per_temp``, ``reheat_threshold``, ``reheat_factor``,
-                      ``t_min``).
+            method: Search driver -- ``"hc"`` (Hill Climbing, default)
+                or ``"sa"`` (Simulated Annealing).
+            num_iter: Number of proposed moves to evaluate.
+            kernel: Custom :class:`MPLKernel` instance.  When
+                ``None`` a default one is built with ``max_reticulations``.
+            max_reticulations: Upper bound on reticulation count.
+                ``None`` means unlimited.  Ignored when a custom
+                ``kernel`` is supplied.
+            save_best_path: Optional Newick output path for the best
+                network found.
+            reference_network: Optional ground-truth / baseline
+                network.  When provided, a comparison report is
+                printed after the search.
+            comparison_report_path: Optional path to also write the
+                comparison report as UTF-8 text.
+            comparison_top_k: Number of worst-performing triplets
+                listed in the comparison report.
+            print_comparison: When ``reference_network`` is set,
+                whether to echo the report to stdout.
+            **kwargs: Forwarded to the chosen search driver.  For SA
+                these include ``t_start``, ``t_end``, ``n_restarts``,
+                ``seed``, ``plateau_frac``, ``progress_every`` (print
+                every *n* iterations; ``0`` disables), and
+                ``schedule``: ``"cool"`` (high-to-low T), ``"heat"``
+                (low-to-high T), or ``"geometric_reheat"`` (geometric
+                cooling every ``steps_per_temp`` steps down to
+                ``t_min``, with multi-signal reheats: rate-based
+                plateau -- ``reheat_window`` + ``reheat_min_improve``;
+                strict-stall backstop -- ``reheat_threshold``;
+                optional frozen-chain detection --
+                ``reheat_on_no_uphill``).  A cascade guard
+                (``reheat_max_consecutive``) suspends further reheats
+                after N fire without any strict run-best improvement;
+                the counter resets on improvement.  Also see
+                ``cooling_alpha``, ``steps_per_temp``,
+                ``reheat_factor``, ``reheat_cap_mult``, ``t_min``.
 
         Returns:
-            Log pseudo-likelihood of the best network found.  The MPL
-            instance's network (``self.net``) is updated in-place with the
-            result.
+            Log pseudo-likelihood of the best network found.
+
+        Raises:
+            ValueError: If ``method`` is not ``"hc"`` or ``"sa"``.
         """
         scorer = MPLScorer(self._rho, self._active_triplets)
 
-        model = Model()
+        # ----------------------------------------------------------------
+        # RNG plumbing.
+        #
+        # One SeedSequence drives three independent generators:
+        #   * SA accept/reject (``sa_ss``),
+        #   * proposal-class sampling inside the kernel (``kernel_ss``),
+        #   * proposal *content* inside each move (``model_ss``, read
+        #     via ``model.rng``).
+        # This is the only way to make seeded MPL runs actually
+        # reproducible; every tuning study depends on it.  HC does not
+        # consume its own accept/reject RNG so we only inject ``seed``
+        # into kwargs for the SA path.
+        # ----------------------------------------------------------------
+        seed_in = kwargs.pop("seed", None)
+        if isinstance(seed_in, np.random.SeedSequence):
+            root_ss = seed_in
+        else:
+            root_ss = np.random.SeedSequence(seed_in)
+        sa_ss, kernel_ss, model_ss = root_ss.spawn(3)
+        if method == "sa":
+            kwargs["seed"] = sa_ss
+
+        # ----------------------------------------------------------------
+        # Build a Model around a deep copy of the starting network so
+        # the driver's in-place mutations don't touch self.net until
+        # the run completes successfully.
+        # ----------------------------------------------------------------
+        model = Model(rng=model_ss)
         model.network = copy.deepcopy(self.net)
         model.set_likelihood_calculator(scorer)
 
+        # ----------------------------------------------------------------
+        # Build or fix up the proposal kernel.  If the caller supplied
+        # their own kernel but didn't wire in an RNG, seed it from the
+        # same SeedSequence so reproducibility still holds.
+        # ----------------------------------------------------------------
         if kernel is None:
-            kernel = MPLKernel(max_reticulations=max_reticulations)
+            kernel = MPLKernel(
+                max_reticulations=max_reticulations,
+                rng=np.random.default_rng(kernel_ss),
+            )
+        elif getattr(kernel, "rng", None) is None:
+            kernel.rng = np.random.default_rng(kernel_ss)
 
+        # ----------------------------------------------------------------
+        # Dispatch to the chosen search driver.
+        # ----------------------------------------------------------------
         if method == "hc":
             searcher = HillClimbing(
                 pkernel=kernel,
@@ -1692,6 +2887,21 @@ class MPL:
 
         end_state = searcher.run()
 
+        # ----------------------------------------------------------------
+        # End-of-run diagnostics.  Cheap, one-time, and the single
+        # best tool for tuning kernel weights.  Callers that want to
+        # silence it can patch ``MPLKernel.format_stats`` or capture
+        # stdout.
+        # ----------------------------------------------------------------
+        if hasattr(kernel, "format_stats"):
+            print("\nMove kernel stats (lifetime):", flush=True)
+            print(kernel.format_stats(), flush=True)
+
+        # ----------------------------------------------------------------
+        # Adopt the best network into self.net and rebuild the DP
+        # engine so subsequent :meth:`score` calls see the new
+        # topology.  Optional Newick / comparison-report artifacts.
+        # ----------------------------------------------------------------
         self.net = end_state.current_model.network
         self._triple_engine = _TripleDPEngine(self.net)
 
@@ -1712,27 +2922,31 @@ class MPL:
                 Path(comparison_report_path).write_text(report + "\n", encoding="utf-8")
 
         return end_state.likelihood()
-    
+
+    # ── Internal ──────────────────────────────────────────────────
+
     def _score_triplet(self, triplet: tuple[str, str, str]) -> float:
-        """
-        Compute the MPL contribution of one species triplet.
+        """Contribution of one species triplet to the log-PL sum.
+
+        Only used by the Python scoring fallback in :meth:`score`;
+        the Cython path handles every triplet in a single call.
 
         Args:
-            triplet (tuple[str, str, str]): Canonical species triplet.
+            triplet: Canonical species triplet.
+
         Returns:
-            float: Log pseudo-likelihood contribution from this triplet.
+            ``sum_i rho_i * log(p_i)`` across the three resolutions,
+            with ``p_i == 0`` terms replaced by ``_LOG_FLOOR`` and
+            ``rho_i == 0`` terms skipped entirely.
         """
         x, y, z = triplet
-        # Evaluate two ordered resolutions directly.
         p_xy = self._triple_engine.calculate_triple_probability((x, y, z))
         p_xz = self._triple_engine.calculate_triple_probability((x, z, y))
         probs = (p_xy, p_xz, max(1.0 - p_xy - p_xz, 0.0))
         rho = self._rho[triplet]
-        
+
         contribution = 0.0
-        # Skip zero rho terms and guard log(0) with a floor.
         for rho_i, p_i in zip(rho, probs):
             if rho_i > 0.0:
                 contribution += rho_i * (math.log(p_i) if p_i > 0.0 else _LOG_FLOOR)
         return contribution
-    

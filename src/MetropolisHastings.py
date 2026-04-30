@@ -110,14 +110,18 @@ class ProposalKernel(ABC):
         super().__init__()
     
     @abstractmethod
-    def generate(self) -> Move:
+    def generate(self, model: "Model | None" = None) -> Move:
         """
         *ABSTRACT METHOD*
-        
+
         Generate the next move for a model to apply to the network.
-    
+
         Args:
-            N/A
+            model: Optional current model.  Subclasses may use it for
+                state-aware sampling (e.g. cap-aware filtering of
+                ``AddReticulation`` when the network is already at
+                ``max_reticulations``).  Kernels that don't need state
+                may ignore this parameter.
         Returns:
             Move: Any newly instantiated object that is a subclass of Move.
         """
@@ -153,12 +157,12 @@ class Infer_MP_Allop_Kernel(ProposalKernel):
         super().__init__()
         self.iter = 0
    
-    def generate(self) -> SwitchParentage:
+    def generate(self, model: "Model | None" = None) -> SwitchParentage:
         """
         Simply return a new SwitchParentage object.
 
         Args:
-            N/A
+            model: Unused; accepted for interface compatibility.
         Returns:
             SwitchParentage: A new switch parentage move.
         """
@@ -244,7 +248,7 @@ class HillClimbing:
             if no_progress == 150:
                 break
             
-            next_move = self.kernel.generate()
+            next_move = self.kernel.generate(self.current_state.current_model)
             is_valid: bool = self.current_state.generate_next(next_move)
             
             if is_valid:
@@ -410,7 +414,7 @@ class MetropolisHastings:
 
         while iter_no < self.num_iter:
             # propose a new state
-            next_move = self.kernel.generate()
+            next_move = self.kernel.generate(self.current_state.current_model)
             self.current_state.generate_next(next_move)
             
             cur = self.current_state.likelihood() 
@@ -495,9 +499,25 @@ class SimulatedAnnealing:
       to escape local maxima).
     * ``schedule="geometric_reheat"``: Hold T for ``steps_per_temp`` iterations,
       then multiply by ``cooling_alpha`` (geometric cooling) down to ``t_min``.
-      If the run-best score has not improved for ``reheat_threshold``
-      iterations, multiply T by ``reheat_factor`` (capped at ``t_start``) to
-      escape local maxima.
+      Reheats (multiply T by ``reheat_factor``, capped at
+      ``t_start * reheat_cap_mult``) trigger when any of these stagnation
+      signals fire:
+
+      * **Rate-based plateau** (primary): over the last ``reheat_window``
+        iterations, run-best gain < ``reheat_min_improve``.
+      * **Strict-stall backstop**: run-best has not strictly improved for
+        ``reheat_threshold`` iterations.
+      * **Frozen-chain** (optional): zero uphill acceptances in the last
+        ``reheat_window`` iterations (enabled when ``reheat_on_no_uphill``).
+
+      A short post-reheat grace period (``reheat_window`` iters) suppresses
+      immediate re-triggering while the chain re-equilibrates.
+
+      **Cascade guard**: if ``reheat_max_consecutive`` reheats fire without
+      any strict run-best improvement between them, further reheats are
+      suspended until the chain finds a new best score. This prevents the
+      pathological "pin T at cap, thrash forever" failure mode where a
+      genuinely deep basin provokes unbounded reheating.
 
     At each step, a worse move is accepted with probability exp(-delta / T)
     where ``delta = cur - proposed`` for the current vs proposed likelihood
@@ -523,7 +543,12 @@ class SimulatedAnnealing:
                  cooling_alpha: float = 0.93,
                  steps_per_temp: int = 100,
                  reheat_threshold: int = 1000,
-                 reheat_factor: float = 2.0) -> None:
+                 reheat_factor: float = 2.0,
+                 reheat_window: int = 500,
+                 reheat_min_improve: float = 1.0,
+                 reheat_on_no_uphill: bool = True,
+                 reheat_cap_mult: float = 1.0,
+                 reheat_max_consecutive: int = 5) -> None:
         """
         Args:
             pkernel: Proposal kernel that generates moves.
@@ -546,9 +571,29 @@ class SimulatedAnnealing:
             cooling_alpha: Geometric factor applied every ``steps_per_temp``
                 iterations (0 < alpha < 1).
             steps_per_temp: Iterations at a given T before cooling by alpha.
-            reheat_threshold: If run-best has not improved in this many
-                iterations, multiply T by ``reheat_factor`` (capped at ``t_start``).
+            reheat_threshold: Backstop strict-stall trigger. If run-best has
+                not strictly improved in this many iterations, reheat.
             reheat_factor: Factor applied to T on reheat (> 1).
+            reheat_window: Window (in iterations) used for the rate-based
+                plateau trigger and the frozen-chain uphill counter. Also
+                doubles as the post-reheat grace period.
+            reheat_min_improve: Minimum run-best gain (log-PL units) over
+                ``reheat_window`` iters that still counts as progress.
+                Below this -> reheat. Scale with taxa count / reticulations;
+                see :class:`SimulatedAnnealing` docs.
+            reheat_on_no_uphill: If True, also reheat when the chain accepted
+                zero uphill moves during the last ``reheat_window`` iters
+                AND window gain is below ``3 * reheat_min_improve`` (signals
+                T is effectively 0 relative to typical deltas while progress
+                is weak; healthy strict-descent runs are *not* reheated).
+            reheat_cap_mult: Ceiling on post-reheat T expressed as a multiple
+                of ``t_start``. ``1.0`` keeps the classic cap at ``t_start``;
+                values > 1 allow progressively hotter escapes.
+            reheat_max_consecutive: Cascade guard. Maximum number of reheats
+                that may fire without any strict run-best improvement between
+                them. Once hit, further reheats are suspended until the chain
+                finds a new best score (at which point the counter resets).
+                Set to a very large int to disable the guard.
         """
         self.kernel = pkernel
         self.init_model = model
@@ -566,6 +611,11 @@ class SimulatedAnnealing:
         self.steps_per_temp = max(1, int(steps_per_temp))
         self.reheat_threshold = max(1, int(reheat_threshold))
         self.reheat_factor = float(reheat_factor)
+        self.reheat_window = max(1, int(reheat_window))
+        self.reheat_min_improve = float(reheat_min_improve)
+        self.reheat_on_no_uphill = bool(reheat_on_no_uphill)
+        self.reheat_cap_mult = max(1.0, float(reheat_cap_mult))
+        self.reheat_max_consecutive = max(1, int(reheat_max_consecutive))
 
         cool_iters = max(1, int(num_iter * (1.0 - self.plateau_frac)))
         if schedule == "cool" and not (t_start > t_end):
@@ -593,6 +643,11 @@ class SimulatedAnnealing:
                 raise ValueError(
                     f"reheat_factor must be > 1, got {self.reheat_factor}.",
                 )
+            if self.reheat_min_improve < 0.0:
+                raise ValueError(
+                    "reheat_min_improve must be >= 0, "
+                    f"got {self.reheat_min_improve}.",
+                )
             self.alpha = 1.0  # unused; kept for any code reading .alpha
         elif cool_iters > 1:
             self.alpha = (t_end / t_start) ** (1.0 / (cool_iters - 1))
@@ -617,7 +672,7 @@ class SimulatedAnnealing:
 
         for i in range(self.num_iter):
             try:
-                next_move = self.kernel.generate()
+                next_move = self.kernel.generate(state.current_model)
                 is_valid = state.generate_next(next_move)
 
                 if not is_valid:
@@ -681,9 +736,23 @@ class SimulatedAnnealing:
         }
 
     def _single_run_geometric_reheat(self, state: State) -> dict:
-        """Geometric cooling with reheats when the run-best score stalls."""
+        """Geometric cooling with multi-signal reheat detection.
+
+        Reheat triggers (in priority order):
+          1. Rate-based plateau: run-best gain over the last ``reheat_window``
+             iterations is below ``reheat_min_improve``.
+          2. Strict-stall backstop: no strict run-best improvement for
+             ``reheat_threshold`` iterations.
+          3. Frozen-chain (if ``reheat_on_no_uphill``): zero uphill acceptances
+             in the last ``reheat_window`` iterations.
+
+        After any reheat, a grace period equal to ``reheat_window`` iters is
+        enforced before another reheat can fire (the chain needs time to
+        re-equilibrate at the new T).
+        """
         temp = self.t_start
         t_floor = self.t_min_floor
+        t_cap = self.t_start * self.reheat_cap_mult
 
         accepted = 0
         uphill_accepted = 0
@@ -694,21 +763,56 @@ class SimulatedAnnealing:
         since_best_improve = 0
         reheat_count = 0
 
+        # Windowed plateau tracking
+        window_steps = 0
+        best_at_window_start = best_run_score
+        uphill_in_window = 0
+        grace_left = 0  # post-reheat cooldown, no reheats fire while > 0
+        last_window_gain = float("nan")  # for progress print
+        reheats_since_improve = 0  # cascade-guard counter
+
+        def _do_reheat(reason: str) -> tuple[float, int, int, int]:
+            """Apply reheat, return (temp, since_best_improve, steps_at_level, reheat_count)."""
+            nonlocal temp, since_best_improve, steps_at_level, reheat_count
+            nonlocal grace_left, uphill_in_window, best_at_window_start, window_steps
+            nonlocal reheats_since_improve
+            temp = min(temp * self.reheat_factor, t_cap)
+            since_best_improve = 0
+            steps_at_level = 0
+            reheat_count += 1
+            reheats_since_improve += 1
+            grace_left = self.reheat_window
+            uphill_in_window = 0
+            best_at_window_start = best_run_score
+            window_steps = 0
+            # Notify the proposal kernel that the driver just diagnosed a
+            # plateau.  Kernels that adapt to stagnation (e.g. MPLKernel's
+            # phase cycler and adaptive SPR radius) use this as a hard
+            # "we're stuck" hint that their own local counters may have
+            # missed because of magnitude-threshold filtering.
+            on_reheat = getattr(self.kernel, "on_reheat", None)
+            if callable(on_reheat):
+                on_reheat()
+            return temp, since_best_improve, steps_at_level, reheat_count
+
         for i in range(self.num_iter):
             try:
-                next_move = self.kernel.generate()
+                next_move = self.kernel.generate(state.current_model)
                 is_valid = state.generate_next(next_move)
 
                 if not is_valid:
                     self.kernel.report_outcome(False, delta=0.0)
                     since_best_improve += 1
                     steps_at_level += 1
+                    window_steps += 1
                     temp, since_best_improve, steps_at_level, reheat_count = (
                         self._tick_geometric_reheat(
                             temp, since_best_improve, steps_at_level,
                             reheat_count, t_floor,
                         )
                     )
+                    if grace_left > 0:
+                        grace_left -= 1
                     continue
 
                 try:
@@ -719,17 +823,21 @@ class SimulatedAnnealing:
                     self.kernel.report_outcome(False, delta=0.0)
                     since_best_improve += 1
                     steps_at_level += 1
+                    window_steps += 1
                     temp, since_best_improve, steps_at_level, reheat_count = (
                         self._tick_geometric_reheat(
                             temp, since_best_improve, steps_at_level,
                             reheat_count, t_floor,
                         )
                     )
+                    if grace_left > 0:
+                        grace_left -= 1
                     continue
 
                 delta = cur - proposed
 
                 was_accepted = False
+                was_uphill = False
                 if delta < 0:
                     state.commit(next_move)
                     accepted += 1
@@ -738,7 +846,9 @@ class SimulatedAnnealing:
                     state.commit(next_move)
                     accepted += 1
                     uphill_accepted += 1
+                    uphill_in_window += 1
                     was_accepted = True
+                    was_uphill = True
                 else:
                     state.revert(next_move)
 
@@ -749,26 +859,91 @@ class SimulatedAnnealing:
                     best_run_score = score_now
                     best_run_network = copy.deepcopy(state.current_model.network)
                     since_best_improve = 0
+                    # Re-arm the reheat mechanism: we just escaped the basin
+                    # that was provoking cascade-guard suspension (if any).
+                    reheats_since_improve = 0
                 else:
                     since_best_improve += 1
 
                 steps_at_level += 1
+                window_steps += 1
                 temp, since_best_improve, steps_at_level, reheat_count = (
                     self._tick_geometric_reheat(
                         temp, since_best_improve, steps_at_level,
                         reheat_count, t_floor,
                     )
                 )
+
+                # --- Reheat detection (after cooling tick) --------------------
+                if grace_left > 0:
+                    grace_left -= 1
+
+                do_reheat = False
+                cascade_active = (
+                    reheats_since_improve >= self.reheat_max_consecutive
+                )
+                if grace_left == 0 and not cascade_active:
+                    # 2) Strict-stall backstop
+                    if since_best_improve >= self.reheat_threshold:
+                        do_reheat = True
+
+                    # 1) Rate-based plateau and 3) frozen-chain: evaluate once
+                    # per full window. Skip the final partial window so we
+                    # don't reheat uselessly near the end of the budget.
+                    if window_steps >= self.reheat_window:
+                        window_gain = best_run_score - best_at_window_start
+                        last_window_gain = window_gain
+                        remaining = self.num_iter - (i + 1)
+                        if remaining >= self.reheat_window // 2:
+                            if window_gain < self.reheat_min_improve:
+                                do_reheat = True
+                            elif (
+                                self.reheat_on_no_uphill
+                                and uphill_in_window == 0
+                                and window_gain
+                                < 3.0 * self.reheat_min_improve
+                            ):
+                                # "Slow + greedy-only" zone: still improving,
+                                # but weakly, and T is effectively 0 relative
+                                # to typical deltas. Reheat to broaden search.
+                                do_reheat = True
+                        best_at_window_start = best_run_score
+                        window_steps = 0
+                        uphill_in_window = 0
+                elif cascade_active and window_steps >= self.reheat_window:
+                    # Still track window_gain for the progress print so the
+                    # user can see how the suspended chain is behaving, but
+                    # do not fire any new reheats.
+                    last_window_gain = best_run_score - best_at_window_start
+                    best_at_window_start = best_run_score
+                    window_steps = 0
+                    uphill_in_window = 0
+
+                if do_reheat:
+                    _do_reheat("plateau")
             finally:
                 if self.progress_every and (i + 1) % self.progress_every == 0:
                     try:
                         cur_sc = state.likelihood()
                     except Exception:
                         cur_sc = float("nan")
+                    gain_str = (
+                        f"{last_window_gain:+.4f}"
+                        if last_window_gain == last_window_gain  # not NaN
+                        else "   n/a"
+                    )
+                    suspended = (
+                        reheats_since_improve >= self.reheat_max_consecutive
+                    )
+                    reheat_str = (
+                        f"reheats={reheat_count}[SUSPENDED]"
+                        if suspended else f"reheats={reheat_count}"
+                    )
                     print(
                         f"  SA {i + 1}/{self.num_iter}  log_PL={cur_sc:.6f}  "
                         f"T={temp:.6g}  best_run={best_run_score:.6f}  "
-                        f"reheats={reheat_count}",
+                        f"Δbest({self.reheat_window})={gain_str}  "
+                        f"{reheat_str}",
                         flush=True,
                     )
 
@@ -789,13 +964,14 @@ class SimulatedAnnealing:
         reheat_count: int,
         t_floor: float,
     ) -> tuple[float, int, int, int]:
-        """One iteration of schedule: reheat if stalled, else geometric cool."""
-        if since_best_improve >= self.reheat_threshold:
-            temp = min(temp * self.reheat_factor, self.t_start)
-            since_best_improve = 0
-            steps_at_level = 0
-            reheat_count += 1
-        elif steps_at_level >= self.steps_per_temp:
+        """Geometric cooling step only.
+
+        The strict-stall reheat previously lived here; it has moved to
+        :meth:`_single_run_geometric_reheat` so it can share a grace period
+        with the new rate-based triggers. This method now only handles the
+        per-level geometric cool-down.
+        """
+        if steps_at_level >= self.steps_per_temp:
             temp = max(temp * self.cooling_alpha, t_floor)
             steps_at_level = 0
         return temp, since_best_improve, steps_at_level, reheat_count

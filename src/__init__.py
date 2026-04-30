@@ -51,6 +51,7 @@ from .ModelFactory import *
 from .MetropolisHastings import MetropolisHastings, HillClimbing, SimulatedAnnealing, ProposalKernel
 from .State import State
 from .ModelMove import Move, SwitchParentage, AddReticulation, RemoveReticulation, FlipReticulation, SPR
+from .ModelSelection import reticulation_sweep, SweepResult, SweepRow
 from .Logger import Logger
 
 # Inference methods
@@ -58,6 +59,15 @@ from .Infer_MP_Allop import (
     INFER_MP_ALLOP, INFER_MP_ALLOP_BOOTSTRAP, ALLOP_SCORE,
     InferMPAllop, MPAllopComponent, MPAllopScorer,
     Allop_MUL, AlleleMap,
+)
+from .MCMC_GT import (
+    MCMC_GT,
+    MCMCGTScorer,
+    MCMCGTKernel,
+    MCMC_GTPriors,
+    MCMCSample,
+    MCMCGTResult,
+    log_prior_network,
 )
 
 # CUDA-accelerated BiMarkers (optional)

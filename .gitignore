@@ -59,3 +59,9 @@ archive/
 
 # PyPI deployment token
 .pypi_token
+
+# MPL demo outputs (logs, cached seeds, sweep artifacts)
+# The folder itself is kept via runs/.gitkeep so scripts always have a
+# writable target; only the contents are ignored.
+runs/*
+!runs/.gitkeep

@@ -27,12 +27,14 @@ Tests  - [ ]
 Design - [x]
 """
 
+import copy
 import os
+import random
 import tempfile
 import subprocess
 import warnings
 from io import StringIO
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, FrozenSet, List, Literal, Optional, Set, Tuple, Union
 
 from Bio import Phylo
 
@@ -439,6 +441,84 @@ class GeneTrees:
                 total += float(rf)
 
         return total / len(self.trees)
+
+    def most_frequent_gene_tree(
+        self,
+        *,
+        include_trivial: bool = False,
+        restrict_to_taxa: Optional[Set[str]] = None,
+        tiebreak: Literal["first", "random"] = "first",
+        seed: Optional[int] = None,
+    ) -> Network:
+        """Return a deep copy of the most frequent gene tree topology.
+
+        Gene trees are grouped by the frozenset of their rooted clusters
+        (topology signature, ignoring branch lengths and internal-node
+        labels). The largest group wins; a representative of that group is
+        returned. Guaranteed binary iff the input gene trees are binary.
+
+        This is generally a better MPL search seed than a majority-rule
+        consensus because consensus trees are often non-binary (unresolved
+        polytomies) and hence give pathologically low starting MPL scores.
+
+        Args:
+            include_trivial: Include size-1 clusters (leaves) in the
+                topology signature. Defaults to False (only informative
+                clusters matter for the topology class).
+            restrict_to_taxa: If provided, only gene trees whose leaf set
+                equals this taxa set participate. Useful when gene trees
+                have ragged taxon coverage and you want a seed that covers
+                the full species set.
+            tiebreak: On ties between multiple topologies with the same
+                maximum frequency, either pick the first one encountered
+                (``"first"``) or sample uniformly (``"random"``).
+            seed: RNG seed when ``tiebreak="random"``.
+
+        Returns:
+            Network: Deep copy of a representative gene tree from the modal
+            topology class.
+
+        Raises:
+            GeneTreeError: If no gene trees satisfy ``restrict_to_taxa``.
+        """
+        if len(self.trees) == 0:
+            raise GeneTreeError("No gene trees available to pick a seed from.")
+
+        if restrict_to_taxa is not None:
+            target = set(restrict_to_taxa)
+            eligible = [
+                t for t in self.trees
+                if {leaf.label for leaf in t.get_leaves()} == target
+            ]
+            if not eligible:
+                raise GeneTreeError(
+                    "No gene trees cover exactly restrict_to_taxa "
+                    f"({len(target)} taxa); cannot build a seed.",
+                )
+        else:
+            eligible = list(self.trees)
+
+        # Topology signature: frozenset of rooted cluster-labels.
+        def signature(tree: Network) -> FrozenSet[FrozenSet[str]]:
+            clusters = get_all_clusters(tree, include_trivial=include_trivial)
+            return frozenset(
+                frozenset(n.label for n in clus) for clus in clusters
+            )
+
+        groups: Dict[FrozenSet[FrozenSet[str]], List[Network]] = {}
+        for tree in eligible:
+            groups.setdefault(signature(tree), []).append(tree)
+
+        max_size = max(len(g) for g in groups.values())
+        winners = [g for g in groups.values() if len(g) == max_size]
+
+        if len(winners) == 1 or tiebreak == "first":
+            representative = winners[0][0]
+        else:
+            rng = random.Random(seed)
+            representative = rng.choice(winners)[0]
+
+        return copy.deepcopy(representative)
 
     def build_majority_rule_consensus_tree(self,
                                            threshold: float = 0.5) -> Network:

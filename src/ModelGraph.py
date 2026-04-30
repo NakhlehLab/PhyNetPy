@@ -26,7 +26,6 @@ V1 Architecture - Model Graph for probabilistic graphical modeling in phylogenet
 """
 
 from __future__ import annotations
-import random
 from abc import ABC, abstractmethod
 from typing import Any, Callable, TYPE_CHECKING
 import numpy as np
@@ -103,25 +102,53 @@ class Model:
     parameters.
     """
 
-    def __init__(self): 
+    def __init__(
+        self,
+        rng: np.random.Generator | np.random.SeedSequence | int | None = None,
+    ) -> None:
         """
         Initialize a model object.
-        
+
         Args:
-            N/A
+            rng: Optional RNG context.  Accepts a ``numpy.random.Generator``
+                (used directly), a ``numpy.random.SeedSequence`` (used to
+                build a fresh generator), or an ``int`` seed.  ``None``
+                falls back to ``numpy.random.default_rng()``, which seeds
+                itself from OS entropy.  Callers that care about
+                reproducibility (e.g. ``MPL.search``) should pass a
+                ``SeedSequence`` spawned from the search-wide seed.
         Returns:
             N/A
         """
         self.network : Network = None
         self.nodetypes = {"leaf": [], "internal": [], "reticulation": [], "root": []}
         self.network_node_map: dict[Node, ModelNode] = {}
-        self.seed = random.randint(0, 1000)
-        self.rng: np.random.Generator = np.random.default_rng(self.seed)
+        if isinstance(rng, np.random.Generator):
+            self.rng = rng
+        else:
+            self.rng = np.random.default_rng(rng)
+        self.seed = None
         self.summary_str = ""
         self.root = None
         self._likelihood_calculator: Any = None
         self._dirty: bool = True
         self._cached_likelihood: float | None = None
+        # Fine-grained invalidation used by scorers that support
+        # incremental likelihood updates (e.g. MCMC_GT).
+        #
+        # Semantics:
+        #   * ``None``   -> "all dirty" (safe fallback); scorers rebuild
+        #     any per-network-edge caches from scratch.
+        #   * ``set()``  -> "nothing dirty"; the scorer may reuse every
+        #     cached partial.
+        #   * non-empty ``set[Node]`` -> only these network nodes (and
+        #     their ancestor path) need recomputing.
+        #
+        # The coarse ``self._dirty`` boolean above is preserved verbatim
+        # for backward compatibility with the existing MPL scorer (which
+        # rebuilds the whole engine per call).  Scorers that know how to
+        # honour ``_dirty_nodes`` should consume and then clear the set.
+        self._dirty_nodes: set[Node] | None = None
   
     
     def get_root(self) -> ModelNode:
@@ -149,12 +176,63 @@ class Model:
         Called after any move modifies the network topology.
         Marks the model as needing recomputation.
 
+        Treated as a *full* invalidation: any fine-grained dirty-node
+        set that a move may have posted via :meth:`mark_touched` is
+        promoted to ``None`` (all-dirty) so the scorer's fallback path
+        kicks in.  Moves that know exactly which nodes they touched
+        should call :meth:`mark_touched` *instead of* this method (or
+        before it).
+
         Args:
             N/A
         Returns:
             N/A
         """
         self._dirty = True
+        self._dirty_nodes = None
+
+    def mark_touched(self, nodes: "set[Node] | None") -> None:
+        """Record which network nodes were modified by the last move.
+
+        Called by :class:`Move` subclasses from ``execute``/``undo`` to
+        let scorers with per-network-edge caches (e.g. MCMC_GT's
+        :class:`_GTLikelihoodEngine`) invalidate only the affected
+        region instead of the entire likelihood.
+
+        Semantics:
+          * ``mark_touched(None)`` -> escalate to full invalidation,
+            regardless of any previously-posted set.  Safe fallback
+            used by moves whose impact is hard to localize.
+          * ``mark_touched(set(...))`` -> merge into any existing
+            dirty set (so multiple sequential mutations accumulate).
+            If the model is already "all dirty" the call is a no-op.
+          * ``mark_touched(set())`` -> initialise an empty set,
+            signalling "nothing dirty this iteration" (useful for
+            rebinding after a full rescore).
+
+        Args:
+            nodes: Nodes whose incident branches or gammas changed,
+                or ``None`` for all-dirty.
+        """
+        self._dirty = True
+        if nodes is None:
+            self._dirty_nodes = None
+            return
+        if self._dirty_nodes is None:
+            if not nodes:
+                self._dirty_nodes = set()
+            return
+        self._dirty_nodes.update(nodes)
+
+    def clear_dirty_nodes(self) -> None:
+        """Reset the fine-grained dirty-node set to "nothing dirty".
+
+        Called by scorers after they have consumed ``_dirty_nodes``
+        and updated their caches accordingly.  Leaves the coarse
+        ``_dirty`` flag alone; the caller controls that via
+        :meth:`likelihood` gating.
+        """
+        self._dirty_nodes = set()
 
     def likelihood(self) -> float:
         """
