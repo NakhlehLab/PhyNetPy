@@ -54,13 +54,18 @@ from .ModelMove import Move, SwitchParentage, AddReticulation, RemoveReticulatio
 from .ModelSelection import reticulation_sweep, SweepResult, SweepRow
 from .Logger import Logger
 
-# Inference methods
-from .Infer_MP_Allop import (
+# Inference methods.  The public, recommended import path is
+# ``phynetpy.infer`` -- see ``src/infer.py`` for the curated surface.  The
+# underscore-prefixed modules below hold the actual implementations and
+# are not part of the public API.
+from . import infer
+from .infer import *  # noqa: F401,F403  -- top-level re-export for ergonomics
+from ._infer_mp_allop import (
     INFER_MP_ALLOP, INFER_MP_ALLOP_BOOTSTRAP, ALLOP_SCORE,
     InferMPAllop, MPAllopComponent, MPAllopScorer,
     Allop_MUL, AlleleMap,
 )
-from .MCMC_GT import (
+from ._mcmc_gt import (
     MCMC_GT,
     MCMCGTScorer,
     MCMCGTKernel,

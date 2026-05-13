@@ -1,0 +1,2877 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##############################################################################
+##  -- PhyNetPy --
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
+"""
+MCMC_GT -- Bayesian inference of phylogenetic networks from gene-tree
+topologies under the multispecies network coalescent (MSNC).
+
+Implements the scoring function of
+
+    Yu, Y., Degnan, J.H., Nakhleh, L. (2012). "The probability of a gene
+    tree topology within a phylogenetic network with applications to
+    hybridization detection." PLoS Genetics 8(4), e1002660.
+
+and the Bayesian search wrapper of
+
+    Wen, D., Yu, Y., Nakhleh, L. (2016). "Bayesian inference of
+    reticulate phylogenies under the multispecies network coalescent."
+    PLoS Genetics 12(5), e1006006.
+
+Objective to sample (posterior):
+
+    log P(Psi | G)
+      = sum_i log P(g_i | Psi)          (MSNC likelihood per gene tree)
+      + log P(Psi)                      (network prior: topology + branch lengths + gammas + retic-count)
+      + const.                          (normalising constant dropped; MH ratios cancel it)
+
+Pipeline overview
+-----------------
+End-to-end control flow when a user runs ``MCMC_GT.search(method="mh", ...)``:
+
+    1. Enumerate gene-tree leaf -> species mapping and pre-hash per gene
+       tree (labels only; topology signature is reused by the DP).
+
+    2. Build an initial :class:`Model` wrapping the starting species
+       network.  Attach an :class:`MCMCGTScorer` so the search driver
+       can call ``scorer(model)`` to get the log posterior (MH) or
+       log likelihood (HC / SA).
+
+    3. Run the search driver (:class:`MetropolisHastings`,
+       :class:`HillClimbing`, or :class:`SimulatedAnnealing`) using an
+       :class:`MCMCGTKernel` to propose moves.  Each accepted proposal
+       mutates the model's network in place; MH records samples every
+       ``thin`` iterations after ``burn_in``.
+
+    4. Return an :class:`MCMCGTResult` with the final best / sampled
+       networks and diagnostic counters.
+
+Scoring path (per call to ``MCMCGTScorer.__call__``):
+
+    Model.network -> _GTLikelihoodEngine.update(dirty_nodes)
+                  -> engine.log_prob(g_i) summed over gene trees
+                  -> + log_prior_network(Psi)
+                  -> posterior or likelihood
+
+Likelihood model: full MSNC ancestral-configurations DP
+--------------------------------------------------------
+The MSNC likelihood is evaluated by the **ancestral-configurations
+DP** of Yu, Degnan & Nakhleh (2012; PLoS Genetics 8(4):e1002660), the
+exact algorithm underlying PhyloNet's MCMC_GT:
+
+    P(g | Psi) = sum_h P_coal(g, h | Psi) * prod_R gamma(R, h)^|S_R|
+                                            * (1 - gamma(R, h))^|A_R\\S_R|
+
+summed over every coalescent history ``h`` that maps gene-tree
+internal nodes to species-network branches, where ``S_R`` is the
+subset of gene-tree lineages routed through one parent of
+reticulation ``R`` (the complement goes through the other parent;
+each lineage chooses independently).  The DP walks the species
+network in bottom-up topological order maintaining a *joint*
+distribution of lineage bitmasks over every currently-open
+species-network edge -- this preserves the dependency between the two
+parent-paths of a reticulation that re-merge at their lowest common
+ancestor.  See :func:`_msnc_log_prob_network_int` for the per-node
+recurrences.
+
+Equivalence to the displayed-tree decomposition.  When every
+reticulation is crossed by at most one gene-tree lineage (the
+single-allele regime) the AC DP reduces to the displayed-tree
+mixture ``sum_T w(T) P(g | T)``.  For multi-allele data, or
+single-allele data where coalescent backwards-traversal puts
+multiple lineages above a reticulation simultaneously, the
+displayed-tree mixture is a strict lower bound and only the AC DP
+returns the true MSNC likelihood.  This implementation always uses
+the AC DP so the score matches PhyloNet across every retic-count /
+allele-count regime.
+
+Incremental likelihood caching
+------------------------------
+The engine cooperates with :class:`ModelGraph.Model`'s
+``_dirty_nodes`` dirty-set plumbing (see :meth:`Move.touched_nodes`):
+topology-preserving moves (``ChangeNodeHeight``,
+``ChangeInheritanceProb``) post a single touched node; the engine
+preserves its int-indexed network view and only invalidates the
+per-call gene-tree memo (the static
+:meth:`_NetworkIndex.edge_length` / ``edge_gamma`` accessors read
+the mutated values fresh).  Topology-changing moves leave
+``_dirty_nodes`` as ``None`` (fully invalidate), rebuilding the
+:class:`_NetworkIndex` and busting per-(gene-tree, network)
+score memos.  Persistent caches that survive every move:
+
+    * ``_gij(t, i, j)`` and ``_log_gij``, ``_log_denom`` -- depend
+      only on branch length / lineage counts, not on topology.
+    * ``_GeneTreeIndex`` and its coarsening / linear-extension
+      caches -- depend only on the (immutable) gene tree.
+    * ``_score_cache`` keyed by ``(id(gene_tree), network_signature)``
+      -- lets MH chains skip the AC DP entirely on revisits to a
+      previously-evaluated network state.
+
+Module layout
+-------------
+Sections are marked with banner comments.  Top-to-bottom:
+
+    (A) Result containers          (MCMCSample, MCMCGTResult)
+    (B) Priors                     (MCMC_GTPriors, log_prior_network)
+    (C) MSNC likelihood engine     (_GTLikelihoodEngine)
+    (D) Scorer                     (MCMCGTScorer)
+    (E) Proposal kernel            (MCMCGTKernel)
+    (F) Orchestration              (MCMC_GT)
+"""
+
+from __future__ import annotations
+
+import copy
+import math
+import os
+import random as _py_random
+import time
+from collections import deque
+from dataclasses import dataclass, field
+from functools import lru_cache
+from itertools import product as _iter_product
+from typing import Any, Callable, Iterable, Optional, Sequence
+
+import numpy as np
+
+from .Network import Network, Node, Edge
+from .GeneTrees import GeneTrees
+from . import IO as io
+from .ModelGraph import Model
+from .MetropolisHastings import (
+    ProposalKernel,
+    HillClimbing,
+    MetropolisHastings,
+    SimulatedAnnealing,
+)
+from .ModelMove import (
+    Move,
+    SPR,
+    ChangeNodeHeight,
+    ChangeInheritanceProb,
+    AddReticulation,
+    RemoveReticulation,
+    FlipReticulation,
+    ChangeReticSource,
+    ChangeReticDest,
+    RelocateReticulation,
+)
+
+# Optional Cython acceleration.  ``gt_msc_cy`` provides drop-in C-level
+# replacements for ``_apply_branch_coalescent_int`` and
+# ``_combine_configs_int`` -- the two hot loops on the MSC DP profile
+# (cf. ``runs/bench_mcmc_gt_7tax.py``).  When the extension hasn't been
+# built (e.g. fresh checkout, no ``pip install -e .``) we silently fall
+# back to the pure-Python implementations defined further down.  All
+# numerics are byte-identical between the two paths.
+try:
+    from .cython.gt_msc_cy import (  # type: ignore[import-not-found]
+        apply_branch_coalescent_cy as _apply_branch_coalescent_cy,
+        combine_configs_cy as _combine_configs_cy,
+    )
+    _CYTHON_AVAILABLE = True
+except ImportError:
+    _apply_branch_coalescent_cy = None  # type: ignore[assignment]
+    _combine_configs_cy = None  # type: ignore[assignment]
+    _CYTHON_AVAILABLE = False
+
+
+# log(p) floor for zero-probability terms.  MSNC likelihoods can drive
+# individual displayed-tree contributions arbitrarily close to zero on
+# incompatible (network, gene-tree) pairs; we cap at ``_LOG_FLOOR`` so
+# the overall chain stays finite rather than returning ``-inf`` and
+# breaking the MH acceptance test.  Chosen to match MPL's convention
+# (see ``src/MPL.py:_LOG_FLOOR``) so downstream users see consistent
+# scale across methods.
+_LOG_FLOOR: float = math.log(1e-200)
+
+
+# ======================================================================
+# (A) Result containers
+# ======================================================================
+
+@dataclass
+class MCMCSample:
+    """A single posterior sample from an :class:`MCMC_GT` MH run.
+
+    Attributes:
+        iteration: Global iteration index at which the sample was taken
+            (including burn-in).
+        network: Deep copy of the species network at this iteration.
+            Decoupled from the chain's live model so subsequent moves
+            don't mutate the sample.
+        log_posterior: Unnormalised log posterior at the sample
+            (``sum_i log P(g_i | Psi) + log_prior(Psi)``).
+        log_likelihood: Just the MSNC log likelihood part (useful for
+            reporting the MAP estimate independently of the prior).
+    """
+
+    iteration: int
+    network: Network
+    log_posterior: float
+    log_likelihood: float
+
+
+@dataclass
+class MCMCGTResult:
+    """Aggregate result from an :class:`MCMC_GT` search.
+
+    Both Bayesian (``method="mh"``) and likelihood-maximising
+    (``method="hc"`` / ``"sa"``) runs populate this container; fields
+    irrelevant to a given method are left at their defaults.
+
+    Attributes:
+        method: Which driver produced this result (``"mh"``, ``"hc"``,
+            or ``"sa"``).
+        best_network: Highest-scoring network seen during the search.
+            For MH this is the MAP sample; for HC / SA it's the
+            end-state.
+        best_log_posterior: Score associated with ``best_network``
+            (posterior for MH; likelihood for HC / SA).
+        samples: Posterior samples collected from the MH chain, in
+            order of draw.  Empty for HC / SA.
+        num_iter: Total proposed moves evaluated.
+        num_accepted: Count of moves actually accepted into the chain.
+        wall_time_sec: Observed wall-clock time of the run.
+    """
+
+    method: str
+    best_network: Network
+    best_log_posterior: float
+    samples: list[MCMCSample] = field(default_factory=list)
+    num_iter: int = 0
+    num_accepted: int = 0
+    wall_time_sec: float = 0.0
+
+    @property
+    def acceptance_rate(self) -> float:
+        """Fraction of proposals the driver accepted."""
+        if self.num_iter <= 0:
+            return 0.0
+        return self.num_accepted / float(self.num_iter)
+
+
+# ======================================================================
+# (B) Priors
+# ======================================================================
+
+@dataclass
+class MCMC_GTPriors:
+    """Composable prior parameters for :func:`log_prior_network`.
+
+    Defaults follow Wen & Nakhleh (2016).  Each component can be
+    disabled by setting its weight to ``0.0`` for a plain-likelihood
+    search (equivalent to HC / SA with method="mh" dropped in).
+
+    Attributes:
+        branch_length_rate: Rate ``lambda`` of an ``Exp(lambda)`` prior
+            on every finite branch length.  Mean branch length under
+            the prior is ``1 / lambda``.  Default 1.0 coalescent-unit.
+        gamma_alpha, gamma_beta: Beta(alpha, beta) prior on each
+            reticulation inheritance probability.  Default ``(1, 1)``
+            is uniform.
+        retic_count_mean: Mean of the ``Poisson`` prior on the number
+            of reticulations.  Default 1.0 (softly shrinks toward
+            tree-like topologies while still supporting several
+            retics).
+        topology_weight: Coefficient on the topology prior term
+            (``log_prior_topology``).  Default 0.0 (uniform: every
+            rooted binary topology with a given retic count has equal
+            prior mass, so the term drops).  Set non-zero only for
+            bespoke topology priors via ``topology_prior_fn``.
+        topology_prior_fn: Optional caller-supplied callable taking a
+            :class:`Network` and returning a log prior.  When
+            ``None``, the topology prior is zero (uniform).
+    """
+
+    branch_length_rate: float = 1.0
+    gamma_alpha: float = 1.0
+    gamma_beta: float = 1.0
+    retic_count_mean: float = 1.0
+    topology_weight: float = 0.0
+    topology_prior_fn: Optional[Callable[[Network], float]] = None
+
+
+def _log_exp_pdf(x: float, rate: float) -> float:
+    """Log-density of an ``Exp(rate)`` distribution at ``x``.
+
+    Returns ``_LOG_FLOOR`` for non-positive ``x`` rather than ``-inf``
+    to keep the MH chain finite.
+    """
+    if x is None or not math.isfinite(x) or x <= 0.0:
+        return _LOG_FLOOR
+    return math.log(rate) - rate * x
+
+
+def _log_beta_pdf(x: float, alpha: float, beta: float) -> float:
+    """Log-density of a ``Beta(alpha, beta)`` distribution at ``x``.
+
+    Uses :func:`math.lgamma` to avoid overflow for tall beta peaks.
+    Clamped to ``_LOG_FLOOR`` outside ``(0, 1)``.
+    """
+    if x is None or not math.isfinite(x) or x <= 0.0 or x >= 1.0:
+        return _LOG_FLOOR
+    log_beta_fn = math.lgamma(alpha) + math.lgamma(beta) - math.lgamma(alpha + beta)
+    return (alpha - 1.0) * math.log(x) + (beta - 1.0) * math.log(1.0 - x) - log_beta_fn
+
+
+def _log_poisson_pmf(k: int, mean: float) -> float:
+    """Log-pmf of a ``Poisson(mean)`` distribution at integer ``k``."""
+    if k < 0 or mean <= 0.0:
+        return _LOG_FLOOR
+    return k * math.log(mean) - mean - math.lgamma(k + 1)
+
+
+def log_prior_network(
+    net: Network,
+    priors: MCMC_GTPriors,
+) -> float:
+    """Compose the network prior from its component pieces.
+
+    Components (all additive in log space):
+
+      * **Topology**: ``priors.topology_weight * topology_prior_fn(net)``
+        when the caller supplies a custom topology prior; otherwise
+        zero (uniform over topologies with the observed retic count).
+      * **Branch lengths**: per-edge ``Exp(branch_length_rate)``.
+        Zero-length and ``None`` branches are treated as the
+        ``_LOG_FLOOR`` cap to avoid ``log(0)`` but keep the score
+        finite for partially-annotated networks.
+      * **Gammas**: per-reticulation ``Beta(gamma_alpha, gamma_beta)``
+        on one of the two parent-edge gammas (the other is
+        ``1 - gamma`` by construction).
+      * **Retic count**: ``Poisson(retic_count_mean)`` on the number
+        of reticulation nodes.
+
+    Args:
+        net: Species network to score.  All branch lengths / gammas
+            read directly off the network's edges; no topology
+            caching is performed here (callers that need caching
+            should memoise at a higher level).
+        priors: :class:`MCMC_GTPriors` hyperparameters.
+
+    Returns:
+        Log prior (typically negative; the more "extreme" a network
+        is under the prior, the more negative the value).
+    """
+    total = 0.0
+
+    # --- Topology ---
+    if priors.topology_prior_fn is not None and priors.topology_weight != 0.0:
+        total += priors.topology_weight * priors.topology_prior_fn(net)
+
+    # --- Branch lengths ---
+    for e in net.E():
+        total += _log_exp_pdf(e.get_length(), priors.branch_length_rate)
+
+    # --- Gammas (one per retic; complementary gamma is implied) ---
+    retic_count = 0
+    for n in net.V():
+        if not n.is_reticulation():
+            continue
+        retic_count += 1
+        parents = net.get_parents(n)
+        if len(parents) != 2:
+            continue
+        e1 = net.get_edge(parents[0], n)
+        gamma = e1.get_gamma()
+        if gamma is None:
+            gamma = 0.5
+        total += _log_beta_pdf(
+            float(gamma), priors.gamma_alpha, priors.gamma_beta,
+        )
+
+    # --- Reticulation count ---
+    total += _log_poisson_pmf(retic_count, priors.retic_count_mean)
+    return total
+
+
+# ======================================================================
+# (C) MSNC gene-tree likelihood engine
+# ======================================================================
+
+class _GeneTreeIndex:
+    """Per-gene-tree static-poset cache used by the bitmask MSC DP.
+
+    Built once on first sight of a gene tree and reused for the rest
+    of the engine's lifetime (gene trees are immutable inputs).  The
+    DP operates exclusively on integer bitmasks keyed by ``bit``
+    indices assigned here, which sidesteps the dominant cost of the
+    earlier implementation: hashing ``Node`` objects into
+    ``frozenset`` keys.
+
+    The instance also memoises two purely-structural functions of the
+    gene tree:
+
+      * :meth:`linear_extensions` -- number of linear extensions of a
+        sub-forest of internal-node bitmasks (hook-length formula).
+        Permanent cache: depends only on the gene-tree topology.
+      * :meth:`coarsenings` -- every reachable ``(active_out_mask,
+        merge_mask)`` pair from a starting ``active_in_mask``.
+        Permanent cache: same justification.
+
+    Together, these two caches turn the inner DP into ``O(1)``
+    table lookups for the second and subsequent calls per
+    (gene tree, mask) -- exactly the regime an MH chain spends most
+    of its time in once its small set of "interesting" lineage
+    configurations has been enumerated.
+
+    Attributes:
+        n_total: Total number of distinct gene-tree nodes that
+            received a bit index.
+        bit_of: Map from gene-tree :class:`Node` to its bit index.
+        leaves: List of bit indices for every gene-tree leaf.
+        leaf_species_of: Map from a leaf's bit index to its species
+            label (extracted from the configured ``species_of`` map).
+        internals_mask: Bitmask of every internal gene-tree node.
+        children: Map from an internal-node bit index to its two
+            children's bit indices ``(left_bit, right_bit)``.
+        parent: Map from every non-root bit index to its parent's
+            bit index.
+        root_bit: Bit index of the gene-tree root (or ``-1`` for
+            an empty gene tree).
+    """
+
+    __slots__ = (
+        "n_total",
+        "bit_of",
+        "leaves",
+        "leaf_species_of",
+        "internals_mask",
+        "children",
+        "parent",
+        "root_bit",
+        "_le_cache",
+        "_coarse_cache",
+    )
+
+    def __init__(self, gene_tree: Network, species_of: dict[str, str]) -> None:
+        """Build the bit-indexed view of ``gene_tree``.
+
+        Args:
+            gene_tree: The gene tree.  Reticulations in gene trees
+                are not supported (assumed to be a strict rooted
+                binary tree, possibly with one polytomy that we
+                reduce to a binary approximation).
+            species_of: Gene-copy label -> species label.  Used here
+                only to populate :attr:`leaf_species_of`; the
+                topology cache is unaffected by ``species_of`` so
+                callers that swap species mappings can re-use the
+                same index by re-binding through
+                :meth:`refresh_species`.
+        """
+        self.bit_of: dict[Any, int] = {}
+        self.leaves: list[int] = []
+        self.leaf_species_of: dict[int, str] = {}
+        self.children: dict[int, tuple[int, int]] = {}
+        self.parent: dict[int, int] = {}
+        self.root_bit: int = -1
+        self._le_cache: dict[int, int] = {}
+        self._coarse_cache: dict[int, tuple[tuple[int, int], ...]] = {}
+
+        # Assign bit indices in a single pass over ``V()`` so two
+        # calls on the same gene tree get the same bits (Network's
+        # iteration order is deterministic per its own conventions).
+        nodes = list(gene_tree.V())
+        for idx, node in enumerate(nodes):
+            self.bit_of[node] = idx
+        self.n_total = len(nodes)
+
+        internals_mask = 0
+        for node in nodes:
+            bit = self.bit_of[node]
+            kids = gene_tree.get_children(node)
+            if not kids:
+                self.leaves.append(bit)
+                lbl = species_of.get(node.label)
+                if lbl is not None:
+                    self.leaf_species_of[bit] = lbl
+                continue
+            if len(kids) > 2:
+                # Soft-collapse polytomies to the first two children;
+                # higher-arity nodes lower-bound the MSC likelihood
+                # but at least keep the DP finite.
+                kids = kids[:2]
+            if len(kids) == 2:
+                lb = self.bit_of[kids[0]]
+                rb = self.bit_of[kids[1]]
+                self.children[bit] = (lb, rb)
+                self.parent[lb] = bit
+                self.parent[rb] = bit
+                internals_mask |= 1 << bit
+        self.internals_mask = internals_mask
+
+        if gene_tree.roots():
+            try:
+                root = gene_tree.root()
+                self.root_bit = self.bit_of.get(root, -1)
+            except Exception:
+                self.root_bit = -1
+
+    def refresh_species(self, gene_tree: Network, species_of: dict[str, str]) -> None:
+        """Rebuild only :attr:`leaf_species_of` for a new mapping.
+
+        Cheap: doesn't touch the topology / coarsening / linear-ext
+        caches.  Useful when the same gene-tree set is scored under
+        different allele -> species mappings.
+        """
+        self.leaf_species_of.clear()
+        for node, bit in self.bit_of.items():
+            if bit in self._cached_leaves_set():
+                lbl = species_of.get(node.label)
+                if lbl is not None:
+                    self.leaf_species_of[bit] = lbl
+
+    def _cached_leaves_set(self) -> set[int]:
+        return set(self.leaves)
+
+    # --- Static caches over masks ---------------------------------
+
+    def linear_extensions(self, merge_mask: int) -> int:
+        """``|L(F)|`` for the sub-forest of internals encoded by ``merge_mask``.
+
+        Hook-length formula on the tree poset induced by gene-tree
+        ancestry.  Cached permanently because the gene tree is
+        immutable.
+        """
+        cached = self._le_cache.get(merge_mask)
+        if cached is not None:
+            return cached
+        if merge_mask == 0:
+            self._le_cache[merge_mask] = 1
+            return 1
+        # Single-bit fast path.
+        if merge_mask & (merge_mask - 1) == 0:
+            self._le_cache[merge_mask] = 1
+            return 1
+        # General case: |M|! / prod_v size_within(v)
+        bits = _bits(merge_mask)
+        k = len(bits)
+        denom = 1
+        for v_bit in bits:
+            denom *= self._size_within(v_bit, merge_mask)
+        result = math.factorial(k) // denom
+        self._le_cache[merge_mask] = result
+        return result
+
+    def _size_within(self, root_bit: int, merge_mask: int) -> int:
+        """``size`` of the subtree of ``merge_mask`` rooted at ``root_bit``.
+
+        Walks descendants of ``root_bit`` in the gene tree, counting
+        how many of them are also in ``merge_mask`` (including
+        ``root_bit`` itself).  Bounded by ``popcount(merge_mask)``
+        per call; small for the merge sets the DP actually visits.
+        """
+        children = self.children
+        count = 0
+        stack = [root_bit]
+        while stack:
+            cur = stack.pop()
+            if (merge_mask >> cur) & 1:
+                count += 1
+            kids = children.get(cur)
+            if kids is None:
+                continue
+            l, r = kids
+            stack.append(l)
+            stack.append(r)
+        return count
+
+    def coarsenings(
+        self,
+        active_mask: int,
+    ) -> tuple[tuple[int, int, int, int, float], ...]:
+        """Pre-computed coarsenings of ``active_mask``.
+
+        Each row is ``(cfg_out, merge_mask, m_out, k, log_le)`` where:
+
+          * ``cfg_out`` is the active-set bitmask after the merges,
+          * ``merge_mask`` is the bitmask of internal-node bits picked
+            up by the coarsening,
+          * ``m_out = popcount(cfg_out)``,
+          * ``k = popcount(active_mask) - m_out`` (number of merges),
+          * ``log_le = log(linear_extensions(merge_mask))`` -- the
+            hook-length factor in the per-coarsening branch
+            probability.
+
+        Pre-baking these scalars in the cache row eliminates 4 of
+        the 6 hot-loop ops per coarsening (popcount, linear-ext
+        lookup, ``math.log`` on the LE value); the inner DP only
+        keeps ``log(g_ij)`` and the ``denom`` factor (both length-
+        dependent and looked up against engine-level caches).
+        """
+        cached = self._coarse_cache.get(active_mask)
+        if cached is not None:
+            return cached
+
+        # Iterative BFS over (active, merged) pairs.
+        states: list[tuple[int, int]] = []
+        seen: set[tuple[int, int]] = set()
+        frontier = [(active_mask, 0)]
+        children = self.children
+        parent = self.parent
+        while frontier:
+            new_frontier: list[tuple[int, int]] = []
+            for state in frontier:
+                if state in seen:
+                    continue
+                seen.add(state)
+                states.append(state)
+                active, merged = state
+                # Group active bits by parent.
+                groups: dict[int, list[int]] = {}
+                m = active
+                while m:
+                    bit = (m & -m).bit_length() - 1
+                    m &= m - 1
+                    p = parent.get(bit)
+                    if p is None:
+                        continue
+                    groups.setdefault(p, []).append(bit)
+                for p, kids in groups.items():
+                    if (merged >> p) & 1:
+                        continue
+                    pc = children.get(p)
+                    if pc is None:
+                        continue
+                    if len(kids) < 2:
+                        continue
+                    lb, rb = pc
+                    if lb in kids and rb in kids:
+                        new_active = (active & ~((1 << lb) | (1 << rb))) | (1 << p)
+                        new_merged = merged | (1 << p)
+                        nxt = (new_active, new_merged)
+                        if nxt not in seen:
+                            new_frontier.append(nxt)
+            frontier = new_frontier
+
+        # Bake popcounts and log(linear_extensions) into each row.
+        n_in = _popcount(active_mask)
+        rows: list[tuple[int, int, int, int, float]] = []
+        for active_out, merge_mask in states:
+            m_out = _popcount(active_out)
+            k = n_in - m_out
+            le_val = self.linear_extensions(merge_mask)
+            log_le = math.log(le_val) if le_val > 0 else _LOG_FLOOR
+            rows.append((active_out, merge_mask, m_out, k, log_le))
+        result = tuple(rows)
+        self._coarse_cache[active_mask] = result
+        return result
+
+
+def _bits(mask: int) -> list[int]:
+    """Return the bit indices set in ``mask`` (low-to-high)."""
+    out: list[int] = []
+    while mask:
+        lsb = mask & -mask
+        out.append(lsb.bit_length() - 1)
+        mask ^= lsb
+    return out
+
+
+def _popcount(mask: int) -> int:
+    """Number of bits set in ``mask``.
+
+    Uses :func:`int.bit_count` on Python 3.10+ when available,
+    otherwise falls back to ``bin(mask).count("1")`` (still
+    C-speed, just one extra string conversion per call).  Hot path
+    of the bitmask MSC DP.
+    """
+    if mask < 0:
+        mask = -mask
+    return bin(mask).count("1")
+
+
+class _NetworkIndex:
+    """Int-indexed view of a phylogenetic species network for the AC DP.
+
+    Built on first sight of a network and re-used as long as the
+    topology is unchanged; :meth:`_GTLikelihoodEngine.update`
+    invalidates and rebuilds it on a topology mutation.  Branch
+    lengths and gammas are read fresh on every DP call via
+    :meth:`edge_length` / :meth:`edge_gamma`, so parameter-only
+    moves preserve the index.
+
+    The DP in :func:`_msnc_log_prob_network_int` consumes this view
+    instead of poking at :class:`Network` directly so the hot loop
+    sees only ints (node IDs, edge IDs, lineage bitmasks).
+
+    Attributes:
+        n_nodes: Total number of network nodes.
+        n_edges: Total number of network edges.
+        is_retic: ``[i] -> True`` if node ``i`` is a reticulation.
+        is_leaf: ``[i] -> True`` if node ``i`` has out-degree 0.
+        leaf_label: Leaf node ID -> species label.
+        down_edges: ``[i] -> list[edge_id]`` of edges going from
+            ``i`` to ``i``'s children (= out-edges of ``i``).
+        up_edges: ``[i] -> list[edge_id]`` of edges going from
+            ``i``'s parents to ``i`` (= in-edges of ``i``).
+        edge_src / edge_dst: Per-edge parent / child node IDs.
+        topo_order: Bottom-up node-ID order (every node appears
+            after all of its children).
+        root: Node ID of the network root (unique node with no
+            up-edges; ``-1`` for the empty-network case).
+    """
+
+    __slots__ = (
+        "n_nodes",
+        "n_edges",
+        "is_retic",
+        "is_leaf",
+        "leaf_label",
+        "down_edges",
+        "up_edges",
+        "edge_src",
+        "edge_dst",
+        "topo_order",
+        "root",
+        "_node_objs",
+        "_edge_objs",
+    )
+
+    def __init__(self, net: Network) -> None:
+        """Build the int-indexed view of ``net``.
+
+        O(|V| + |E|) one-time cost; subsequent DP calls amortise this
+        across every gene tree the chain scores against this network.
+        """
+        nodes = list(net.V())
+        edges = list(net.E())
+        self.n_nodes = len(nodes)
+        self.n_edges = len(edges)
+        self._node_objs = nodes
+        self._edge_objs = edges
+        node_to_id = {n: i for i, n in enumerate(nodes)}
+        self.is_retic = [bool(n.is_reticulation()) for n in nodes]
+        self.is_leaf = [net.out_degree(n) == 0 for n in nodes]
+        self.leaf_label = {
+            i: nodes[i].label
+            for i in range(self.n_nodes)
+            if self.is_leaf[i]
+        }
+        self.down_edges = [[] for _ in range(self.n_nodes)]
+        self.up_edges = [[] for _ in range(self.n_nodes)]
+        self.edge_src = [0] * self.n_edges
+        self.edge_dst = [0] * self.n_edges
+        for j, e in enumerate(edges):
+            src_id = node_to_id[e.src]
+            dst_id = node_to_id[e.dest]
+            self.edge_src[j] = src_id
+            self.edge_dst[j] = dst_id
+            # Edges go src(parent) -> dst(child); "down-edge of src"
+            # means the edge points from src down to its child, which
+            # matches the DAG out-edge of src.
+            self.down_edges[src_id].append(j)
+            self.up_edges[dst_id].append(j)
+        # Bottom-up topological order: a node is ready when all its
+        # children (= dst of every edge in down_edges[v]) have been
+        # popped from the queue.  Standard Kahn's algorithm.
+        children_remaining = [
+            len(self.down_edges[v]) for v in range(self.n_nodes)
+        ]
+        ready: deque[int] = deque(
+            v for v in range(self.n_nodes) if children_remaining[v] == 0
+        )
+        order: list[int] = []
+        while ready:
+            v = ready.popleft()
+            order.append(v)
+            for j in self.up_edges[v]:
+                p = self.edge_src[j]
+                children_remaining[p] -= 1
+                if children_remaining[p] == 0:
+                    ready.append(p)
+        self.topo_order = order
+        roots = [v for v in range(self.n_nodes) if not self.up_edges[v]]
+        self.root = roots[0] if roots else -1
+
+    def edge_length(self, edge_id: int) -> "float | None":
+        """Live-read the length of edge ``edge_id`` from the network."""
+        return self._edge_objs[edge_id].get_length()
+
+    def edge_gamma(self, edge_id: int) -> "float | None":
+        """Live-read the inheritance prob of edge ``edge_id``."""
+        return self._edge_objs[edge_id].get_gamma()
+
+
+class _GTLikelihoodEngine:
+    """Full MSNC gene-tree-topology likelihood for a fixed species network.
+
+    Computes ``log P(g | Psi)`` by the **ancestral-configurations DP**
+    of Yu, Degnan & Nakhleh (2012).  See the module docstring for the
+    formal definition; in brief, the DP walks the species network in
+    bottom-up topological order maintaining a joint distribution
+
+        dict[ tuple[(edge_id, lineage_mask), ...], log_prob ]
+
+    over all currently-open species-network edges, applying the
+    Kingman branch-coalescent on every traversed edge and splitting
+    each lineage independently at every reticulation (per-lineage
+    gamma weighting).  The joint state preserves the dependency
+    between the two parent-paths of a reticulation that re-merge at
+    their LCA.  Reduces to the standard MSC tree DP when the network
+    has no reticulations and to the displayed-tree decomposition when
+    every reticulation is crossed by at most one lineage; for
+    multi-lineage retic crossings only the AC DP returns the true
+    MSNC likelihood (the displayed-tree mixture is a strict lower
+    bound there).
+
+    Caching strategy (see module docstring for the motivating
+    architecture):
+
+      * ``_gij(t, n, m)`` and its log/denom variants are memoised on
+        the engine; survives every move (depends only on length /
+        lineage counts).
+      * :class:`_NetworkIndex` view of the species network is built
+        once and reused across topology-preserving moves; rebuilt
+        from scratch on topology mutations.
+      * :class:`_GeneTreeIndex` view + its coarsening / linear-
+        extension caches are built once per gene tree and survive
+        the engine's lifetime (gene trees are immutable).
+      * Per-(gene-tree, network) score memo (``_score_cache``) keyed
+        by ``(id(gene_tree), network_signature)`` lets MH chains
+        skip the AC DP entirely on revisits to a previously-evaluated
+        network state.
+    """
+
+    # Legacy displayed-tree warning threshold.  Retained because the
+    # diagnostic :meth:`_build_displayed_trees` helper still consumes
+    # it; the production scoring path goes through the AC DP and
+    # does not enumerate displayed trees.
+    _DISPLAYED_TREE_WARN_THRESHOLD = 7
+
+    def __init__(self, network: Network) -> None:
+        """Bind the engine to a species network.
+
+        Heavy caching happens lazily on the first ``log_prob`` call
+        so construction itself remains cheap (the search driver may
+        instantiate many engines during proof-of-concept code paths,
+        and we don't want the "maybe unused" cost up-front).
+
+        Args:
+            network: Species network whose MSNC likelihood the engine
+                will score.  The engine holds a reference (not a
+                copy); callers that mutate the network must honour
+                the dirty-set protocol so the engine can invalidate
+                stale caches.
+        """
+        self.network = network
+        self._gij_cache: dict[tuple[float, int, int], float] = {}
+        self._log_gij_cache: dict[tuple[float, int, int], float] = {}
+        self._log_denom_cache: dict[tuple[int, int], float] = {}
+        # Int-indexed view of the species network used by the AC DP.
+        # Built lazily on first ``log_prob`` call; rebuilt on topology
+        # mutations (signaled via ``update(None)``).
+        self._net_index: _NetworkIndex | None = None
+        # Legacy displayed-tree machinery -- kept around as a
+        # reference / diagnostic implementation (see
+        # :func:`_msc_log_prob_tree_int`); not consulted by the
+        # production scoring path.
+        self._displayed_trees: list[_DisplayedTree] | None = None
+        # Per-gene-tree cache keyed by gene-tree id() (cheap-but-brittle
+        # identity).  Gene trees are assumed immutable for the
+        # engine's lifetime; callers that truly swap gene trees
+        # should instantiate a fresh scorer/engine.
+        self._gene_tree_log_prob: dict[int, float] = {}
+        # Per-gene-tree static :class:`_GeneTreeIndex` cache.  Survives
+        # every ``update`` call: gene trees are immutable so the
+        # bit-indexed view (and its internal coarsening / linear-
+        # extension caches) are valid for the engine's whole lifetime.
+        self._gti_cache: dict[int, _GeneTreeIndex] = {}
+        # Per-(gene-tree, network) AC-DP score memo keyed by gene-tree
+        # id and a lightweight network signature (per-edge length +
+        # gamma).  Survives ``update`` calls so revisited network
+        # states (rejected MH proposals reverting to the previous
+        # accepted state) skip the DP entirely.  Bounded by the
+        # number of distinct (length, gamma)-tuples the chain visits.
+        # Memoised network signature -- recomputed exactly once per
+        # ``update()`` cycle (i.e. once per accepted/rejected MH move)
+        # rather than per scored gene tree.  On the 7-tax bench this
+        # dropped ``_network_signature`` from a 2 s hotspot to a flat
+        # ~0 s for the same number of likelihood calls.
+        self._cached_signature: tuple | None = None
+        self._score_cache: dict[
+            tuple[int, tuple],
+            float,
+        ] = {}
+        # Reverse map ``id(gene_tree) -> gene_tree`` so the scorer
+        # can rebuild :class:`_GeneTreeIndex` entries when species_of
+        # changes after caching.
+        self._gt_by_id: dict[int, Network] = {}
+
+    # ------------------------------------------------------------------
+    # Coalescent transition probability
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _fact_range(start: int, end: int) -> float:
+        """Product ``start * (start+1) * ... * end``.  Empty -> 1.
+
+        Used by :meth:`_gij_raw`; factored out so we don't rebuild
+        it per-call.
+        """
+        if end < start:
+            return 1.0
+        result = 1.0
+        for i in range(start, end + 1):
+            result *= i
+        return result
+
+    @staticmethod
+    def _gij_raw(length: float | None, i: int, j: int) -> float:
+        """Closed-form Tavare transition probability ``g_{i,j}(t)``.
+
+        Matches :meth:`_TripleDPEngine._gij_raw` in ``src/MPL.py`` so
+        both methods see the same coalescent transition numbers for
+        identical inputs.  See that docstring for the special-case
+        handling (``length=None`` / ``-1`` -> infinite branch;
+        ``length=0`` -> zero-step delta).
+        """
+        if length is None or length == -1:
+            return 1.0 if j == 1 else 0.0
+        if length == 0:
+            return 1.0 if i == j else 0.0
+        if i == 0:
+            return 1.0
+        _fact = _GTLikelihoodEngine._fact_range
+        result = 0.0
+        for k in range(j, i + 1):
+            temp = (
+                math.exp(0.5 * k * (1.0 - k) * length)
+                * (2.0 * k - 1.0)
+                * ((-1.0) ** (k - j))
+                * _fact(j, j + k - 2)
+                * _fact(i - k + 1, i)
+            )
+            denom = _fact(1, j) * _fact(1, k - j) * _fact(i, i + k - 1)
+            result += temp / denom
+        # Clamp to [0, 1] to absorb floating-point noise.
+        if result < 0.0:
+            return 0.0
+        if result > 1.0:
+            return 1.0
+        return result
+
+    def _gij(self, length: float | None, i: int, j: int) -> float:
+        """Memoized wrapper around :meth:`_gij_raw`.
+
+        Stores by identity ``(length, i, j)``.  Branch lengths that
+        differ only in floating-point noise won't share cache lines;
+        for the MCMC search that's fine since :class:`ChangeNodeHeight`
+        explicitly rewrites lengths and would bust the cache anyway.
+        """
+        key = (length, i, j)
+        cached = self._gij_cache.get(key)
+        if cached is not None:
+            return cached
+        val = _GTLikelihoodEngine._gij_raw(length, i, j)
+        self._gij_cache[key] = val
+        return val
+
+    def _log_gij(self, length: "float | None", i: int, j: int) -> float:
+        """Memoized ``log(g_{i,j}(length))``; ``_LOG_FLOOR`` when zero.
+
+        Same persistence semantics as :meth:`_gij`; we cache the log
+        value directly because the inner DP only ever consumes
+        ``log(g_ij)``.  Saves one ``math.log`` per coarsening per
+        gene-tree per iteration -- ~3M calls/sec on the 7-tax bench.
+        """
+        key = (length, i, j)
+        cached = self._log_gij_cache.get(key)
+        if cached is not None:
+            return cached
+        val = _GTLikelihoodEngine._gij_raw(length, i, j)
+        if val <= 0.0:
+            log_val = _LOG_FLOOR
+        else:
+            log_val = math.log(val)
+        self._log_gij_cache[key] = log_val
+        return log_val
+
+    def _log_denom(self, n: int, k: int) -> float:
+        """``log(prod_{i=1..k} C(n-i+1, 2))``; engine-cached.
+
+        Function only of ``(n, k)`` -- same value across every
+        gene tree and every iteration of an MH chain.
+        """
+        if k <= 0:
+            return 0.0
+        key = (n, k)
+        cached = self._log_denom_cache.get(key)
+        if cached is not None:
+            return cached
+        denom = 1
+        for i in range(1, k + 1):
+            denom *= ((n - i + 1) * (n - i)) >> 1
+        if denom <= 0:
+            val = _LOG_FLOOR
+        else:
+            val = math.log(denom)
+        self._log_denom_cache[key] = val
+        return val
+
+    # ------------------------------------------------------------------
+    # Displayed-tree decomposition
+    # ------------------------------------------------------------------
+
+    def _build_displayed_trees(self) -> list["_DisplayedTree"]:
+        """Enumerate every displayed tree of ``self.network``.
+
+        Each displayed tree is a contracted copy of the network where
+        one parent edge is retained (and the other deleted) at each
+        reticulation; resulting degree-2 passthrough nodes are
+        collapsed into single edges whose length is the sum of the
+        originals.  The associated weight is the product of the
+        retained gammas.
+
+        The returned list is freshly built and does not share any
+        :class:`Node` objects with the input network, so subsequent
+        mutations to the input network won't silently corrupt the
+        displayed-tree representation.
+
+        Returns:
+            List of :class:`_DisplayedTree` records, one per
+            displayed tree (empty retic list -> single trivial entry
+            covering the input tree itself).
+        """
+        net = self.network
+        retics: list[Node] = [n for n in net.V() if n.is_reticulation()]
+        k = len(retics)
+        if k >= self._DISPLAYED_TREE_WARN_THRESHOLD:
+            # Soft warning via comment; searches that routinely propose
+            # this many retics should move to the AC DP (future work).
+            pass
+
+        trees: list[_DisplayedTree] = []
+        for mask in range(2 ** k):
+            # For each retic i, keep parent[0] when (mask >> i) & 1 == 0
+            # else parent[1].  Record the chosen gamma on each kept
+            # edge for the log-weight.
+            keep_choice: dict[Node, int] = {}
+            log_weight = 0.0
+            valid = True
+            for i, r in enumerate(retics):
+                parents = net.get_parents(r)
+                if len(parents) != 2:
+                    valid = False
+                    break
+                choice = (mask >> i) & 1
+                keep_choice[r] = choice
+                kept_edge = net.get_edge(parents[choice], r)
+                gamma = kept_edge.get_gamma()
+                if gamma is None or gamma <= 0.0:
+                    log_weight += _LOG_FLOOR
+                else:
+                    log_weight += math.log(gamma)
+            if not valid:
+                continue
+            dt = _DisplayedTree.from_network(net, keep_choice, log_weight)
+            trees.append(dt)
+        return trees
+
+    def _ensure_displayed_trees(self) -> list["_DisplayedTree"]:
+        """Return cached displayed trees; rebuild if missing."""
+        if self._displayed_trees is None:
+            self._displayed_trees = self._build_displayed_trees()
+        return self._displayed_trees
+
+    # ------------------------------------------------------------------
+    # Incremental-update entry point (dirty-set protocol)
+    # ------------------------------------------------------------------
+
+    def update(self, dirty_nodes: "set[Node] | None") -> None:
+        """Invalidate caches affected by the last batch of moves.
+
+        Called by :class:`MCMCGTScorer` before each scoring pass.
+        See the module docstring for the full protocol.
+
+        Args:
+            dirty_nodes: Either ``None`` (fully invalidate: the
+                network topology changed; rebuild :class:`_NetworkIndex`
+                and bust per-gene-tree memos) or a :class:`set` of
+                network nodes whose incident parameters changed
+                (partial invalidate: keep the network index but
+                clear the per-call gene-tree memo).  An empty set
+                is a no-op.
+        """
+        if dirty_nodes is None:
+            # Topology change: bust the network index, the displayed-
+            # tree skeleton, the per-gene memo, and the
+            # (gene-tree, network)-keyed score cache.  The latter is
+            # keyed against a topology that's gone, so its entries
+            # are no longer reachable.  The ``_gij`` / ``_log_gij`` /
+            # ``_log_denom`` caches and ``_gti_cache`` survive (they
+            # depend only on branch lengths / gene trees, which are
+            # unchanged here).
+            self._net_index = None
+            self._displayed_trees = None
+            self._gene_tree_log_prob.clear()
+            self._score_cache.clear()
+            self._cached_signature = None
+            return
+        if not dirty_nodes:
+            return
+        # Partial-dirty path: branch lengths or gammas changed but
+        # the topology didn't.  The :class:`_NetworkIndex` is still
+        # valid (lengths/gammas are read fresh on each DP call), but
+        # the cached :class:`_DisplayedTree` (used by the no-retic
+        # fast path) bakes the old lengths into ``_idx_edge_lengths``
+        # so we drop it and let it rebuild on the next score.  The
+        # per-call memo always invalidates; the ``_score_cache`` is
+        # keyed by a length+gamma signature and stays correct.
+        self._displayed_trees = None
+        self._gene_tree_log_prob.clear()
+        self._cached_signature = None
+
+    def _network_signature(self) -> tuple:
+        """Compact tuple summarising the network's mutable parameters.
+
+        Used as a cache key for the per-(gene-tree, network) AC DP
+        score memo.  Captures every quantity the AC DP reads off the
+        network: per-edge length + gamma, plus a stable identifier
+        for the edge endpoints (so two networks with the same edge
+        set but different topology don't collide).
+
+        The signature is memoised across all ``log_prob`` calls
+        between two consecutive :meth:`update` invocations -- it's
+        a function of the network's mutable state, which only the
+        scorer (via ``update``) is allowed to change.  Saves ~20 us
+        per scored gene tree on the 7-tax bench.
+        """
+        cached = self._cached_signature
+        if cached is not None:
+            return cached
+        sig = []
+        for e in self.network.E():
+            sig.append((id(e.src), id(e.dest), e.get_length(), e.get_gamma()))
+        sig_tuple = tuple(sig)
+        self._cached_signature = sig_tuple
+        return sig_tuple
+
+    # ------------------------------------------------------------------
+    # Log-probability of a gene tree under the species network
+    # ------------------------------------------------------------------
+
+    def _get_gti(
+        self,
+        gene_tree: Network,
+        species_of: dict[str, str],
+    ) -> "_GeneTreeIndex":
+        """Lazily build (or fetch) the bit-indexed view of ``gene_tree``.
+
+        Static for the engine's lifetime: subsequent calls re-use the
+        same object and inherit its coarsening / linear-extension
+        caches.
+        """
+        gid = id(gene_tree)
+        gti = self._gti_cache.get(gid)
+        if gti is None:
+            gti = _GeneTreeIndex(gene_tree, species_of)
+            self._gti_cache[gid] = gti
+            self._gt_by_id[gid] = gene_tree
+        elif species_of is not None and not gti.leaf_species_of:
+            # First call may have used an empty species map; re-bind.
+            gti.refresh_species(gene_tree, species_of)
+        return gti
+
+    def log_prob(
+        self,
+        gene_tree: Network,
+        species_of: dict[str, str],
+    ) -> float:
+        """Return ``log P(gene_tree | self.network)``.
+
+        Computed by the full MSNC ancestral-configurations DP (Yu,
+        Degnan & Nakhleh 2012); see :func:`_msnc_log_prob_network_int`.
+
+        Args:
+            gene_tree: The observed gene tree (a :class:`Network`
+                with in-degree-1 internal nodes; reticulations in
+                gene trees are not supported).
+            species_of: Map from gene-copy label to species label.
+                Must cover every leaf of ``gene_tree`` that appears
+                in ``self.network``.  Gene leaves whose species is
+                not in ``self.network`` are silently dropped.
+
+        Returns:
+            Log probability under the MSNC on the currently-bound
+            network, floored at ``_LOG_FLOOR`` for incompatible
+            configurations so MH acceptance ratios stay finite.
+        """
+        key = id(gene_tree)
+        cached = self._gene_tree_log_prob.get(key)
+        if cached is not None:
+            return cached
+
+        if self._net_index is None:
+            self._net_index = _NetworkIndex(self.network)
+        net_idx = self._net_index
+        if net_idx.n_nodes == 0 or net_idx.root < 0:
+            self._gene_tree_log_prob[key] = _LOG_FLOOR
+            return _LOG_FLOOR
+
+        gti = self._get_gti(gene_tree, species_of)
+        # Refresh the species map if the cached one is stale (lazy-fill
+        # path or the caller swapped species_of between calls).
+        if species_of is not None and len(gti.leaf_species_of) != len(gti.leaves):
+            gti.refresh_species(gene_tree, species_of)
+
+        # Per-(gene_tree, network) score memo.  The network signature
+        # captures every per-edge mutable quantity the DP reads, so
+        # a hit here is exact and lets MH revisits skip the DP.
+        sig = self._network_signature()
+        cache_key = (key, sig)
+        cached_score = self._score_cache.get(cache_key)
+        if cached_score is None:
+            # Tree-only fast path: when the network has no retics the
+            # AC DP frontier degenerates to a single entry per step
+            # but still pays the tuple-insertion bookkeeping per node.
+            # Route through the optimised tree DP instead, which gives
+            # identical results in the no-retic case (verified by
+            # ``TestMSCClosedForm`` and the gamma-extreme tests).
+            if not any(net_idx.is_retic):
+                tree_dt = self._ensure_displayed_trees()
+                if tree_dt:
+                    cached_score = _msc_log_prob_tree_int(tree_dt[0], gti, self)
+                else:
+                    cached_score = _msnc_log_prob_network_int(net_idx, gti, self)
+            else:
+                cached_score = _msnc_log_prob_network_int(net_idx, gti, self)
+            if not math.isfinite(cached_score):
+                cached_score = _LOG_FLOOR
+            self._score_cache[cache_key] = cached_score
+
+        self._gene_tree_log_prob[key] = cached_score
+        return cached_score
+
+    def score_many(
+        self,
+        gene_trees: Iterable[Network],
+        species_of: dict[str, str],
+    ) -> float:
+        """Sum of log probabilities across a batch of gene trees.
+
+        Equivalent to ``sum(log_prob(g, species_of) for g in gene_trees)``
+        but intended as the hot path for :class:`MCMCGTScorer` (and a
+        natural target for future parallelisation: each gene tree is
+        independent once the displayed-tree decomposition is built).
+        """
+        total = 0.0
+        for g in gene_trees:
+            total += self.log_prob(g, species_of)
+        return total
+
+
+def _logsumexp(values: Sequence[float]) -> float:
+    """Numerically stable ``log(sum(exp(v) for v in values))``.
+
+    Kept local (instead of depending on scipy) because the rest of the
+    PhyNetPy stack is numpy-only and we don't want to pull in scipy
+    just for one helper.
+    """
+    if not values:
+        return _LOG_FLOOR
+    m = max(values)
+    if m == -math.inf:
+        return _LOG_FLOOR
+    acc = 0.0
+    for v in values:
+        acc += math.exp(v - m)
+    if acc <= 0.0:
+        return _LOG_FLOOR
+    return m + math.log(acc)
+
+
+class _DisplayedTree:
+    """One displayed tree of a species network.
+
+    Constructed by :meth:`_GTLikelihoodEngine._build_displayed_trees`
+    via edge contraction: for each reticulation ``r`` the retained
+    parent edge is kept and the other is deleted, then the resulting
+    degree-2 passthrough nodes (``r`` itself plus possibly its kept
+    parent) are merged with their surviving neighbours into a single
+    edge whose length is the sum of the originals.  This preserves
+    the MSC evaluation semantics (coalescent transitions cascade
+    across concatenated branches) while reducing the graph to a
+    strict rooted binary tree.
+
+    Instances are lightweight: we don't re-use :class:`Network`
+    itself (too much setup) but instead expose the minimal data the
+    MSC DP needs -- a leaf label -> node map, a parent map, a
+    children map, an edge-length map, and a post-order node list.
+    """
+
+    __slots__ = (
+        "log_weight",
+        "root",
+        "leaves",
+        "leaf_species",
+        "children",
+        "parent",
+        "edge_length",
+        "post_order",
+        "signature",
+        # Int-indexed view used by the bitmask MSC DP.  Built once
+        # during ``__init__`` so the DP never has to hash
+        # :class:`Node` objects (which dominated the original profile).
+        "_idx_n",
+        "_idx_post_order",
+        "_idx_children",
+        "_idx_edge_lengths",
+        "_idx_leaves",
+        "_idx_leaf_species",
+        "_idx_root",
+    )
+
+    def __init__(
+        self,
+        *,
+        log_weight: float,
+        root: Any,
+        leaves: list[Any],
+        leaf_species: dict[Any, str],
+        children: dict[Any, list[Any]],
+        parent: dict[Any, Any],
+        edge_length: dict[tuple[Any, Any], float | None],
+        post_order: list[Any],
+    ) -> None:
+        """Store the pre-computed topology; see class docstring."""
+        self.log_weight = log_weight
+        self.root = root
+        self.leaves = leaves
+        self.leaf_species = leaf_species
+        self.children = children
+        self.parent = parent
+        self.edge_length = edge_length
+        self.post_order = post_order
+        # Cache key for the per-displayed-tree score memo on the
+        # backing :class:`_GTLikelihoodEngine`.  Stable across the
+        # ``_ensure_displayed_trees`` rebuilds that ``update`` triggers
+        # because :class:`_DisplayedTree` objects reference the
+        # network's live :class:`Node` instances (no deep copy), so
+        # ``id(node)`` is invariant for the duration of the search.
+        # Pair each node id with the length of the edge feeding into
+        # it from its parent; the post-order traversal pins the
+        # ordering of the tuple.
+        sig_pairs: list[tuple[int, float | None]] = []
+        for n in post_order:
+            p = parent.get(n)
+            length = edge_length.get((p, n)) if p is not None else None
+            sig_pairs.append((id(n), length))
+        self.signature = tuple(sig_pairs)
+
+        # Build the int-indexed view: assign each species-tree node
+        # in ``post_order`` an index 0..len-1.  ``_idx_post_order``
+        # is therefore just ``range(n)``; we store derived adjacency
+        # arrays so the MSC DP can iterate without re-hashing the
+        # underlying :class:`Node` objects.
+        idx_of: dict[Any, int] = {n: i for i, n in enumerate(post_order)}
+        self._idx_n = len(post_order)
+        self._idx_post_order = list(range(self._idx_n))
+        self._idx_children = [[] for _ in range(self._idx_n)]
+        self._idx_edge_lengths = [[] for _ in range(self._idx_n)]
+        for i, node in enumerate(post_order):
+            for child in children.get(node, []):
+                ci = idx_of[child]
+                self._idx_children[i].append(ci)
+                self._idx_edge_lengths[i].append(edge_length.get((node, child)))
+        self._idx_leaves = [
+            idx_of[l] for l in leaves if l in idx_of
+        ]
+        self._idx_leaf_species = {
+            idx_of[l]: leaf_species[l]
+            for l in leaves if l in idx_of and l in leaf_species
+        }
+        self._idx_root = idx_of.get(root, -1)
+
+    @classmethod
+    def from_network(
+        cls,
+        net: Network,
+        retic_choice: dict[Node, int],
+        log_weight: float,
+    ) -> "_DisplayedTree":
+        """Construct a displayed tree from a network + retic choices.
+
+        Walks the species network top-down, accumulating a parent map
+        and edge-length sums, following only the "kept" parent edge
+        at each reticulation.  Degree-2 passthroughs introduced by
+        dropping one retic parent are collapsed implicitly by the
+        fact that reticulations with in-degree 1 after contraction
+        behave as tree internal nodes whose single parent's edge
+        carries the combined length.
+
+        Args:
+            net: Species network.
+            retic_choice: ``{retic_node: 0-or-1}`` specifying which of
+                the retic's two parents is retained.
+            log_weight: ``sum of log(gamma)`` over the retained
+                parent-edges, used by the displayed-tree mixture.
+
+        Returns:
+            Fully-populated :class:`_DisplayedTree`.
+        """
+        root = net.root()
+        children_map: dict[Any, list[Any]] = {}
+        parent_map: dict[Any, Any] = {}
+        length_map: dict[tuple[Any, Any], float | None] = {}
+        leaves: list[Any] = []
+        leaf_species: dict[Any, str] = {}
+
+        # Use a stable identifier for each species-network node in
+        # this displayed tree.  A "node id" is the :class:`Node`
+        # itself; we do not copy, since the displayed tree is read
+        # only.
+        visited: set[Node] = set()
+        queue: deque[Node] = deque([root])
+        while queue:
+            cur = queue.popleft()
+            if cur in visited:
+                continue
+            visited.add(cur)
+            if net.out_degree(cur) == 0:
+                # Leaf: terminal of the DP recursion.
+                leaves.append(cur)
+                leaf_species[cur] = cur.label
+                children_map[cur] = []
+                continue
+            for child in net.get_children(cur):
+                edge = net.get_edge(cur, child)
+                length = edge.get_length()
+                if child.is_reticulation():
+                    # Only traverse the retained parent edge.
+                    parents = net.get_parents(child)
+                    if len(parents) != 2:
+                        # Degenerate retic; conservatively keep the edge.
+                        kept = cur
+                    else:
+                        choice = retic_choice.get(child, 0)
+                        kept = parents[choice]
+                    if kept is not cur:
+                        continue
+                # Accumulate degree-2 passthrough collapses: if ``cur``
+                # already had a single parent edge feeding into it,
+                # and ``cur`` itself is reticulation-like (in_degree>1
+                # in original), we've still captured only the retained
+                # branch via the ``kept == cur`` gate above.  The
+                # ``edge_length`` here therefore correctly reflects
+                # the surviving branch in the displayed tree.
+                children_map.setdefault(cur, []).append(child)
+                parent_map[child] = cur
+                length_map[(cur, child)] = length
+                queue.append(child)
+        # Simplify: some reticulation nodes remain in the graph with
+        # a single retained parent edge but their own outgoing edge;
+        # we flatten those (length-sum) by detecting in_degree==1
+        # passthrough-chains over reticulations and collapsing.
+        root_out = cls._collapse_passthroughs(
+            root=root,
+            children_map=children_map,
+            parent_map=parent_map,
+            length_map=length_map,
+            leaves=leaves,
+            is_retic=lambda n: n.is_reticulation(),
+        )
+        post_order = cls._compute_post_order(root_out, children_map)
+        return cls(
+            log_weight=log_weight,
+            root=root_out,
+            leaves=[l for l in leaves if l in parent_map or l is root_out],
+            leaf_species=leaf_species,
+            children=children_map,
+            parent=parent_map,
+            edge_length=length_map,
+            post_order=post_order,
+        )
+
+    @staticmethod
+    def _collapse_passthroughs(
+        *,
+        root: Any,
+        children_map: dict[Any, list[Any]],
+        parent_map: dict[Any, Any],
+        length_map: dict[tuple[Any, Any], float | None],
+        leaves: list[Any],
+        is_retic: Callable[[Any], bool],
+    ) -> Any:
+        """Merge degree-2 (in=1, out=1) chains into single edges.
+
+        Called once during :meth:`from_network` to flatten any
+        reticulation nodes that, after parent pruning, have only one
+        incoming and one outgoing edge.  Branch lengths are summed.
+
+        Works in place on the supplied maps and returns the (possibly
+        unchanged) root.
+        """
+        changed = True
+        while changed:
+            changed = False
+            # Snapshot interior nodes to safely mutate during iteration.
+            interior = [
+                n for n in list(children_map.keys())
+                if n is not root
+                and len(children_map.get(n, [])) == 1
+                and n in parent_map
+            ]
+            for n in interior:
+                parent = parent_map[n]
+                if n not in children_map or len(children_map[n]) != 1:
+                    continue
+                child = children_map[n][0]
+                # Merge (parent -> n -> child) into (parent -> child).
+                top_len = length_map.get((parent, n))
+                bot_len = length_map.get((n, child))
+                combined = _safe_add(top_len, bot_len)
+                # Detach n, reattach child directly.
+                parent_kids = children_map.get(parent, [])
+                parent_kids = [c for c in parent_kids if c is not n]
+                parent_kids.append(child)
+                children_map[parent] = parent_kids
+                parent_map[child] = parent
+                length_map.pop((parent, n), None)
+                length_map.pop((n, child), None)
+                length_map[(parent, child)] = combined
+                del children_map[n]
+                del parent_map[n]
+                changed = True
+        return root
+
+    @staticmethod
+    def _compute_post_order(
+        root: Any,
+        children_map: dict[Any, list[Any]],
+    ) -> list[Any]:
+        """Return a post-order traversal of the displayed tree."""
+        post: list[Any] = []
+        stack: list[tuple[Any, bool]] = [(root, False)]
+        while stack:
+            node, processed = stack.pop()
+            if processed:
+                post.append(node)
+                continue
+            stack.append((node, True))
+            for child in children_map.get(node, []):
+                stack.append((child, False))
+        return post
+
+
+def _safe_add(a: float | None, b: float | None) -> float | None:
+    """Add two possibly-``None`` branch lengths.
+
+    Treats ``None`` as "no finite length" (the root edge / infinite
+    branch); summing ``None`` with anything yields ``None``.  For
+    finite inputs the usual sum applies.
+    """
+    if a is None or b is None:
+        return None
+    return float(a) + float(b)
+
+
+def _msc_log_prob_tree_int(
+    dt: "_DisplayedTree",
+    gti: "_GeneTreeIndex",
+    engine: "_GTLikelihoodEngine",
+) -> float:
+    """Bitmask MSC DP: ``log P(gene_tree | dt)`` via int configs.
+
+    Equivalent to :func:`_msc_log_prob_tree` (which it replaces in
+    the hot path) but represents each lineage configuration as a
+    Python ``int`` bitmask of gene-tree node bits.  This kills the
+    ~60M ``Node.__hash__`` calls per chain step that dominated the
+    pre-optimisation profile, and lets us reuse
+    :class:`_GeneTreeIndex`'s permanent coarsening / linear-extension
+    caches.
+
+    Args:
+        dt: Displayed tree (already contracted).
+        gti: Per-gene-tree :class:`_GeneTreeIndex` (bit indices,
+             children, parent maps, and static caches).
+        engine: Backing :class:`_GTLikelihoodEngine` (for ``_gij``).
+
+    Returns:
+        Log probability; clamped at ``_LOG_FLOOR`` on incompatible
+        configurations.
+    """
+    if gti.root_bit < 0 or not gti.leaves:
+        return 0.0
+
+    # Initial config at each species-leaf: a bitmask of all gene
+    # leaves whose species maps there.
+    species_to_bits: dict[str, int] = {}
+    leaf_species = gti.leaf_species_of
+    for leaf_bit in gti.leaves:
+        sp = leaf_species.get(leaf_bit)
+        if sp is None:
+            continue
+        species_to_bits[sp] = species_to_bits.get(sp, 0) | (1 << leaf_bit)
+
+    n = dt._idx_n
+    configs_at: list[dict[int, float] | None] = [None] * n
+    leaf_species_dt = dt._idx_leaf_species
+    for leaf_idx in dt._idx_leaves:
+        sp = leaf_species_dt.get(leaf_idx)
+        mask = species_to_bits.get(sp, 0) if sp is not None else 0
+        configs_at[leaf_idx] = {mask: 0.0}
+
+    children_idx = dt._idx_children
+    edge_lengths_idx = dt._idx_edge_lengths
+    apply_branch = _apply_branch_coalescent_int
+    combine = _combine_configs_int
+    for i in range(n):
+        if configs_at[i] is not None:
+            continue
+        kids = children_idx[i]
+        if not kids:
+            configs_at[i] = {0: 0.0}
+            continue
+        lengths = edge_lengths_idx[i]
+        child_top = [
+            apply_branch(configs_at[kids[j]], lengths[j], gti, engine)
+            for j in range(len(kids))
+        ]
+        merged = child_top[0]
+        for nxt in child_top[1:]:
+            merged = combine(merged, nxt)
+        configs_at[i] = merged
+
+    # Apply the infinite root-edge to force collapse to one lineage.
+    root_idx = dt._idx_root
+    root_config = configs_at[root_idx] if root_idx >= 0 else {}
+    top_config = apply_branch(root_config or {}, None, gti, engine)
+    target = 1 << gti.root_bit
+    best = top_config.get(target)
+    if best is not None:
+        return best
+    # Fall back: any single-active-bit config containing the gene-tree root.
+    acc: list[float] = []
+    for cfg, lp in top_config.items():
+        if cfg == target:
+            acc.append(lp)
+        elif _popcount(cfg) == 1 and (cfg >> gti.root_bit) & 1:
+            acc.append(lp)
+    if not acc:
+        return _LOG_FLOOR
+    return _logsumexp(acc)
+
+
+def _apply_branch_coalescent_int_py(
+    config_in: dict[int, float],
+    length: "float | None",
+    gti: "_GeneTreeIndex",
+    engine: "_GTLikelihoodEngine",
+) -> dict[int, float]:
+    """Pure-Python bitmask version of :func:`_apply_branch_coalescent`.
+
+    Hot inner loop of the MSC DP.  All length-independent quantities
+    -- popcounts, ``log(linear_extensions)``, the merge-mask itself
+    -- come pre-baked from :meth:`_GeneTreeIndex.coarsenings`; only
+    ``log(g_ij)`` and ``log_denom`` (both functions of branch length)
+    are looked up each call, against engine-level caches.
+
+    The Cython extension :mod:`phynetpy.cython.gt_msc_cy` provides a
+    drop-in replacement bound to :func:`_apply_branch_coalescent_int`
+    when available; this Python copy is the fallback (and the
+    ground truth used by the unit tests when the extension is
+    rebuilt).
+    """
+    out: dict[int, list[float]] = {}
+    coarsen = gti.coarsenings
+    log_gij = engine._log_gij
+    log_denom = engine._log_denom
+    log_floor = _LOG_FLOOR
+    for cfg_in, lp_in in config_in.items():
+        n = _popcount(cfg_in)
+        for cfg_out, merge_mask, m, k, log_le in coarsen(cfg_in):
+            log_branch = log_gij(length, n, m)
+            if log_branch <= log_floor:
+                continue
+            if k > 0:
+                log_branch += log_le - log_denom(n, k)
+            log_total = lp_in + log_branch
+            existing = out.get(cfg_out)
+            if existing is None:
+                out[cfg_out] = [log_total]
+            else:
+                existing.append(log_total)
+    result: dict[int, float] = {}
+    for cfg, terms in out.items():
+        if len(terms) == 1:
+            result[cfg] = terms[0]
+        else:
+            result[cfg] = _logsumexp(terms)
+    return result
+
+
+def _combine_configs_int_py(
+    left: dict[int, float],
+    right: dict[int, float],
+) -> dict[int, float]:
+    """Pure-Python outer-product disjoint-union combine.
+
+    Disjoint-union of bitmasks; entries with overlapping bits are
+    skipped (mapping ill-formed) and same-union duplicates merged
+    via log-sum-exp.  See :func:`_apply_branch_coalescent_int_py`
+    for the Cython-acceleration story.
+    """
+    out: dict[int, list[float]] = {}
+    for cfg_l, lp_l in left.items():
+        for cfg_r, lp_r in right.items():
+            if cfg_l & cfg_r:
+                continue
+            union = cfg_l | cfg_r
+            existing = out.get(union)
+            if existing is None:
+                out[union] = [lp_l + lp_r]
+            else:
+                existing.append(lp_l + lp_r)
+    result: dict[int, float] = {}
+    for cfg, terms in out.items():
+        if len(terms) == 1:
+            result[cfg] = terms[0]
+        else:
+            result[cfg] = _logsumexp(terms)
+    return result
+
+
+# Bind the public names to the Cython extension when it's available;
+# otherwise fall back to the pure-Python implementations above.  Both
+# paths produce numerically-identical dicts (same logaddexp identity,
+# same iteration order); the Cython path just runs the inner loop in
+# C with libc ``log1p``/``exp`` and avoids the per-cfg-out list
+# allocation entirely (see ``src/cython/gt_msc_cy.pyx``).
+if _CYTHON_AVAILABLE:
+    def _apply_branch_coalescent_int(
+        config_in: dict[int, float],
+        length: "float | None",
+        gti: "_GeneTreeIndex",
+        engine: "_GTLikelihoodEngine",
+    ) -> dict[int, float]:
+        """Cython-accelerated wrapper for the per-branch coalescent step."""
+        return _apply_branch_coalescent_cy(
+            config_in,
+            gti.coarsenings,
+            engine._log_gij,
+            engine._log_denom,
+            length,
+        )
+
+    def _combine_configs_int(
+        left: dict[int, float],
+        right: dict[int, float],
+    ) -> dict[int, float]:
+        """Cython-accelerated wrapper for the disjoint-union combine."""
+        return _combine_configs_cy(left, right)
+else:
+    _apply_branch_coalescent_int = _apply_branch_coalescent_int_py
+    _combine_configs_int = _combine_configs_int_py
+
+
+# ----------------------------------------------------------------------
+# Full MSNC ancestral-configurations DP on the species network.
+# ----------------------------------------------------------------------
+
+def _msnc_log_prob_network_int(
+    net_idx: "_NetworkIndex",
+    gti: "_GeneTreeIndex",
+    engine: "_GTLikelihoodEngine",
+) -> float:
+    """Full MSNC ancestral-configurations DP on the species network.
+
+    Implements the network-coalescent likelihood of Yu, Degnan &
+    Nakhleh (2012; PLoS Genetics 8(4):e1002660) and underlies the
+    MCMC inference of Yu & Nakhleh (2014; PNAS 111(46):16448-16453).
+
+    State.  The DP carries a *frontier* dict mapping a sorted tuple
+    of ``(species_edge_id, lineage_mask)`` pairs to log-probability.
+    Each entry encodes the joint state on every currently-open
+    species-network edge (the parent-side, "top-of-edge", lineage
+    mask after branch coalescent has been applied).  An empty key
+    ``()`` is the initial state (no edges open) at log_prob ``0.0``.
+
+    Per-node operations (executed in bottom-up topological order):
+
+      * **Leaf** (out-deg 0).  No down-edges to pull off the frontier.
+        Seed the up-edge bottom with the bitmask of all gene-tree
+        lineages mapped to this species, apply branch coalescent on
+        the up-edge, append ``(up_edge_id, top_mask)`` to every
+        frontier key with the corresponding log-prob accumulated.
+      * **Tree internal** (in-deg 1, out-deg >= 1).  Pop the down-
+        edges' ``(edge_id, mask)`` pairs from each frontier key
+        (their masks are disjoint by construction; OR them) and
+        apply branch coalescent on the single up-edge.
+      * **Reticulation** (in-deg 2, out-deg 1).  Pop the (single)
+        down-edge from each frontier key.  For every subset
+        ``S`` of the popped mask ``A`` (``2^|A|`` subsets):
+        route ``S`` up parent edge ``e1`` with weight
+        ``gamma1^|S|``, and ``A\\S`` up parent edge ``e2`` with
+        weight ``(1-gamma1)^|A\\S|``.  Each lineage independently
+        chooses a parent (so the labelled count is exactly
+        ``gamma^|S| (1-gamma)^|A\\S|``; no binomial coefficient).
+        Apply branch coalescent on each parent edge separately.
+        The resulting joint state on ``(e1, e2)`` is preserved
+        through the frontier tuple and naturally collapses when
+        the two parent-paths merge at the LCA of the retic.
+      * **Root** (in-deg 0).  Pop all down-edges, OR their masks,
+        apply infinite-branch coalescent (forces collapse to a
+        single lineage).  The result is the gene-tree root with
+        log-probability equal to the full MSNC log-likelihood.
+
+    Args:
+        net_idx: Pre-computed :class:`_NetworkIndex` view of the
+            species network.
+        gti: Pre-computed :class:`_GeneTreeIndex` view of the gene
+            tree (provides bit indices, coarsening / linear-extension
+            cache).
+        engine: Backing :class:`_GTLikelihoodEngine` (provides
+            ``_log_gij`` and ``_log_denom`` caches).
+
+    Returns:
+        ``log P(gene_tree | net_idx)``; clamped at ``_LOG_FLOOR`` for
+        incompatible configurations.
+    """
+    if gti.root_bit < 0 or not gti.leaves:
+        return 0.0
+    if net_idx.n_nodes == 0 or net_idx.root < 0:
+        return _LOG_FLOOR
+
+    # Species label -> bitmask of all gene-tree lineages mapped there.
+    species_to_bits: dict[str, int] = {}
+    leaf_species_g = gti.leaf_species_of
+    for leaf_bit in gti.leaves:
+        sp = leaf_species_g.get(leaf_bit)
+        if sp is None:
+            continue
+        species_to_bits[sp] = species_to_bits.get(sp, 0) | (1 << leaf_bit)
+
+    apply_branch = _apply_branch_coalescent_int
+    log_floor = _LOG_FLOOR
+    log_gij = engine._log_gij  # noqa: F841 (referenced for caching warm-up)
+
+    # Frontier: empty tuple at log-prob 0.
+    frontier: dict[tuple[tuple[int, int], ...], float] = {(): 0.0}
+
+    for v in net_idx.topo_order:
+        down_es = net_idx.down_edges[v]
+        up_es = net_idx.up_edges[v]
+        is_retic_v = net_idx.is_retic[v]
+
+        new_frontier: dict[tuple[tuple[int, int], ...], float] = {}
+
+        for key, lp in frontier.items():
+            # Compute mask_at_v and the trimmed key (drop v's down-edges).
+            if not down_es:
+                # Leaf: deterministic seed from the species map.
+                sp = net_idx.leaf_label.get(v)
+                mask_at_v = species_to_bits.get(sp, 0) if sp is not None else 0
+                new_key_base = key
+            else:
+                # Internal: pop v's down-edges from key.
+                new_key_list = list(key)
+                mask_at_v = 0
+                ok = True
+                for de in down_es:
+                    found_idx = -1
+                    for idx in range(len(new_key_list)):
+                        if new_key_list[idx][0] == de:
+                            found_idx = idx
+                            break
+                    if found_idx < 0:
+                        ok = False
+                        break
+                    mask_at_v |= new_key_list[found_idx][1]
+                    new_key_list.pop(found_idx)
+                if not ok:
+                    # Down-edge missing from key -- shouldn't happen
+                    # given the topo order, but be defensive.
+                    continue
+                new_key_base = tuple(new_key_list)
+
+            # Push v's up-edges (with branch coalescent and, for
+            # reticulations, the per-lineage gamma split).
+            if not up_es:
+                # Root: collapse to the gene-tree root by infinite
+                # branch coalescent.  Encode the post-root config under
+                # the sentinel edge ID -1.
+                out = apply_branch({mask_at_v: 0.0}, None, gti, engine)
+                for top_mask, top_lp in out.items():
+                    new_key = _frontier_insert(new_key_base, (-1, top_mask))
+                    _frontier_acc(new_frontier, new_key, lp + top_lp)
+                continue
+
+            if len(up_es) >= 2 and is_retic_v:
+                # Reticulation: split each lineage independently among
+                # the two parent edges.  Iterate every subset S of the
+                # active mask.
+                e1, e2 = up_es[0], up_es[1]
+                gamma1 = net_idx.edge_gamma(e1)
+                gamma2 = net_idx.edge_gamma(e2)
+                if gamma1 is None and gamma2 is None:
+                    gamma1 = 0.5
+                    gamma2 = 0.5
+                elif gamma1 is None:
+                    gamma1 = max(0.0, 1.0 - float(gamma2))
+                elif gamma2 is None:
+                    gamma2 = max(0.0, 1.0 - float(gamma1))
+                log_g1 = math.log(gamma1) if gamma1 > 0.0 else log_floor
+                log_g2 = math.log(gamma2) if gamma2 > 0.0 else log_floor
+                length1 = net_idx.edge_length(e1)
+                length2 = net_idx.edge_length(e2)
+                n_total = _popcount(mask_at_v)
+
+                S = mask_at_v
+                while True:
+                    k_S = _popcount(S)
+                    factor = k_S * log_g1 + (n_total - k_S) * log_g2
+                    AS = mask_at_v ^ S
+                    out1 = apply_branch({S: 0.0}, length1, gti, engine)
+                    out2 = apply_branch({AS: 0.0}, length2, gti, engine)
+                    for top1, lp1 in out1.items():
+                        ent1 = (e1, top1)
+                        for top2, lp2 in out2.items():
+                            new_key = _frontier_insert(new_key_base, ent1)
+                            new_key = _frontier_insert(new_key, (e2, top2))
+                            _frontier_acc(
+                                new_frontier,
+                                new_key,
+                                lp + factor + lp1 + lp2,
+                            )
+                    if S == 0:
+                        break
+                    S = (S - 1) & mask_at_v
+                continue
+
+            # Tree internal (in-deg 1) or pathological in-deg-1 retic.
+            e_up = up_es[0]
+            length = net_idx.edge_length(e_up)
+            out = apply_branch({mask_at_v: 0.0}, length, gti, engine)
+            for top_mask, top_lp in out.items():
+                new_key = _frontier_insert(new_key_base, (e_up, top_mask))
+                _frontier_acc(new_frontier, new_key, lp + top_lp)
+
+        frontier = new_frontier
+
+    # After processing the root: every key should be a singleton
+    # ``((-1, mask),)``.  Sum (log-add) the log-probs of every entry
+    # whose mask is the gene-tree root bit (or, defensively, any
+    # single-bit mask containing the root bit).
+    target = 1 << gti.root_bit
+    log_terms: list[float] = []
+    for key, lp in frontier.items():
+        if len(key) != 1:
+            continue
+        eid, mask = key[0]
+        if eid != -1:
+            continue
+        if mask == target:
+            log_terms.append(lp)
+        elif _popcount(mask) == 1 and (mask >> gti.root_bit) & 1:
+            log_terms.append(lp)
+    if not log_terms:
+        return _LOG_FLOOR
+    return _logsumexp(log_terms)
+
+
+def _frontier_insert(
+    tup: tuple[tuple[int, int], ...],
+    item: tuple[int, int],
+) -> tuple[tuple[int, int], ...]:
+    """Insert ``item`` into a sorted-tuple frontier key, preserving order.
+
+    Frontier keys are tuples of ``(edge_id, mask)`` sorted by
+    ``edge_id``.  Insertion is O(k) for k = current frontier size,
+    which is small in practice (bounded by the network's max-cut,
+    typically < 15 in the regime the search visits).
+    """
+    if not tup:
+        return (item,)
+    eid = item[0]
+    out = list(tup)
+    pos = 0
+    while pos < len(out) and out[pos][0] < eid:
+        pos += 1
+    out.insert(pos, item)
+    return tuple(out)
+
+
+def _frontier_acc(
+    frontier: dict[tuple[tuple[int, int], ...], float],
+    key: tuple[tuple[int, int], ...],
+    lp: float,
+) -> None:
+    """Accumulate ``lp`` into ``frontier[key]`` via log-sum-exp."""
+    existing = frontier.get(key)
+    if existing is None:
+        frontier[key] = lp
+    elif existing > lp:
+        frontier[key] = existing + math.log1p(math.exp(lp - existing))
+    else:
+        frontier[key] = lp + math.log1p(math.exp(existing - lp))
+
+
+def _msc_log_prob_tree(
+    dt: _DisplayedTree,
+    gene_tree: Network,
+    species_of: dict[str, str],
+    engine: _GTLikelihoodEngine,
+) -> float:
+    """Compute ``log P(gene_tree | dt)`` via a partition-DP on ``dt``.
+
+    Standard Rannala-Yang MSC evaluation:
+
+      1. Initialise each leaf of ``dt`` with the set of gene-tree
+         leaves mapped to its species (may be empty when the gene
+         tree doesn't cover every species).
+      2. Post-order ``dt``.  At each non-root internal node combine
+         the "top-of-edge" lineage configurations coming in from its
+         children (disjoint union; probabilities multiply).  At each
+         edge entering the current node from a child, convolve the
+         child's lineage configuration against the Kingman coalescent
+         transition for the edge length, enumerating every valid
+         coarsening of the active lineages via sibling-pair merges
+         in the gene tree.
+      3. Above the root of ``dt``, apply an infinite-length branch
+         to force the remaining lineages to coalesce down to one.
+
+    Args:
+        dt: Displayed tree (already contracted).
+        gene_tree: Gene tree to score.
+        species_of: Gene-copy label -> species label.
+        engine: Backing :class:`_GTLikelihoodEngine` (for ``_gij``).
+
+    Returns:
+        Log probability; clamped at ``_LOG_FLOOR`` if the gene tree
+        has no valid embedding in this displayed tree (e.g. species
+        coverage mismatch).
+    """
+    # Build gene-tree parent/child maps once per call.
+    g_children: dict[Any, tuple[Any, Any]] = {}
+    g_parent: dict[Any, Any] = {}
+    g_root: Any | None = None
+    g_leaves: list[Any] = []
+    for node in gene_tree.V():
+        kids = gene_tree.get_children(node)
+        if not kids:
+            g_leaves.append(node)
+            continue
+        if len(kids) != 2:
+            # Non-binary gene tree (polytomy) -- flatten to "either
+            # child order" by picking the first two; higher-order
+            # polytomies reduce to a lower bound under the MSC.  A
+            # better approach is to expand every binary resolution;
+            # we flag this as a small-polytomy approximation.
+            kids = kids[:2]
+        g_children[node] = (kids[0], kids[1])
+        for c in kids:
+            g_parent[c] = node
+    if gene_tree.roots():
+        g_root = gene_tree.root()
+
+    # Build leaf-config at each species leaf of the displayed tree.
+    configs_at: dict[Any, dict[frozenset, float]] = {}
+    for leaf in dt.leaves:
+        species = dt.leaf_species.get(leaf)
+        gene_nodes = frozenset(
+            g for g in g_leaves
+            if species_of.get(g.label) == species
+        )
+        configs_at[leaf] = {gene_nodes: 0.0}
+
+    # Walk the displayed tree in post-order.  For each internal node
+    # whose children have finished, merge children configs and apply
+    # the coalescent transition on each incoming edge.
+    for node in dt.post_order:
+        if node in configs_at:
+            continue
+        kids = dt.children.get(node, [])
+        if not kids:
+            configs_at[node] = {frozenset(): 0.0}
+            continue
+        # 1. Apply per-child-edge coalescent transition into each child's
+        #    config so we have "top-of-edge" distributions.
+        child_top: list[dict[frozenset, float]] = []
+        for child in kids:
+            t = dt.edge_length.get((node, child))
+            child_top.append(
+                _apply_branch_coalescent(
+                    configs_at[child],
+                    t,
+                    g_children,
+                    g_parent,
+                    engine,
+                )
+            )
+        # 2. Combine child top-of-edge configs by disjoint union
+        #    (independent subtrees, products of probabilities).
+        merged = child_top[0]
+        for nxt in child_top[1:]:
+            merged = _combine_configs(merged, nxt)
+        configs_at[node] = merged
+
+    # Above the root, apply an infinite-length branch (g_{n,1}(inf)=1)
+    # forcing a collapse to a single lineage at the gene-tree root.
+    root_config = configs_at.get(dt.root, {})
+    top_config = _apply_branch_coalescent(
+        root_config,
+        None,
+        g_children,
+        g_parent,
+        engine,
+    )
+    if g_root is None:
+        # No gene tree -> trivial.
+        return 0.0
+    target = frozenset([g_root])
+    best = top_config.get(target, None)
+    if best is None:
+        # Aggregate across all configs that collapsed to the single
+        # root -- there should be only one, but be defensive.
+        acc: list[float] = []
+        for cfg, lp in top_config.items():
+            if len(cfg) == 1 and g_root in cfg:
+                acc.append(lp)
+        if not acc:
+            return _LOG_FLOOR
+        return _logsumexp(acc)
+    return best
+
+
+def _apply_branch_coalescent(
+    config_in: dict[frozenset, float],
+    length: float | None,
+    g_children: dict[Any, tuple[Any, Any]],
+    g_parent: dict[Any, Any],
+    engine: _GTLikelihoodEngine,
+) -> dict[frozenset, float]:
+    """Convolve a bottom-of-edge distribution against branch coalescent.
+
+    Runs, for every entry ``(config_in, log_prob_in)``, all reachable
+    branch coarsenings and accumulates log-space probability into
+    ``out[config_out]`` via log-sum-exp.  The Kingman coalescent
+    transition probability used here is:
+
+        P(C_out | C_in, t) = g_{n,m}(t) * |L(F)| / prod_{i=1..k} C(n-i+1, 2)
+
+    where ``n = |C_in|``, ``m = |C_out|``, ``k = n - m``, ``F`` is the
+    forest of gene-tree internal nodes picked up by the coarsening,
+    and ``|L(F)|`` is the number of linear extensions (time orderings)
+    of ``F`` under gene-tree ancestry.
+
+    Args:
+        config_in: Dict from incoming-lineage frozenset to log prob.
+        length: Branch length in coalescent units (``None`` =
+            infinite, i.e. force full collapse to one lineage).
+        g_children / g_parent: Gene-tree adjacency maps.
+        engine: Backing engine (memoised ``_gij``).
+
+    Returns:
+        Dict from outgoing-lineage frozenset to log prob.  Entries
+        whose accumulated log prob falls to ``-inf`` are dropped.
+    """
+    out: dict[frozenset, list[float]] = {}
+    for cfg_in, lp_in in config_in.items():
+        n = len(cfg_in)
+        coarsenings = _enum_coarsenings(cfg_in, g_children, g_parent)
+        for cfg_out, merges in coarsenings:
+            m = len(cfg_out)
+            k = n - m
+            gij = engine._gij(length, n, m)
+            if gij <= 0.0:
+                continue
+            log_branch = math.log(gij)
+            if k > 0:
+                # Denominator: product of C(n-i+1, 2) for i in 1..k
+                denom = 1.0
+                for i in range(1, k + 1):
+                    denom *= math.comb(n - i + 1, 2)
+                le = _linear_extensions(list(merges), g_children)
+                log_branch += math.log(le) - math.log(denom)
+            log_total = lp_in + log_branch
+            out.setdefault(cfg_out, []).append(log_total)
+    # Collapse list-per-key via log-sum-exp.
+    result: dict[frozenset, float] = {}
+    for cfg, terms in out.items():
+        result[cfg] = _logsumexp(terms)
+    return result
+
+
+def _combine_configs(
+    left: dict[frozenset, float],
+    right: dict[frozenset, float],
+) -> dict[frozenset, float]:
+    """Outer-product combine of two child-edge distributions.
+
+    At a species-tree internal node, lineages from independent child
+    subtrees are disjoint, so their combined distribution is the
+    outer product (union of configs, sum of log probs) of the
+    top-of-edge distributions coming in from each child.
+
+    Duplicate resulting configs (possible when two gene-tree leaves
+    live in different species children but share the same internal
+    g-ancestry -- this happens for single-species gene subtrees that
+    got split across a species-tree bipartition) are merged via
+    log-sum-exp to avoid double-counting.
+    """
+    out: dict[frozenset, list[float]] = {}
+    for cfg_l, lp_l in left.items():
+        for cfg_r, lp_r in right.items():
+            if cfg_l & cfg_r:
+                # Overlapping lineage labels -> independence assumption
+                # violated; skip.  (Shouldn't happen if mappings are
+                # well-formed.)
+                continue
+            union = cfg_l | cfg_r
+            out.setdefault(union, []).append(lp_l + lp_r)
+    result: dict[frozenset, float] = {}
+    for cfg, terms in out.items():
+        result[cfg] = _logsumexp(terms)
+    return result
+
+
+# ======================================================================
+# (D) Scorer
+# ======================================================================
+
+class MCMCGTScorer:
+    """Callable likelihood evaluator for :class:`Model`.
+
+    Registered via ``model.set_likelihood_calculator(scorer)``.  Holds
+    a persistent :class:`_GTLikelihoodEngine` bound to
+    ``model.network``; rebinds automatically when the scorer detects
+    a network-object identity swap (e.g. after a deep-copy undo) or
+    when ``model._dirty_nodes is None`` (topology change).
+
+    Returns either the log posterior (``posterior=True``, the canonical
+    Bayesian MCMC_GT objective) or the plain log likelihood
+    (``posterior=False``, for ``method="hc"`` / ``"sa"`` where the
+    prior term is irrelevant to the maximisation).
+    """
+
+    def __init__(
+        self,
+        gene_trees: Iterable[Network] | GeneTrees,
+        mapping: dict[str, list[str]],
+        priors: Optional[MCMC_GTPriors] = None,
+        *,
+        posterior: bool = True,
+    ) -> None:
+        """Initialise from gene trees, mapping, and prior hyperparams.
+
+        Args:
+            gene_trees: Either a :class:`GeneTrees` collection or any
+                iterable yielding :class:`Network` gene trees.
+            mapping: Species label -> list of gene-copy labels (same
+                convention as :class:`MPL`).  Internally flattened to
+                a gene-copy -> species reverse map for the engine.
+            priors: Prior hyperparameters.  Default: :class:`MCMC_GTPriors`
+                defaults (Exp(1) branch lengths, Beta(1,1) gammas,
+                Poisson(1) retic count).
+            posterior: When ``True`` (default), return log posterior.
+                When ``False``, return plain log likelihood (priors
+                dropped).
+        """
+        self._gene_trees: list[Network] = list(
+            gene_trees.trees if isinstance(gene_trees, GeneTrees) else gene_trees
+        )
+        self._mapping = mapping
+        self._species_of: dict[str, str] = {}
+        for species, alleles in mapping.items():
+            for a in alleles:
+                self._species_of[a] = species
+        self._priors = priors if priors is not None else MCMC_GTPriors()
+        self._posterior = posterior
+        self._engine: _GTLikelihoodEngine | None = None
+        self._engine_network: Network | None = None
+        # Last-observed likelihood (useful for reporting / tests).
+        self._last_log_likelihood: float | None = None
+        self._last_log_posterior: float | None = None
+
+    @property
+    def posterior_mode(self) -> bool:
+        """True if the scorer returns log posterior rather than log likelihood."""
+        return self._posterior
+
+    @property
+    def last_log_likelihood(self) -> float | None:
+        """Last likelihood value computed (``None`` before first call)."""
+        return self._last_log_likelihood
+
+    @property
+    def last_log_posterior(self) -> float | None:
+        """Last posterior value computed (``None`` before first call)."""
+        return self._last_log_posterior
+
+    def __call__(self, model: Model) -> float:
+        """Score ``model`` under MSNC (+ priors if ``posterior``).
+
+        Args:
+            model: :class:`Model` whose ``network`` is the current
+                species network.
+
+        Returns:
+            Log posterior (when ``self.posterior_mode``) or log
+            likelihood.  Clamped at ``_LOG_FLOOR`` on the lower end.
+        """
+        net = model.network
+        if self._engine is None or self._engine_network is not net:
+            # Network object swapped (e.g. after deep-copy undo).  Full
+            # rebind; the engine's ``_gij`` memo can't be reused
+            # because the old engine held references to old edge
+            # objects.  This is still O(1) wrt iteration.
+            self._engine = _GTLikelihoodEngine(net)
+            self._engine_network = net
+            model.clear_dirty_nodes()
+        else:
+            dirty = getattr(model, "_dirty_nodes", None)
+            self._engine.update(dirty)
+            model.clear_dirty_nodes()
+
+        # Likelihood over all gene trees.
+        log_lik = self._engine.score_many(self._gene_trees, self._species_of)
+        if not math.isfinite(log_lik):
+            log_lik = _LOG_FLOOR
+        self._last_log_likelihood = log_lik
+
+        if self._posterior:
+            log_prior = log_prior_network(net, self._priors)
+            log_post = log_lik + log_prior
+            self._last_log_posterior = log_post
+            return log_post
+        self._last_log_posterior = log_lik
+        return log_lik
+
+
+# ======================================================================
+# (E) Proposal kernel
+# ======================================================================
+
+class MCMCGTKernel(ProposalKernel):
+    """Weighted proposal kernel for :class:`MCMC_GT`.
+
+    Initial (non-phased) version: draws a :class:`Move` class at each
+    proposal with the PhyloNet-style static weights documented below.
+    A ``max_reticulations`` cap is enforced by dropping
+    :class:`AddReticulation` when the current network is at the cap.
+
+    Phase-aware adaptive tuning (as in :class:`MPL.MPLKernel`) is
+    intentionally out of scope for the first working version; a
+    well-weighted static kernel is already enough to drive a sound
+    MCMC chain, and keeping the machinery simple makes correctness
+    testing straightforward.
+
+    Default weights (re-normalised each draw after the cap-aware
+    filter):
+
+        SPR                       30%
+        ChangeNodeHeight          20%
+        ChangeInheritanceProb     15%
+        AddReticulation            7%
+        RemoveReticulation         7%
+        FlipReticulation           3%
+        ChangeReticSource          5%
+        ChangeReticDest            5%
+        RelocateReticulation       8%
+    """
+
+    _DEFAULT_WEIGHTS: dict[type, float] = {
+        SPR: 0.30,
+        ChangeNodeHeight: 0.20,
+        ChangeInheritanceProb: 0.15,
+        AddReticulation: 0.07,
+        RemoveReticulation: 0.07,
+        FlipReticulation: 0.03,
+        ChangeReticSource: 0.05,
+        ChangeReticDest: 0.05,
+        RelocateReticulation: 0.08,
+    }
+
+    def __init__(
+        self,
+        max_reticulations: Optional[int] = None,
+        weights: Optional[dict[type, float]] = None,
+        rng: Optional[np.random.Generator] = None,
+    ) -> None:
+        """Configure the kernel.
+
+        Args:
+            max_reticulations: Upper bound on retic count.  When the
+                current network is at or above the cap,
+                :class:`AddReticulation` is filtered out of the
+                candidate pool.
+            weights: Custom move-class weights.  Keys must be
+                :class:`Move` subclasses.  Missing entries are
+                implicitly zero.  Defaults to
+                :attr:`_DEFAULT_WEIGHTS`.
+            rng: NumPy random Generator used to sample the move
+                class.  When ``None``, a fresh generator is created
+                from OS entropy; callers that care about
+                reproducibility should pass one seeded from the
+                chain-wide :class:`np.random.SeedSequence`.
+        """
+        super().__init__()
+        self._max_retics = max_reticulations
+        self._weights = dict(weights if weights is not None else self._DEFAULT_WEIGHTS)
+        self.rng = rng if rng is not None else np.random.default_rng()
+        self._proposed: dict[type, int] = {cls: 0 for cls in self._weights}
+        self._accepted: dict[type, int] = {cls: 0 for cls in self._weights}
+        self._last_cls: type | None = None
+
+    def generate(self, model: "Model | None" = None) -> Move:
+        """Sample a :class:`Move` instance according to the weights.
+
+        The cap-aware filter on ``AddReticulation`` is applied by
+        inspecting ``model.network`` when the model is provided; when
+        ``model`` is ``None``, all move classes are eligible.
+
+        Args:
+            model: Current :class:`Model` (optional).  Used only to
+                drop ``AddReticulation`` at the cap.
+
+        Returns:
+            Freshly-instantiated :class:`Move`.  Most move classes
+            don't take constructor arguments; ``AddReticulation`` is
+            instantiated with the configured cap so its own
+            safeguards also kick in.
+        """
+        classes: list[type] = []
+        weights: list[float] = []
+        at_cap = False
+        if model is not None and self._max_retics is not None:
+            net = model.network
+            retic_count = sum(1 for n in net.V() if n.is_reticulation())
+            at_cap = retic_count >= self._max_retics
+        for cls, w in self._weights.items():
+            if w <= 0.0:
+                continue
+            if at_cap and cls is AddReticulation:
+                continue
+            classes.append(cls)
+            weights.append(w)
+        if not classes:
+            # Degenerate: everything filtered.  Fall back to
+            # ChangeNodeHeight (topology-neutral).
+            return ChangeNodeHeight()
+        arr = np.array(weights, dtype=float)
+        arr /= arr.sum()
+        pick = int(self.rng.choice(len(classes), p=arr))
+        cls = classes[pick]
+        self._proposed[cls] = self._proposed.get(cls, 0) + 1
+        self._last_cls = cls
+        if cls is AddReticulation:
+            return AddReticulation(max_reticulations=self._max_retics)
+        return cls()
+
+    def report_outcome(self, accepted: bool, delta: float = 0.0) -> None:
+        """Increment acceptance counters for the last generated move."""
+        if self._last_cls is None:
+            return
+        if accepted:
+            self._accepted[self._last_cls] = self._accepted.get(self._last_cls, 0) + 1
+
+    def format_stats(self) -> str:
+        """Return a human-readable per-move-class proposal summary."""
+        lines = ["move-class | proposed | accepted | rate"]
+        for cls in self._weights:
+            p = self._proposed.get(cls, 0)
+            a = self._accepted.get(cls, 0)
+            rate = (a / p) if p else 0.0
+            lines.append(f"{cls.__name__:<22} | {p:8d} | {a:8d} | {rate:.3f}")
+        return "\n".join(lines)
+
+
+# ======================================================================
+# (F) Orchestration
+# ======================================================================
+
+class MCMC_GT:
+    """Bayesian (and HC/SA) network inference from gene-tree topologies.
+
+    Mirrors :class:`MPL`'s public surface:
+
+    * :meth:`score` computes a one-off log posterior / likelihood for
+      the currently-held network.
+    * :meth:`search` runs a driver (``"mh"`` for Metropolis-Hastings
+      posterior sampling; ``"hc"`` / ``"sa"`` for likelihood
+      maximisation) and returns an :class:`MCMCGTResult`.
+    * :classmethod:`from_nexus` is a convenience constructor for
+      NEXUS-formatted gene trees + starting network.
+    * :classmethod:`from_consensus` builds a starting tree from a
+      majority-rule consensus of the gene trees (the recommended seed
+      when no prior estimate is available).
+
+    Gene-tree data (fixed across the run) is stored verbatim; the
+    ``species_net`` attribute is *updated in place* at the end of
+    :meth:`search` to reflect the best network found.
+    """
+
+    def __init__(
+        self,
+        species_net: Network,
+        gene_trees: GeneTrees,
+        mapping: dict[str, list[str]],
+        priors: Optional[MCMC_GTPriors] = None,
+    ) -> None:
+        """Initialise the inference object.
+
+        Args:
+            species_net: Starting species network.  Must have branch
+                lengths on every edge; gammas on reticulation
+                in-edges.  Consumed by reference and may be mutated
+                by :meth:`search`.
+            gene_trees: Input gene tree set.
+            mapping: Species -> list of gene-copy labels.
+            priors: :class:`MCMC_GTPriors` hyperparameters.  Default:
+                all weights at the Wen-Nakhleh defaults.
+        """
+        self.net = species_net
+        self.gene_trees = gene_trees
+        self.mapping = mapping
+        self.priors = priors if priors is not None else MCMC_GTPriors()
+
+    @classmethod
+    def from_nexus(
+        cls,
+        gt_file: str,
+        st_file: str,
+        mapping: dict[str, list[str]],
+        priors: Optional[MCMC_GTPriors] = None,
+    ) -> "MCMC_GT":
+        """Construct from two NEXUS files.
+
+        Args:
+            gt_file: Path to the gene-tree NEXUS.
+            st_file: Path to the starting-network NEXUS.
+            mapping: Species -> list of gene-copy labels.
+            priors: Optional prior hyperparameters.
+
+        Returns:
+            Fully-initialised :class:`MCMC_GT`.
+        """
+        st: Network = io.read_nexus(st_file, return_type="networks")
+        gts: GeneTrees = io.read_nexus(gt_file, return_type="genetrees")
+        if hasattr(gts, "species_gene_mapping"):
+            gts.species_gene_mapping(mapping)
+        return cls(st, gts, mapping, priors=priors)
+
+    @classmethod
+    def from_consensus(
+        cls,
+        gene_trees: GeneTrees,
+        mapping: dict[str, list[str]],
+        priors: Optional[MCMC_GTPriors] = None,
+        *,
+        threshold: float = 0.5,
+    ) -> "MCMC_GT":
+        """Seed the starting network from a majority-rule consensus.
+
+        Uses :meth:`GeneTrees.build_majority_rule_consensus_tree`.
+        Polytomies in the consensus produce a deliberately poor
+        initial score that the kernel resolves in the first few
+        hundred moves (same caveat as :class:`MPL.from_consensus`-style
+        usage).
+
+        Args:
+            gene_trees: Gene-tree collection to build the consensus
+                from.
+            mapping: Species -> list of gene-copy labels.
+            priors: Optional prior hyperparameters.
+            threshold: Support threshold for consensus clades.
+                Default 0.5 (majority rule).
+
+        Returns:
+            Fully-initialised :class:`MCMC_GT`.
+        """
+        seed = gene_trees.build_majority_rule_consensus_tree(threshold=threshold)
+        _populate_default_branch_lengths(seed)
+        return cls(seed, gene_trees, mapping, priors=priors)
+
+    # ── Scoring ───────────────────────────────────────────────────
+
+    def score(self, *, posterior: bool = True) -> float:
+        """One-off score of the current network.
+
+        Args:
+            posterior: When ``True`` (default) return log posterior;
+                else return log likelihood only.
+
+        Returns:
+            Log posterior or log likelihood.
+        """
+        scorer = MCMCGTScorer(
+            self.gene_trees, self.mapping, self.priors, posterior=posterior,
+        )
+        model = Model(rng=np.random.default_rng())
+        model.network = self.net
+        model.set_likelihood_calculator(scorer)
+        return scorer(model)
+
+    # ── Search ────────────────────────────────────────────────────
+
+    def search(
+        self,
+        method: str = "mh",
+        num_iter: int = 10_000,
+        *,
+        burn_in: int = 2_000,
+        thin: int = 10,
+        kernel: Optional[MCMCGTKernel] = None,
+        max_reticulations: Optional[int] = None,
+        seed: Any = None,
+        **kwargs: Any,
+    ) -> MCMCGTResult:
+        """Search the network space with the chosen driver.
+
+        Args:
+            method: One of ``"mh"`` (Metropolis-Hastings posterior
+                sampling; the canonical Bayesian MCMC_GT),
+                ``"hc"`` (Hill Climbing over log likelihood), or
+                ``"sa"`` (Simulated Annealing over log likelihood).
+            num_iter: Total proposed moves.
+            burn_in: MH only -- iterations to discard before
+                collecting samples.  Ignored for HC / SA.
+            thin: MH only -- collect every ``thin``-th post-burn-in
+                sample.
+            kernel: Custom :class:`MCMCGTKernel`.  When ``None`` a
+                default one is constructed with
+                ``max_reticulations``.
+            max_reticulations: Cap passed to the default kernel.
+            seed: Seed for the chain's RNGs.  Accepts any value
+                :class:`np.random.SeedSequence` accepts (including
+                another :class:`SeedSequence`).
+            **kwargs: Forwarded to the chosen search driver.  For HC
+                these include ``enhanced_stop``; for SA these include
+                ``t_start``, ``t_end``, ``schedule``, etc. (see
+                :class:`SimulatedAnnealing`).
+
+        Returns:
+            :class:`MCMCGTResult` with the best network plus, for
+            MH, the posterior sample list.
+        """
+        method = method.lower()
+        if method not in {"mh", "hc", "sa"}:
+            raise ValueError(f"Unknown method {method!r}; use 'mh', 'hc', or 'sa'.")
+
+        # RNG plumbing (mirrors ``MPL.search``: one root SeedSequence,
+        # separate generators for the accept/reject loop, the kernel,
+        # and the model/move RNG).
+        if isinstance(seed, np.random.SeedSequence):
+            root_ss = seed
+        else:
+            root_ss = np.random.SeedSequence(seed)
+        driver_ss, kernel_ss, model_ss = root_ss.spawn(3)
+        driver_seed = int(driver_ss.generate_state(1)[0])
+
+        # Scorer + model.
+        posterior = (method == "mh")
+        scorer = MCMCGTScorer(
+            self.gene_trees, self.mapping, self.priors, posterior=posterior,
+        )
+        model = Model(rng=np.random.default_rng(model_ss))
+        model.network = copy.deepcopy(self.net)
+        model.set_likelihood_calculator(scorer)
+
+        # Kernel.
+        if kernel is None:
+            kernel = MCMCGTKernel(
+                max_reticulations=max_reticulations,
+                rng=np.random.default_rng(kernel_ss),
+            )
+        elif getattr(kernel, "rng", None) is None:
+            kernel.rng = np.random.default_rng(kernel_ss)
+
+        # Dispatch.
+        start = time.time()
+        if method == "mh":
+            result = self._run_mh(
+                model=model,
+                kernel=kernel,
+                scorer=scorer,
+                num_iter=num_iter,
+                burn_in=burn_in,
+                thin=thin,
+                driver_seed=driver_seed,
+            )
+        elif method == "hc":
+            searcher = HillClimbing(
+                pkernel=kernel,
+                model=model,
+                num_iter=num_iter,
+                **kwargs,
+            )
+            end_state = searcher.run()
+            best_score = end_state.likelihood()
+            result = MCMCGTResult(
+                method="hc",
+                best_network=end_state.current_model.network,
+                best_log_posterior=best_score,
+                num_iter=num_iter,
+            )
+        else:  # method == "sa"
+            kwargs.setdefault("seed", driver_ss)
+            searcher = SimulatedAnnealing(
+                pkernel=kernel,
+                model=model,
+                num_iter=num_iter,
+                **kwargs,
+            )
+            end_state = searcher.run()
+            best_score = end_state.likelihood()
+            result = MCMCGTResult(
+                method="sa",
+                best_network=end_state.current_model.network,
+                best_log_posterior=best_score,
+                num_iter=num_iter,
+            )
+        result.wall_time_sec = time.time() - start
+
+        # Adopt the final network into self.net.  For MH we use the
+        # final-state network (equivalent to "last sample"); callers
+        # wanting the MAP should read ``result.best_network`` instead.
+        self.net = copy.deepcopy(result.best_network)
+        return result
+
+    # ── Internal ──────────────────────────────────────────────────
+
+    def _run_mh(
+        self,
+        *,
+        model: Model,
+        kernel: MCMCGTKernel,
+        scorer: MCMCGTScorer,
+        num_iter: int,
+        burn_in: int,
+        thin: int,
+        driver_seed: int,
+    ) -> MCMCGTResult:
+        """Run a Metropolis-Hastings chain with burn-in and thinning.
+
+        Uses the same posterior formulation as standard MH: accept a
+        proposal with log-acceptance ``prop_score - cur_score +
+        log_hastings_ratio``.  Samples are drawn every ``thin`` steps
+        after ``burn_in``; ``MAP`` is tracked independently so even
+        runs that never converge report the best single network
+        observed.
+
+        Args:
+            model: Live model (deep-copied from ``self.net``).
+            kernel: Proposal kernel.
+            scorer: The scorer returned by ``model.likelihood`` --
+                held explicitly so we can read back the last
+                likelihood value for sample diagnostics.
+            num_iter: Total proposed moves.
+            burn_in: Iterations before collecting samples.
+            thin: Sample every ``thin``-th post-burn-in iteration.
+            driver_seed: Seed for the accept/reject Uniform(0, 1)
+                generator.
+
+        Returns:
+            Populated :class:`MCMCGTResult`.
+        """
+        # Avoid importing State here to keep the MCMC_GT module free
+        # of any State coupling; we use Model directly and manage the
+        # accept/reject loop inline.  This is identical semantics to
+        # the :class:`MetropolisHastings` driver except we can pull
+        # samples mid-run and we use a dedicated Generator for the
+        # acceptance-test random draws so reproducibility holds.
+        rng = np.random.default_rng(driver_seed)
+        cur_score = float(scorer(model))
+        best_score = cur_score
+        best_network = copy.deepcopy(model.network)
+        best_log_lik = scorer.last_log_likelihood or cur_score
+        samples: list[MCMCSample] = []
+        num_accepted = 0
+
+        for iter_no in range(num_iter):
+            move = kernel.generate(model)
+            try:
+                move.execute(model)
+                prop_score = float(scorer(model))
+            except Exception:
+                # Move failed mid-execute; try to undo and continue.
+                try:
+                    move.undo(model)
+                except Exception:
+                    pass
+                kernel.report_outcome(False)
+                continue
+
+            log_alpha = prop_score - cur_score + move.hastings_ratio()
+            accept = (log_alpha >= 0.0) or (math.log(rng.random()) < log_alpha)
+            if accept:
+                cur_score = prop_score
+                num_accepted += 1
+                kernel.report_outcome(True, delta=prop_score - cur_score)
+                if prop_score > best_score:
+                    best_score = prop_score
+                    best_network = copy.deepcopy(model.network)
+                    best_log_lik = scorer.last_log_likelihood or prop_score
+            else:
+                try:
+                    move.undo(model)
+                except Exception:
+                    # If undo fails, we're in a weird state.  Rebuild
+                    # the scorer against the current (possibly
+                    # corrupted) network rather than crashing.
+                    pass
+                kernel.report_outcome(False, delta=prop_score - cur_score)
+
+            # Sample (MH posterior).
+            if iter_no >= burn_in and ((iter_no - burn_in) % thin == 0):
+                samples.append(
+                    MCMCSample(
+                        iteration=iter_no,
+                        network=copy.deepcopy(model.network),
+                        log_posterior=cur_score,
+                        log_likelihood=(
+                            scorer.last_log_likelihood
+                            if scorer.last_log_likelihood is not None
+                            else cur_score
+                        ),
+                    )
+                )
+
+        return MCMCGTResult(
+            method="mh",
+            best_network=best_network,
+            best_log_posterior=best_score,
+            samples=samples,
+            num_iter=num_iter,
+            num_accepted=num_accepted,
+        )
+
+
+# ======================================================================
+# Helpers
+# ======================================================================
+
+def _populate_default_branch_lengths(net: Network, default: float = 1.0) -> None:
+    """Fill missing branch lengths with ``default`` coalescent units.
+
+    Consensus trees from :meth:`GeneTrees.build_majority_rule_consensus_tree`
+    may come out with missing or zero branch lengths; the MSNC
+    likelihood requires a positive length on every edge to be
+    meaningful.  This is a quick-and-dirty initialiser -- the MH /
+    HC / SA search will refine the lengths from the prior / gradient
+    within the first few hundred iterations anyway.
+    """
+    for e in net.E():
+        bl = e.get_length()
+        if bl is None or bl <= 0.0:
+            e.set_length(default)
+        g = e.get_gamma()
+        if g is None and e.dest.is_reticulation():
+            e.set_gamma(0.5)

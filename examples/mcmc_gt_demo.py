@@ -28,7 +28,7 @@ from pathlib import Path
 
 import phynetpy.IO as io
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MCMC_GT import MCMC_GT, MCMC_GTPriors
+from phynetpy.infer import MCMC_GT, MCMC_GTPriors
 
 
 # TODO: CHANGE PATHS FOR YOUR OWN FILE SYSTEM!!

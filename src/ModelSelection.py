@@ -34,7 +34,7 @@ has no such caveat and is often the most honest of the three.
 
 Typical use with MPL::
 
-    from phynetpy.MPL import MPL
+    from phynetpy.infer import MPL
     from phynetpy.ModelSelection import reticulation_sweep
 
     def run_k(k: int, seed: int) -> float:

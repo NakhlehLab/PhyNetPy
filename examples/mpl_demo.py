@@ -8,7 +8,7 @@ Inputs:
   - mapping: species -> allele label mapping
 """
 
-from phynetpy.MPL import MPL
+from phynetpy.infer import MPL
 from phynetpy.Network import Network
 from phynetpy.IO import read_newick_file, convert_newick
 

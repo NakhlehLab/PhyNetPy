@@ -326,7 +326,7 @@ class Move(ABC):
         """Network nodes whose incident branches or gammas this move modified.
 
         Consumed by scorers that maintain per-network-edge likelihood
-        caches (see :class:`phynetpy.MCMC_GT._GTLikelihoodEngine`):
+        caches (see :class:`phynetpy._mcmc_gt._GTLikelihoodEngine`):
         any node returned here -- plus its ancestor path to the root
         -- will have its cached partials invalidated, everything else
         is reused across iterations.

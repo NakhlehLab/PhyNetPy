@@ -37,7 +37,7 @@ from pathlib import Path
 
 import phynetpy.IO as io
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL import MPL
+from phynetpy.infer import MPL
 
 
 #TODO: CHANGE PATHS FOR YOUR OWN FILE SYSTEM!!

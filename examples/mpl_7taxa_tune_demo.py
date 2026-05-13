@@ -37,7 +37,7 @@ from pathlib import Path
 
 import phynetpy.IO as io
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL import MPL
+from phynetpy.infer import MPL
 
 
 _REPO = Path(__file__).resolve().parent.parent
