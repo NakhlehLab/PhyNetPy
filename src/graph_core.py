@@ -1,4 +1,8 @@
 """
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 0.3.0
+
 Graph core data structures with automatic Cython acceleration.
 
 This module provides NodeSet and EdgeSet classes, automatically using

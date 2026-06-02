@@ -1,4 +1,8 @@
 """
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 0.3.0
+
 Visitor pattern interface for :class:`~.ModelGraph.ModelNode` traversals.
 
 Use a :class:`Visitor` when the operation is a *side-effect* (e.g.
@@ -21,21 +25,41 @@ class Visitor(ABC):
     :meth:`visit` provides automatic dispatch by calling
     :pymeth:`ModelNode.get_node_type`.
     """
-    
+
     @abstractmethod
     def visit_leaf(self, n: ModelNode) -> None:
+        """Side-effect callback fired when the traversal lands on a leaf.
+
+        Args:
+            n (ModelNode): The leaf node being visited.
+        """
         ...
-    
+
     @abstractmethod
     def visit_internal(self, n: ModelNode) -> None:
+        """Side-effect callback fired when the traversal lands on an internal node.
+
+        Args:
+            n (ModelNode): The internal node being visited.
+        """
         ...
 
     @abstractmethod
     def visit_reticulation(self, n: ModelNode) -> None:
+        """Side-effect callback fired when the traversal lands on a reticulation node.
+
+        Args:
+            n (ModelNode): The reticulation (hybrid) node being visited.
+        """
         ...
 
     @abstractmethod
     def visit_root(self, n: ModelNode) -> None:
+        """Side-effect callback fired when the traversal lands on the root.
+
+        Args:
+            n (ModelNode): The root node being visited.
+        """
         ...
     
     def visit(self, n: ModelNode) -> None:

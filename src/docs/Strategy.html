@@ -19,7 +19,7 @@
                     <a href="index.html">Home</a> &raquo; Strategy
                 </div>
                 
-                <h1>Strategy Module <span class="version-badge">v1.0.0</span></h1>
+                <h1>Strategy Module <span class="version-badge">v0.3.0</span></h1>
                 
                 <p>Strategy pattern interface for node-level computations dispatched during bottom-up traversal.</p>
                 
@@ -27,6 +27,8 @@
                     <dl>
                         <dt>Author:</dt>
                         <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>5/12/26</dd>
                         <dt>Source:</dt>
                         <dd>Strategy.py</dd>
                     </dl>
@@ -51,20 +53,80 @@
                             <div class="function-header">
                                 <span class="name">compute_at_leaf</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
                             </div>
+                            <div class="function-body">
+                                <p>Compute the strategy's quantity at a leaf node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>The leaf node currently being visited.</td>
+                                    </tr>
+                                </table>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">compute_at_internal</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the strategy's quantity at an internal (non-root, non-leaf) node. Implementations may assume that ``compute_at_*`` has already been called for every child of ``n``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>The internal node currently being visited.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">compute_at_reticulation</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
                             </div>
+                            <div class="function-body">
+                                <p>Compute the strategy's quantity at a reticulation (hybrid) node. Reticulation nodes have two or more parents and a single child; the strategy is responsible for combining the contributions from each incoming branch (e.g. via the inheritance probabilities).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>The reticulation node currently being visited.</td>
+                                    </tr>
+                                </table>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">compute_at_root</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the strategy's quantity at the root node. This is the terminal step of a bottom-up traversal; the return value (stored on the node by the implementation) typically represents the whole-network result, e.g. the marginal likelihood.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>The root node currently being visited.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -100,6 +162,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -108,10 +171,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html" class="current">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

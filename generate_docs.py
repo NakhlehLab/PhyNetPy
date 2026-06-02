@@ -77,6 +77,10 @@ MODULE_META = {
         "desc": "Network topology move operations for MCMC search (add/remove/flip reticulation, SPR).",
         "category": "Inference",
     },
+    "ModelSelection": {
+        "desc": "Information-criterion-based reticulation-count selection (AIC, BIC, AICc) and reticulation sweep helpers.",
+        "category": "Inference",
+    },
     "MSA": {
         "desc": "Multiple Sequence Alignment parsing, storage, grouping, and distance computation.",
         "category": "Core Data Structures",
@@ -113,6 +117,10 @@ MODULE_META = {
         "desc": "Strategy pattern interface for node-level computations dispatched during bottom-up traversal.",
         "category": "Infrastructure",
     },
+    "Sync": {
+        "desc": "Atomic model / network reconciliation context manager: topology moves inside a ``with Sync(model):`` block are auto-rolled back on error and reconciled on success.",
+        "category": "Infrastructure",
+    },
     "Traversal": {
         "desc": "Iterator-based graph traversal for model nodes supporting pre-order, post-order, and level-order.",
         "category": "Infrastructure",
@@ -124,6 +132,10 @@ MODULE_META = {
     "Visitor": {
         "desc": "Visitor pattern interface for ModelNode traversals with typed dispatch.",
         "category": "Infrastructure",
+    },
+    "infer": {
+        "desc": "Curated public inference surface: re-exports MCMC_GT, INFER_MP_ALLOP, MPL, and their entry points from the private implementation modules.",
+        "category": "Inference",
     },
 }
 
@@ -137,7 +149,20 @@ CATEGORY_ORDER = [
     "Infrastructure",
 ]
 
-SKIP_MODULES = {"__init__"}
+SKIP_MODULES = {
+    "__init__",
+    # Underscore-prefixed implementation modules: surfaced via ``phynetpy.infer``
+    # and the deprecated shims below.
+    "_mcmc_gt",
+    "_mpl",
+    "_infer_mp_allop",
+    # Back-compat shims (22-line re-exports of the underscore implementations).
+    # Skipped to avoid empty doc pages; the real content lives in the
+    # documented public interfaces.
+    "MCMC_GT",
+    "MPL",
+    "Infer_MP_Allop",
+}
 
 
 def html_escape(text: str) -> str:
@@ -361,11 +386,19 @@ def extract_module_info(filepath: Path) -> dict:
     constants = []
     exceptions = []
 
+    # First pass: collect raw AST for every top-level class so we can inherit
+    # method docstrings from same-module abstract bases below.
+    raw_class_nodes: dict[str, ast.ClassDef] = {
+        node.name: node
+        for node in ast.iter_child_nodes(tree)
+        if isinstance(node, ast.ClassDef)
+    }
+
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.ClassDef):
             if node.name.startswith("_"):
                 continue
-            cls_info = extract_class_info(node)
+            cls_info = extract_class_info(node, all_class_nodes=raw_class_nodes)
             if any(
                 b
                 for b in cls_info.get("bases", [])
@@ -406,12 +439,60 @@ def extract_module_info(filepath: Path) -> dict:
     }
 
 
-def extract_class_info(node: ast.ClassDef) -> dict:
+def _inherited_docstring(
+    method_name: str,
+    bases: list[str],
+    all_class_nodes: dict[str, ast.ClassDef],
+    seen: set[str] | None = None,
+) -> str:
+    """Walk the same-module base-class chain and return the first non-empty
+    docstring found for ``method_name``.
+
+    This lets concrete subclasses (e.g. ``CPUExecutor``, ``AddReticulation``)
+    inherit method-level documentation from their abstract base classes
+    (``Executor``, ``Move``) without having to repeat every docstring.
+    """
+    if seen is None:
+        seen = set()
+    for base_name in bases:
+        # Strip generic / subscripted bits such as "Generic[T]"
+        bare = base_name.split("[", 1)[0].strip()
+        if bare in seen or bare not in all_class_nodes:
+            continue
+        seen.add(bare)
+        base_node = all_class_nodes[bare]
+        for item in base_node.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == method_name:
+                doc = ast.get_docstring(item)
+                if doc:
+                    return doc
+        # Recurse into the base's bases.
+        deeper_bases = [ast.unparse(b) for b in base_node.bases]
+        inherited = _inherited_docstring(method_name, deeper_bases, all_class_nodes, seen)
+        if inherited:
+            return inherited
+    return ""
+
+
+def extract_class_info(
+    node: ast.ClassDef,
+    all_class_nodes: dict[str, ast.ClassDef] | None = None,
+) -> dict:
     bases = [ast.unparse(b) for b in node.bases]
     docstring = ast.get_docstring(node) or ""
     methods = []
     class_attrs = []
     properties = []
+    all_class_nodes = all_class_nodes or {}
+
+    def _build(item: ast.FunctionDef | ast.AsyncFunctionDef) -> dict:
+        info = extract_function_info(item)
+        if not info["docstring"]:
+            inherited = _inherited_docstring(item.name, bases, all_class_nodes)
+            if inherited:
+                info["docstring"] = inherited
+                info["parsed_doc"] = parse_docstring(inherited)
+        return info
 
     for item in node.body:
         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -420,14 +501,14 @@ def extract_class_info(node: ast.ClassDef) -> dict:
                 if item.name in ("__len__", "__iter__", "__contains__",
                                   "__getitem__", "__setitem__", "__eq__",
                                   "__hash__", "__str__", "__repr__"):
-                    methods.append(extract_function_info(item))
+                    methods.append(_build(item))
                 continue
             if item.name.startswith("_") and item.name != "__init__":
                 continue
             if is_property(item):
-                properties.append(extract_function_info(item))
+                properties.append(_build(item))
             else:
-                methods.append(extract_function_info(item))
+                methods.append(_build(item))
 
     return {
         "name": node.name,
@@ -859,7 +940,7 @@ def generate_index_page(all_modules: list[str]) -> str:
                 <div class="module-info">
                     <dl>
                         <dt>Version:</dt>
-                        <dd>0.3.0</dd>
+                        <dd>0.4.0</dd>
                         <dt>Authors:</dt>
                         <dd>Mark Kessler, Luay Nakhleh</dd>
                         <dt>Copyright:</dt>

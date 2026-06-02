@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>graph_core - PhyNetPy Documentation</title>
+    <title>Sync - PhyNetPy Documentation</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,47 +16,61 @@
         <div class="documentwrapper">
             <div class="body">
                 <div class="breadcrumb">
-                    <a href="index.html">Home</a> &raquo; graph_core
+                    <a href="index.html">Home</a> &raquo; Sync
                 </div>
                 
-                <h1>graph_core Module <span class="version-badge">v0.3.0</span></h1>
+                <h1>Sync Module <span class="version-badge">v0.3.2</span></h1>
                 
-                <p>Graph core data structures with automatic Cython acceleration for NodeSet and EdgeSet.</p>
+                <p>Atomic model / network reconciliation context manager: topology moves inside a ``with Sync(model):`` block are auto-rolled back on error and reconciled on success.</p>
                 
                 <div class="module-info">
                     <dl>
                         <dt>Author:</dt>
                         <dd>Mark Kessler</dd>
                         <dt>Last Edit:</dt>
-                        <dd>5/12/26</dd>
+                        <dd>3/20/26</dd>
                         <dt>Source:</dt>
-                        <dd>graph_core.py</dd>
+                        <dd>Sync.py</dd>
                     </dl>
                 </div>
                 
                 <div class="toc">
                     <h4>Contents</h4>
                     <ul>
-                        <li><a href="#constants">Constants</a></li>
-                        <li><a href="#functions">Module Functions</a></li>
+                        <li><a href="#sync">Sync</a></li>
                     </ul>
                 </div>
 
-                <h2 id="constants">Constants</h2>
-                <div class="constant-def">
-                    <span class="constant-name">USING_CYTHON</span> = False
-                </div>
-
-                <h2 id="functions">Module Functions</h2>
+                <h2 id="sync">Sync</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Sync</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Atomic model / network reconciliation context manager. ``Sync`` wraps a sequence of topology moves on a :class:`~.ModelGraph.Model` so that they appear atomic with respect to both the ``Model`` and its underlying :class:`~.Network.Network`: * On normal exit the network is **reconciled** -- nodes and edges in ``model.network`` are rebuilt from the current ``ModelNode`` topology so that the two representations agree. * On exception the model and network are **rolled back** to the snapshot captured at ``__enter__``, leaving the caller's state untouched. Typical use:: with Sync(my_model): my_model.execute_move(nni()) my_model.execute_move(spr()) my_model.execute_move(add_reticulation()) # after the block, my_model.network reflects all three moves # (or none of them, if one raised)</p>
+                        <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">get_implementation_info</span> <span class="keyword">-&gt;</span> dict
+                                <span class="name">__init__</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Get information about which implementation is being used.</p>
-                                <div class="returns"><span class="returns-label">Returns:</span> dict with keys:  - 'using_cython': bool - 'nodeset_class': class object - 'edgeset_class': class object</div>
+                                <p>Create a synchroniser bound to ``model``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>The model whose ``ModelNode`` topology and ``network`` attribute should be kept in lock-step on exit.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
+                    </div>
+                </div>
 
                 
                 <div class="footer">
@@ -97,18 +111,17 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
-                <li><a href="Sync.html">Sync</a></li>
+                <li><a href="Sync.html" class="current">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
-                <li><a href="graph_core.html" class="current">graph_core</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
                 <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>
             <ul>
-                <li><a href="#constants">Constants</a></li>
-                <li><a href="#functions">Module Functions</a></li>
+                <li><a href="#sync">Sync</a></li>
             </ul>
         </div>
     </div>

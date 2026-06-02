@@ -201,6 +201,18 @@ def insert_node_in_edge(edge: Edge, node: Node, net: Network) -> None:
     This requires the deletion of edge a -> b, then the addition of edges
     a -> c and c -> b.
 
+    Gamma preservation.  When ``b`` is a reticulation, the original
+    edge ``a -> b`` carries an inheritance probability ``gamma`` that
+    represents one component of ``b``'s parental-mass split.  After
+    the insertion the new in-edge to ``b`` is ``c -> b`` (``a -> c``
+    is just a fresh tree edge feeding the new internal node), so we
+    propagate the original gamma to ``c -> b``.  Without this, every
+    ``insert_node_in_edge`` call on a retic in-edge silently breaks
+    the retic gamma sum invariant -- which is the root cause of the
+    historical 14% bad-gamma rate in ``AddReticulation``.
+    The new ``a -> c`` edge has no gamma (its retic-ness, if any,
+    is the caller's responsibility to set explicitly).
+
     Args:
         edge (Edge): An edge, a -> b
         node (Node): A node, c.
@@ -208,13 +220,17 @@ def insert_node_in_edge(edge: Edge, node: Node, net: Network) -> None:
     Returns:
         N/A
     """
-    a: Node = edge.src 
+    a: Node = edge.src
     b: Node = edge.dest
-    
+    saved_gamma = edge.get_gamma()
+
     # Rewire the edges
     net.remove_edge(edge)
     net.add_edges(Edge(a, node))
-    net.add_edges(Edge(node, b))
+    if saved_gamma is not None and b.is_reticulation():
+        net.add_edges(Edge(node, b, gamma=saved_gamma))
+    else:
+        net.add_edges(Edge(node, b))
     
 def connect_nodes(src: Node, dest: Node, net: Network) -> None:
     """
@@ -656,6 +672,25 @@ class FlipReticulation(Move):
             c.set_is_reticulation(False)
         if net.in_degree(z) > 1:
             z.set_is_reticulation(True)
+            # Reticulation invariant: gammas on z's two in-edges
+            # must sum to 1.0.  The flipped edge ``c -> z`` carries
+            # ``saved_gamma``, but z's pre-existing in-edge was a
+            # tree edge with no gamma set (or 0.0 by default).  Now
+            # that z is a reticulation we have to assign the
+            # complementary mass on that edge -- otherwise the AC DP
+            # scores z with a one-sided split and every proposal
+            # collapses to the log floor.  This was the root cause
+            # of the historical 0% accept rate for this move
+            # (verified by ``runs/diag_retic_fix_proof.py``).
+            sg = saved_gamma if saved_gamma is not None else 0.5
+            other_gamma = max(0.0, min(1.0, 1.0 - sg))
+            for in_e in net.in_edges(z):
+                if in_e.src is c:
+                    continue
+                g = in_e.get_gamma()
+                if g is None or g == 0.0 or not (0.0 < g < 1.0):
+                    in_e.set_gamma(other_gamma)
+                    break
 
         # The above invariant filters catch the common invalid
         # cases, but a cycle can still arise in rare topologies;
@@ -1726,10 +1761,23 @@ class ChangeReticDest(Move):
         host_len = host.get_length()
         split = float(rng.random())
 
+        # Reticulation invariant: the two in-edges of ``c_new`` must
+        # carry inheritance probabilities that sum to 1.0.  We
+        # preserve ``saved_gamma`` on the redirected source edge
+        # ``z -> c_new`` and assign the complementary mass to the
+        # new tree-derived in-edge ``a -> c_new``.  Falling back to
+        # 0.5 when ``saved_gamma`` is None handles malformed inputs
+        # without crashing.  Without this, the AC DP scores ``c_new``
+        # with a one-sided gamma split that sends every proposal to
+        # the log floor (root-cause of the historical 0% accept rate
+        # for this move; verified by ``runs/diag_retic_fix_proof.py``).
+        sg = saved_gamma if saved_gamma is not None else 0.5
+        gamma_a = max(0.0, min(1.0, 1.0 - sg))
+
         net.remove_edge(host)
-        net.add_edges(Edge(a, c_new, length=host_len * split))
+        net.add_edges(Edge(a, c_new, length=host_len * split, gamma=gamma_a))
         net.add_edges(Edge(c_new, b, length=host_len * (1.0 - split)))
-        net.add_edges(Edge(z, c_new, length=saved_length, gamma=saved_gamma))
+        net.add_edges(Edge(z, c_new, length=saved_length, gamma=sg))
 
         model.update_network()
         return model

@@ -312,7 +312,7 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">read_newick_file</span>(<span class="params">filepath: str, return_type: Literal['networks', 'genetrees'] = 'networks', species_gene_mapping: Optional[Dict[str, List[str]]] = None, naming_rule: Optional[Callable[..., Any]] = None</span>) <span class="keyword">-&gt;</span> Union[List[Network], GeneTrees]
+                                <span class="name">read_newick_file</span>(<span class="params">filepath: Union[str, Path], return_type: Literal['networks', 'genetrees'] = 'networks', species_gene_mapping: Optional[Dict[str, List[str]]] = None, naming_rule: Optional[Callable[..., Any]] = None, restrict_to_taxa: Optional[Sequence[str]] = None, min_leaves_after_restrict: int = 1</span>) <span class="keyword">-&gt;</span> Union[List[Network], GeneTrees]
                             </div>
                             <div class="function-body">
                                 <p>Read a file containing one or more newick strings (one per line) and parse each into a PhyNetPy Network. Blank lines and lines starting with '#' are skipped.</p>
@@ -324,7 +324,7 @@
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">filepath</span></td>
-                                        <td><span class="param-type">str</span></td>
+                                        <td><span class="param-type"></span></td>
                                         <td>Path to a file containing newick strings.</td>
                                     </tr>
                                     <tr>
@@ -342,9 +342,19 @@
                                         <td><span class="param-type">Callable, optional</span></td>
                                         <td>Gene-label-to-species callable. Only used when *return_type* is ``&quot;genetrees&quot;`` and no explicit mapping is given.</td>
                                     </tr>
+                                    <tr>
+                                        <td><span class="param-name">restrict_to_taxa</span></td>
+                                        <td><span class="param-type">Sequence[str], optional</span></td>
+                                        <td>If set, each parsed network is replaced by the subnetwork induced on those leaf labels that appear in both the network and this sequence (via :func:`GraphUtils.induced_subnetwork_by_taxa`). Lines where fewer than ``min_leaves_after_restrict`` of these labels are present are skipped with a warning.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">min_leaves_after_restrict</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Minimum number of ``restrict_to_taxa`` labels that must be present on a tree after restriction. Ignored when ``restrict_to_taxa`` is None. Default ``1``.</td>
+                                    </tr>
                                 </table>
                                 <div class="returns"><span class="returns-label">Returns:</span> list[Network] | GeneTrees: Parsed phylogenetic data.</div>
-                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If the file does not exist., <code>IOError</code>: If no valid newick strings are found, or parsing fails.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>FileNotFoundError</code>: If the file does not exist., <code>IOError</code>: If no valid newick strings are found, or parsing fails., <code>ValueError</code>: If ``restrict_to_taxa`` is an empty sequence.</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -595,6 +605,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -603,10 +614,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

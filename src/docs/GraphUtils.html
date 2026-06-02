@@ -28,7 +28,7 @@
                         <dt>Author:</dt>
                         <dd>Mark Kessler</dd>
                         <dt>Last Edit:</dt>
-                        <dd>8/18/25</dd>
+                        <dd>5/12/26</dd>
                         <dt>Source:</dt>
                         <dd>GraphUtils.py</dd>
                     </dl>
@@ -718,6 +718,253 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
+                                <span class="name">hardwired_cluster_distance</span>(<span class="params">net1: Network, net2: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> Union[int, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Hardwired cluster distance between two phylogenetic networks. The hardwired cluster of a node v is the set of all leaf labels reachable from v by following every directed edge. The distance is the cardinality of the symmetric difference of the two hardwired cluster sets: d_HC(N1, N2) = |HC(N1) triangle HC(N2)| When *normalize* is True the result is divided by |HC(N1) | HC(N2)|, yielding a value in [0, 1]. Reference --------- Huson, Rupp &amp; Scornavacca. *Phylogenetic Networks: Concepts, Algorithms and Applications* (2010), Chapter 7.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Return a value in [0, 1] instead of a raw count.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The hardwired cluster distance (int, or float when normalized).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">softwired_cluster_distance</span>(<span class="params">net1: Network, net2: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> Union[int, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Softwired cluster distance between two phylogenetic networks. The softwired cluster set of a network is the union of cluster sets across all of its displayed trees. The distance is the cardinality of the symmetric difference: d_SC(N1, N2) = |SC(N1) triangle SC(N2)| .. note:: This enumerates all 2^k displayed trees where k is the number of reticulations. For networks with many reticulations the cost is exponential. When *normalize* is True the result is divided by |SC(N1) | SC(N2)|, yielding a value in [0, 1]. Reference --------- Huson, Rupp &amp; Scornavacca. *Phylogenetic Networks: Concepts, Algorithms and Applications* (2010), Chapter 7.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Return a value in [0, 1] instead of a raw count.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The softwired cluster distance (int, or float when normalized).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mu_distance</span>(<span class="params">net1: Network, net2: Network</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Mu-representation distance between two phylogenetic networks. For every node v in a network with leaf set X = {l_1, ..., l_n} the *mu-vector* is mu(v) = (m(v, l_1), ..., m(v, l_n)) where m(v, l_i) is the number of directed paths from v to leaf l_i. The *mu-representation* of a network is the multiset of mu-vectors over all nodes. The distance is the size of the multiset symmetric difference of the two mu-representations. This is a metric on the space of *reduced* phylogenetic networks (networks with no degree-2 tree nodes and no parallel edges). It is also referred to as the *topological distance for reduced networks*. For trees it reduces to the Robinson--Foulds distance. Both networks must share the same leaf label set. Reference --------- Cardona, Llabres, Rossello &amp; Valiente. *Metrics for Phylogenetic Networks I: Generalizations of the Robinson-Foulds Metric*. IEEE/ACM Trans. Comput. Biol. Bioinformatics **6** (2009), 46--61.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The mu-distance (non-negative integer).</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the two networks have different leaf label sets.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">tripartition_distance</span>(<span class="params">net1: Network, net2: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> Union[int, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Tripartition-based distance between two phylogenetic networks. For each tree node u with exactly two children c_1, c_2 the tripartition is (desc(c_1), desc(c_2), X \ (desc(c_1) | desc(c_2))) where X is the full leaf set. The distance is the cardinality of the symmetric difference of the tripartition sets: d_T(N1, N2) = |T(N1) triangle T(N2)| Reticulation nodes (in-degree &gt;= 2) are excluded from tripartition generation. When *normalize* is True the result is divided by |T(N1) | T(N2)|, yielding a value in [0, 1]. Reference --------- Moret *et al.*; Huson, Rupp &amp; Scornavacca. *Phylogenetic Networks: Concepts, Algorithms and Applications* (2010), Chapter 7.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Return a value in [0, 1] instead of a raw count.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The tripartition distance (int, or float when normalized).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">displayed_tree_distance</span>(<span class="params">net1: Network, net2: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> Union[int, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Tree-based distance between two phylogenetic networks. Each network's set of unique displayed-tree topologies (identified by cluster representation) is computed. The distance is the cardinality of the symmetric difference: d_DT(N1, N2) = |DT(N1) triangle DT(N2)| .. note:: This enumerates all 2^k displayed trees per network. For networks with many reticulations the cost is exponential. When *normalize* is True the result is divided by |DT(N1) | DT(N2)|, yielding a value in [0, 1].</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Return a value in [0, 1] instead of a raw count.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The displayed-tree distance (int, or float when normalized).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">robinson_foulds_distance</span>(<span class="params">net1: Network, net2: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> Union[int, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Robinson--Foulds distance between two phylogenetic trees or networks. For rooted trees the RF distance equals the cardinality of the symmetric difference of the non-trivial cluster sets (clusters of size &gt;= 2 and &lt; n, where n is the number of leaves). For networks the function uses hardwired clusters, which is the natural generalization of RF to DAGs. Both inputs must share the same leaf label set. When *normalize* is True the result is divided by |C(N1)| + |C(N2)| (the maximum possible RF for the given cluster counts), yielding a value in [0, 1]. Reference --------- Robinson &amp; Foulds. *Comparison of Phylogenetic Trees*. Mathematical Biosciences **53** (1981), 131--147. Cardona, Llabres, Rossello &amp; Valiente. *Metrics for Phylogenetic Networks I: Generalizations of the Robinson-Foulds Metric*. IEEE/ACM Trans. Comput. Biol. Bioinformatics **6** (2009), 46--61.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>First tree / network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Second tree / network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Return a value in [0, 1] instead of a raw count.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The RF distance (int, or float when normalized).</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the two inputs have different leaf label sets.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">average_path_distance</span>(<span class="params">net1: Network, net2: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Average Path Distance (APD) between two phylogenetic networks. For each network a pairwise leaf distance matrix is computed by averaging the path lengths across all displayed trees (uniform weighting). The APD is the L1 norm of the difference between the two matrices: APD(N1, N2) = sum_{i&lt;j} |D_N1(l_i,l_j) - D_N2(l_i,l_j)| When *normalize* is True the sum is divided by the number of leaf pairs C(n, 2). Branch lengths on every edge are required. .. note:: This enumerates all 2^k displayed trees per network. For networks with many reticulations the cost is exponential. Reference --------- Yakici, Ogilvie &amp; Nakhleh. *Phylogenetic Network Dissimilarity Measures that Take Branch Lengths into Account*. RECOMB-CG 2022, LNCS 13234, pp. 86--102.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Divide by C(n, 2) to get a per-pair average.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The APD (float).</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the two networks have different leaf label sets.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">weighted_average_path_distance</span>(<span class="params">net1: Network, net2: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Weighted Average Path Distance (WAPD) between two networks. Identical to :func:`average_path_distance` except that the average over displayed trees is weighted by each tree's probability (the product of the gamma values of the kept reticulation edges). WAPD(N1, N2) = sum_{i&lt;j} |WD_N1(l_i,l_j) - WD_N2(l_i,l_j)| When *normalize* is True the sum is divided by the number of leaf pairs C(n, 2). Branch lengths and gamma values on every reticulation edge are required. .. note:: This enumerates all 2^k displayed trees per network. For networks with many reticulations the cost is exponential. Reference --------- Yakici, Ogilvie &amp; Nakhleh. *Phylogenetic Network Dissimilarity Measures that Take Branch Lengths into Account*. RECOMB-CG 2022, LNCS 13234, pp. 86--102.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Divide by C(n, 2) to get a per-pair average.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The WAPD (float).</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the two networks have different leaf label sets.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
                                 <span class="name">ascii</span>(<span class="params">net: Network, show_edge_lengths: bool = False</span>) <span class="keyword">-&gt;</span> str
                             </div>
                             <div class="function-body">
@@ -794,6 +1041,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -802,10 +1050,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

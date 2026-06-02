@@ -28,7 +28,7 @@
                         <dt>Author:</dt>
                         <dd>Mark Kessler</dd>
                         <dt>Last Edit:</dt>
-                        <dd>3/11/25</dd>
+                        <dd>5/12/26</dd>
                         <dt>Source:</dt>
                         <dd>State.py</dd>
                     </dl>
@@ -52,7 +52,7 @@
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">model: Model | None = None, validate: Callable[[Model], bool] = acyclic_routine</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">__init__</span>(<span class="params">model: Model | None = None, validate: Callable[[Model], bool] = network_invariants_routine</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
                                 <p>Initialize a State. A State contains two models-- one current model, and one proposed model that contains one singular edit to the current model. At the very beginning of the State and before the execution of a method, the two models will be carbon copies of each other.</p>
@@ -111,7 +111,7 @@
                                 <span class="name">generate_next</span>(<span class="params">move: Move</span>) <span class="keyword">-&gt;</span> bool
                             </div>
                             <div class="function-body">
-                                <p>Set the proposed model to a new model that is the result of applying one move to the former proposed model</p>
+                                <p>Set the proposed model to a new model that is the result of applying one move to the former proposed model. Relies on the move's own undo() for rollback instead of deep-copying the entire model as a snapshot.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -152,7 +152,7 @@
                                 <span class="name">commit</span>(<span class="params">move: Move</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>The proposed change was beneficial. Make the same move on the current model as was made to the proposed model.</p>
+                                <p>The proposed change was beneficial. Synchronise the current model by copying the proposed network (cheaper than replaying the move).</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -267,6 +267,27 @@
                                 <div class="returns"><span class="returns-label">Returns:</span> bool: True if the model's network is free of cycles, False if it contains cycles.</div>
                             </div>
                         </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">network_invariants_routine</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Validate that a network satisfies phylogenetic invariants. Checks: 1. Exactly one root (in-degree 0, out-degree &gt;= 2) 2. Every leaf has (in=1, out=0) 3. Every reticulation has (in=2, out=1) 4. Every other internal node has (in=1, out &gt;= 2) 5. The graph is a DAG (acyclic)</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A Model whose ``network`` attribute is the phylogenetic network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> True when all invariants hold, False otherwise.</div>
+                            </div>
+                        </div>
 
                 
                 <div class="footer">
@@ -298,6 +319,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -306,10 +328,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html" class="current">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

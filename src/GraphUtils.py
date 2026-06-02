@@ -1,5 +1,31 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+
+"""
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 1.0.0
+
+GraphUtils -- topology analysis, manipulation, and rendering utilities
+for phylogenetic networks.
+
+This module is the catch-all for graph-theoretic operations on
+:class:`~.Network.Network` objects, including:
+
+* topology summaries (network level, blob/biconnected-component
+  decomposition, tree-child / tree-based predicates);
+* enumeration of displayed trees and subnetworks
+  (``get_all_subtrees``, ``displayed_trees``);
+* distance metrics on networks
+  (mu-distance, hardwired / softwired / Robinson--Foulds /
+  tripartition / displayed-tree / average-path / weighted-APD);
+* convenience helpers for branch lengths, clades, and ASCII rendering.
+
+Docs   - [x]
+Tests  - [ ]
+Design - [ ]
+"""
+
 from __future__ import annotations
 
 ##############################################################################
@@ -17,16 +43,6 @@ from __future__ import annotations
 ##     Mark Kessler, Luay Nakhleh. 2025.
 ##
 ##############################################################################
-
-""" 
-Author : Mark Kessler
-Last Edit : 8/18/25
-First Included in Version : 1.0.0
-
-Docs   - [x]
-Tests  - [ ]
-Design - [ ]
-"""
 
 from .Network import *
 from collections import Counter, deque

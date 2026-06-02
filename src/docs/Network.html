@@ -1111,14 +1111,6 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__len__</span> <span class="keyword">-&gt;</span> float
-                            </div>
-                            <div class="function-body">
-                                <p>Get the length of this edge.</p>
-                            </div>
-                        </div>
-                        <div class="function-def">
-                            <div class="function-header">
                                 <span class="name">to_branch</span> <span class="keyword">-&gt;</span> Branch
                             </div>
                             <div class="function-body">
@@ -1206,6 +1198,14 @@
                                         <td>An edge that is currently in E.</td>
                                     </tr>
                                 </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">rehash_node</span>(<span class="params">node: Node, affected_edges: set</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Rebuild hash entries for all edges touching *node*. Must be called **after** the node's name (and therefore its hash) has already been changed. The caller supplies the set of Edge / UEdge objects that touch *node* so that we can remove them under the *old* hash bucket (which is now unreachable because the node hash changed) and re-insert under the *new* hash.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -1476,7 +1476,7 @@
                                 <span class="name">update_node_name</span>(<span class="params">node: Node, name: str</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Rename a node and update the bookkeeping.</p>
+                                <p>Rename a node and update the bookkeeping. Because Node.__hash__ is name-based, we must remove the node from all hash-keyed collections *before* changing the name and re-add it *after*.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -1721,6 +1721,31 @@
                                         <td><span class="param-name">gamma</span></td>
                                         <td><span class="param-type">float</span></td>
                                         <td>an inheritance probability from [0,1], if the edge is provided as a list of nodes, and there is an identifiability issue that needs resolving (ie, the edge that needs to be removed is a bubble edge). Optional. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">update_node_name</span>(<span class="params">node: Node, name: str</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Rename a node and update *all* bookkeeping (NodeSet, EdgeSet, leaf/root sets). Overrides Graph.update_node_name to additionally rehash the Network-level ``__leaves`` and ``__roots`` sets whose keys depend on Node.__hash__ (which is name-based).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>a node in the graph</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>the new name for the node.</td>
                                     </tr>
                                 </table>
                             </div>
@@ -2226,10 +2251,10 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">nakhleh_distance</span>(<span class="params">other: Network</span>) <span class="keyword">-&gt;</span> float
+                                <span class="name">rooted_triplet_distance</span>(<span class="params">other: Network</span>) <span class="keyword">-&gt;</span> float
                             </div>
                             <div class="function-body">
-                                <p>Computes the rooted triplet distance (Nakhleh distance) between two networks. This distance measure compares the topological relationships between all triplets of leaves in both networks.</p>
+                                <p>Computes the rooted triplet distance between two networks. This distance measure compares the topological relationships between all triplets of leaves in both networks. For each triplet of leaves {x, y, z}, the pair sharing the deepest MRCA are identified as siblings, producing a canonical encoding. The distance is the normalized symmetric difference of these triplet sets.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -2242,7 +2267,7 @@
                                         <td>The other network to compare against.</td>
                                     </tr>
                                 </table>
-                                <div class="returns"><span class="returns-label">Returns:</span> float: The Nakhleh distance (0 = identical topology, 1 = completely different).</div>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The rooted triplet distance (0 = identical, 1 = completely different).</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -2506,6 +2531,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html" class="current">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -2514,10 +2540,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

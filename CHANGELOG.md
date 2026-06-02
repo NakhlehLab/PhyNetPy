@@ -6,6 +6,76 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.0] -- 2026-05-12
+
+### Added
+
+- **`phynetpy.infer`** -- new curated public inference API.  Single
+  import surface (`MPL`, `MCMC_GT`, `INFER_MP_ALLOP`,
+  `INFER_MP_ALLOP_BOOTSTRAP`, `ALLOP_SCORE`, `MCMC_BIMARKERS`,
+  `SNP_LIKELIHOOD`) plus scorer, kernel, prior, and result types.
+- **Cython MPL DP engine** (`phynetpy.cython.mpl_engine_cy`):
+  C-level dynamic programming for MPL triplet scoring.
+- **Cython gene-tree MSC kernel** (`phynetpy.cython.gt_msc_cy`):
+  C-level scoring backbone for `MCMC_GT` and `MCMCGTScorer`.
+- **`MCMCGTKernel`** -- adaptive proposal kernel for MCMC-GT with
+  per-move acceptance statistics, phase reporting (`burn-in` /
+  `tune` / `sample`), `freeze_adaptation()`, and
+  `format_stats()` summaries.
+- **`_ScoreManyPool`** -- parallel network-scoring worker pool used
+  by the MCMC-GT search driver for multi-core speedups.
+- **`RelocateReticulation`** topology move -- atomic remove + re-add
+  of a reticulation destination edge.
+- **Simulated-Annealing enhancements**: geometric and linear
+  cooling / heating schedules, plateau detection with adaptive
+  temperature kicks, and search save / compare hooks.
+- **`Sync`** context manager re-exported at top level
+  (`from phynetpy import Sync`).
+- New example scripts: `mpl_demo.py`, `mpl_20taxa_search_demo.py`,
+  `mpl_7taxa_tune_demo.py`, `mpl_7taxa_retic_sweep.py`,
+  `mpl_7taxa_multiseed.py`, `mcmc_gt_demo.py`, `quickstart.py`,
+  `tree_of_blobs.py`.
+
+### Changed
+
+- **Module reorganisation** -- the three largest inference modules
+  have been split into private implementations
+  (`_mcmc_gt`, `_mpl`, `_infer_mp_allop`) and 22-line re-export
+  shims at the old import paths (`MCMC_GT`, `MPL`,
+  `Infer_MP_Allop`).  Existing `from phynetpy.MCMC_GT import ...`
+  style imports continue to work; new code should prefer
+  `from phynetpy.infer import ...`.
+- **`generate_docs.py`** now inherits method docstrings from
+  same-module abstract base classes.  Concrete subclasses
+  (`CPUExecutor`, `GPUExecutor`, every `Move` subclass) inherit
+  documentation from their base method, eliminating dozens of empty
+  method descriptions on the generated HTML pages.  Private
+  implementation modules and back-compat shims are now skipped to
+  prevent empty doc pages.
+- Module headers and docstrings normalised so the doc-generator
+  picks up `Author`, `Last Edit`, and `First Included in Version`
+  lines on all 30 documented modules.
+- `phynetpy.__version__` and `setup.py` `version=` are now
+  single-sourced and both report `0.4.0` (these had drifted
+  apart in 0.3.x).
+
+### Fixed
+
+- **`AddReticulation`** gamma preservation -- `insert_node_in_edge`
+  now propagates the original reticulation gamma to the new in-edge
+  instead of dropping it, eliminating the historical ~14%
+  bad-gamma proposal rate.
+- **`FlipReticulation`** sum-to-one invariant -- the flipped
+  target's pre-existing in-edge is now assigned the complementary
+  gamma, restoring the `gamma + (1 - gamma) = 1` invariant on the
+  post-flip reticulation.  Lifts the historical 0% accept rate.
+- **`ChangeReticDest`** sum-to-one invariant -- the redirected
+  source edge keeps its saved gamma and the new tree-derived
+  in-edge gets the complement.  Lifts the historical 0% accept
+  rate for this move.
+
+---
+
 ## [0.3.2] -- 2026-04-02
 
 ### Added

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhyNetPy | Phylogenetic Network Inference in Python</title>
+  <meta name="description" content="PhyNetPy is a Python library for phylogenetic network construction, simulation, scoring, and inference.">
+  <link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="Main navigation">
+      <a class="brand" href="index.html">PhyNetPy</a>
+      <div class="nav-links">
+        <a href="news.html">News</a>
+        <a href="releases.html">Release Notes</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="advertisements.html">Advertisements</a>
+        <a href="demos.html">Demos</a>
+        <a href="https://github.com/NakhlehLab/PhyNetPy">GitHub</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <p class="eyebrow">Phylogenetic network research toolkit</p>
+      <h1>Build, score, and infer phylogenetic networks in Python.</h1>
+      <p>
+        PhyNetPy provides research-grade data structures, simulation tools, and
+        search methods for phylogenetic networks, including a unified inference
+        API and accelerated scoring paths in the 0.5.0 release.
+      </p>
+      <div class="hero-actions">
+        <a class="button primary" href="documentation.html">Read the docs</a>
+        <a class="button secondary" href="releases.html">See what is new</a>
+      </div>
+    </section>
+  </header>
+
+  <main>
+    <section class="grid three" aria-label="Site highlights">
+      <article class="feature">
+        <h2>Unified Inference</h2>
+        <p>
+          Start from <code>phynetpy.infer</code> for MPL, MCMC-GT, MP-Allop,
+          and biallelic marker workflows through one public entry point.
+        </p>
+      </article>
+      <article class="feature">
+        <h2>Network Moves</h2>
+        <p>
+          Explore reticulation-aware topology moves, adaptive proposal kernels,
+          and search drivers for network inference experiments.
+        </p>
+      </article>
+      <article class="feature">
+        <h2>Fast Scoring</h2>
+        <p>
+          Optional Cython engines accelerate MPL triplet scoring and gene-tree
+          MSC scoring while preserving pure-Python fallback behavior.
+        </p>
+      </article>
+    </section>
+
+    <section class="section">
+      <div class="section-heading">
+        <h2>Latest Release</h2>
+        <a href="releases.html">Full release notes</a>
+      </div>
+      <article class="release">
+        <p class="eyebrow">Version 0.5.0</p>
+        <h2>Faster, more reliable phylogenetic-network search</h2>
+        <p>
+          PhyNetPy 0.5.0 adds the public <code>phynetpy.infer</code> API,
+          Cython dynamic-programming engines, adaptive proposal kernels, and
+          correctness fixes for reticulation moves.
+        </p>
+        <ul class="highlight-list">
+          <li>Cython MPL and gene-tree MSC scoring engines.</li>
+          <li>Adaptive MCMC-GT proposal kernel with per-move statistics.</li>
+          <li>Reticulation move fixes that preserve gamma invariants.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="section grid two">
+      <article class="card">
+        <h2>For Researchers</h2>
+        <p>
+          Use PhyNetPy to prototype network inference methods, test topology
+          moves, compare scoring strategies, and run reproducible simulations.
+        </p>
+        <ul class="tag-list">
+          <li>MCMC</li>
+          <li>MPL</li>
+          <li>MSC scoring</li>
+          <li>Reticulation moves</li>
+        </ul>
+      </article>
+      <article class="ad-banner">
+        <h2>Advertise a Workshop, Dataset, or Tutorial</h2>
+        <p>
+          This site includes a dedicated advertisements page for calls for
+          papers, training events, lab opportunities, and community resources
+          related to phylogenetics and network methods.
+        </p>
+        <a href="advertisements.html">View announcement slots</a>
+      </article>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      PhyNetPy is developed for phylogenetics research and method development.
+      Source code is available on <a href="https://github.com/NakhlehLab/PhyNetPy">GitHub</a>.
+    </p>
+  </footer>
+</body>
+</html>

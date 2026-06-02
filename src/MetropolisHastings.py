@@ -1,5 +1,34 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+
+"""
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 1.0.0
+
+MetropolisHastings -- generic stochastic search drivers for phylogenetic
+network inference.
+
+This module provides the search-algorithm scaffolding shared by every
+PhyNetPy inference method (MPL, MCMC_GT, INFER_MP_ALLOP, etc.).
+Concrete inference modules wire their per-method scorer and proposal
+kernel into one of these drivers:
+
+* :class:`MetropolisHastings` -- Bayesian sampling via the
+  Metropolis-Hastings acceptance rule.
+* :class:`HillClimbing` -- greedy local search that always accepts an
+  improving move.
+* :class:`SimulatedAnnealing` -- temperature-controlled stochastic
+  search with configurable cooling schedules (geometric, linear,
+  plateau-aware) for escaping local optima.
+* :class:`ProposalKernel` -- pluggable move-selection policy with
+  optional adaptive weight tuning during search.
+
+Docs   - [ ]
+Tests  - [x]
+Design - [x]
+"""
+
 from __future__ import annotations
 
 ##############################################################################
@@ -17,14 +46,6 @@ from __future__ import annotations
 ##     Mark Kessler, Luay Nakhleh. 2025.
 ##
 ##############################################################################
-
-""" 
-Author : Mark Kessler
-Last Stable Edit : 3/11/25
-First Included in Version : 1.0.0
-
-V1 Architecture - Metropolis-Hastings and Hill Climbing search algorithms.
-"""
 
 import copy
 import math

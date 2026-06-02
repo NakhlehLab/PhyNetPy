@@ -24,7 +24,7 @@
                 <div class="module-info">
                     <dl>
                         <dt>Version:</dt>
-                        <dd>0.3.0</dd>
+                        <dd>0.4.0</dd>
                         <dt>Authors:</dt>
                         <dd>Mark Kessler, Luay Nakhleh</dd>
                         <dt>Copyright:</dt>
@@ -103,6 +103,10 @@
                             <td>Network topology move operations for MCMC search (add/remove/flip reticulation, SPR).</td>
                         </tr>
                         <tr>
+                            <td><a href="ModelSelection.html">ModelSelection</a></td>
+                            <td>Information-criterion-based reticulation-count selection (AIC, BIC, AICc) and reticulation sweep helpers.</td>
+                        </tr>
+                        <tr>
                             <td><a href="Network.html">Network</a></td>
                             <td>Core phylogenetic network data structures: Node, Edge, and Network classes.</td>
                         </tr>
@@ -135,6 +139,10 @@
                             <td>Strategy pattern interface for node-level computations dispatched during bottom-up traversal.</td>
                         </tr>
                         <tr>
+                            <td><a href="Sync.html">Sync</a></td>
+                            <td>Atomic model / network reconciliation context manager: topology moves inside a ``with Sync(model):`` block are auto-rolled back on error and reconciled on success.</td>
+                        </tr>
+                        <tr>
                             <td><a href="Traversal.html">Traversal</a></td>
                             <td>Iterator-based graph traversal for model nodes supporting pre-order, post-order, and level-order.</td>
                         </tr>
@@ -149,6 +157,10 @@
                         <tr>
                             <td><a href="graph_core.html">graph_core</a></td>
                             <td>Graph core data structures with automatic Cython acceleration for NodeSet and EdgeSet.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="infer.html">infer</a></td>
+                            <td>Curated public inference surface: re-exports MCMC_GT, INFER_MP_ALLOP, MPL, and their entry points from the private implementation modules.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -203,8 +215,10 @@ simulated_net = sim.generate_network()</code></pre>
                     <li><a href="BiMarkers.html">BiMarkers</a> - SNP (biallelic marker) likelihood computation for phylogenetic networks, with optional GPU acceleration.</li>
                     <li><a href="MetropolisHastings.html">MetropolisHastings</a> - Metropolis-Hastings MCMC and Hill Climbing search algorithms for phylogenetic inference.</li>
                     <li><a href="ModelMove.html">ModelMove</a> - Network topology move operations for MCMC search (add/remove/flip reticulation, SPR).</li>
+                    <li><a href="ModelSelection.html">ModelSelection</a> - Information-criterion-based reticulation-count selection (AIC, BIC, AICc) and reticulation sweep helpers.</li>
                     <li><a href="NetworkMoves.html">NetworkMoves</a> - Network topology modification operations for MCMC search (add/remove hybrid, NNI, node height).</li>
                     <li><a href="State.html">State</a> - State management for MCMC accept/reject decisions with model validation.</li>
+                    <li><a href="infer.html">infer</a> - Curated public inference surface: re-exports MCMC_GT, INFER_MP_ALLOP, MPL, and their entry points from the private implementation modules.</li>
                 </ul>
                 <h3>Analysis</h3>
                 <ul class="method-list">
@@ -225,6 +239,7 @@ simulated_net = sim.generate_network()</code></pre>
                     <li><a href="ModelFactory.html">ModelFactory</a> - Component-based model building factory for constructing probabilistic phylogenetic models.</li>
                     <li><a href="ModelGraph.html">ModelGraph</a> - Probabilistic graphical model for phylogenetics with typed model nodes and visitor pattern support.</li>
                     <li><a href="Strategy.html">Strategy</a> - Strategy pattern interface for node-level computations dispatched during bottom-up traversal.</li>
+                    <li><a href="Sync.html">Sync</a> - Atomic model / network reconciliation context manager: topology moves inside a ``with Sync(model):`` block are auto-rolled back on error and reconciled on success.</li>
                     <li><a href="Traversal.html">Traversal</a> - Iterator-based graph traversal for model nodes supporting pre-order, post-order, and level-order.</li>
                     <li><a href="Visitor.html">Visitor</a> - Visitor pattern interface for ModelNode traversals with typed dispatch.</li>
                     <li><a href="graph_core.html">graph_core</a> - Graph core data structures with automatic Cython acceleration for NodeSet and EdgeSet.</li>
@@ -259,6 +274,7 @@ simulated_net = sim.generate_network()</code></pre>
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -267,10 +283,12 @@ simulated_net = sim.generate_network()</code></pre>
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
         </div>
     </div>

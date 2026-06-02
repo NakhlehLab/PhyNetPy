@@ -9,7 +9,12 @@
 ##  All rights reserved.
 ##############################################################################
 
-"""Public inference API for PhyNetPy.
+"""
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 0.4.0
+
+Public inference API for PhyNetPy.
 
 This is the single front door for running phylogenetic-network inference.
 Users should import everything they need from here rather than reaching into

@@ -69,10 +69,22 @@
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params"></span>)
+                                <span class="name">__init__</span>(<span class="params">rng: np.random.Generator | np.random.SeedSequence | int | None = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
                                 <p>Initialize a model object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rng</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional RNG context.  Accepts a ``numpy.random.Generator`` (used directly), a ``numpy.random.SeedSequence`` (used to build a fresh generator), or an ``int`` seed.  ``None`` falls back to ``numpy.random.default_rng()``, which seeds itself from OS entropy.  Callers that care about reproducibility (e.g. ``MPL.search``) should pass a ``SeedSequence`` spawned from the search-wide seed.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <h4>Methods</h4>
@@ -82,6 +94,72 @@
                             </div>
                             <div class="function-body">
                                 <p>Returns the root node of the model.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_likelihood_calculator</span>(<span class="params">calculator: Any</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set a callable that computes the model's likelihood/score. The callable should accept a single argument (the Model instance) and return a float.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">calculator</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A callable (Model) -&gt; float.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">update_network</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Called after any move modifies the network topology. Marks the model as needing recomputation. Treated as a *full* invalidation: any fine-grained dirty-node set that a move may have posted via :meth:`mark_touched` is promoted to ``None`` (all-dirty) so the scorer's fallback path kicks in. Moves that know exactly which nodes they touched should call :meth:`mark_touched` *instead of* this method (or before it).</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mark_touched</span>(<span class="params">nodes: 'set[Node] | None'</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Record which network nodes were modified by the last move. Called by :class:`Move` subclasses from ``execute``/``undo`` to let scorers with per-network-edge caches (e.g. MCMC_GT's :class:`_GTLikelihoodEngine`) invalidate only the affected region instead of the entire likelihood. Semantics: * ``mark_touched(None)`` -&gt; escalate to full invalidation, regardless of any previously-posted set. Safe fallback used by moves whose impact is hard to localize. * ``mark_touched(set(...))`` -&gt; merge into any existing dirty set (so multiple sequential mutations accumulate). If the model is already &quot;all dirty&quot; the call is a no-op. * ``mark_touched(set())`` -&gt; initialise an empty set, signalling &quot;nothing dirty this iteration&quot; (useful for rebinding after a full rescore).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">nodes</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Nodes whose incident branches or gammas changed, or ``None`` for all-dirty.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clear_dirty_nodes</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Reset the fine-grained dirty-node set to &quot;nothing dirty&quot;. Called by scorers after they have consumed ``_dirty_nodes`` and updated their caches accordingly. Leaves the coarse ``_dirty`` flag alone; the caller controls that via :meth:`likelihood` gating.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">likelihood</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the model likelihood/score using the registered calculator.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The model likelihood or score.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ModelError</code>: If no likelihood calculator has been set.</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -749,6 +827,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html" class="current">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -757,10 +836,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

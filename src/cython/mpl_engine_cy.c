@@ -4,9 +4,6 @@
 {
     "distutils": {
         "depends": [],
-        "extra_compile_args": [
-            "-O3"
-        ],
         "name": "phynetpy.cython.mpl_engine_cy",
         "sources": [
             "src/cython/mpl_engine_cy.pyx"

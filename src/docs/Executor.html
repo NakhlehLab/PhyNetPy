@@ -19,7 +19,7 @@
                     <a href="index.html">Home</a> &raquo; Executor
                 </div>
                 
-                <h1>Executor Module <span class="version-badge">v1.0.0</span></h1>
+                <h1>Executor Module <span class="version-badge">v0.3.0</span></h1>
                 
                 <p>Computation backend abstraction layer providing CPU (NumPy) and GPU (CuPy) array operations.</p>
                 
@@ -27,6 +27,8 @@
                     <dl>
                         <dt>Author:</dt>
                         <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>5/12/26</dd>
                         <dt>Source:</dt>
                         <dd>Executor.py</dd>
                     </dl>
@@ -599,131 +601,240 @@
                             <div class="function-header">
                                 <span class="name">__init__</span>(<span class="params">config: Optional[ExecutorConfig] = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Initialize executor with configuration.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">config</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>ExecutorConfig specifying device and options</td>
+                                    </tr>
+                                </table>
+                            </div>
                         </div>
                         <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">array</span>(<span class="params">data, dtype = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Create an array on the executor's device.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Input data (list, numpy array, etc.)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">dtype</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional dtype override</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Array on the target device</div>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">zeros</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create zero-filled array.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">ones</span>(<span class="params">shape, dtype = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Create one-filled array.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">empty</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create uninitialized array (faster than zeros).</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">eye</span>(<span class="params">n, dtype = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Create identity matrix.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">diag</span>(<span class="params">v</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create diagonal matrix from vector, or extract diagonal.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">arange</span>(<span class="params">start, stop, step = 1</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Create array with evenly spaced values.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">exp</span>(<span class="params">x</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise exponential.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">log</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Element-wise natural logarithm.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">sqrt</span>(<span class="params">x</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise square root.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">abs</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Element-wise absolute value.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">sum</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Sum of array elements along axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">prod</span>(<span class="params">x, axis = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Product of array elements along axis.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">max</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Maximum along axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">min</span>(<span class="params">x, axis = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Minimum along axis.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">mean</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Mean along axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">clip</span>(<span class="params">x, min_val, max_val</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Clip values to range.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">matmul</span>(<span class="params">a, b</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Matrix multiplication.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">einsum</span>(<span class="params">subscripts, *operands</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Einstein summation - critical for phylogenetic computations. Common patterns: - 'ij,sj-&gt;si': Transform partials through P matrix - 'si,i-&gt;s': Weight by frequencies - 'ij,jk-&gt;ik': Matrix multiply - 'bij,bsj-&gt;bsi': Batched transform</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">outer</span>(<span class="params">a, b</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Outer product of two vectors.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">dot</span>(<span class="params">a, b</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Dot product.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">transpose</span>(<span class="params">x, axes = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Transpose array.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">inv</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Matrix inverse.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">eig</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Eigendecomposition.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Tuple of (eigenvalues, eigenvectors)</div>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">solve</span>(<span class="params">a, b</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Solve linear system Ax = b.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -746,75 +857,120 @@
                             <div class="function-header">
                                 <span class="name">reshape</span>(<span class="params">x, shape</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Reshape array.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">concatenate</span>(<span class="params">arrays, axis = 0</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Concatenate arrays along axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">stack</span>(<span class="params">arrays, axis = 0</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Stack arrays along new axis.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">split</span>(<span class="params">x, indices, axis = 0</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Split array at indices.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">squeeze</span>(<span class="params">x, axis = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Remove single-dimensional entries.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">expand_dims</span>(<span class="params">x, axis</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Add dimension at axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">broadcast_to</span>(<span class="params">x, shape</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Broadcast array to shape.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">take</span>(<span class="params">x, indices, axis = 0</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Take elements along axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">where</span>(<span class="params">condition, x, y</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Element-wise conditional selection.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">to_numpy</span>(<span class="params">x</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Convert array to numpy (CPU).</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">from_numpy</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Convert numpy array to executor's array type.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">copy</span>(<span class="params">x</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create a copy of array.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">random_uniform</span>(<span class="params">shape, low = 0.0, high = 1.0</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Generate uniform random values.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">random_normal</span>(<span class="params">shape, mean = 0.0, std = 1.0</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Generate normal random values.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">random_choice</span>(<span class="params">a, size, p = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Random choice from array.</p>
                             </div>
                         </div>
                     </div>
@@ -832,131 +988,240 @@
                             <div class="function-header">
                                 <span class="name">__init__</span>(<span class="params">config: Optional[ExecutorConfig] = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Initialize executor with configuration.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">config</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>ExecutorConfig specifying device and options</td>
+                                    </tr>
+                                </table>
+                            </div>
                         </div>
                         <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">array</span>(<span class="params">data, dtype = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Create an array on the executor's device.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Input data (list, numpy array, etc.)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">dtype</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional dtype override</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Array on the target device</div>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">zeros</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create zero-filled array.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">ones</span>(<span class="params">shape, dtype = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Create one-filled array.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">empty</span>(<span class="params">shape, dtype = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create uninitialized array (faster than zeros).</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">eye</span>(<span class="params">n, dtype = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Create identity matrix.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">diag</span>(<span class="params">v</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Create diagonal matrix from vector, or extract diagonal.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">arange</span>(<span class="params">start, stop, step = 1</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Create array with evenly spaced values.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">exp</span>(<span class="params">x</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise exponential.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">log</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Element-wise natural logarithm.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">sqrt</span>(<span class="params">x</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise square root.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">abs</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Element-wise absolute value.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">sum</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Sum of array elements along axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">prod</span>(<span class="params">x, axis = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Product of array elements along axis.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">max</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Maximum along axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">min</span>(<span class="params">x, axis = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Minimum along axis.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">mean</span>(<span class="params">x, axis = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Mean along axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">clip</span>(<span class="params">x, min_val, max_val</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Clip values to range.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">matmul</span>(<span class="params">a, b</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Matrix multiplication.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">einsum</span>(<span class="params">subscripts, *operands</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Einstein summation - critical for phylogenetic computations. Common patterns: - 'ij,sj-&gt;si': Transform partials through P matrix - 'si,i-&gt;s': Weight by frequencies - 'ij,jk-&gt;ik': Matrix multiply - 'bij,bsj-&gt;bsi': Batched transform</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">outer</span>(<span class="params">a, b</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Outer product of two vectors.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">dot</span>(<span class="params">a, b</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Dot product.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">transpose</span>(<span class="params">x, axes = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Transpose array.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">inv</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Matrix inverse.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">eig</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Eigendecomposition.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Tuple of (eigenvalues, eigenvectors)</div>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">solve</span>(<span class="params">a, b</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Solve linear system Ax = b.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -1039,45 +1304,72 @@
                             <div class="function-header">
                                 <span class="name">reshape</span>(<span class="params">x, shape</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Reshape array.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">concatenate</span>(<span class="params">arrays, axis = 0</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Concatenate arrays along axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">stack</span>(<span class="params">arrays, axis = 0</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Stack arrays along new axis.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">split</span>(<span class="params">x, indices, axis = 0</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Split array at indices.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">squeeze</span>(<span class="params">x, axis = None</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Remove single-dimensional entries.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">expand_dims</span>(<span class="params">x, axis</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Add dimension at axis.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">broadcast_to</span>(<span class="params">x, shape</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Broadcast array to shape.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">take</span>(<span class="params">x, indices, axis = 0</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Take elements along axis.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">where</span>(<span class="params">condition, x, y</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Element-wise conditional selection.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -1100,6 +1392,9 @@
                             <div class="function-header">
                                 <span class="name">copy</span>(<span class="params">x</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Create a copy of array.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
@@ -1121,15 +1416,24 @@
                             <div class="function-header">
                                 <span class="name">random_uniform</span>(<span class="params">shape, low = 0.0, high = 1.0</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Generate uniform random values.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">random_normal</span>(<span class="params">shape, mean = 0.0, std = 1.0</span>)
                             </div>
+                            <div class="function-body">
+                                <p>Generate normal random values.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">random_choice</span>(<span class="params">a, size, p = None</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Random choice from array.</p>
                             </div>
                         </div>
                     </div>
@@ -1188,6 +1492,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -1196,10 +1501,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

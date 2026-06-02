@@ -1,5 +1,9 @@
 
 """
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 0.3.0
+
 Executor Module for PhyNetPy
 
 This module provides the Executor abstraction layer that supplies matrix/vector
@@ -32,9 +36,6 @@ Architecture:
     │      └──► MultiGPUExecutor (distributed)                        │
     │                                                                 │
     └─────────────────────────────────────────────────────────────────┘
-
-Author: Mark Kessler
-Version: 0.3.0
 """
 
 from __future__ import annotations

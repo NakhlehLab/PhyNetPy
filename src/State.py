@@ -1,5 +1,26 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+
+"""
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 1.0.0
+
+State -- accept/reject bookkeeping for MCMC and hill-climbing search.
+
+Wraps a :class:`~.ModelGraph.Model` with snapshot / restore semantics so
+that the search driver can:
+
+* propose a topology or parameter move and tentatively evaluate it,
+* atomically commit the move on acceptance, or
+* revert it on rejection or model-validation failure.
+
+The class is intentionally lightweight -- it holds references to the
+mutable model and a small set of rollback hooks; the heavy lifting (move
+execution, scoring) is delegated to :mod:`.ModelMove` and the inference
+module's scorer.
+"""
+
 from __future__ import annotations
 
 ##############################################################################
@@ -17,14 +38,6 @@ from __future__ import annotations
 ##     Mark Kessler, Luay Nakhleh. 2025.
 ##
 ##############################################################################
-
-""" 
-Author : Mark Kessler
-Last Edit : 3/11/25
-First Included in Version : 1.0.0
-
-V1 Architecture - State management for MCMC accept/reject.
-"""
 
 import copy
 from typing import Callable

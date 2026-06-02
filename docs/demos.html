@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demos | PhyNetPy</title>
+  <meta name="description" content="Demonstrations and starter workflows for PhyNetPy.">
+  <link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="Main navigation">
+      <a class="brand" href="index.html">PhyNetPy</a>
+      <div class="nav-links">
+        <a href="news.html">News</a>
+        <a href="releases.html">Release Notes</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="advertisements.html">Advertisements</a>
+        <a aria-current="page" href="demos.html">Demos</a>
+        <a href="https://github.com/NakhlehLab/PhyNetPy">GitHub</a>
+      </div>
+    </nav>
+
+    <section class="hero page-title">
+      <p class="eyebrow">Examples</p>
+      <h1>Demos</h1>
+      <p>Starter workflows and demonstration ideas for using PhyNetPy in research projects.</p>
+    </section>
+  </header>
+
+  <main class="content-page">
+    <section class="grid two" aria-label="Demo cards">
+      <article class="card">
+        <h2>Install and Import</h2>
+        <p>Install PhyNetPy and import the public inference API.</p>
+        <pre class="demo-shell"><code>pip install phynetpy
+
+python -c "from phynetpy.infer import MPL, MCMC_GT; print('PhyNetPy ready')"</code></pre>
+      </article>
+
+      <article class="card">
+        <h2>Inference API Tour</h2>
+        <p>
+          Create a notebook or script that walks through MPL, MCMC-GT, MP-Allop,
+          and biallelic marker workflows from <code>phynetpy.infer</code>.
+        </p>
+        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/src/docs/infer.html">Read inference API docs</a>
+      </article>
+
+      <article class="card">
+        <h2>Topology Move Sandbox</h2>
+        <p>
+          Demonstrate add, remove, flip, and relocate reticulation proposals on
+          a small phylogenetic network, then visualize accepted and rejected
+          moves.
+        </p>
+        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/src/docs/NetworkMoves.html">Read NetworkMoves docs</a>
+      </article>
+
+      <article class="card">
+        <h2>Benchmark Scoring Engines</h2>
+        <p>
+          Compare pure-Python and optional Cython scoring paths on synthetic
+          networks and gene trees to show speedups available in local builds.
+        </p>
+        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/src/docs/graph_core.html">Read graph core docs</a>
+      </article>
+    </section>
+
+    <section class="section">
+      <article class="callout">
+        <h2>Future Demo Assets</h2>
+        <p>
+          Add notebooks, screenshots, recorded walkthroughs, and reproducible
+          scripts under this page as the project site grows.
+        </p>
+      </article>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p><a href="index.html">Back to home</a></p>
+  </footer>
+</body>
+</html>

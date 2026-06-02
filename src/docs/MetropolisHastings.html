@@ -28,7 +28,7 @@
                         <dt>Author:</dt>
                         <dd>Mark Kessler</dd>
                         <dt>Last Edit:</dt>
-                        <dd>3/11/25</dd>
+                        <dd>5/12/26</dd>
                         <dt>Source:</dt>
                         <dd>MetropolisHastings.py</dd>
                     </dl>
@@ -42,6 +42,7 @@
                         <li><a href="#infer_mp_allop_kernel">Infer_MP_Allop_Kernel</a></li>
                         <li><a href="#hillclimbing">HillClimbing</a></li>
                         <li><a href="#metropolishastings">MetropolisHastings</a></li>
+                        <li><a href="#simulatedannealing">SimulatedAnnealing</a></li>
                     </ul>
                 </div>
 
@@ -82,11 +83,48 @@
                         <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">generate</span> <span class="keyword">-&gt;</span> Move <span class="keyword">abstract</span>
+                                <span class="name">generate</span>(<span class="params">model: 'Model | None' = None</span>) <span class="keyword">-&gt;</span> Move <span class="keyword">abstract</span>
                             </div>
                             <div class="function-body">
                                 <p>*ABSTRACT METHOD* Generate the next move for a model to apply to the network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional current model.  Subclasses may use it for state-aware sampling (e.g. cap-aware filtering of ``AddReticulation`` when the network is already at ``max_reticulations``).  Kernels that don't need state may ignore this parameter.</td>
+                                    </tr>
+                                </table>
                                 <div class="returns"><span class="returns-label">Returns:</span> Move: Any newly instantiated object that is a subclass of Move.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">report_outcome</span>(<span class="params">accepted: bool, delta: float = 0.0</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Report whether the last generated move was accepted or rejected. Subclasses may override this to implement adaptive weight tuning.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">accepted</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>True if the move improved the score and was committed.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">delta</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Score change (proposed - current).  Positive means the proposal was better (for a maximisation problem).</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -111,10 +149,22 @@
                         <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">generate</span> <span class="keyword">-&gt;</span> SwitchParentage
+                                <span class="name">generate</span>(<span class="params">model: 'Model | None' = None</span>) <span class="keyword">-&gt;</span> SwitchParentage
                             </div>
                             <div class="function-body">
                                 <p>Simply return a new SwitchParentage object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Unused; accepted for interface compatibility.</td>
+                                    </tr>
+                                </table>
                                 <div class="returns"><span class="returns-label">Returns:</span> SwitchParentage: A new switch parentage move.</div>
                             </div>
                         </div>
@@ -300,6 +350,146 @@
                     </div>
                 </div>
 
+                <h2 id="simulatedannealing">SimulatedAnnealing</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SimulatedAnnealing</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Simulated annealing search for phylogenetic network optimization. Temperature follows an exponential schedule from ``t_start`` toward ``t_end`` over (1 - plateau_frac) * num_iter adjustment steps. * ``schedule=&quot;cool&quot;`` (default): ``t_start`` should exceed ``t_end`` so T drops (classic SA: explore early, exploit late). * ``schedule=&quot;heat&quot;``: ``t_end`` should exceed ``t_start`` so T rises (greedy / hill-climbing when T is tiny, then more uphill acceptance later to escape local maxima). * ``schedule=&quot;geometric_reheat&quot;``: Hold T for ``steps_per_temp`` iterations, then multiply by ``cooling_alpha`` (geometric cooling) down to ``t_min``. Reheats (multiply T by ``reheat_factor``, capped at ``t_start * reheat_cap_mult``) trigger when any of these stagnation signals fi...</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">pkernel: ProposalKernel, model: Model, num_iter: int = 500, t_start: float = 10.0, t_end: float = 0.01, n_restarts: int = 1, seed: int = 42, plateau_frac: float = 0.0, progress_every: int = 0, schedule: Literal['cool', 'heat', 'geometric_reheat'] = 'cool', t_min: Optional[float] = None, cooling_alpha: float = 0.93, steps_per_temp: int = 100, reheat_threshold: int = 1000, reheat_factor: float = 2.0, reheat_window: int = 500, reheat_min_improve: float = 1.0, reheat_on_no_uphill: bool = True, reheat_cap_mult: float = 1.0, reheat_max_consecutive: int = 5</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">pkernel</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Proposal kernel that generates moves.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Initial Model object (network + scorer).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">num_iter</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Iterations per annealing run.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t_start</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Initial temperature (T0). For ``geometric_reheat``, also the ceiling when reheating.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t_end</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>For ``cool``/``heat``, target temperature. For ``geometric_reheat`` ignored unless ``t_min`` is omitted, then used as the floor temperature (same role as T_min).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n_restarts</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Number of independent restarts.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">seed</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>RNG seed for reproducibility.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">plateau_frac</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Fraction of iterations to hold at ``t_start`` before beginning exponential cool/heat (0.0-1.0). Ignored for ``geometric_reheat``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">progress_every</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>If &gt; 0, print a progress line every this many iterations (current log score, temperature, best-so-far in run).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">schedule</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``&quot;cool&quot;`` / ``&quot;heat&quot;`` as above, or ``&quot;geometric_reheat&quot;``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t_min</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Floor temperature for ``geometric_reheat`` (default: ``t_end``).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">cooling_alpha</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Geometric factor applied every ``steps_per_temp`` iterations (0 &lt; alpha &lt; 1).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">steps_per_temp</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Iterations at a given T before cooling by alpha.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">reheat_threshold</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Backstop strict-stall trigger. If run-best has not strictly improved in this many iterations, reheat.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">reheat_factor</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Factor applied to T on reheat (&gt; 1).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">reheat_window</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Window (in iterations) used for the rate-based plateau trigger and the frozen-chain uphill counter. Also doubles as the post-reheat grace period.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">reheat_min_improve</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Minimum run-best gain (log-PL units) over ``reheat_window`` iters that still counts as progress. Below this -&gt; reheat. Scale with taxa count / reticulations;</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">see</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>class:`SimulatedAnnealing` docs.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">reheat_on_no_uphill</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>If True, also reheat when the chain accepted zero uphill moves during the last ``reheat_window`` iters AND window gain is below ``3 * reheat_min_improve`` (signals T is effectively 0 relative to typical deltas while progress is weak; healthy strict-descent runs are *not* reheated).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">reheat_cap_mult</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Ceiling on post-reheat T expressed as a multiple of ``t_start``. ``1.0`` keeps the classic cap at ``t_start``; values &gt; 1 allow progressively hotter escapes.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">reheat_max_consecutive</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Cascade guard. Maximum number of reheats that may fire without any strict run-best improvement between them. Once hit, further reheats are suspended until the chain finds a new best score (at which point the counter resets). Set to a very large int to disable the guard.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">run</span> <span class="keyword">-&gt;</span> State
+                            </div>
+                            <div class="function-body">
+                                <p>Run simulated annealing (with optional restarts).</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> State holding the best network found across all restarts.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
@@ -330,6 +520,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -338,10 +529,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>
@@ -351,6 +544,7 @@
                 <li><a href="#infer_mp_allop_kernel">Infer_MP_Allop_Kernel</a></li>
                 <li><a href="#hillclimbing">HillClimbing</a></li>
                 <li><a href="#metropolishastings">MetropolisHastings</a></li>
+                <li><a href="#simulatedannealing">SimulatedAnnealing</a></li>
             </ul>
         </div>
     </div>

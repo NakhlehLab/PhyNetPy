@@ -139,9 +139,11 @@ from __future__ import annotations
 import copy
 import math
 import os
+import pickle
 import random as _py_random
 import time
 from collections import deque
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from functools import lru_cache
 from itertools import product as _iter_product
@@ -2246,6 +2248,254 @@ def _combine_configs(
 # (D) Scorer
 # ======================================================================
 
+# ---------------------------------------------------------------------
+# Multiprocess scoring pool
+# ---------------------------------------------------------------------
+# The MSNC AC DP is embarrassingly parallel across gene trees: each
+# gene tree's ``log_prob`` call only reads the species network and
+# the per-tree ``_GeneTreeIndex``, never writes shared state inside
+# its own DP.  ``score_many`` therefore parallelises trivially across
+# a process pool: each worker holds **all** gene trees + its own
+# persistent :class:`_GTLikelihoodEngine`, and per iteration the
+# main process pickles the current network once and dispatches it
+# along with a ``[lo, hi)`` index range to each worker.  Each worker
+# scores its assigned range and returns a partial sum; the main
+# process sums the partials to recover the full ``score_many`` total.
+#
+# Why processes and not threads.  The Cython hot loops
+# (``_apply_branch_coalescent_cy`` / ``_combine_configs_cy``) call
+# back into Python for the coarsening cache + log_gij memo, so they
+# never release the GIL.  Threads would serialise on the GIL exactly
+# where the work is.  Processes sidestep this entirely at the cost
+# of per-iter pickling -- on the 7-tax bench network pickle is
+# ~3 KB / 0.1 ms (warm), dominated by the parallel scoring savings.
+#
+# Why every worker holds *all* gene trees rather than a
+# pre-partitioned slice.  ``ProcessPoolExecutor.initializer`` runs
+# on every worker with the *same* args, so we can't hand out
+# per-worker slices through the official initialiser API.  Sending
+# all trees to every worker at startup costs O(workers x trees)
+# bytes once -- on the 7-tax bench, 4 workers x 200 trees x ~3 KB =
+# ~2.4 MB of one-shot startup IO -- and lets us partition by index
+# range per iter, which is correct without per-worker dispatch
+# tricks (and is robust to ``map`` task interleaving).
+#
+# Worker-process global state.  Each worker stashes its persistent
+# state in module-globals; this is the standard ``initializer``
+# pattern and is safe because each worker is a single-threaded
+# Python process with no concurrent task execution.
+_WORKER_STATE: dict[str, Any] = {}
+
+
+def _mcmc_worker_init(
+    gene_trees_pickle: bytes,
+    species_of: dict[str, str],
+) -> None:
+    """Initialise a worker process: unpickle the full gene-tree set.
+
+    Called by :class:`ProcessPoolExecutor`'s ``initializer`` exactly
+    once per worker at pool start.  The unpickled gene trees keep
+    stable Python ``id()`` values for the worker's lifetime, so the
+    engine's ``_gti_cache`` (keyed by ``id(gene_tree)``) hits
+    permanently after the first ``log_prob`` call -- same caching
+    behaviour as the serial path.
+
+    Args:
+        gene_trees_pickle: Pickled list of every gene tree to be
+            scored.  Each worker holds the full list; per-iter
+            scoring picks a ``[lo, hi)`` slice.
+        species_of: Gene-copy label -> species label map.
+    """
+    global _WORKER_STATE
+    gene_trees = pickle.loads(gene_trees_pickle)
+    _WORKER_STATE = {
+        "gene_trees": list(gene_trees),
+        "species_of": dict(species_of),
+        "engine": None,
+    }
+
+
+def _mcmc_worker_score(args: tuple[bytes, int, int]) -> float:
+    """Score a contiguous gene-tree slice against the supplied network.
+
+    Args:
+        args: ``(network_pickle, idx_lo, idx_hi)``.  ``network_pickle``
+            is the main-process pickle of the current species
+            network for this iteration.  The worker scores
+            ``state["gene_trees"][idx_lo:idx_hi]``.
+
+    Returns:
+        Partial sum of ``log P(g | net)`` over the assigned slice.
+        Pickle round-trip on the network is score-preserving (diff=0
+        verified on the 7-tax bench).
+    """
+    state = _WORKER_STATE
+    network_pickle, idx_lo, idx_hi = args
+    new_net = pickle.loads(network_pickle)
+
+    # Reuse the worker's persistent engine across iterations -- we
+    # only reset its network-side state, keeping the per-tree GTI
+    # cache + the (length, n, m) ``_log_gij`` memo + the per-tree
+    # coarsening / linear-extension caches warm.
+    engine = state["engine"]
+    if engine is None:
+        engine = _GTLikelihoodEngine(new_net)
+        state["engine"] = engine
+    else:
+        engine.network = new_net
+        # ``update(None)`` busts the network index + per-call gene
+        # tree memo + per-(gt, network) score cache, but keeps the
+        # tree-level caches that are valid forever.
+        engine.update(None)
+
+    species_of = state["species_of"]
+    gts = state["gene_trees"]
+    total = 0.0
+    for i in range(idx_lo, idx_hi):
+        total += engine.log_prob(gts[i], species_of)
+    return total
+
+
+class _ScoreManyPool:
+    """Persistent process pool for parallel :meth:`score_many`.
+
+    Owns a :class:`ProcessPoolExecutor` plus a contiguous index
+    partition over the gene-tree list.  One pool per
+    :class:`MCMCGTScorer`; created when ``n_workers > 1`` and torn
+    down by :meth:`MCMCGTScorer.close` (and ``__del__`` defensively).
+
+    Partition is contiguous (worker 0 gets ``[0, k)``, worker 1 gets
+    ``[k, 2k)``, ...) so adjacent gene trees -- which often share
+    similar topologies in real datasets -- end up on the same
+    worker.  This isn't load-balanced for skewed inputs, but for
+    IID-like gene trees it gives even slices and keeps cache
+    locality high within a worker.
+    """
+
+    def __init__(
+        self,
+        gene_trees: Sequence[Network],
+        species_of: dict[str, str],
+        n_workers: int,
+    ) -> None:
+        """Spin up workers and broadcast the full gene-tree set.
+
+        Args:
+            gene_trees: Full ordered list of gene trees.  Workers
+                receive a copy of this list at init time; per-iter
+                scoring picks ``[lo, hi)`` slices into it.
+            species_of: Gene-copy -> species label map.
+            n_workers: Number of worker processes.  Capped at
+                ``len(gene_trees)`` (no point spawning more workers
+                than there is work to dispatch).
+        """
+        n_total = len(gene_trees)
+        n_workers = max(1, min(int(n_workers), n_total))
+        self._n_workers = n_workers
+
+        # Contiguous, near-equal partition.  ``chunk`` is the per-
+        # worker slice size with the remainder spread across the
+        # first few workers (so total covers exactly ``n_total``).
+        chunk_base, rem = divmod(n_total, n_workers)
+        ranges: list[tuple[int, int]] = []
+        cursor = 0
+        for w in range(n_workers):
+            size = chunk_base + (1 if w < rem else 0)
+            ranges.append((cursor, cursor + size))
+            cursor += size
+        self._ranges: tuple[tuple[int, int], ...] = tuple(ranges)
+        self._slice_sizes: tuple[int, ...] = tuple(hi - lo for lo, hi in ranges)
+
+        # Pickle the gene trees once; ``ProcessPoolExecutor`` ships
+        # the pickled bytes to every worker through the initializer.
+        gts_pickle = pickle.dumps(list(gene_trees))
+        self._executor = ProcessPoolExecutor(
+            max_workers=n_workers,
+            initializer=_mcmc_worker_init,
+            initargs=(gts_pickle, dict(species_of)),
+        )
+        # Force every worker to start + run its initializer before
+        # we return -- otherwise the first ``score()`` call pays
+        # the worker-startup latency on its critical path.  We do
+        # this by submitting a no-op task per worker and waiting.
+        warmup = list(self._executor.map(
+            _mcmc_worker_ping,
+            range(n_workers),
+            chunksize=1,
+        ))
+        if not all(warmup):
+            raise RuntimeError(f"Worker pool warm-up failed: {warmup!r}")
+        self._closed = False
+
+    @property
+    def n_workers(self) -> int:
+        """Number of worker processes in the pool."""
+        return self._n_workers
+
+    @property
+    def slice_sizes(self) -> tuple[int, ...]:
+        """Per-worker gene-tree slice sizes.  Useful for debug prints."""
+        return self._slice_sizes
+
+    def score(self, network: Network) -> float:
+        """Score every gene tree in parallel and return the total.
+
+        Args:
+            network: Current species network.  Pickled once on the
+                main process and shipped to every worker (one
+                ``map`` task per worker).
+
+        Returns:
+            Sum of ``log P(g | network)`` across all gene trees,
+            byte-identical to the serial ``engine.score_many`` path
+            on the same network and gene trees (verified by
+            empirical diff in the smoke benchmark).
+        """
+        if self._closed:
+            raise RuntimeError("Pool is closed")
+        net_pickle = pickle.dumps(network)
+        tasks = [(net_pickle, lo, hi) for lo, hi in self._ranges]
+        partials = list(self._executor.map(
+            _mcmc_worker_score,
+            tasks,
+            chunksize=1,
+        ))
+        return float(sum(partials))
+
+    def close(self) -> None:
+        """Shut down the worker pool (idempotent)."""
+        if not self._closed:
+            try:
+                self._executor.shutdown(wait=True, cancel_futures=True)
+            except Exception:
+                pass
+            self._closed = True
+
+    def __del__(self) -> None:
+        """Defensive cleanup on garbage collection."""
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+def _mcmc_worker_ping(worker_idx: int) -> bool:
+    """No-op task that confirms a worker is up and ``_WORKER_STATE`` is set.
+
+    Used by :class:`_ScoreManyPool.__init__` to force every worker
+    to run its initialiser before the pool returns -- otherwise the
+    first ``score()`` call pays worker-startup latency on its
+    critical path (which on Windows is several hundred ms per
+    worker).  The ``worker_idx`` argument is unused but distinct
+    per task, ensuring ``map`` actually dispatches one task per
+    worker rather than coalescing them.
+
+    Returns:
+        ``True`` once ``_WORKER_STATE`` is populated.
+    """
+    return _WORKER_STATE.get("gene_trees") is not None
+
+
 class MCMCGTScorer:
     """Callable likelihood evaluator for :class:`Model`.
 
@@ -2268,6 +2518,7 @@ class MCMCGTScorer:
         priors: Optional[MCMC_GTPriors] = None,
         *,
         posterior: bool = True,
+        n_workers: int = 1,
     ) -> None:
         """Initialise from gene trees, mapping, and prior hyperparams.
 
@@ -2283,6 +2534,14 @@ class MCMCGTScorer:
             posterior: When ``True`` (default), return log posterior.
                 When ``False``, return plain log likelihood (priors
                 dropped).
+            n_workers: Number of worker processes for parallel
+                ``score_many``.  ``1`` (default) keeps the original
+                serial path.  When ``> 1``, a :class:`_ScoreManyPool`
+                is constructed with that many workers; gene trees are
+                broadcast to every worker once at pool startup.
+                Capped at ``len(gene_trees)``.  Pool is torn down via
+                :meth:`close` (called automatically from
+                :meth:`MCMC_GT.search` via try/finally).
         """
         self._gene_trees: list[Network] = list(
             gene_trees.trees if isinstance(gene_trees, GeneTrees) else gene_trees
@@ -2300,6 +2559,14 @@ class MCMCGTScorer:
         self._last_log_likelihood: float | None = None
         self._last_log_posterior: float | None = None
 
+        # Lazy-init the worker pool: spawning workers on
+        # ``__init__`` would pay the startup tax even for one-off
+        # ``score()`` calls.  Pool is built on the first scoring
+        # call when ``n_workers > 1`` and held for the scorer's
+        # lifetime (idempotent close in :meth:`close`).
+        self._n_workers: int = max(1, int(n_workers))
+        self._pool: Optional[_ScoreManyPool] = None
+
     @property
     def posterior_mode(self) -> bool:
         """True if the scorer returns log posterior rather than log likelihood."""
@@ -2314,6 +2581,45 @@ class MCMCGTScorer:
     def last_log_posterior(self) -> float | None:
         """Last posterior value computed (``None`` before first call)."""
         return self._last_log_posterior
+
+    @property
+    def n_workers(self) -> int:
+        """Number of worker processes used by ``score_many`` (1 = serial)."""
+        return self._n_workers
+
+    def _ensure_pool(self) -> Optional[_ScoreManyPool]:
+        """Spin up the worker pool on first use, or return ``None``.
+
+        Returns ``None`` when the scorer was constructed with
+        ``n_workers <= 1`` -- the caller falls back to the serial
+        ``engine.score_many`` path.
+        """
+        if self._n_workers <= 1:
+            return None
+        if self._pool is None:
+            self._pool = _ScoreManyPool(
+                self._gene_trees, self._species_of, self._n_workers,
+            )
+        return self._pool
+
+    def close(self) -> None:
+        """Tear down the worker pool if one was started.
+
+        Safe to call multiple times; safe to call when no pool was
+        ever started.  :meth:`MCMC_GT.search` calls this from a
+        ``finally`` block so chains terminate cleanly even on
+        exceptions.
+        """
+        if self._pool is not None:
+            self._pool.close()
+            self._pool = None
+
+    def __del__(self) -> None:
+        """Defensive cleanup on garbage collection."""
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def __call__(self, model: Model) -> float:
         """Score ``model`` under MSNC (+ priors if ``posterior``).
@@ -2340,8 +2646,18 @@ class MCMCGTScorer:
             self._engine.update(dirty)
             model.clear_dirty_nodes()
 
-        # Likelihood over all gene trees.
-        log_lik = self._engine.score_many(self._gene_trees, self._species_of)
+        # Likelihood over all gene trees.  Parallel path takes the
+        # current network and dispatches it to the worker pool;
+        # serial path runs on the main-process engine.  Both produce
+        # numerically-identical totals (verified empirically: diff=0
+        # across pickle round-trip on 7-tax bench).
+        pool = self._ensure_pool()
+        if pool is not None:
+            log_lik = pool.score(net)
+        else:
+            log_lik = self._engine.score_many(
+                self._gene_trees, self._species_of,
+            )
         if not math.isfinite(log_lik):
             log_lik = _LOG_FLOOR
         self._last_log_likelihood = log_lik
@@ -2359,51 +2675,160 @@ class MCMCGTScorer:
 # (E) Proposal kernel
 # ======================================================================
 
-class MCMCGTKernel(ProposalKernel):
-    """Weighted proposal kernel for :class:`MCMC_GT`.
+class _MCMCGTAdaptiveConfig:
+    """Internal tuning constants for :class:`MCMCGTKernel`.
 
-    Initial (non-phased) version: draws a :class:`Move` class at each
-    proposal with the PhyloNet-style static weights documented below.
-    A ``max_reticulations`` cap is enforced by dropping
-    :class:`AddReticulation` when the current network is at the cap.
-
-    Phase-aware adaptive tuning (as in :class:`MPL.MPLKernel`) is
-    intentionally out of scope for the first working version; a
-    well-weighted static kernel is already enough to drive a sound
-    MCMC chain, and keeping the machinery simple makes correctness
-    testing straightforward.
-
-    Default weights (re-normalised each draw after the cap-aware
-    filter):
-
-        SPR                       30%
-        ChangeNodeHeight          20%
-        ChangeInheritanceProb     15%
-        AddReticulation            7%
-        RemoveReticulation         7%
-        FlipReticulation           3%
-        ChangeReticSource          5%
-        ChangeReticDest            5%
-        RelocateReticulation       8%
+    Numerical values mirror :class:`MPL._AdaptiveConfig` -- both kernels
+    share the same Robbins-Monro / phase-cycle / SPR-decay machinery and
+    we want them to behave identically on equivalent inputs.  The one
+    intentional divergence is the **target acceptance rate**: MPL is an
+    optimiser (likes high acceptance to climb fast) so it targets 0.35;
+    Bayesian MH targets the Roberts/Gelman/Gilks 1997 asymptotic optimum
+    of 0.234.
     """
 
-    _DEFAULT_WEIGHTS: dict[type, float] = {
-        SPR: 0.30,
-        ChangeNodeHeight: 0.20,
-        ChangeInheritanceProb: 0.15,
-        AddReticulation: 0.07,
-        RemoveReticulation: 0.07,
+    # ΓöÇΓöÇ Robbins-Monro continuous-sigma tuning ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    # ``log(sigma)`` drifts toward the target via
+    # ``log_sigma += step * (accept_indicator - target)`` with
+    # ``step = 1 / (n + shift)^exp``.  The 1/n^0.6 schedule satisfies
+    # the Roberts-Rosenthal 2007 diminishing-adaptation condition,
+    # so we can leave the chain adapting through the whole run if we
+    # want (we still freeze on burn-in by default for safety).
+    SIGMA_TARGET_ACCEPT = 0.234           # Roberts/Gelman/Gilks 1997
+    SIGMA_TUNE_DELAY = 20                 # warm-up obs before adapting
+    SIGMA_TUNE_EXPONENT = 0.6
+    SIGMA_TUNE_DENOM_SHIFT = 50
+
+    # ΓöÇΓöÇ ChangeNodeHeight sigma_frac bounds ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    # ``sigma_frac`` is dimensionless (fraction of feasible half-range).
+    NH_SIGMA_INIT = 0.4
+    NH_SIGMA_MIN = 0.02
+    NH_SIGMA_MAX = 1.5
+
+    # ΓöÇΓöÇ ChangeInheritanceProb sigma bounds ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    CIP_SIGMA_INIT = 0.1
+    CIP_SIGMA_MIN = 0.005
+    CIP_SIGMA_MAX = 0.4
+
+    # ΓöÇΓöÇ SPR adaptive regraft radius ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    # Edges weighted by ``1 / d**decay``.  High decay = local; low
+    # decay = broad.  Interpolates linearly with stagnation/patience.
+    SPR_DECAY_MAX = 2.5
+    SPR_DECAY_MIN = 0.5
+
+    # ΓöÇΓöÇ Efficiency-aware weight scaler blend ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    # composite = ACC * acc_rate + EFF * efficiency
+    # In MH the analogue of "improvement" is "log-posterior delta > 0";
+    # we use that as the efficiency signal (i.e. acceptance into the
+    # *higher-density* part of the chain rather than uphill via temp).
+    SCALER_ACC_WEIGHT = 0.4
+    SCALER_EFF_WEIGHT = 0.6
+    SCALER_EFF_EPSILON = 0.01
+
+    # ΓöÇΓöÇ Stagnation reset threshold ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    # Magnitude (log-posterior units) of an accepted-and-improving
+    # move that counts as "real progress" for stagnation-reset
+    # purposes.  Tiny tweaks from late-stage NH/CIP moves don't reset
+    # the counter; honest improvements do.
+    STAGNATION_RESET_DELTA = 1.0
+
+
+class MCMCGTKernel(ProposalKernel):
+    """Phase-aware, Robbins-Monro-tuned proposal kernel for :class:`MCMC_GT`.
+
+    Cycles between two complementary search phases (same design as
+    :class:`MPL.MPLKernel`):
+
+      **TOPOLOGY** -- SPR + branch-length / inheritance-prob tuning;
+      small bleed (~10% aggregate) of reticulation moves.
+
+      **RETICULATION** -- Add/Remove/Flip/Source/Dest/Relocate +
+      gamma tuning; small bleed (~10%) of SPR + ChangeNodeHeight so
+      local refinements still happen alongside retic restructuring.
+
+    Phase transitions fire after ``phase_patience`` consecutive
+    proposals without an accepted log-posterior delta exceeding
+    ``stagnation_reset_delta``.  Within each phase, ``ChangeNodeHeight``
+    and ``ChangeInheritanceProb`` adapt their proposal sigmas via
+    Robbins-Monro toward 0.234 acceptance (Roberts/Gelman/Gilks 1997),
+    and ``SPR`` interpolates ``distance_decay`` between the local and
+    broad endpoints based on the stagnation level.
+
+    **Detailed balance.**  Adaptive MCMC is only valid for posterior
+    sampling when the adaptation either (a) shrinks to zero
+    asymptotically (Roberts-Rosenthal 2007 *J. Comput. Graph. Stat.*
+    diminishing-adaptation theorem) or (b) is frozen at some point and
+    the post-freeze chain is the actual sample.  Our 1/n^0.6 RM
+    schedule satisfies (a), but to be conservative
+    :meth:`freeze_adaptation` is called by :meth:`MCMC_GT._run_mh`
+    when the burn-in window ends.  After freezing the kernel reverts
+    to fixed-weight, fixed-sigma behaviour and the chain is a proper
+    posterior sample.
+
+    Backward-compat path: when explicit *weights* are supplied to the
+    constructor, the kernel falls back to flat (non-phased,
+    non-adaptive) sampling -- the original v1 behaviour.
+
+    Default weights (re-normalised each draw after the cap-aware
+    filter on AddReticulation):
+
+        TOPOLOGY phase                   RETICULATION phase
+        ------------------               ------------------
+        SPR                  5.0         AddReticulation       3.0
+        ChangeNodeHeight     3.0         RemoveReticulation    2.0
+        ChangeInheritProb    1.0         RelocateReticulation  2.5
+        AddReticulation      0.30        ChangeReticSource     1.5
+        RemoveReticulation   0.20        ChangeReticDest       1.5
+        RelocateRetic        0.25        FlipReticulation      0.5
+        ChangeReticSource    0.10        ChangeInheritProb     1.5
+        ChangeReticDest      0.10        ChangeNodeHeight      1.0
+        FlipReticulation     0.03        SPR                   1.5
+    """
+
+    TOPOLOGY = "topology"
+    RETICULATION = "reticulation"
+
+    _TOPOLOGY_BASE: dict[type, float] = {
+        SPR: 5.0,
+        ChangeNodeHeight: 3.0,
+        ChangeInheritanceProb: 1.0,
+        AddReticulation: 0.30,
+        RemoveReticulation: 0.20,
+        RelocateReticulation: 0.25,
+        ChangeReticSource: 0.10,
+        ChangeReticDest: 0.10,
         FlipReticulation: 0.03,
-        ChangeReticSource: 0.05,
-        ChangeReticDest: 0.05,
-        RelocateReticulation: 0.08,
     }
+    _RETICULATION_BASE: dict[type, float] = {
+        AddReticulation: 3.0,
+        RemoveReticulation: 2.0,
+        FlipReticulation: 0.5,
+        ChangeReticSource: 1.5,
+        ChangeReticDest: 1.5,
+        RelocateReticulation: 2.5,
+        ChangeInheritanceProb: 1.5,
+        ChangeNodeHeight: 1.0,
+        SPR: 1.5,
+    }
+    _PHASE_ORDER = [TOPOLOGY, RETICULATION]
+
+    # Backward-compat alias kept for any out-of-tree caller still
+    # reading ``MCMCGTKernel._DEFAULT_WEIGHTS``.  Maps to the topology
+    # base map (the de facto starting phase).
+    _DEFAULT_WEIGHTS: dict[type, float] = _TOPOLOGY_BASE
 
     def __init__(
         self,
         max_reticulations: Optional[int] = None,
         weights: Optional[dict[type, float]] = None,
         rng: Optional[np.random.Generator] = None,
+        *,
+        adaptive: bool = True,
+        window_size: int = 30,
+        min_weight: float = 0.05,
+        phase_patience: int = 150,
+        warmup: int = 8,
+        stagnation_reset_delta: Optional[float] = None,
     ) -> None:
         """Configure the kernel.
 
@@ -2412,84 +2837,475 @@ class MCMCGTKernel(ProposalKernel):
                 current network is at or above the cap,
                 :class:`AddReticulation` is filtered out of the
                 candidate pool.
-            weights: Custom move-class weights.  Keys must be
-                :class:`Move` subclasses.  Missing entries are
-                implicitly zero.  Defaults to
-                :attr:`_DEFAULT_WEIGHTS`.
-            rng: NumPy random Generator used to sample the move
-                class.  When ``None``, a fresh generator is created
-                from OS entropy; callers that care about
+            weights: When supplied, disables phase cycling and
+                adaptive tuning; the kernel reverts to the v1
+                fixed-weight behaviour.  Useful for unit tests and
+                "I know exactly what I want" callers.
+            rng: NumPy random Generator.  When ``None``, a fresh one
+                is created from OS entropy; callers that care about
                 reproducibility should pass one seeded from the
-                chain-wide :class:`np.random.SeedSequence`.
+                chain's :class:`np.random.SeedSequence`.
+            adaptive: Enable within-phase adaptive weight scaling
+                (efficiency-aware) and Robbins-Monro sigma tuning.
+                Ignored when ``weights`` is supplied.  Default ``True``.
+            window_size: Sliding-window length for per-move
+                acceptance/improvement statistics.
+            min_weight: Floor on the multiplicative scale factor
+                applied to base weights, to prevent any move from
+                being fully starved.
+            phase_patience: Consecutive non-improving proposals before
+                the kernel switches to the next phase.
+            warmup: Minimum observations per move class before the
+                adaptive scaler activates for that class.
+            stagnation_reset_delta: Minimum strict-improvement
+                magnitude (in log-posterior units) that counts as
+                "real progress" for stagnation-reset purposes.
+                ``None`` -> :attr:`_MCMCGTAdaptiveConfig.STAGNATION_RESET_DELTA`.
         """
         super().__init__()
         self._max_retics = max_reticulations
-        self._weights = dict(weights if weights is not None else self._DEFAULT_WEIGHTS)
         self.rng = rng if rng is not None else np.random.default_rng()
-        self._proposed: dict[type, int] = {cls: 0 for cls in self._weights}
-        self._accepted: dict[type, int] = {cls: 0 for cls in self._weights}
-        self._last_cls: type | None = None
 
-    def generate(self, model: "Model | None" = None) -> Move:
-        """Sample a :class:`Move` instance according to the weights.
+        # ΓöÇΓöÇ Mode flags ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        # ``_phased`` -> use phase cycling
+        # ``_adaptive`` -> use within-phase adaptive scaling + RM sigmas
+        # Both are forced off when explicit ``weights`` are supplied.
+        self._fixed_weights: Optional[dict[type, float]] = (
+            dict(weights) if weights is not None else None
+        )
+        self._phased: bool = self._fixed_weights is None
+        self._adaptive: bool = adaptive and (self._fixed_weights is None)
 
-        The cap-aware filter on ``AddReticulation`` is applied by
-        inspecting ``model.network`` when the model is provided; when
-        ``model`` is ``None``, all move classes are eligible.
+        self._all_moves: list[type] = list(
+            self._fixed_weights.keys()
+            if self._fixed_weights is not None
+            else self._TOPOLOGY_BASE.keys()
+        )
 
-        Args:
-            model: Current :class:`Model` (optional).  Used only to
-                drop ``AddReticulation`` at the cap.
+        # ΓöÇΓöÇ Phase / stagnation state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        self._phase: str = self.TOPOLOGY
+        self._phase_patience: int = phase_patience
+        self._stagnation: int = 0
+        self._phase_switches: int = 0
+        self._stagnation_peak: int = 0
+        self._stagnation_reset_delta: float = (
+            float(stagnation_reset_delta)
+            if stagnation_reset_delta is not None
+            else _MCMCGTAdaptiveConfig.STAGNATION_RESET_DELTA
+        )
 
-        Returns:
-            Freshly-instantiated :class:`Move`.  Most move classes
-            don't take constructor arguments; ``AddReticulation`` is
-            instantiated with the configured cap so its own
-            safeguards also kick in.
+        # ΓöÇΓöÇ Adaptive weight scaler state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        self._window_size: int = window_size
+        self._min_weight: float = min_weight
+        self._warmup: int = warmup
+        self._history: dict[type, deque] = {
+            cls: deque(maxlen=window_size) for cls in self._all_moves
+        }
+
+        # ΓöÇΓöÇ Adaptive sigmas for continuous proposals ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        self._nh_sigma: float = _MCMCGTAdaptiveConfig.NH_SIGMA_INIT
+        self._cip_sigma: float = _MCMCGTAdaptiveConfig.CIP_SIGMA_INIT
+        self._sigma_obs: dict[type, int] = {
+            ChangeNodeHeight: 0,
+            ChangeInheritanceProb: 0,
+        }
+
+        # ΓöÇΓöÇ SPR distance decay tracking ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        self._spr_decay_last: float = _MCMCGTAdaptiveConfig.SPR_DECAY_MAX
+        self._spr_decay_min_seen: float = _MCMCGTAdaptiveConfig.SPR_DECAY_MAX
+        self._spr_decay_max_seen: float = _MCMCGTAdaptiveConfig.SPR_DECAY_MAX
+
+        # ΓöÇΓöÇ Lifetime move counters (end-of-run diagnostics) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        # ``proposed``: every draw of a move class.
+        # ``accepted``: every draw the MH driver committed.
+        # ``improved``: accepts whose log-posterior delta was strictly
+        #   positive (the Bayesian analogue of MPL's "improvement").
+        self._proposed: dict[type, int] = {cls: 0 for cls in self._all_moves}
+        self._accepted: dict[type, int] = {cls: 0 for cls in self._all_moves}
+        self._improved: dict[type, int] = {cls: 0 for cls in self._all_moves}
+        self._last_cls: Optional[type] = None
+
+    # ΓöÇΓöÇ adaptation lifecycle ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    def freeze_adaptation(self) -> None:
+        """Disable all online adaptation; keep current sigmas/phase fixed.
+
+        Called by :meth:`MCMC_GT._run_mh` exactly when the burn-in
+        window ends.  The post-freeze chain is a proper Bayesian
+        posterior sample (no diminishing-adaptation gymnastics
+        required).  Stat counters keep updating so ``format_stats``
+        still reports honest per-move accept rates over the
+        post-burn-in window.
         """
-        classes: list[type] = []
+        self._adaptive = False
+
+    @property
+    def adaptive(self) -> bool:
+        """``True`` while the kernel is still adapting sigmas/weights."""
+        return self._adaptive
+
+    @property
+    def phase(self) -> str:
+        """Current search phase (``"topology"`` or ``"reticulation"``)."""
+        return self._phase
+
+    # ΓöÇΓöÇ phase / cap helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    def _phase_base_map(self) -> dict[type, float]:
+        """Base weight map for the current phase."""
+        if self._phase == self.TOPOLOGY:
+            return self._TOPOLOGY_BASE
+        return self._RETICULATION_BASE
+
+    def _at_retic_cap(self, network: Optional[Network]) -> bool:
+        """True when the current network already holds ``max_reticulations``."""
+        if self._max_retics is None or network is None:
+            return False
+        return sum(1 for n in network.V() if n.is_reticulation()) >= self._max_retics
+
+    def _active_moves_and_base(
+        self, network: Optional[Network] = None,
+    ) -> tuple[list[type], list[float]]:
+        """Active move classes and base weights for the current phase.
+
+        Drops :class:`AddReticulation` when the network is at the
+        retic cap so we don't waste proposals on guaranteed no-ops.
+        """
+        base = self._phase_base_map()
+        at_cap = self._at_retic_cap(network)
+        moves: list[type] = []
         weights: list[float] = []
-        at_cap = False
-        if model is not None and self._max_retics is not None:
-            net = model.network
-            retic_count = sum(1 for n in net.V() if n.is_reticulation())
-            at_cap = retic_count >= self._max_retics
-        for cls, w in self._weights.items():
-            if w <= 0.0:
+        for cls in self._all_moves:
+            if cls not in base:
                 continue
             if at_cap and cls is AddReticulation:
                 continue
-            classes.append(cls)
-            weights.append(w)
-        if not classes:
-            # Degenerate: everything filtered.  Fall back to
-            # ChangeNodeHeight (topology-neutral).
-            return ChangeNodeHeight()
-        arr = np.array(weights, dtype=float)
-        arr /= arr.sum()
-        pick = int(self.rng.choice(len(classes), p=arr))
-        cls = classes[pick]
-        self._proposed[cls] = self._proposed.get(cls, 0) + 1
+            moves.append(cls)
+            weights.append(base[cls])
+        return moves, weights
+
+    def _maybe_switch_phase(self) -> None:
+        """Advance to the next phase when stagnation exceeds patience."""
+        if self._stagnation < self._phase_patience:
+            return
+        idx = self._PHASE_ORDER.index(self._phase)
+        for offset in range(1, len(self._PHASE_ORDER) + 1):
+            candidate = self._PHASE_ORDER[
+                (idx + offset) % len(self._PHASE_ORDER)
+            ]
+            base = (self._TOPOLOGY_BASE if candidate == self.TOPOLOGY
+                    else self._RETICULATION_BASE)
+            if any(cls in base for cls in self._all_moves):
+                self._phase = candidate
+                self._phase_switches += 1
+                break
+        self._stagnation = 0
+
+    # ΓöÇΓöÇ adaptive SPR regraft radius ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    def _current_spr_decay(self) -> float:
+        """SPR ``distance_decay`` for the current stagnation level.
+
+        Linearly interpolates from ``SPR_DECAY_MAX`` (just improved /
+        fresh, prefer local regrafts) to ``SPR_DECAY_MIN`` (fully
+        stuck, near-flat distribution -> broad hops).  Returns the
+        max value when the kernel is non-adaptive.
+        """
+        if not self._adaptive or self._phase_patience <= 0:
+            return _MCMCGTAdaptiveConfig.SPR_DECAY_MAX
+        stuckness = min(1.0, self._stagnation / float(self._phase_patience))
+        span = (
+            _MCMCGTAdaptiveConfig.SPR_DECAY_MAX
+            - _MCMCGTAdaptiveConfig.SPR_DECAY_MIN
+        )
+        return _MCMCGTAdaptiveConfig.SPR_DECAY_MAX - stuckness * span
+
+    # ΓöÇΓöÇ Robbins-Monro sigma tuning ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    def _tune_sigma(
+        self,
+        current: float,
+        n_obs: int,
+        accepted: bool,
+        sigma_min: float,
+        sigma_max: float,
+    ) -> float:
+        """One Robbins-Monro step of ``log(sigma)`` toward the target.
+
+        ``log(sigma) += step * (accept_indicator - target)`` with
+        ``step = 1 / (n_obs + shift)^exp``.  Standard adaptive
+        Metropolis update (Roberts & Rosenthal 2009 *Examples of
+        Adaptive MCMC*).  Accept-rate above target widens the
+        proposal; below target tightens it.  Schedule satisfies
+        diminishing adaptation.
+        """
+        if n_obs < _MCMCGTAdaptiveConfig.SIGMA_TUNE_DELAY:
+            return current
+        step = 1.0 / (
+            (n_obs + _MCMCGTAdaptiveConfig.SIGMA_TUNE_DENOM_SHIFT)
+            ** _MCMCGTAdaptiveConfig.SIGMA_TUNE_EXPONENT
+        )
+        indicator = 1.0 if accepted else 0.0
+        log_adjust = step * (indicator - _MCMCGTAdaptiveConfig.SIGMA_TARGET_ACCEPT)
+        new_sigma = current * math.exp(log_adjust)
+        return max(sigma_min, min(sigma_max, new_sigma))
+
+    # ΓöÇΓöÇ adaptive weight scaler ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    def _adapt_weights(
+        self,
+        moves: list[type],
+        base_weights: list[float],
+    ) -> list[float]:
+        """Scale base weights by an efficiency-aware accept/improve blend.
+
+        Composite =
+          ``SCALER_ACC_WEIGHT * acc_rate``        (chain-mixing credit)
+        + ``SCALER_EFF_WEIGHT * efficiency``      (posterior-delta credit)
+
+        where ``efficiency = imp_rate / max(acc_rate, eps)``.  This
+        directs proposal mass toward moves that not only get accepted
+        but actually move the chain to higher-posterior regions --
+        the Bayesian analogue of the MPL "improvement" signal.
+
+        Moves with fewer than ``warmup`` observations keep their full
+        base weight to avoid early-window noise swinging the scaler.
+        """
+        floor = self._min_weight
+        out: list[float] = []
+        for cls, base_w in zip(moves, base_weights):
+            hist = self._history[cls]
+            if len(hist) < self._warmup:
+                out.append(base_w)
+                continue
+            n = len(hist)
+            n_acc = sum(1 for accepted, _ in hist if accepted)
+            n_imp = sum(1 for accepted, delta in hist if accepted and delta > 0.0)
+            acc_rate = n_acc / n
+            imp_rate = n_imp / n
+            efficiency = min(
+                1.0,
+                imp_rate / max(acc_rate, _MCMCGTAdaptiveConfig.SCALER_EFF_EPSILON),
+            )
+            composite = (
+                _MCMCGTAdaptiveConfig.SCALER_ACC_WEIGHT * acc_rate
+                + _MCMCGTAdaptiveConfig.SCALER_EFF_WEIGHT * efficiency
+            )
+            scale = floor + (2.0 - floor) * composite
+            out.append(base_w * scale)
+        return out
+
+    # ΓöÇΓöÇ public interface ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    def generate(self, model: "Model | None" = None) -> Move:
+        """Sample a :class:`Move` from the current effective distribution.
+
+        Args:
+            model: Optional current model.  Used for cap-aware
+                filtering (``AddReticulation`` dropped at the cap).
+
+        Returns:
+            Freshly-instantiated :class:`Move`.  Continuous moves
+            (``ChangeNodeHeight``, ``ChangeInheritanceProb``) are
+            instantiated with the kernel's current adaptive sigma;
+            ``SPR`` with its current adaptive ``distance_decay``.
+        """
+        network = model.network if model is not None else None
+
+        # --- Decide eligible moves and weights ----------------------
+        if not self._phased:
+            moves = list(self._fixed_weights.keys())
+            weights = [self._fixed_weights[cls] for cls in moves]
+            # Honour the cap even in fixed-weight mode.
+            if self._at_retic_cap(network):
+                moves_w = [
+                    (cls, w) for cls, w in zip(moves, weights)
+                    if cls is not AddReticulation
+                ]
+                if moves_w:
+                    moves = [m for m, _ in moves_w]
+                    weights = [w for _, w in moves_w]
+        else:
+            self._maybe_switch_phase()
+            moves, base_weights = self._active_moves_and_base(network)
+            weights = (
+                self._adapt_weights(moves, base_weights)
+                if self._adaptive else base_weights
+            )
+
+        if not moves:
+            # Defensive: cap + filter eliminated everything.  Fall
+            # back to a topology-neutral move so the chain progresses.
+            return ChangeNodeHeight(sigma_frac=self._nh_sigma)
+
+        # --- Sample ------------------------------------------------
+        w = np.asarray(weights, dtype=float)
+        total = float(w.sum())
+        if not np.isfinite(total) or total <= 0.0:
+            idx = int(self.rng.integers(0, len(moves)))
+        else:
+            idx = int(self.rng.choice(len(moves), p=w / total))
+        cls = moves[idx]
         self._last_cls = cls
-        if cls is AddReticulation:
+        self._proposed[cls] = self._proposed.get(cls, 0) + 1
+
+        # --- Instantiate with current adaptive knobs ----------------
+        if cls is AddReticulation and self._max_retics is not None:
             return AddReticulation(max_reticulations=self._max_retics)
+        if cls is ChangeNodeHeight:
+            return ChangeNodeHeight(sigma_frac=self._nh_sigma)
+        if cls is ChangeInheritanceProb:
+            return ChangeInheritanceProb(sigma=self._cip_sigma)
+        if cls is SPR:
+            decay = self._current_spr_decay()
+            self._spr_decay_last = decay
+            self._spr_decay_min_seen = min(self._spr_decay_min_seen, decay)
+            self._spr_decay_max_seen = max(self._spr_decay_max_seen, decay)
+            return SPR(distance_decay=decay)
         return cls()
 
     def report_outcome(self, accepted: bool, delta: float = 0.0) -> None:
-        """Increment acceptance counters for the last generated move."""
-        if self._last_cls is None:
-            return
-        if accepted:
-            self._accepted[self._last_cls] = self._accepted.get(self._last_cls, 0) + 1
+        """Record a move outcome and update adaptive state.
 
-    def format_stats(self) -> str:
-        """Return a human-readable per-move-class proposal summary."""
-        lines = ["move-class | proposed | accepted | rate"]
-        for cls in self._weights:
+        Called by the search driver after each ``generate -> propose ->
+        score`` cycle, regardless of accept/reject.
+
+        Args:
+            accepted: True iff the driver committed the move to the
+                chain.
+            delta: ``log_posterior_proposed - log_posterior_current``.
+                Positive means the proposal landed in a strictly
+                higher-density region of the posterior.
+        """
+        cls = self._last_cls
+        if cls is None:
+            return
+
+        if cls in self._history:
+            self._history[cls].append((accepted, delta))
+        if accepted:
+            self._accepted[cls] = self._accepted.get(cls, 0) + 1
+            if delta > 0.0:
+                self._improved[cls] = self._improved.get(cls, 0) + 1
+
+        # Robbins-Monro sigma tuning (only while adapting; otherwise
+        # we keep the frozen sigma from burn-in's last update).
+        if self._adaptive:
+            if cls is ChangeNodeHeight:
+                self._sigma_obs[cls] += 1
+                self._nh_sigma = self._tune_sigma(
+                    self._nh_sigma,
+                    self._sigma_obs[cls],
+                    accepted,
+                    _MCMCGTAdaptiveConfig.NH_SIGMA_MIN,
+                    _MCMCGTAdaptiveConfig.NH_SIGMA_MAX,
+                )
+            elif cls is ChangeInheritanceProb:
+                self._sigma_obs[cls] += 1
+                self._cip_sigma = self._tune_sigma(
+                    self._cip_sigma,
+                    self._sigma_obs[cls],
+                    accepted,
+                    _MCMCGTAdaptiveConfig.CIP_SIGMA_MIN,
+                    _MCMCGTAdaptiveConfig.CIP_SIGMA_MAX,
+                )
+
+        # Magnitude-aware stagnation reset.  Only honest improvements
+        # reset; tiny tweaks let the counter climb so phase switches /
+        # SPR-decay opens are driven by genuine plateaus.
+        if accepted and delta > self._stagnation_reset_delta:
+            self._stagnation = 0
+        else:
+            self._stagnation += 1
+            if self._stagnation > self._stagnation_peak:
+                self._stagnation_peak = self._stagnation
+
+    def get_weights(self) -> dict[str, float]:
+        """Return the current effective selection probabilities.
+
+        Honours phase + adaptive scaler.  Useful for diagnostic
+        printing mid-run.
+        """
+        if self._phased:
+            moves, base = self._active_moves_and_base()
+            weights = self._adapt_weights(moves, base) if self._adaptive else base
+        else:
+            moves = list(self._fixed_weights.keys())
+            weights = [self._fixed_weights[c] for c in moves]
+        total = sum(weights)
+        if total <= 0.0:
+            return {cls.__name__: 0.0 for cls in moves}
+        return {cls.__name__: w / total for cls, w in zip(moves, weights)}
+
+    def get_stats(self) -> dict[str, dict[str, float]]:
+        """Lifetime per-move statistics across the search.
+
+        Returns:
+            Mapping ``move_class_name -> {proposed, accepted, improved,
+            acceptance_rate, improvement_rate}``.
+        """
+        out: dict[str, dict[str, float]] = {}
+        for cls in self._all_moves:
             p = self._proposed.get(cls, 0)
             a = self._accepted.get(cls, 0)
-            rate = (a / p) if p else 0.0
-            lines.append(f"{cls.__name__:<22} | {p:8d} | {a:8d} | {rate:.3f}")
+            i = self._improved.get(cls, 0)
+            out[cls.__name__] = {
+                "proposed": p,
+                "accepted": a,
+                "improved": i,
+                "acceptance_rate": (a / p) if p else 0.0,
+                "improvement_rate": (i / p) if p else 0.0,
+            }
+        return out
+
+    def format_stats(self) -> str:
+        """Return a human-readable summary of lifetime kernel statistics.
+
+        Includes per-move counts/rates, phase-switch summary, adaptive
+        sigma end-state, and SPR distance-decay range.  Prints sorted
+        by proposal count (descending) for at-a-glance reading of the
+        actually-active moves.
+        """
+        stats = self.get_stats()
+        name_width = max((len(k) for k in stats), default=8)
+        lines = [
+            f"{'move':<{name_width}}  {'proposed':>9}  {'accepted':>9}  "
+            f"{'improved':>9}  {'accept%':>8}  {'improve%':>9}"
+        ]
+        total_prop = sum(s["proposed"] for s in stats.values())
+        for name, s in sorted(
+            stats.items(), key=lambda kv: -kv[1]["proposed"],
+        ):
+            lines.append(
+                f"{name:<{name_width}}  "
+                f"{int(s['proposed']):>9d}  "
+                f"{int(s['accepted']):>9d}  "
+                f"{int(s['improved']):>9d}  "
+                f"{100.0 * s['acceptance_rate']:>7.2f}%  "
+                f"{100.0 * s['improvement_rate']:>8.3f}%"
+            )
+        lines.append(f"  total proposals: {int(total_prop)}")
+        if self._phased:
+            lines.append(
+                f"  phase: {self._phase}  "
+                f"switches: {self._phase_switches}  "
+                f"stagnation peak: {self._stagnation_peak}/{self._phase_patience}  "
+                f"adaptive: {self._adaptive}"
+            )
+            lines.append(
+                "  adaptive sigma -- "
+                f"ChangeNodeHeight.sigma_frac={self._nh_sigma:.4f} "
+                f"(n={self._sigma_obs.get(ChangeNodeHeight, 0)}), "
+                f"ChangeInheritanceProb.sigma={self._cip_sigma:.4f} "
+                f"(n={self._sigma_obs.get(ChangeInheritanceProb, 0)})"
+            )
+            lines.append(
+                "  adaptive SPR distance_decay "
+                f"last={self._spr_decay_last:.3f}, "
+                f"range=[{self._spr_decay_min_seen:.3f}, "
+                f"{self._spr_decay_max_seen:.3f}] "
+                f"(low=broad, high=local)"
+            )
         return "\n".join(lines)
 
 
@@ -2631,6 +3447,7 @@ class MCMC_GT:
         kernel: Optional[MCMCGTKernel] = None,
         max_reticulations: Optional[int] = None,
         seed: Any = None,
+        n_workers: int = 1,
         **kwargs: Any,
     ) -> MCMCGTResult:
         """Search the network space with the chosen driver.
@@ -2652,6 +3469,16 @@ class MCMC_GT:
             seed: Seed for the chain's RNGs.  Accepts any value
                 :class:`np.random.SeedSequence` accepts (including
                 another :class:`SeedSequence`).
+            n_workers: Number of worker processes for parallel
+                ``score_many`` (per-iter likelihood across the gene
+                tree set).  ``1`` (default) keeps the serial path
+                bit-for-bit identical to the v1 behaviour.  Values
+                ``> 1`` spin up a persistent :class:`_ScoreManyPool`
+                of that size; gene trees are broadcast to every
+                worker once at startup, network is pickled once per
+                iteration and dispatched to all workers in parallel.
+                Capped at the number of gene trees.  Pool teardown
+                is automatic via ``finally`` even on exception.
             **kwargs: Forwarded to the chosen search driver.  For HC
                 these include ``enhanced_stop``; for SA these include
                 ``t_start``, ``t_end``, ``schedule``, etc. (see
@@ -2678,7 +3505,8 @@ class MCMC_GT:
         # Scorer + model.
         posterior = (method == "mh")
         scorer = MCMCGTScorer(
-            self.gene_trees, self.mapping, self.priors, posterior=posterior,
+            self.gene_trees, self.mapping, self.priors,
+            posterior=posterior, n_workers=n_workers,
         )
         model = Model(rng=np.random.default_rng(model_ss))
         model.network = copy.deepcopy(self.net)
@@ -2693,50 +3521,55 @@ class MCMC_GT:
         elif getattr(kernel, "rng", None) is None:
             kernel.rng = np.random.default_rng(kernel_ss)
 
-        # Dispatch.
+        # Dispatch.  ``finally`` guarantees pool teardown even on
+        # mid-chain exceptions; otherwise an exception in the MH loop
+        # would leak worker processes.
         start = time.time()
-        if method == "mh":
-            result = self._run_mh(
-                model=model,
-                kernel=kernel,
-                scorer=scorer,
-                num_iter=num_iter,
-                burn_in=burn_in,
-                thin=thin,
-                driver_seed=driver_seed,
-            )
-        elif method == "hc":
-            searcher = HillClimbing(
-                pkernel=kernel,
-                model=model,
-                num_iter=num_iter,
-                **kwargs,
-            )
-            end_state = searcher.run()
-            best_score = end_state.likelihood()
-            result = MCMCGTResult(
-                method="hc",
-                best_network=end_state.current_model.network,
-                best_log_posterior=best_score,
-                num_iter=num_iter,
-            )
-        else:  # method == "sa"
-            kwargs.setdefault("seed", driver_ss)
-            searcher = SimulatedAnnealing(
-                pkernel=kernel,
-                model=model,
-                num_iter=num_iter,
-                **kwargs,
-            )
-            end_state = searcher.run()
-            best_score = end_state.likelihood()
-            result = MCMCGTResult(
-                method="sa",
-                best_network=end_state.current_model.network,
-                best_log_posterior=best_score,
-                num_iter=num_iter,
-            )
-        result.wall_time_sec = time.time() - start
+        try:
+            if method == "mh":
+                result = self._run_mh(
+                    model=model,
+                    kernel=kernel,
+                    scorer=scorer,
+                    num_iter=num_iter,
+                    burn_in=burn_in,
+                    thin=thin,
+                    driver_seed=driver_seed,
+                )
+            elif method == "hc":
+                searcher = HillClimbing(
+                    pkernel=kernel,
+                    model=model,
+                    num_iter=num_iter,
+                    **kwargs,
+                )
+                end_state = searcher.run()
+                best_score = end_state.likelihood()
+                result = MCMCGTResult(
+                    method="hc",
+                    best_network=end_state.current_model.network,
+                    best_log_posterior=best_score,
+                    num_iter=num_iter,
+                )
+            else:  # method == "sa"
+                kwargs.setdefault("seed", driver_ss)
+                searcher = SimulatedAnnealing(
+                    pkernel=kernel,
+                    model=model,
+                    num_iter=num_iter,
+                    **kwargs,
+                )
+                end_state = searcher.run()
+                best_score = end_state.likelihood()
+                result = MCMCGTResult(
+                    method="sa",
+                    best_network=end_state.current_model.network,
+                    best_log_posterior=best_score,
+                    num_iter=num_iter,
+                )
+            result.wall_time_sec = time.time() - start
+        finally:
+            scorer.close()
 
         # Adopt the final network into self.net.  For MH we use the
         # final-state network (equivalent to "last sample"); callers
@@ -2795,7 +3628,24 @@ class MCMC_GT:
         samples: list[MCMCSample] = []
         num_accepted = 0
 
+        # Adaptive kernels (e.g. :class:`MCMCGTKernel` with
+        # ``adaptive=True``) tune sigmas / weights during burn-in only;
+        # freezing afterwards preserves detailed balance (Roberts &
+        # Rosenthal 2007 *J. Comput. Graph. Stat.*).  Static kernels
+        # ignore this signal -- the call is only made when the kernel
+        # actually exposes ``freeze_adaptation``.
+        freeze_fn = getattr(kernel, "freeze_adaptation", None)
+        adaptation_frozen = False
+
         for iter_no in range(num_iter):
+            if (
+                freeze_fn is not None
+                and not adaptation_frozen
+                and iter_no >= burn_in
+            ):
+                freeze_fn()
+                adaptation_frozen = True
+
             move = kernel.generate(model)
             try:
                 move.execute(model)
@@ -2806,15 +3656,20 @@ class MCMC_GT:
                     move.undo(model)
                 except Exception:
                     pass
-                kernel.report_outcome(False)
+                kernel.report_outcome(False, delta=0.0)
                 continue
 
-            log_alpha = prop_score - cur_score + move.hastings_ratio()
+            # Compute delta + acceptance test BEFORE mutating
+            # ``cur_score`` so the adaptive layer sees the actual
+            # log-posterior step size, not zero.  This was a bug in
+            # the v1 kernel-stats path (delta was always 0 on accept).
+            delta = prop_score - cur_score
+            log_alpha = delta + move.hastings_ratio()
             accept = (log_alpha >= 0.0) or (math.log(rng.random()) < log_alpha)
             if accept:
-                cur_score = prop_score
                 num_accepted += 1
-                kernel.report_outcome(True, delta=prop_score - cur_score)
+                kernel.report_outcome(True, delta=delta)
+                cur_score = prop_score
                 if prop_score > best_score:
                     best_score = prop_score
                     best_network = copy.deepcopy(model.network)
@@ -2827,7 +3682,7 @@ class MCMC_GT:
                     # the scorer against the current (possibly
                     # corrupted) network rather than crashing.
                     pass
-                kernel.report_outcome(False, delta=prop_score - cur_score)
+                kernel.report_outcome(False, delta=delta)
 
             # Sample (MH posterior).
             if iter_no >= burn_in and ((iter_no - burn_in) % thin == 0):

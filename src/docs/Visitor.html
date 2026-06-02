@@ -19,7 +19,7 @@
                     <a href="index.html">Home</a> &raquo; Visitor
                 </div>
                 
-                <h1>Visitor Module <span class="version-badge">v1.0.0</span></h1>
+                <h1>Visitor Module <span class="version-badge">v0.3.0</span></h1>
                 
                 <p>Visitor pattern interface for ModelNode traversals with typed dispatch.</p>
                 
@@ -27,6 +27,8 @@
                     <dl>
                         <dt>Author:</dt>
                         <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>5/12/26</dd>
                         <dt>Source:</dt>
                         <dd>Visitor.py</dd>
                     </dl>
@@ -51,20 +53,80 @@
                             <div class="function-header">
                                 <span class="name">visit_leaf</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
                             </div>
+                            <div class="function-body">
+                                <p>Side-effect callback fired when the traversal lands on a leaf.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>The leaf node being visited.</td>
+                                    </tr>
+                                </table>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">visit_internal</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Side-effect callback fired when the traversal lands on an internal node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>The internal node being visited.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">visit_reticulation</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
                             </div>
+                            <div class="function-body">
+                                <p>Side-effect callback fired when the traversal lands on a reticulation node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>The reticulation (hybrid) node being visited.</td>
+                                    </tr>
+                                </table>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">visit_root</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Side-effect callback fired when the traversal lands on the root.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n</span></td>
+                                        <td><span class="param-type">ModelNode</span></td>
+                                        <td>The root node being visited.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <div class="function-def">
@@ -108,6 +170,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -116,10 +179,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html" class="current">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

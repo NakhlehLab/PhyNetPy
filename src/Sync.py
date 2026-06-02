@@ -42,7 +42,35 @@ with Sync(my_model):
 from .ModelGraph import *
 
 class Sync:
+    """Atomic model / network reconciliation context manager.
+
+    ``Sync`` wraps a sequence of topology moves on a :class:`~.ModelGraph.Model`
+    so that they appear atomic with respect to both the ``Model`` and its
+    underlying :class:`~.Network.Network`:
+
+    * On normal exit the network is **reconciled** -- nodes and edges in
+      ``model.network`` are rebuilt from the current ``ModelNode`` topology so
+      that the two representations agree.
+    * On exception the model and network are **rolled back** to the snapshot
+      captured at ``__enter__``, leaving the caller's state untouched.
+
+    Typical use::
+
+        with Sync(my_model):
+            my_model.execute_move(nni())
+            my_model.execute_move(spr())
+            my_model.execute_move(add_reticulation())
+        # after the block, my_model.network reflects all three moves
+        # (or none of them, if one raised)
+    """
+
     def __init__(self, model : Model) -> None:
+        """Create a synchroniser bound to ``model``.
+
+        Args:
+            model (Model): The model whose ``ModelNode`` topology and
+                ``network`` attribute should be kept in lock-step on exit.
+        """
         self.net = model.network
         self.model = model
 

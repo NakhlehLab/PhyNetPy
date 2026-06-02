@@ -1,3 +1,24 @@
+"""
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 0.3.0
+
+Iterator-based graph traversal for :class:`~.ModelGraph.ModelNode` graphs.
+
+Decouples traversal *order* from visitation *logic*.  Two public classes are
+provided:
+
+* :class:`Traversal` -- yields nodes one at a time in pre-order, post-order,
+  or level-order. Choose post-order for likelihood-style computations
+  (children before parents) and pre-order for top-down simulation.
+* :class:`LevelParallelTraversal` -- yields ``(level_number, nodes_at_level)``
+  tuples, so independent nodes at the same depth can be processed in parallel.
+
+Use these traversals to drive :class:`~.Visitor.Visitor` /
+:class:`~.Strategy.Strategy` callbacks without baking the traversal order
+into the visitor itself.
+"""
+
 from enum import Enum, auto
 from typing import Any, Iterator, Generator, Optional
 from collections import deque

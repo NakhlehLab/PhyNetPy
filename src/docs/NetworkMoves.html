@@ -19,7 +19,7 @@
                     <a href="index.html">Home</a> &raquo; NetworkMoves
                 </div>
                 
-                <h1>NetworkMoves Module <span class="version-badge">v1.0.0</span></h1>
+                <h1>NetworkMoves Module <span class="version-badge">v0.3.2</span></h1>
                 
                 <p>Network topology modification operations for MCMC search (add/remove hybrid, NNI, node height).</p>
                 
@@ -27,6 +27,8 @@
                     <dl>
                         <dt>Author:</dt>
                         <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>5/12/26</dd>
                         <dt>Source:</dt>
                         <dd>NetworkMoves.py</dd>
                     </dl>
@@ -45,7 +47,7 @@
                                 <span class="name">add_hybrid</span>(<span class="params">net: Network, source: Edge, destination: Edge, t_src: float = None, t_dest: float = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Add a hybrid (reticulation) edge between *source* and *destination*. Two new internal nodes are inserted -- one splitting *source* and one splitting *destination* -- and a directed edge is created from the source-side node to the destination-side node (which is marked as a reticulation). If *source* and *destination* are the same edge, a bubble (parallel pair of edges) is created instead.</p>
+                                <p>Add a hybrid (reticulation) edge between two existing edges. This is the primary move for *increasing* network complexity. A new directed edge is created that represents a hybridization or introgression event between two lineages. How it works (normal case, source != destination):: BEFORE AFTER a x a x | | | | | | n1 -------&gt; n2 (new hybrid edge) | | | | b y b y Two fresh internal nodes (n1, n2) are inserted by splitting the *source* and *destination* edges respectively. n2 is flagged as a reticulation node, and a directed edge n1 -&gt; n2 is added. **Bubble (genome-duplication) case** -- when *source* and *destination* are the same edge, two parallel edges with equal inheritance probabilities (gamma = 0.5) are created between two new internal nodes, modeling a whole-genome duplication event.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -55,27 +57,27 @@
                                     <tr>
                                         <td><span class="param-name">net</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>The network to modify in place.</td>
+                                        <td>The network to modify **in place**.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">source</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>The edge on which to place the new outgoing node.</td>
+                                        <td>The edge that will donate the new outgoing lineage.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">destination</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>The edge on which to place the new reticulation node.</td>
+                                        <td>The edge that will receive the incoming hybrid lineage.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">t_src</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Optional time at which to place the source-side node.</td>
+                                        <td>Optional divergence time for the new source-side node.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">t_dest</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Optional time at which to place the destination-side node.</td>
+                                        <td>Optional divergence time for the new reticulation node.</td>
                                     </tr>
                                 </table>
                             </div>
@@ -85,7 +87,7 @@
                                 <span class="name">remove_hybrid</span>(<span class="params">net: Network, hybrid_edge: Edge</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Removes a hybrid edge from a network. src: dest: a x | | | | | | v v n1- - - - - - - - -&gt;n2 | | | | v v b y</p>
+                                <p>Remove a hybrid (reticulation) edge and clean up the two degree-2 nodes. This is the inverse of :func:`add_hybrid`. It lowers the network level by one by deleting the hybrid edge and the two internal nodes that were created when the hybrid was originally added. Expected local topology around the hybrid edge:: a x | | v v n1 -------&gt; n2 &lt;-- hybrid_edge (n1 -&gt; n2, n2 is reticulation) | | v v b y After removal, n1 and n2 are deleted and replaced by two simple edges:: a x | | v v b y **Preconditions** -- the move only makes sense when n1 and n2 were originally inserted by :func:`add_hybrid`, meaning: * n1 has exactly one parent (a) and one non-hybrid child (b). * n2 has exactly one other parent (x) and one child (y).</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -94,15 +96,16 @@
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">net</span></td>
-                                        <td><span class="param-type">Network</span></td>
-                                        <td>A network.</td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The network to modify **in place**.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">hybrid_edge</span></td>
-                                        <td><span class="param-type">Edge</span></td>
-                                        <td>An edge in E, whose destination node is a reticulation node.</td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The reticulation edge to remove. Its destination (n2) must be flagged as a reticulation node.</td>
                                     </tr>
                                 </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the edge is not a valid hybrid edge, or if the surrounding topology does not allow clean removal (i.e. the nodes don't satisfy the degree constraints listed above).</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -110,7 +113,7 @@
                                 <span class="name">nni</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Perform a nearest neighbor interchange (NNI) on the network.</p>
+                                <p>Perform a random nearest-neighbor interchange (NNI) on the network. NNI is the workhorse topology-exploration move. It swaps two subtrees across an internal edge, producing a &quot;neighboring&quot; topology that differs by exactly one bipartition. Because it never adds or removes reticulations, the network level is unchanged. Diagram of the swap:: BEFORE AFTER a a / \ / \ c b d b / \ / \ d ... c ... A child *c* of *a* (that is not *b*) and a child *d* of *b* are chosen uniformly at random and exchanged. All edge metadata (length, gamma, weight, tag) travel with their respective subtrees. **Eligible edges** -- only internal edges whose endpoints are both non-reticulation and non-leaf are considered, so the move never disrupts reticulation structure.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -119,10 +122,11 @@
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">net</span></td>
-                                        <td><span class="param-type">Network</span></td>
-                                        <td>A network.</td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The network to modify **in place**.</td>
                                     </tr>
                                 </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If no eligible internal edge exists, or if the randomly selected edge lacks sufficient children on both sides.</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -130,7 +134,7 @@
                                 <span class="name">node_height_change</span>(<span class="params">n: Node, net: Network, height: float, extend: bool = False</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Alter the node height of a node in a network, without altering the node heights of any surrounding nodes (parents, children). A node height can be moved up or down within the range min child height &lt; new h &lt; max parent height (refer to assumptions.txt). It is an error to attempt to move a node outside of these bounds -- the operation will abort and no changes to the network will be made. If extend is set (True), then the subtree branch lengths will be retained instead of altered. The new height of 'n', then, must not be closer to the root than the parent of 'n' whose height is furthest from the root. Attempting this is an error -- the operation will abort and no changes to the network will be made.</p>
+                                <p>Change the divergence time (height) of an internal node. In a time-consistent (ultrametric) network, every node has a &quot;time&quot; value that increases from root toward the tips. This move slides a single node up or down the time axis while preserving the parent &gt; child ordering on both sides. **Simple mode** (``extend=False``, default): Only the time of *n* is changed. Parent and child times are untouched, so the branch lengths into and out of *n* change accordingly. The new height must fall strictly between the nearest parent time and the nearest child time. **Extend mode** (``extend=True``): The node *and all of its immediate children* are shifted by the same delta, preserving the branch lengths between *n* and its children. This is useful when you want to move a speciation event without distorting the subtree below it. The move is rejected if any shifted child would collide with or pass its own grandchildren in time.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -139,25 +143,73 @@
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">n</span></td>
-                                        <td><span class="param-type">Node</span></td>
-                                        <td>A node whose height needs to be changed.</td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The internal node whose height should change.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">net</span></td>
-                                        <td><span class="param-type">Network</span></td>
-                                        <td>The network that contains node n.</td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The network containing *n*.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">height</span></td>
-                                        <td><span class="param-type">float</span></td>
-                                        <td>The new height of node n.</td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The proposed new time value for *n*.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">extend</span></td>
-                                        <td><span class="param-type">bool, optional</span></td>
-                                        <td>Flag to retain subtree branch lengths. Defaults to False.</td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>If True, shift children by the same delta to keep branch lengths within the subtree constant.</td>
                                     </tr>
                                 </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If *n* is a root or leaf (no parents or children), or if the proposed height violates time-ordering constraints.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">spr</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Perform a random subtree prune-and-regraft (SPR) on a tree. SPR is a larger-radius topology move than NNI: it detaches an entire subtree and reattaches it at a different location in the tree, allowing the search to jump further across tree space in a single step. **Restriction:** currently limited to level-0 networks (i.e. trees with no reticulations). This is checked up front. Algorithm outline:: 1. Pick a random &quot;prune edge&quot; (u, v) where v is not the root and at least one edge exists entirely outside the subtree rooted at v (so there is somewhere to reattach). 2. Remove the prune edge (u, v). 3. If u is now a degree-2 pass-through node, suppress it by merging its parent and child edges (see _suppress_chain_node). 4. Pick a random &quot;host edge&quot; (a, b) that lies completely outside the pruned subtree. 5. Insert a new internal node k on (a, b), splitting it into (a, k) and (k, b), and attach the pruned subtree as (k, v). The host edge's length is split randomly between (a, k) and (k, b), and the original prune-edge length is assigned to (k, v). The result is always a bifurcating tree with the same leaf set.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The tree to modify **in place**.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the network is not level-0, or if no valid prune or reattachment edge can be found.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">permute_leaves</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> Iterator[Network]
+                            </div>
+                            <div class="function-body">
+                                <p>Yield every possible relabeling of the leaf taxa on the network. This is useful for exhaustive searches over small networks: given a fixed internal topology, the function produces one network copy for every permutation of the leaf labels across the existing pendant (leaf-edge) positions. For *n* leaves this yields *n!* networks, so use with caution on networks with more than ~10 leaves. How it works: 1. Record the canonical leaf ordering and each leaf's parent node. 2. For each permutation of the leaf list, make a deep copy of the network, detach all leaves from their parents, and rewire them according to the permutation -- leaf ``perm[i]`` gets attached to the parent that originally held leaf ``i``. 3. Edge metadata (length, gamma, weight, tag) travel with the leaf they were originally attached to, not with the slot. The original network is **never modified**.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The template network to permute.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">Yields</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td> A deep copy of *net* with leaves rewired according to one permutation.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If any leaf has zero or multiple parents (each leaf must have exactly one parent for the rewiring to be well-defined).</div>
                             </div>
                         </div>
 
@@ -191,6 +243,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html" class="current">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -199,10 +252,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

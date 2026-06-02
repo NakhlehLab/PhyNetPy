@@ -311,6 +311,43 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
+                                <span class="name">most_frequent_gene_tree</span>(<span class="params">include_trivial: bool = False, restrict_to_taxa: Optional[Set[str]] = None, tiebreak: Literal['first', 'random'] = 'first', seed: Optional[int] = None</span>) <span class="keyword">-&gt;</span> Network
+                            </div>
+                            <div class="function-body">
+                                <p>Return a deep copy of the most frequent gene tree topology. Gene trees are grouped by the frozenset of their rooted clusters (topology signature, ignoring branch lengths and internal-node labels). The largest group wins; a representative of that group is returned. Guaranteed binary iff the input gene trees are binary. This is generally a better MPL search seed than a majority-rule consensus because consensus trees are often non-binary (unresolved polytomies) and hence give pathologically low starting MPL scores.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">include_trivial</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Include size-1 clusters (leaves) in the topology signature. Defaults to False (only informative clusters matter for the topology class).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">restrict_to_taxa</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>If provided, only gene trees whose leaf set equals this taxa set participate. Useful when gene trees have ragged taxon coverage and you want a seed that covers the full species set.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tiebreak</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>On ties between multiple topologies with the same maximum frequency, either pick the first one encountered (``&quot;first&quot;``) or sample uniformly (``&quot;random&quot;``).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">seed</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>RNG seed when ``tiebreak=&quot;random&quot;``.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: Deep copy of a representative gene tree from the modal topology class.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>GeneTreeError</code>: If no gene trees satisfy ``restrict_to_taxa``.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
                                 <span class="name">build_majority_rule_consensus_tree</span>(<span class="params">threshold: float = 0.5</span>) <span class="keyword">-&gt;</span> Network
                             </div>
                             <div class="function-body">
@@ -429,6 +466,7 @@
                 <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="NetworkMoves.html">NetworkMoves</a></li>
                 <li><a href="Newick.html">Newick</a></li>
@@ -437,10 +475,12 @@
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
                 <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
                 <li><a href="Traversal.html">Traversal</a></li>
                 <li><a href="Validation.html">Validation</a></li>
                 <li><a href="Visitor.html">Visitor</a></li>
                 <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
             </ul>
             
             <h3>This Page</h3>

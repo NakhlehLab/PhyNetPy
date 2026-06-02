@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release Notes | PhyNetPy</title>
+  <meta name="description" content="Release notes and changelog highlights for PhyNetPy.">
+  <link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="Main navigation">
+      <a class="brand" href="index.html">PhyNetPy</a>
+      <div class="nav-links">
+        <a href="news.html">News</a>
+        <a aria-current="page" href="releases.html">Release Notes</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="advertisements.html">Advertisements</a>
+        <a href="demos.html">Demos</a>
+        <a href="https://github.com/NakhlehLab/PhyNetPy">GitHub</a>
+      </div>
+    </nav>
+
+    <section class="hero page-title">
+      <p class="eyebrow">Version history</p>
+      <h1>Release Notes</h1>
+      <p>Highlights, compatibility notes, and links for PhyNetPy releases.</p>
+    </section>
+  </header>
+
+  <main class="content-page">
+    <article class="release">
+      <p class="eyebrow">Released May 12, 2026</p>
+      <h2>PhyNetPy 0.5.0</h2>
+      <p>
+        PhyNetPy 0.5.0 is focused on faster and more reliable
+        phylogenetic-network search. The release keeps existing public imports
+        backward compatible while adding a curated inference front door.
+      </p>
+
+      <h3>Highlights</h3>
+      <ul class="highlight-list">
+        <li><strong>Unified inference API:</strong> <code>phynetpy.infer</code> re-exports supported inference workflows.</li>
+        <li><strong>Cython acceleration:</strong> MPL dynamic programming and gene-tree MSC scoring now have optimized engines.</li>
+        <li><strong>Adaptive proposal kernels:</strong> MCMC-GT tracks per-move statistics and can tune proposal weights during search.</li>
+        <li><strong>Simulated annealing improvements:</strong> geometric, linear, and plateau-aware schedules are available.</li>
+        <li><strong>Reticulation correctness fixes:</strong> topology moves preserve gamma sum-to-one invariants.</li>
+      </ul>
+
+      <h3>Install</h3>
+      <pre class="demo-shell"><code>pip install phynetpy</code></pre>
+
+      <p>
+        The repository also includes the full Markdown release notes at
+        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/RELEASE_NOTES_0.5.0.md">RELEASE_NOTES_0.5.0.md</a>
+        and the running changelog at
+        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/CHANGELOG.md">CHANGELOG.md</a>.
+      </p>
+    </article>
+
+    <section class="section">
+      <article class="callout">
+        <h2>Release Archive</h2>
+        <p>
+          Add future releases here as separate cards so users can quickly scan
+          changes before upgrading.
+        </p>
+      </article>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p><a href="index.html">Back to home</a></p>
+  </footer>
+</body>
+</html>

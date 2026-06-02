@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ModelSelection - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; ModelSelection
+                </div>
+                
+                <h1>ModelSelection Module <span class="version-badge">v0.3.2</span></h1>
+                
+                <p>Information-criterion-based reticulation-count selection (AIC, BIC, AICc) and reticulation sweep helpers.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>4/24/26</dd>
+                        <dt>Source:</dt>
+                        <dd>ModelSelection.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#sweeprow">SweepRow</a></li>
+                        <li><a href="#sweepresult">SweepResult</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="sweeprow">SweepRow</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SweepRow</span>
+                    </div>
+                    <div class="class-body">
+                        <p>One row of the reticulation sweep: results for a single ``k``. Attributes: k: Reticulation count this row was produced with. best_log_lik: Best log-likelihood observed across seeds at this ``k`` (higher is better for MPL). all_log_liks: Per-seed log-likelihoods, in the order the seeds were evaluated. Useful for diagnosing multimodality. n_params: Effective parameter count used for AIC/BIC. aic: ``2 * n_params - 2 * best_log_lik``. bic: ``n_params * ln(data_size) - 2 * best_log_lik``. elapsed_s: Wall-clock time spent on this ``k`` (all seeds). delta_log_lik: Marginal gain over the previous ``k`` row; set by :func:`reticulation_sweep` after all rows are built. ``None`` for the first row.</p>
+                    </div>
+                </div>
+
+                <h2 id="sweepresult">SweepResult</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SweepResult</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Container for reticulation-sweep rows with selection/plotting helpers. Built by :func:`reticulation_sweep`. Exposes :meth:`best_by` for criterion-based ``k`` recommendation, :meth:`print_summary` for a console table, :meth:`save_csv` for a machine-readable dump, and :meth:`plot` for a visual report. Attributes: rows: Ordered list of :class:`SweepRow`, one per ``k``. data_size: ``n`` used in the BIC formula. params_per_reticulation: Parameters added by each reticulation. base_params: Backbone (k=0) parameter count. log_lik_label: Human-readable name for the y-axis / summary column (e.g. ``&quot;log-pseudo-likelihood&quot;``).</p>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">best_by</span>(<span class="params">criterion: Criterion</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Return the recommended ``k`` under the given criterion.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">criterion</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>One of * ``&quot;logL&quot;``:  ``argmax_k logL(k)`` (ignores parsimony; always picks the largest ``k`` in a non-overfit regime). * ``&quot;aic&quot;``:   ``argmin_k AIC(k)``. * ``&quot;bic&quot;``:   ``argmin_k BIC(k)``. * ``&quot;elbow&quot;``: smallest ``k`` at which the next-step gain in log-likelihood falls below ``elbow_tol_frac`` of the maximum gain across the sweep.  This matches the classic &quot;knee plot&quot; heuristic.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Recommended reticulation count.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ValueError</code>: If the sweep is empty or ``criterion`` is unrecognised.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">print_summary</span>(<span class="params">file = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Pretty-print the sweep table, deltas, and recommendations.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">file</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional text stream to print to.  Defaults to ``sys.stdout``.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">save_csv</span>(<span class="params">path: str | Path</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Write the sweep rows to ``path`` as CSV, one row per ``k``. Parent directories are created on demand. Per-seed scores are joined into a single ``;``-separated field so the CSV stays flat.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">path</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Output CSV path.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">plot</span>(<span class="params">path: str | Path | None = None, show: bool = False, title: str | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Render the log-likelihood / AIC / BIC curves versus ``k``. Writes a PNG to ``path`` (if provided) and/or opens an interactive window (``show=True``). Each recommended ``k`` is marked with a vertical dashed line colour-matched to its criterion.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">path</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional PNG output path.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">show</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>When True, also display an interactive window.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">title</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional figure title.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reticulation_sweep</span>(<span class="params">search_fn: Callable[[int, int], float], k_values: Sequence[int], seeds: Sequence[int] = (0,), data_size: int = 1, params_per_reticulation: int = 3, base_params: int = 0, log_lik_label: str = 'log-likelihood', progress: bool = True</span>) <span class="keyword">-&gt;</span> SweepResult
+                            </div>
+                            <div class="function-body">
+                                <p>Run ``search_fn`` over each ``k in k_values`` and summarize.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">search_fn</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Callable ``f(k, seed) -&gt; float`` that performs one search with ``max_reticulations == k`` and returns the best log-likelihood found.  The caller is responsible for constructing a fresh search object / starting network for each invocation if that's appropriate for the method.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">k_values</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Reticulation counts to sweep over (e.g. ``range(0, 4)``).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">seeds</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>RNG seeds to run at each ``k``.  If multiple seeds are provided the best (highest) log-likelihood across seeds is taken as the representative score for that ``k``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data_size</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``n`` used in BIC (``p ln(n) - 2 logL``).  For MPL this is typically ``len(gene_trees.trees)``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">params_per_reticulation</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Number of free parameters each additional reticulation contributes.  For MPL, 3 (one gamma + two new branch lengths) is a sensible default; 1 (gamma only) is the most conservative choice.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">base_params</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Parameters attributable to the backbone tree (commonly ``2 * n_taxa - 3`` for an unrooted binary tree; pass ``0`` to ignore -- only differences across ``k`` matter for the AIC/BIC comparison.)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">log_lik_label</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Y-axis label, e.g. &quot;log-pseudo-likelihood&quot;.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">progress</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Print a one-line progress update per search.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> A: class:`SweepResult` with the best score and derived stats at each ``k``.</div>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="Executor.html">Executor</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html" class="current">ModelSelection</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="NetworkMoves.html">NetworkMoves</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="Phylo.html">Phylo</a></li>
+                <li><a href="PhyloNet.html">PhyloNet</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Strategy.html">Strategy</a></li>
+                <li><a href="Sync.html">Sync</a></li>
+                <li><a href="Traversal.html">Traversal</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="Visitor.html">Visitor</a></li>
+                <li><a href="graph_core.html">graph_core</a></li>
+                <li><a href="infer.html">infer</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#sweeprow">SweepRow</a></li>
+                <li><a href="#sweepresult">SweepResult</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,5 +1,33 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+
+"""
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 1.0.0
+
+BiMarkers -- biallelic SNP (single-nucleotide polymorphism) likelihood
+under the multispecies network coalescent for phylogenetic networks.
+
+This module implements the SNAPP-style two-state continuous-time Markov
+chain likelihood (Bryant et al. 2012) generalised to reticulate
+topologies.  It provides:
+
+* :class:`SNP_LIKELIHOOD` and :class:`SNP_LIKELIHOOD_DATA` -- the public
+  scoring functions for biallelic site patterns on a species network.
+* :class:`MCMC_BIMARKERS` -- a Metropolis-Hastings search driver wired to
+  the SNP likelihood, mirroring the API of the other ``MCMC_*`` entry
+  points.
+* A NumPy reference implementation suitable for small/medium networks.
+  An optional CUDA-accelerated implementation lives in
+  ``MCMC_BiMarkers_CUDA`` and is auto-wired by ``phynetpy/__init__.py``
+  when ``cupy``/``numba`` are importable.
+
+Docs   - [ ]
+Tests  - [ ]
+Design - [ ]
+"""
+
 from __future__ import annotations
 
 ##############################################################################
@@ -17,20 +45,6 @@ from __future__ import annotations
 ##     Mark Kessler, Luay Nakhleh. 2025.
 ##
 ##############################################################################
-
-
-""" 
-Author : Mark Kessler
-Last Edit : 2/5/26
-First Included in Version : 1.0.0
-
-CUDA-accelerated
-Optimized for NVIDIA GPUs (tested with RTX 5070ti)
-
-Docs   - [ ]
-Tests  - [ ]
-Design - [ ]
-"""
 
 from math import sqrt, comb, pow
 import time

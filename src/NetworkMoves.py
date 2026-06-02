@@ -1,24 +1,11 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
-##############################################################################
-##  -- PhyNetPy --                                                              
-##  Library for the Development and use of Phylogenetic Network Methods
-##
-##  Copyright 2025 Mark Kessler, Luay Nakhleh.
-##  All rights reserved.
-##
-##  See "LICENSE.txt" for terms and conditions of usage.
-##
-##  If you use this work or any portion thereof in published work,
-##  please cite it as:
-##
-##     Mark Kessler, Luay Nakhleh. 2025.
-##
-##############################################################################
 
 """
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 0.3.2
+
 NetworkMoves -- Topology-altering operations for phylogenetic networks.
 
 This module provides the core set of "moves" used during phylogenetic
@@ -53,6 +40,24 @@ spr               Subtree prune-and-regraft -- detach a subtree and
 permute_leaves    Enumerate every relabeling of the leaf taxa, yielding a
                   new network copy for each permutation.
 """
+
+from __future__ import annotations
+
+##############################################################################
+##  -- PhyNetPy --                                                              
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
 
 from .Network import Network, Node, Edge, NetworkError
 from .GraphUtils import level

@@ -52,6 +52,7 @@ from .MetropolisHastings import MetropolisHastings, HillClimbing, SimulatedAnnea
 from .State import State
 from .ModelMove import Move, SwitchParentage, AddReticulation, RemoveReticulation, FlipReticulation, SPR
 from .ModelSelection import reticulation_sweep, SweepResult, SweepRow
+from .Sync import Sync
 from .Logger import Logger
 
 # Inference methods.  The public, recommended import path is
@@ -107,6 +108,6 @@ except ImportError:
         print("CUDA BiMarkers not available. Install with: pip install phynetpy[cuda]")
         return False
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 __author__ = "Mark Kessler"
 

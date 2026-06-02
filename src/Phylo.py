@@ -1,4 +1,8 @@
 """
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 0.3.0
+
 Core phylogenetic data structures shared across PhyNetPy.
 
 Provides the :class:`Branch` class which stores the length, inheritance
