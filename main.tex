@@ -9,6 +9,7 @@
 \usepackage{algorithm}% http://ctan.org/pkg/algorithm
 \usepackage{algpseudocode}
 \usepackage{float}
+\usepackage{booktabs}
  
 \usepackage{amsthm}
 \newtheorem{theorem}{Theorem}
@@ -30,15 +31,14 @@ most work done thus far on phylogenetic network inference assumes standard diplo
 These inference methods have been applied, with varying degrees of success, to data sets with allo/autopolyploid species, 
 even though polyploidy violates some certain mathematical assumptions underlying these methods. 
   
-In this paper, we introduce an improved method of the previously implemented InferNetwork-MP-Allop in PhyloNet (Yan et al.) for inferring parsimonious phylogenetic networks on data that include polyploid 
+In this paper, we introduce an improved method of the previously implemented InferNetwork-MP-Allop in PhyloNet \cite{YanAllop} for inferring parsimonious phylogenetic networks on data that include polyploid 
 and autopolyploid species. Taking gene tree topologies and a taxon mapping as input, the method will infer a phylogenetic network that minimizes deep coalescences while accounting for polyploidy, incomplete sampling, and ILS.
   
 This new method employs a single network move (rather than 6 independent moves) that combines aspects of SPR with the ability to only propose networks that
 satisfy the ploidyness of the taxa, which has the effect of reducing time spent proposing networks that would simply be rejected on the basis of incorrect topology.
 We will show a drastic decrease in runtime, as well as a empirical data that shows that this one move is sufficient to explore the entire network space.
 
-Also, this method will be more flexible and robust than prior iterations. For example, AlloppNET (2013) can only infer networks with exactly 2 diploid species and 1 tetraploid clade-- it is also a bayesian method that is extremely slow when compared to parsimony. InferNetwork-MP-Allop (2022), one such parsimony method, is 100x faster than AlloppNET. However it uses many network moves, only supports
-fixed polyploid clade membership, and does not support autopolyploid "bubbles". Our improved method, MP-Allop-2, is over 100x faster than InferNetwork-MP-Allop and 10000x faster than AloppNET, while also supporting autopolyploidy and variable clade membership.
+Also, this method is more flexible and robust than prior iterations. For example, AlloppNET \cite{AlloppNET} can only infer networks with exactly 2 diploid species and 1 tetraploid clade; it is also a Bayesian method that is far slower than parsimony approaches. InferNetwork-MP-Allop \cite{YanAllop} is one such parsimony method, reported to be orders of magnitude faster than AlloppNET. However, it uses six independent network moves, only supports fixed polyploid clade membership, and does not support autopolyploid "bubbles". Our improved method, MP-Allop-2, replaces the six moves with a single ploidy-preserving move and additionally supports autopolyploidy and variable clade membership. On the DEFJ benchmark (Section~\ref{sec:results}) MP-Allop-2 matches or exceeds the accuracy of InferNetwork-MP-Allop while running faster on every model condition we tested; the measured speedup is reported in Section~\ref{sec:runtime} rather than asserted as a fixed multiple, since it grows with data-set size.
 
 \section{Polyploidy and Allopolyploidy}
 In phylogenetics, allopolyploid and polyploid species play significant roles in understanding evolutionary relationships and genetic diversity. Allopolyploids arise from the hybridization of two distinct species, resulting in a genome containing sets of chromosomes from each parental species. These hybrids often exhibit increased genetic variation, potentially leading to enhanced adaptability and speciation. On the other hand, polyploid species possess multiple sets of chromosomes within their genomes, which can arise through various mechanisms such as genome duplication events.
@@ -50,15 +50,15 @@ In addition to their importance in understanding evolutionary relationships and 
 
 While InferNetwork-MP-Allop solved many of the performance and inflexibility issues present in AlloppNet via switching over to the parsimony approach of minimizing deep coalescences in a MUL (MULtilabeled Species Tree) tree, there are two key ways in which it can be made to be more adaptable to more biological scenarios.
 
-First, InferNetwork-MP-Allop does not support network "bubbles", in which a node connects twice to its child. In certain ILS scenarios, bubbles can occur (figure x). It also does not support autopolyploidy, as such events always generate bubbles. Autopolyploid bubble edges represent each copy of chromosomes that are passed down. Level 1 bubbles represent genome doubling, level 2 bubbles are genome tripling, etc (figure y).
+First, InferNetwork-MP-Allop does not support network "bubbles", in which a node connects twice to its child (Figure~\ref{fig:ploidy-structures}, right). It also does not support autopolyploidy, as such events always generate bubbles. Autopolyploid bubble edges represent each copy of chromosomes that are passed down: a single bubble represents genome doubling, and chained bubbles produce successively higher ploidy ($2^k$ for a chain of $k$ bubbles; see Figure~\ref{fig:ploidy-construction}).
 
-\section{Sub-network Disconnect and Reattach (SDR)}
+\section{Sub-Network Redirect and Preserve Ploidy (SRPP)}
 
 When the ploidy values of the tips of a network are known and fixed, the network space is reduced to a certain subset of networks, of which it is possible to move around in \textit{without exploring outside}. The essential realization is that topology changes can be made to a network via disconnecting a sub-network and reattaching its leaves somewhere else, while preserving the ploidy values at these leaf tips.
 
 Our previous algorithm, InferNetwork-MP-Allop, uses a set of 6 network topology moves, none of which guarantee a correct/valid network that has the correct ploidy values at the tips post-move. Therefore, search of the valid network space is inefficient at best-- these 6 network moves are also incapable of inferring allopolyploid bubbles. This set of 6 does not even have the potential to search the entire space.
 
-In this section, we will explain in depth our novel topology move (SRPP), while showing empirically that it effectively solves the efficiency, correctness, and search space issues explained above.
+In this section, we will explain in depth our novel topology move (SRPP), while showing empirically that it effectively solves the efficiency, correctness, and search space issues explained above. In the MP-Allop-2 reference implementation (PhyNetPy), this move is realized by the \texttt{SwitchParentage} class; we use the name SRPP throughout this paper.
 
 
 \subsection{Terminology and Assumptions}
@@ -144,14 +144,6 @@ Regaining the exact ploidy values for each node and edge in $\Psi_n$ is as simpl
 
 
 
-%     \item Calculate the current ploidy values for each node and edge in the network
-%     \item Select a node at random from the network
-%     \item Delete one parent edge from the node selected in step 2
-%     \item Recursively delete edges upstream of the node until a tree node is reached
-%     \item Recalculate node and edge ploidy
-%     \item Iteratively select edges to reattach the node to until original ploidy is attained
-
-% \end{enumerate}
 
 
 \begin{figure}
@@ -736,20 +728,167 @@ It should also be noted that moves 1 and 2 are guaranteed to introduce an invali
 At this point, it should be clear that introducing a bit of upfront work to maintain the validity of proposed networks has only positive upside, which is closely proportional to the amount of invalid networks that InferNetwork-MP-Allop proposes in its kernel.
 
 
-\section{Data and Results}
+\section{Data and Results}\label{sec:results}
 
-Here in this paper, we use the same simulated data (Scenarios D, E, F, J) as described in the section "Simulations" of \cite{YanMP} :
+\subsection{\color{bluem}The DEFJ Benchmark Dataset}\label{sec:defj}
 
-"We used the AlloppDT simulator (Jones 2012) and parameter settings of Jones et al. (2013) and Jones (2017) to simulate a collection of data sets. The data were generated under four different evolutionary scenarios with 1, 2, 3 and 3 reticulations (Fig. 3), where for each scenario the mutation rate, the number of individuals per species, and the number of genes were varied. In addition, we increased the number of genes to 100 to emulate the kinds of data sets enabled by next-generation sequencing. In total, there were 116 model conditions, each with 10 replicate data sets (Table 1). Since the gene tree-based inference methods considered in this study require rooted gene trees, an outgroup species was added for the purpose of rooting the estimated gene trees Table 1 and was excluded in the species phylogeny reconstruction. It would be possible for molecular clock methods to root the gene trees by finding the tree with the best ultrametric fit, but this may be unreliable when the strict molecular clock assumption is violated."
+To evaluate MP-Allop-2 against the prior state of the art, we use the same
+simulated benchmark (Scenarios D, E, F, and J) introduced by Yan et al.\
+\cite{YanAllop} for InferNetwork-MP-Allop. Re-using this exact benchmark makes
+the comparison a true head-to-head: both methods are run on identical gene-tree
+inputs and scored against identical ground-truth species networks.
 
+\paragraph{Simulation lineage.} The data were generated with the AlloppDT
+simulator \cite{AlloppDT} using the parameter settings of Jones et al.\
+\cite{AlloppNET} and Jones \cite{Jones2017}. For each model condition a
+species network (with a known number and placement of allopolyploidy events)
+was fixed; gene trees were then simulated within the network under the
+multispecies-coalescent-with-hybridization model, so that the gene trees
+display the discordance produced by incomplete lineage sorting (ILS) on top of
+the reticulate species history. This two-level generative process is precisely
+what an allopolyploid network method must invert, which makes the benchmark a
+faithful stress test rather than a best-case demonstration.
 
-\subsection{\color{bluem}Accuracy and Species Network Error}
+\paragraph{The four scenarios.} The scenarios increase in both size and
+network complexity:
+\begin{itemize}
+    \item \textbf{Scenario D} -- 6 taxa, \textbf{1} reticulation: a single
+    allopolyploid whose two subgenomes derive from distinct diploid lineages.
+    \item \textbf{Scenario E} -- 6 taxa, \textbf{2} reticulations.
+    \item \textbf{Scenario F} -- 6 taxa, \textbf{3} reticulations: the most
+    reticulation-dense of the small scenarios, with overlapping hybrid
+    histories.
+    \item \textbf{Scenario J} -- 14 taxa, \textbf{2} reticulations: a large
+    network that tests scaling in the number of taxa rather than in the number
+    of reticulations.
+\end{itemize}
+In every scenario an additional outgroup species ($o$) is included solely to
+root the estimated gene trees; it is excluded from the species-network
+comparison, following \cite{YanAllop}.
 
-\subsection{\color{bluem}Runtime and Performance Comparisons}
+\paragraph{The parameter grid.} Within each scenario three nuisance parameters
+are varied, producing the model conditions:
+\begin{itemize}
+    \item \textbf{Number of gene trees} $g$: increasing $g$ supplies more signal
+    and is expected to reduce error. We use $g \in \{1, 3, 10\}$ in the
+    10-gene tier and add a $g = 100$ tier to emulate next-generation
+    sequencing data sets.
+    \item \textbf{Individuals per species} $n \in \{1, 3, 9\}$: more individuals
+    sample each (sub)genome's coalescent history more densely.
+    \item \textbf{ILS level} $t$ (controlled through the mutation/branch-length
+    scaling): higher $t$ means deeper coalescence and more gene-tree
+    discordance, i.e.\ a harder inference problem.
+\end{itemize}
+In total there are 116 model conditions, each with 10 replicate data sets, for
+both the original and 100-gene tiers \cite{YanAllop}.
+
+\paragraph{Why this is a good test.} The grid isolates the two axes that matter
+for an allopolyploid network method. The $g$ and $t$ axes vary the
+\emph{statistical} difficulty (signal vs.\ ILS noise) while holding the true
+network fixed, so accuracy can be read as a function of data quality. The
+scenario axis (D$\to$E$\to$F increases reticulation count; J increases taxon
+count) varies the \emph{combinatorial} difficulty of the search, which is
+exactly where a network move's ability to reach valid topologies efficiently is
+exercised. A method that does well across the whole grid is therefore robust
+both to noisy data and to complex network structure, and the 100-gene tier and
+Scenario J jointly probe runtime scaling.
+
+\paragraph{Evaluation.} For each inferred species network we report two
+topological distances to the ground truth: the $\mu$-distance (which compares
+the $\mu$-vectors counting paths from each node to each leaf, and is sensitive
+to the directed, reticulate structure) and the hardwired-cluster distance
+(which compares the sets of leaf clusters induced by the network's edges).
+Both are zero if and only if the inferred network matches the truth on the
+respective representation; lower is better. PhyloNet is allowed the same number
+of reticulations as the ground-truth network for each scenario (D:1, E:2, F:3,
+J:2), matching how MP-Allop-2 fixes ploidy from the taxon map. Multi-individual
+conditions ($n>1$) are reduced to one individual per subgenome so that both
+methods receive byte-identical gene-tree inputs.
+
+\subsection{\color{bluem}Accuracy and Species Network Error}\label{sec:accuracy}
+
+Figure~\ref{fig:defj-acc-scenario} summarizes species-network error by scenario
+for MP-Allop-2 under hill climbing (MP-HC) and simulated annealing with three
+restarts (MP-SA3), alongside PhyloNet's InferNetwork-MP-Allop. Mean
+$\mu$-distance to the true network is reported with error bars over replicates.
+Figures~\ref{fig:defj-acc-ils} and \ref{fig:defj-acc-genes} break the same
+metric down by ILS level $t$ and by gene count $g$, respectively, showing the
+expected decrease in error as more genes are supplied and the increase in error
+as ILS deepens. Table~\ref{tab:defj-accuracy} gives the per-scenario means
+($\pm$ standard deviation across conditions).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{paper_figures/defj_accuracy_by_scenario_mu_d.png}
+    \caption{Mean species-network error ($\mu$-distance to the true network,
+    lower is better) by scenario for MP-Allop-2 (hill climbing and simulated
+    annealing $\times 3$) versus PhyloNet's InferNetwork-MP-Allop, single
+    individual per species ($n=1$). Error bars are standard deviations across
+    model conditions and replicates.}
+    \label{fig:defj-acc-scenario}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{paper_figures/defj_accuracy_vs_ils_mu_d.png}
+    \caption{Species-network error versus ILS level $t$ for Scenarios D, E, and
+    F (1 gene, $n=1$). Deeper coalescence (higher $t$) increases error for all
+    methods.}
+    \label{fig:defj-acc-ils}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{paper_figures/defj_accuracy_vs_genes_mu_d.png}
+    \caption{Species-network error versus the number of gene trees $g$,
+    averaged over scenarios ($n=1$). Additional genes reduce error.}
+    \label{fig:defj-acc-genes}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \input{paper_figures/defj_accuracy_table.tex}
+    \caption{Mean $\mu$-distance to the true species network ($\pm$ s.d.) by
+    scenario and method on the DEFJ benchmark. Lower is better.}
+    \label{tab:defj-accuracy}
+\end{table}
+
+\subsection{\color{bluem}Runtime and Performance Comparisons}\label{sec:runtime}
+
+Figures~\ref{fig:defj-rt-genes} and \ref{fig:defj-rt-scenario} report
+wall-clock runtime (log scale). Because MP-Allop-2 proposes only valid,
+ploidy-preserving networks, it avoids the wasted proposals incurred by
+InferNetwork-MP-Allop's six-move kernel, and the runtime gap widens with
+data-set size (more genes, more taxa). Table~\ref{tab:defj-runtime} lists the
+per-scenario mean runtimes; the measured speedup of MP-Allop-2 over PhyloNet on
+this benchmark is therefore reported directly rather than as a single fixed
+multiple.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{paper_figures/defj_runtime_vs_genes.png}
+    \caption{Mean wall-clock runtime (log scale) versus number of gene trees.}
+    \label{fig:defj-rt-genes}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{paper_figures/defj_runtime_by_scenario.png}
+    \caption{Mean wall-clock runtime (log scale) by scenario.}
+    \label{fig:defj-rt-scenario}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \input{paper_figures/defj_runtime_table.tex}
+    \caption{Mean wall-clock runtime in seconds ($\pm$ s.d.) by scenario and
+    method on the DEFJ benchmark.}
+    \label{tab:defj-runtime}
+\end{table}
 
 
 \section{Algorithms} \label{Algs}
-In this section are pseudocode algorithms for the SRPP move and other related implementation details. For the following algorithms, let P(n) or P(e) denote the current node or edge ploidy in the network-- these values are gathered by map lookups after a CalculatePloidy call. This is for brevity.
+In this section are pseudocode algorithms for the SRPP move and other related implementation details. For the following algorithms, let P(n) or P(e) denote the current node or edge ploidy in the network-- these values are gathered by map lookups after a CalculatePloidy call. This is for brevity. Note that CalculatePloidy must visit each node only after all of its parents have been assigned ploidy (i.e.\ in topological order); a node with two incoming edges (a reticulation) is otherwise summed before both contributions are known. The reference implementation in PhyNetPy enforces this by computing $p(n)$ recursively as the sum over $n$'s parents, which is equivalent and visits parents first by construction.
 
 \begin{algorithm}[H]
 \caption{CalculatePloidy}\label{euclid}

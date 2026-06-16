@@ -8,11 +8,22 @@ First Included in Version : 0.3.2
 
 NetworkMoves -- Topology-altering operations for phylogenetic networks.
 
-This module provides the core set of "moves" used during phylogenetic
-network search (e.g. MCMC or hill-climbing). Each move modifies a
-:class:`Network` **in place** and is designed to be reversible so that a
-search algorithm can propose a candidate topology, score it, and accept
-or reject it.
+.. deprecated:: 0.5.0
+    This module is a legacy, free-function move library that predates the
+    unified move contract.  It mutates a :class:`Network` in place using
+    the stdlib ``random`` module (not a seeded ``numpy`` Generator),
+    provides no ``undo`` mechanism, and reports **no Hastings ratio** -- so
+    it is unsuitable for correct Metropolis-Hastings sampling.  All
+    PhyNetPy samplers and optimisers now use the :class:`Move` classes in
+    :mod:`phynetpy.ModelMove`, whose proposal math (log-Hastings ratios and
+    reversible-jump Jacobians) is centralised in
+    :mod:`phynetpy._network_moves`.  Prefer those.  This module is retained
+    only for backward compatibility and ad-hoc scripting and may be removed
+    in a future release; do **not** wire it into a sampler.
+
+This module provides a legacy set of "moves" used during early
+phylogenetic network search experiments. Each move modifies a
+:class:`Network` **in place**.
 
 Available moves
 ---------------

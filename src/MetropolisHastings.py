@@ -14,15 +14,45 @@ PhyNetPy inference method (MPL, MCMC_GT, INFER_MP_ALLOP, etc.).
 Concrete inference modules wire their per-method scorer and proposal
 kernel into one of these drivers:
 
-* :class:`MetropolisHastings` -- Bayesian sampling via the
-  Metropolis-Hastings acceptance rule.
-* :class:`HillClimbing` -- greedy local search that always accepts an
-  improving move.
-* :class:`SimulatedAnnealing` -- temperature-controlled stochastic
-  search with configurable cooling schedules (geometric, linear,
-  plateau-aware) for escaping local optima.
+* :class:`MetropolisHastings` -- Bayesian *sampler*: targets the
+  posterior via the Metropolis-Hastings acceptance rule
+  ``log_alpha = (logpi' - logpi) + log_hastings_ratio`` with the
+  threshold ``log(U(0, 1))``.
+* :class:`HillClimbing` -- *optimiser*: greedy local search that only
+  accepts improving moves.
+* :class:`SimulatedAnnealing` -- *optimiser*: temperature-controlled
+  stochastic search with configurable cooling schedules (geometric,
+  linear, plateau-aware) for escaping local optima.
 * :class:`ProposalKernel` -- pluggable move-selection policy with
   optional adaptive weight tuning during search.
+
+Samplers vs optimisers
+----------------------
+
+The distinction matters for which proposal terms are honoured:
+
+* **Samplers** (:class:`MetropolisHastings`, ``MCMC_SEQ``, and
+  ``MCMC_GT(method="mh")``) *must* use a correct log-Hastings ratio --
+  including the reversible-jump Jacobian for dimension-changing moves --
+  or the stationary distribution is wrong.  These drivers read
+  :meth:`phynetpy.ModelMove.Move.log_hastings_ratio` (log space, ``0.0``
+  for symmetric moves) and the operator log-Hastings returned by the
+  ``op_*`` closures in :mod:`phynetpy._mcmc_seq`.
+* **Optimisers** (:class:`HillClimbing`, :class:`SimulatedAnnealing`, and
+  ``MCMC_GT(method="hc"/"sa")``, plus ``MPL``) climb a score surface and
+  *ignore* the Hastings term entirely; for them the asymmetry of a
+  proposal only affects search efficiency, not correctness.
+
+Move contract
+-------------
+
+Every proposal -- whether expressed as a :class:`phynetpy.ModelMove.Move`
+object or an ``op_*`` closure -- shares one contract: it returns (or
+caches) a **log** proposal-asymmetry correction that already folds in any
+reversible-jump log-Jacobian.  The math for that correction lives in a
+single module, :mod:`phynetpy._network_moves`, so the sequence and
+gene-tree stacks can never disagree.  See that module's docstring for the
+full description.
 
 Docs   - [ ]
 Tests  - [x]
@@ -436,16 +466,37 @@ class MetropolisHastings:
         while iter_no < self.num_iter:
             # propose a new state
             next_move = self.kernel.generate(self.current_state.current_model)
-            self.current_state.generate_next(next_move)
-            
-            cur = self.current_state.likelihood() 
+            is_valid = self.current_state.generate_next(next_move)
+
+            # An invalid proposal is an automatic reject (it counts toward
+            # the rejection denominator); ``generate_next`` has already
+            # reverted the proposed model, so just move on.
+            if not is_valid:
+                self.kernel.report_outcome(False, delta=0.0)
+                self.current_state.write_line_to_summary(
+                    f"ITER #{iter_no} (invalid proposal, rejected)"
+                )
+                iter_no += 1
+                continue
+
+            cur = self.current_state.likelihood()
             prop = self.current_state.proposed().likelihood()
 
-            # (logP(B) - logP(A)) + (logP(A|B) - logP(B|A)) > r ~ log(Unif(0, 1))
-            if prop - cur + next_move.hastings_ratio() > random.random():
+            # Metropolis-Hastings in log space:
+            #   log_alpha = (logP(B) - logP(A)) + log[ q(A|B) / q(B|A) ]
+            # accept iff log_alpha >= 0 or log(Unif(0,1)) < log_alpha.
+            # NOTE: the threshold must be ``log(U)``, not ``U`` -- the
+            # previous code compared a log-posterior delta directly to
+            # ``random.random()`` in (0, 1), which is always >= 0 and so
+            # rejected essentially every downhill move (a noisy hill
+            # climber, not a sampler).
+            log_alpha = (prop - cur) + next_move.log_hastings_ratio()
+            if log_alpha >= 0.0 or math.log(random.random()) < log_alpha:
                 self.current_state.commit(next_move)
+                self.kernel.report_outcome(True, delta=prop - cur)
             else:
                 self.current_state.revert(next_move)
+                self.kernel.report_outcome(False, delta=prop - cur)
 
             self.current_state.write_line_to_summary(
                 f"ITER #{iter_no} LIKELIHOOD = {cur}"

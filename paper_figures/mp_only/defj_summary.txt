@@ -1,0 +1,10 @@
+DEFJ benchmark summary (rows used after dropping errors):
+
+  MP-HC: 1160 runs
+  MP-SA3: 1160 runs
+
+Mean mu_d / hw_d / seconds by method:
+            mu_d      hw_d    seconds
+method                               
+MP-HC   6.431034  4.312931   7.599843
+MP-SA3  5.820690  3.782759  28.494828

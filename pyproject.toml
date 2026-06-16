@@ -4,3 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: longer-running tests (e.g. MCMC recovery runs); deselect with -m 'not slow'",
+]

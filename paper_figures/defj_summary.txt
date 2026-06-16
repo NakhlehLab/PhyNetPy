@@ -1,0 +1,10 @@
+DEFJ benchmark summary (rows used after dropping errors):
+
+  MP-SA3: 1160 runs
+  PhyloNet: 669 runs
+
+Mean mu_d / hw_d / seconds by method:
+               mu_d      hw_d     seconds
+method                                   
+MP-SA3     4.334483  2.696552  187.434748
+PhyloNet  12.481315  4.603886  205.485819

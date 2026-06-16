@@ -27,7 +27,7 @@ Network proposal moves for MCMC and simulated-annealing search.
 This module defines the proposal kernel primitives used by both the
 Bayesian MCMC driver and the MPL simulated-annealing driver
 (:mod:`src.MPL`).  Each move subclasses :class:`Move` and implements
-``execute`` / ``undo`` / ``same_move`` / ``hastings_ratio``.  The kernel
+``execute`` / ``undo`` / ``same_move`` / ``log_hastings_ratio``.  The kernel
 wraps these into a weighted selection scheme; only the move classes
 themselves need to understand how to mutate and restore the network.
 
@@ -80,6 +80,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 # Relative imports
 from .Network import Network, Edge, Node
+from . import _network_moves as _nm
 from .Logger import Logger
 
 if TYPE_CHECKING:
@@ -276,10 +277,10 @@ class Move(ABC):
         else.
       * ``same_move(model)`` re-plays the proposal on a clone of
         the model, used by the parallel MCMC driver.
-      * ``hastings_ratio()`` returns ``q(x | x') / q(x' | x)`` for
-        proper MCMC; see the method-level docstring below for
-        why every concrete move in this module currently returns
-        ``1.0``.
+      * ``log_hastings_ratio()`` returns ``log[ q(x | x') / q(x' | x) ]``
+        (in log space, ``0.0`` for symmetric moves) plus any
+        reversible-jump log-Jacobian; see the method-level
+        docstring below.
 
     Subclasses are expected to leave the network in a
     structurally valid state (single root, acyclic, reticulations
@@ -293,6 +294,11 @@ class Move(ABC):
         self.model = None
         self.undo_info = None
         self.same_move_info = None
+        # Log proposal-asymmetry correction for this proposal, computed
+        # in ``execute`` (where the move has access to both the pre- and
+        # post-move network) and returned by :meth:`log_hastings_ratio`.
+        # Defaults to ``0.0`` (symmetric proposal / no-op).
+        self._log_hr: float = 0.0
 
     @abstractmethod
     def execute(self, model: Model) -> Model:
@@ -373,45 +379,54 @@ class Move(ABC):
         """
         return None
 
-    @abstractmethod
-    def hastings_ratio(self) -> float:
-        """Proposal asymmetry correction ``q(x|x') / q(x'|x)``.
+    def log_hastings_ratio(self) -> float:
+        r"""Log proposal-asymmetry correction ``log[ q(x|x') / q(x'|x) ]``.
 
-        A proper MCMC sampler uses the Hastings ratio to correct for
-        asymmetric proposal distributions so that the chain converges to
-        the target distribution.  **Every concrete move in this module
-        currently returns 1.0**, which would be exact only for strictly
-        symmetric proposals.  Three are not:
+        A proper MCMC sampler corrects for asymmetric proposal
+        distributions via the Hastings ratio so the chain converges to
+        the target distribution.  This method returns that ratio **in log
+        space**, which is the convention used throughout PhyNetPy's
+        samplers (see :mod:`phynetpy._network_moves` and
+        :mod:`phynetpy._mcmc_seq`): the acceptance rule is
+
+            log_alpha = (logpi' - logpi) + log_hastings_ratio (+ log|J|)
+
+        so a strictly symmetric move returns ``0.0`` (not ``1.0``).  The
+        previous interface returned a *linear* ratio and every move
+        returned ``1.0``; consumed additively in log space that silently
+        inflated acceptance by a factor of ``e`` and left genuinely
+        asymmetric moves uncorrected.
+
+        Three moves in this module are not symmetric and supply real
+        corrections (delegated to :mod:`phynetpy._network_moves` where the
+        math is shared with the sequence sampler):
 
         * :class:`SPR` weights candidate regraft edges by
-          ``1 / d ** distance_decay`` of their topological distance from
-          the prune point.  The reverse regraft probability depends on
-          the hop-distance distribution *after* the move, which is not
-          cheap to compute on a network.
-        * :class:`ChangeNodeHeight` draws a Gaussian delta whose sigma
-          is a fraction of the per-node *feasible* half-range; the
-          half-range changes after the move, so proposals are mildly
-          asymmetric even though the draw itself is symmetric.
-        * :class:`ChangeInheritanceProb` clamps its Gaussian draw to the
-          open interval ``(eps, 1 - eps)`` (rather than renormalising a
-          truncated Gaussian).  This piles proposal mass on the boundaries.
+          ``1 / d ** distance_decay``; the correction accounts for the
+          forward / reverse regraft-weight asymmetry.
+        * :class:`ChangeNodeHeight` draws a Gaussian whose sigma scales
+          with the feasible half-range, which differs pre/post-move.
+        * :class:`ChangeInheritanceProb` uses a Gaussian on ``gamma``;
+          the correction is the truncated-normal normaliser ratio
+          ``log[ Z(old) / Z(new) ]``.
 
-        For the MPL search this module is driving, the Metropolis-Hastings
-        criterion is applied to a *log-likelihood surface* being maximised
-        under simulated annealing -- not to a stationary distribution we
-        care about matching.  The un-corrected acceptance rule is still
-        monotone in the score, so the search is still guaranteed to
-        climb in expectation; the bias affects dwell-time distribution,
-        which matters for Bayesian posteriors but not for finding the
-        optimum.  Returning 1.0 is therefore a deliberate SA-scoped
-        shortcut, not an oversight.  Bayesian callers should override
-        these ratios before using the moves in an MCMC sampler.
+        Dimension-changing moves (:class:`AddReticulation` /
+        :class:`RemoveReticulation`) additionally fold the reversible-jump
+        Jacobian into this return value, mirroring
+        :func:`phynetpy._mcmc_seq.op_add_reticulation`.
+
+        Note: the optimisation drivers (:class:`HillClimbing`,
+        :class:`SimulatedAnnealing`) ignore this term -- they climb a
+        score surface rather than sample a stationary distribution -- so
+        for MPL search the exact value is immaterial.
 
         Returns:
-            float: Hastings Ratio. ``1.0`` for symmetric moves and for
-            the SA-approximate path used by ``MPL.search``.
+            float: ``log[ q(x|x') / q(x'|x) ]``.  ``0.0`` for symmetric
+            moves; a finite real (possibly including a log-Jacobian) for
+            asymmetric / dimension-changing moves.  The value is computed
+            in :meth:`execute` and cached on ``self._log_hr``.
         """
-        pass
+        return float(getattr(self, "_log_hr", 0.0))
 
 
 ####GRAPH MOVES####
@@ -481,6 +496,9 @@ class AddReticulation(Move):
 
         rng = model.rng
         all_edges = net.E()
+        # Pre-move quantities for the reversible-jump log-Hastings ratio.
+        edge_count_pre = len(all_edges)
+        retic_count_pre = sum(1 for n in net.V() if n.is_reticulation())
         src_e = _rng_pick(rng, all_edges)
         if src_e is None:
             model.update_network()
@@ -537,6 +555,24 @@ class AddReticulation(Move):
             net.add_edges(retic_edge)
             c.set_is_reticulation(True)
 
+        # Reversible-jump log-Hastings ratio (shared with the sequence
+        # sampler via phynetpy._network_moves).  ``len_ab`` / ``len_xy``
+        # are the lengths of the two host edges that were split.  Note:
+        # this is the canonical ultrametric RJMCMC term; on a purely
+        # branch-length-parameterised network the hybrid edge introduces
+        # an extra auxiliary dimension whose density is not folded in
+        # here (documented limitation -- strict posterior inference over
+        # reticulation *number* is best done with MCMC_SEQ).
+        try:
+            self._log_hr = _nm.add_reticulation_log_hastings(
+                edge_count_pre=edge_count_pre,
+                retic_count_pre=retic_count_pre,
+                l1=len_ab,
+                l2=len_xy,
+            )
+        except ValueError:
+            self._log_hr = 0.0
+
         model.update_network()
         return model
 
@@ -547,9 +583,6 @@ class AddReticulation(Move):
 
     def same_move(self, model: Model) -> None:
         pass
-
-    def hastings_ratio(self) -> float:
-        return 1.0
 
 
 class RemoveReticulation(Move):
@@ -577,6 +610,7 @@ class RemoveReticulation(Move):
             return model
 
         rng = model.rng
+        retic_count_pre = sum(1 for n in net.V() if n.is_reticulation())
         c: Node = _rng_pick(rng, retic_nodes)
         parents = net.get_parents(c)
         if len(parents) != 2:
@@ -588,12 +622,43 @@ class RemoveReticulation(Move):
         net.remove_edge(drop_edge)
 
         c.set_is_reticulation(False)
+        # Capture the length of the edge that suppressing ``c`` will
+        # produce (the reverse-add would re-split this edge); same for
+        # ``drop_parent`` below.  These are the ``l1`` / ``l2`` of the
+        # shared RJMCMC delete ratio.
+        l1 = self._merged_length_if_deg2(net, c)
         _suppress_deg2(net, c)
-
+        l2 = self._merged_length_if_deg2(net, drop_parent)
         _suppress_deg2(net, drop_parent)
+
+        edge_count_post = len(net.E())
+        if l1 is not None and l2 is not None and l1 > 0.0 and l2 > 0.0:
+            try:
+                self._log_hr = _nm.remove_reticulation_log_hastings(
+                    edge_count_post=edge_count_post,
+                    retic_count_pre=retic_count_pre,
+                    l1=l1,
+                    l2=l2,
+                )
+            except ValueError:
+                self._log_hr = 0.0
 
         model.update_network()
         return model
+
+    @staticmethod
+    def _merged_length_if_deg2(net: Network, node: Node) -> float | None:
+        """Summed length of a degree-2 node's two incident edges, else None.
+
+        This is the length the edge produced by :func:`_suppress_deg2`
+        will carry, and hence the ``l1`` / ``l2`` consumed by the shared
+        delete-reticulation Hastings ratio.
+        """
+        if net.in_degree(node) != 1 or net.out_degree(node) != 1:
+            return None
+        in_e = list(net.in_edges(node))[0]
+        out_e = list(net.out_edges(node))[0]
+        return (in_e.get_length() or 0.0) + (out_e.get_length() or 0.0)
 
     def undo(self, model: Model) -> None:
         if self.undo_info is not None:
@@ -602,9 +667,6 @@ class RemoveReticulation(Move):
 
     def same_move(self, model: Model) -> None:
         pass
-
-    def hastings_ratio(self) -> float:
-        return 1.0
 
 
 class FlipReticulation(Move):
@@ -711,9 +773,6 @@ class FlipReticulation(Move):
 
     def same_move(self, model: Model) -> None:
         pass
-
-    def hastings_ratio(self) -> float:
-        return 1.0
     
 
 class SwitchParentage(Move):
@@ -747,7 +806,12 @@ class SwitchParentage(Move):
         net: Network = model.network
         self.undo_info = copy.deepcopy(net)
         self.valid_attachment_edges = []
-        
+
+        # Record the pre-move per-leaf ploidy. SwitchParentage MUST preserve
+        # it; we verify this post-reattach and revert to a no-op otherwise.
+        pre_ploidy = {leaf.label: net.subgenome_count(leaf)
+                      for leaf in net.get_leaves()}
+
         # STEP 1: Select random non-root node
         non_root_nodes = [node for node in net.V() if node != net.root()]
         if not non_root_nodes:
@@ -860,9 +924,35 @@ class SwitchParentage(Move):
             
         net.clean()
         self._reconcile_reticulation_flags(net)
+
+        # Correctness guard: the iterative reattach can break out early when
+        # no valid attachment edge is available, leaving a leaf with reduced
+        # ploidy. Emitting such a network would violate the move's defining
+        # invariant (and the validity guarantee claimed for it), so in that
+        # rare case we revert to the pre-move network -- the proposal becomes
+        # a no-op rather than an invalid network.
+        if not self._ploidy_preserved(net, pre_ploidy):
+            model.network = self.undo_info
+            self.same_move_info = copy.deepcopy(self.undo_info)
+            model.update_network()
+            return model
+
         model.update_network()
         self.same_move_info = copy.deepcopy(net)
         return model
+
+    def _ploidy_preserved(self, net: Network, pre_ploidy: dict) -> bool:
+        """
+        Check that every leaf still carries its pre-move ploidy (subgenome
+        count). Also returns False if the leaf set changed or the count is
+        not computable, so callers can treat any of those as a failed move.
+        """
+        try:
+            post_ploidy = {leaf.label: net.subgenome_count(leaf)
+                           for leaf in net.get_leaves()}
+        except Exception:
+            return False
+        return post_ploidy == pre_ploidy
 
     def undo(self, model: Model) -> None:
         """Restores the network to its pre-move state."""
@@ -875,9 +965,6 @@ class SwitchParentage(Move):
         if self.same_move_info is not None:
             model.network = copy.deepcopy(self.same_move_info)
         model.update_network()
-    
-    def hastings_ratio(self) -> float:
-        return 1.0
          
     def _reconcile_reticulation_flags(self, net: Network) -> None:
         """
@@ -987,6 +1074,20 @@ class SPR(Move):
       7. Attach: w -> v.  w is now (1,2) -- a valid internal node.
 
     Uses deep-copy for undo/same_move to guarantee correctness.
+
+    Hastings ratio.  Computing the exact reverse proposal density for a
+    distance-weighted SPR on a *network* (the reverse prune-and-regraft
+    must be enumerated on the post-move topology, and the host-edge split
+    contributes a branch-length Jacobian) is expensive and brittle.  Per
+    the design decision recorded in the unified-MCMC plan, this move
+    therefore reports ``log_hastings_ratio() == 0.0`` -- the exact value
+    only for a *symmetric* local regraft.  It is consequently a topology
+    *optimisation* move (used by Hill-Climbing / Simulated-Annealing,
+    which ignore the Hastings term) and is excluded from the
+    posterior-correct sampler kernel; strict topology sampling is provided
+    by the sequence stack (:class:`phynetpy.infer.MCMC_SEQ`).  Set a low
+    ``distance_decay`` to make the regraft closer to uniform if the move
+    is used in an MH context.
     """
 
     # Default decay matches the prior class-constant value.  ``MPLKernel``
@@ -1098,13 +1199,6 @@ class SPR(Move):
     def same_move(self, model: Model) -> None:
         pass
 
-    def hastings_ratio(self) -> float:
-        # Distance-weighted regraft is *not* symmetric: P(regraft | prune)
-        # and P(prune | regraft) depend on different hop-distance
-        # distributions on the pre/post-move topology.  See the base-
-        # class docstring for why the SA path accepts ``1.0`` anyway.
-        return 1.0
-
 
 ################################
 #### PARAMETER-LEVEL MOVES #####
@@ -1210,6 +1304,16 @@ class ChangeNodeHeight(Move):
     height.  ``sigma_frac`` is meant to be tuned by ``MPLKernel``'s
     adaptive scheduler so the acceptance rate tracks a target.
 
+    Leaf branches (edges whose destination is a tip) are never modified.
+    Under the MSC they carry a single lineage in and out, so their
+    coalescent contribution ``g_{1,1}`` is 1.0 for any length: the
+    length is non-identifiable and optimising it only wastes proposal
+    budget.  Concretely, the downward ``-delta`` adjustment is applied
+    only to child edges that terminate at internal nodes.  A cherry
+    node (all children are tips) is still eligible -- the move simply
+    reduces to perturbing its internal parent branch, which *is*
+    identifiable -- but its leaf branches are left untouched.
+
     The uniform proposal it replaced was equivalent to
     ``sigma_frac ≈ 0.58`` (sd of a uniform is ``half_range/sqrt(3)``)
     and always ignored acceptance feedback.  Starting at ``0.4`` gives
@@ -1230,6 +1334,20 @@ class ChangeNodeHeight(Move):
             self._DEFAULT_SIGMA_FRAC if sigma_frac is None else float(sigma_frac)
         )
 
+    @staticmethod
+    def _is_leaf_edge(net: Network, edge: Edge) -> bool:
+        """True when ``edge`` terminates at a leaf (tip) node.
+
+        A leaf branch is any edge whose destination has out-degree 0.
+        Such branches are non-identifiable under the MSC: with a single
+        sampled lineage per tip, exactly one lineage enters and leaves
+        the terminal branch, so the coalescent factor ``g_{1,1}`` equals
+        1.0 regardless of length.  Proposing changes to them therefore
+        cannot improve the likelihood and only wastes proposal budget,
+        so :class:`ChangeNodeHeight` holds them fixed.
+        """
+        return net.out_degree(edge.dest) == 0
+
     def execute(self, model: Model) -> Model:
         net: Network = model.network
 
@@ -1243,18 +1361,42 @@ class ChangeNodeHeight(Move):
 
         rng = model.rng
         node = _rng_pick(rng, candidates)
+        # Parent edges always terminate at an internal node (``node``),
+        # so they are never leaf branches and are always adjustable.
         parent_edges = list(net.in_edges(node))
-        child_edges = list(net.out_edges(node))
+        # Restrict the downward (``-delta``) adjustment to child edges
+        # that terminate at internal nodes.  Leaf branches are held
+        # fixed (see ``_is_leaf_edge``): they are non-identifiable under
+        # the MSC, so optimising them only wastes proposal budget.  A
+        # node whose children are all tips (a cherry) therefore reduces
+        # to a pure perturbation of its internal parent branch -- which
+        # *is* identifiable -- rather than being skipped entirely.
+        child_edges = [
+            e for e in net.out_edges(node)
+            if not self._is_leaf_edge(net, e)
+        ]
 
-        if not parent_edges or not child_edges:
+        if not parent_edges:
             model.update_network()
             return model
 
         min_parent_len = min(e.get_length() for e in parent_edges)
-        min_child_len = min(e.get_length() for e in child_edges)
 
+        # ``delta > 0`` grows parent branches and shrinks internal child
+        # branches; ``delta < 0`` does the reverse.  The feasible range
+        # keeps every *adjusted* branch above ``_EPSILON``.
+        has_child_edges = bool(child_edges)
+        min_child_len = (
+            min(e.get_length() for e in child_edges) if has_child_edges else None
+        )
         lower = -(min_parent_len - self._EPSILON)
-        upper = min_child_len - self._EPSILON
+        if has_child_edges:
+            upper = min_child_len - self._EPSILON
+        else:
+            # Cherry node: no internal children compensate the slide, so
+            # only the parent branch changes.  Bound the growth by the
+            # parent length to keep the proposal scale local.
+            upper = min_parent_len - self._EPSILON
 
         if lower >= upper:
             model.update_network()
@@ -1272,6 +1414,34 @@ class ChangeNodeHeight(Move):
                 # Clip as a last resort.  Introduces a tiny bias toward
                 # the bounds but keeps the move structurally valid.
                 delta = max(lower, min(upper, delta))
+
+        # Reverse-move feasible window and proposal scale, evaluated on
+        # the *post*-move branch lengths (every parent grew by ``delta``,
+        # every internal child shrank by ``delta``).  The slide draw is
+        # symmetric but its truncated-Gaussian scale is state-dependent,
+        # so the proposal is mildly asymmetric; the shared helper folds
+        # the truncation-normaliser ratio into the log-Hastings term.
+        min_parent_len_post = min_parent_len + delta
+        lower_rev = -(min_parent_len_post - self._EPSILON)
+        if has_child_edges:
+            min_child_len_post = min_child_len - delta
+            upper_rev = min_child_len_post - self._EPSILON
+        else:
+            upper_rev = min_parent_len_post - self._EPSILON
+        sigma_rev = self._sigma_frac * 0.5 * (upper_rev - lower_rev)
+        if upper_rev > lower_rev and sigma > 0.0 and sigma_rev > 0.0:
+            try:
+                self._log_hr = _nm.gaussian_delta_log_hastings(
+                    delta=delta,
+                    sigma_fwd=sigma,
+                    sigma_rev=sigma_rev,
+                    lo_fwd=lower,
+                    hi_fwd=upper,
+                    lo_rev=lower_rev,
+                    hi_rev=upper_rev,
+                )
+            except ValueError:
+                self._log_hr = 0.0
 
         edge_changes: list[tuple[str, str, float, float]] = []
         for e in parent_edges:
@@ -1327,13 +1497,6 @@ class ChangeNodeHeight(Move):
             return None
         return {node}
 
-    def hastings_ratio(self) -> float:
-        # Symmetric Gaussian *draw*, but the sigma scales with the
-        # feasible half-range, which differs pre/post-move.  The
-        # residual asymmetry is small in practice.  See ``Move.hastings_ratio``
-        # for the SA rationale.
-        return 1.0
-
 
 class ChangeInheritanceProb(Move):
     """Propose a new inheritance probability for a random reticulation node.
@@ -1377,10 +1540,31 @@ class ChangeInheritanceProb(Move):
         old_g2 = e2.get_gamma()
 
         current = old_g1 if old_g1 is not None else 0.5
+        lo, hi = self._EPS, 1.0 - self._EPS
+        # Truncated-Gaussian random walk on gamma: resample (rather than
+        # clamp) so the proposal really is a truncated normal, and fold
+        # the truncation-normaliser ratio into the log-Hastings term.
+        # Clamping piled proposal mass on the endpoints and used a
+        # Hastings ratio of 1, biasing inheritance probabilities toward
+        # 0/1.
         new_g1 = float(rng.normal(current, self._sigma))
-        new_g1 = max(self._EPS, min(1.0 - self._EPS, new_g1))
+        if not (lo < new_g1 < hi):
+            for _ in range(8):
+                new_g1 = float(rng.normal(current, self._sigma))
+                if lo < new_g1 < hi:
+                    break
+            else:
+                # Could not land in-bounds; leave gamma unchanged (no-op).
+                model.update_network()
+                return model
         e1.set_gamma(new_g1)
         e2.set_gamma(1.0 - new_g1)
+        try:
+            self._log_hr = _nm.random_walk_truncated_log_hastings(
+                old=current, new=new_g1, sigma=self._sigma, lo=lo, hi=hi
+            )
+        except ValueError:
+            self._log_hr = 0.0
 
         self.undo_info = (e1.src.label, e1.dest.label, old_g1,
                           e2.src.label, e2.dest.label, old_g2)
@@ -1428,15 +1612,6 @@ class ChangeInheritanceProb(Move):
         if node is None:
             return None
         return {node}
-
-    def hastings_ratio(self) -> float:
-        # Clamped-Gaussian proposal.  Proper H would be a truncated-
-        # Gaussian normalisation ratio ``Z(old) / Z(new)`` where
-        # ``Z(c) = Phi((1-eps-c)/sigma) - Phi((eps-c)/sigma)``.  The
-        # current clamp-to-bounds behaviour additionally piles mass on
-        # the interval endpoints; see ``Move.hastings_ratio`` for why the
-        # SA path tolerates the resulting bias.
-        return 1.0
 
 
 class ChangeReticSource(Move):
@@ -1527,9 +1702,6 @@ class ChangeReticSource(Move):
     def same_move(self, model: Model) -> None:
         pass
 
-    def hastings_ratio(self) -> float:
-        return 1.0
-
 
 class RelocateReticulation(Move):
     """Atomically relocate a reticulation node end-to-end.
@@ -1546,6 +1718,17 @@ class RelocateReticulation(Move):
     host edges.
 
     Uses deep-copy for undo to guarantee correctness.
+
+    Hastings ratio.  Like :class:`SPR`, the exact reverse density for a
+    whole-reticulation relocation on a non-ultrametric network (two
+    host-edge picks among state-dependent eligible sets, plus split
+    Jacobians) is impractical to compute robustly, so this move reports
+    ``log_hastings_ratio() == 0.0`` and is treated as an *optimisation*
+    move rather than part of the posterior-correct sampler kernel (see the
+    :class:`SPR` note).  The dimension-changing
+    :class:`AddReticulation` / :class:`RemoveReticulation` pair *does*
+    carry the shared reversible-jump ratio and is what the MH sampler
+    uses to change reticulation number.
     """
 
     def __init__(self) -> None:
@@ -1691,9 +1874,6 @@ class RelocateReticulation(Move):
     def same_move(self, model: Model) -> None:
         pass
 
-    def hastings_ratio(self) -> float:
-        return 1.0
-
 
 class ChangeReticDest(Move):
     """Move the destination (head) end of a reticulation edge.
@@ -1789,7 +1969,4 @@ class ChangeReticDest(Move):
 
     def same_move(self, model: Model) -> None:
         pass
-
-    def hastings_ratio(self) -> float:
-        return 1.0
 

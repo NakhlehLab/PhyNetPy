@@ -4119,71 +4119,75 @@ class MUL(Network):
                 Expected : { len(self.gene_map.keys())}")
        
         copy_gene_map = copy.deepcopy(self.gene_map)
-        mul_tree = Network()
-        
-        # Create copies of all the nodes in net and keep track of the conversion
-        network_2_mul : dict[Node, Node] = {node : node.copy() for node in net.V()}
-        
-        # Add all nodes and edges from net into the mul tree
-        
-        #NODES
-        mul_tree.add_nodes(list(network_2_mul.values()))
-        
-        #EDGES
-        for edge in net.E():
-            new_edge : Edge = edge.copy(network_2_mul[edge.src],
-                                        network_2_mul[edge.dest])
-            mul_tree.add_edges(new_edge)
-        
-        
-        # Bottom-Up traversal starting at leaves. Algorithm from STEP 1 in (2)
-        
-        # Starting at leaves...
-        # push onto queue when all children have been moved to the processed set
-        processed : set[Node] = set()
-        traversal_queue = deque(mul_tree.get_leaves())
-        
-        while len(traversal_queue) != 0:
-            cur = traversal_queue.pop()
-            
-            original_pars = [node for node in mul_tree.get_parents(cur)]
-            
-            if mul_tree.in_degree(cur) == 2:
-                #reticulation node. make a copy of subgraph
-                subtree = mul_tree.subnet(cur)
-                
-                retic_pars = mul_tree.get_parents(cur)
-                a = retic_pars[0]
-                b = retic_pars[1]
-            
-                mul_tree.remove_edge([b, cur])
+
+        # Work on an independent copy of the network so the input is untouched.
+        mul_tree, _ = net.copy()
+
+        # Expand reticulations until none remain. The MUL tree of a network is
+        # unique, so the construction MUST be deterministic and independent of
+        # set-iteration order. The previous bottom-up, leaf-driven traversal
+        # chose which parent kept the original subnetwork (vs. a duplicate) by
+        # the iteration order of the parent set, and pushed work back onto a
+        # queue using the iteration order of child sets. For reticulations that
+        # sit directly above a single leaf this is harmless, but for a
+        # reticulation above a non-trivial (and possibly nested) clade -- e.g.
+        # the (t,u) and (w,x,y,z) hybrid clades in DEFJ scenario J -- different
+        # orderings produced structurally different (and incorrect) MUL trees,
+        # making the parsimony score random rather than a function of the
+        # network. We instead expand reticulations deterministically.
+        #
+        # Key invariant: always expand a *lowest* reticulation -- one with no
+        # reticulation among its descendants -- so the subnetwork being copied
+        # is already a pure tree. This is what makes a single ``subnet`` copy a
+        # faithful duplicate and keeps the result order-independent.
+        def _descendants(node : Node) -> set[Node]:
+            seen : set[Node] = set()
+            stack : list[Node] = [node]
+            while stack:
+                cur = stack.pop()
+                for child in mul_tree.get_children(cur):
+                    if child not in seen:
+                        seen.add(child)
+                        stack.append(child)
+            return seen
+
+        while True:
+            retics = [n for n in mul_tree.V() if mul_tree.in_degree(n) >= 2]
+            if not retics:
+                break
+
+            # Pick a reticulation with no reticulation descendants (a "lowest"
+            # one). Tie-break by label for a fully deterministic order.
+            retic_set = set(retics)
+            lowest = sorted(
+                (r for r in retics if not (_descendants(r) & retic_set)),
+                key=lambda r: r.label,
+            )
+            target = lowest[0]
+
+            # Keep the subnetwork under the first parent (sorted by label) and
+            # graft an independent copy of it under every additional parent.
+            parents = sorted(mul_tree.get_parents(target), key=lambda p: p.label)
+            for parent in parents[1:]:
+                subtree = mul_tree.subnet(target)
+                mul_tree.remove_edge([parent, target])
                 mul_tree.add_nodes(subtree.V())
                 for edge in subtree.E():
                     mul_tree.add_edges(edge)
-                #mul_tree.add_edges(subtree.E())
-                mul_tree.add_edges(Edge(b, subtree.root()))
-                processed.add(subtree.root())
-        
-            processed.add(cur)
-            
-            for par in original_pars:
-                cop = set(mul_tree.get_children(par))
-                if cop.issubset(processed):
-                    traversal_queue.append(par)
-        
-        #Get rid of excess connection nodes
-        
+                mul_tree.add_edges(Edge(parent, subtree.root()))
+
+        # Get rid of excess degree-2 connection nodes left by the expansion.
         mul_tree.clean([True, True, True])
-        
-        #Rename tips based on gene mapping
-        
-        for leaf in mul_tree.get_leaves():
-            
+
+        # Rename tips based on the gene mapping. Iterate leaves in sorted label
+        # order so the (arbitrary) assignment of homeolog labels to the
+        # duplicated copies of a species is reproducible across runs.
+        for leaf in sorted(mul_tree.get_leaves(), key=lambda l: l.label):
             new_name : str = copy_gene_map[leaf.label.split("_")[0]].pop()
             mul_tree.update_node_name(leaf, new_name)
 
-        self.mul = mul_tree 
-     
+        self.mul = mul_tree
+
         return mul_tree  
 
 

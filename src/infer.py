@@ -28,6 +28,8 @@ The module exposes:
 * :class:`MPL` -- maximum pseudo-likelihood inference (Yu & Nakhleh, 2015).
 * :class:`MCMC_GT` -- Bayesian / HC / SA inference from gene-tree topologies
   (Wen & Nakhleh, 2018).
+* :class:`InferNetwork_ML` -- maximum-likelihood inference from gene-tree
+  topologies under the MSNC (Yu, Dong, Liu & Nakhleh, 2014).
 * :func:`INFER_MP_ALLOP`, :func:`INFER_MP_ALLOP_BOOTSTRAP`,
   :func:`ALLOP_SCORE` -- maximum-parsimony allopolyploid inference
   (Hejase et al.).
@@ -66,6 +68,65 @@ from ._mcmc_gt import (
     log_prior_network,
 )
 
+# InferNetwork_ML -- maximum-likelihood inference (Yu et al. 2014).  Shares
+# MCMC_GT's MSNC likelihood engine and proposal kernel; see ``_infernetworkml``.
+from ._infernetworkml import (
+    InferNetwork_ML,
+    InferNetworkMLResult,
+    optimize_network_parameters,
+)
+
+# MCMC_SEQ -- Bayesian co-estimation of reticulate phylogenies and gene trees
+# directly from multilocus sequence alignments (Wen & Nakhleh 2018).  The
+# per-locus Felsenstein likelihood and timed MSNC density live in
+# ``_seq_likelihood`` and match PhyloNet exactly; ``_mcmc_seq`` is the sampler.
+from ._mcmc_seq import (
+    MCMC_SEQ,
+    MCMCSeqPriors,
+    MCMCSeqSample,
+    MCMCSeqResult,
+    MCMCSeqKernel,
+    run_parallel_chains,
+    MultiChainStatus,
+    MultiChainResult,
+)
+from ._seq_likelihood import (
+    SubstitutionModel,
+    JC69,
+    HKY85,
+    GTR,
+    FelsensteinCalculator,
+    gene_tree_msnc_log_density,
+)
+
+# Coalescent simulation of multilocus sequence data (the generative model
+# behind MCMC_SEQ): build a known-truth data set for recovery / calibration
+# checks via ``MCMC_SEQ(**data.to_mcmc_seq_kwargs())``.
+from ._sim_seq import (
+    SimulatedData,
+    simulate_gene_tree,
+    simulate_sequences,
+    simulate_multilocus,
+)
+
+# Post-analysis: MCMC chain diagnostics + Tracer / NEXUS interoperability.
+# Sampler results (MCMCSeqResult, MCMCGTResult) also expose ``write_log``,
+# ``write_networks`` and ``summary`` helpers built on these.
+from ._chain_analysis import (
+    effective_sample_size,
+    autocorrelation_time,
+    standard_error_of_mean,
+    hpd_interval,
+    geweke,
+    summarize,
+    summarize_traces,
+    ParameterSummary,
+    ChainSummary,
+    write_tracer_log,
+    read_tracer_log,
+    write_trees_nexus,
+)
+
 # Maximum-parsimony allopolyploid inference
 from ._infer_mp_allop import (
     INFER_MP_ALLOP,
@@ -102,6 +163,43 @@ __all__ = [
     "MCMCSample",
     "MCMCGTResult",
     "log_prior_network",
+    # InferNetwork_ML
+    "InferNetwork_ML",
+    "InferNetworkMLResult",
+    "optimize_network_parameters",
+    # MCMC_SEQ
+    "MCMC_SEQ",
+    "MCMCSeqPriors",
+    "MCMCSeqSample",
+    "MCMCSeqResult",
+    "MCMCSeqKernel",
+    "run_parallel_chains",
+    "MultiChainStatus",
+    "MultiChainResult",
+    "SubstitutionModel",
+    "JC69",
+    "HKY85",
+    "GTR",
+    "FelsensteinCalculator",
+    "gene_tree_msnc_log_density",
+    # Coalescent simulation (known-truth data for MCMC_SEQ)
+    "SimulatedData",
+    "simulate_gene_tree",
+    "simulate_sequences",
+    "simulate_multilocus",
+    # Post-analysis / Tracer interop
+    "effective_sample_size",
+    "autocorrelation_time",
+    "standard_error_of_mean",
+    "hpd_interval",
+    "geweke",
+    "summarize",
+    "summarize_traces",
+    "ParameterSummary",
+    "ChainSummary",
+    "write_tracer_log",
+    "read_tracer_log",
+    "write_trees_nexus",
     # MP_Allop
     "INFER_MP_ALLOP",
     "INFER_MP_ALLOP_BOOTSTRAP",

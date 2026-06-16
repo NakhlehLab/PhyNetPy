@@ -159,7 +159,8 @@ def _ploidy_dif(goal: dict[Node, int], cur: dict[Node, int]) -> bool:
     
 def _attach(net: Network,
             nti: dict[Node, int],
-            goal_ploidy: dict[Node, int]) -> None:
+            goal_ploidy: dict[Node, int],
+            rng: np.random.Generator = None) -> None:
     """
     Given a set of nodes that need to be edited as to increase ploidy, add a 
     hybrid edge in such a location as to increase the ploidy of a maximally 
@@ -173,7 +174,15 @@ def _attach(net: Network,
     """
     clusters: set[tuple[Node]] = utils.get_all_clusters(net,
                                                         include_trivial=True)
-    sorted_clusters = sorted(clusters, key=len, reverse=True)
+    # Deterministic ordering: largest clusters first, ties broken by the
+    # sorted tuple of member labels. Without the secondary key the order of
+    # equal-size clusters depends on set iteration order (and thus on
+    # per-process string-hash randomization), making start networks
+    # irreproducible across runs even with a fixed seed.
+    sorted_clusters = sorted(
+        clusters,
+        key=lambda c: (-len(c), tuple(sorted(node.label for node in c))),
+    )
     
     def amt_allowed(cluster: tuple[Node], lti: dict) -> int:
         return min([lti[node] for node in cluster])
@@ -199,7 +208,7 @@ def _attach(net: Network,
     if not valid_edge_list:
         raise InferAllopError("No valid edges for ploidy attachment")
     
-    src: Edge = random_object(valid_edge_list, RNG)
+    src: Edge = random_object(valid_edge_list, rng if rng is not None else RNG)
     if top_of_cluster != net.root():
         in_edges = list(net.in_edges(top_of_cluster))
         if in_edges:
@@ -211,7 +220,8 @@ def _attach(net: Network,
     
          
 def _resolve_ploidy(net: Network,
-                    subgenomes: dict[str, list[str]]) -> Network:
+                    subgenomes: dict[str, list[str]],
+                    rng: np.random.Generator = None) -> Network:
     """
     Given a tree and a subgenome mapping of network leaves to genes, add 
     reticulation edges such that each leaf has the desired ploidy.
@@ -238,7 +248,7 @@ def _resolve_ploidy(net: Network,
         for node in net.get_leaves():
             lti[node] = goal_ploidy[node] - cur_ploidy[node]
         
-        _attach(net, lti, goal_ploidy)
+        _attach(net, lti, goal_ploidy, rng=rng)
        
         cur_ploidy = {node: net.subgenome_count(node)
                       for node in net.get_leaves()}
@@ -399,7 +409,7 @@ def partition_gene_trees(gene_map: dict[str, list[str]],
         simple_network.update_node_name(leaf, names[name_idx])
         name_idx += 1
             
-    return _resolve_ploidy(simple_network, gene_map)
+    return _resolve_ploidy(simple_network, gene_map, rng=rng)
 
 def get_other_copies(gene_tree_leaf: Node,
                      gene_map: dict[str, list[str]]) -> list[str]:
@@ -539,6 +549,11 @@ class Allop_MUL(MUL):
     A Standard MUL tree with methods for calculating the maximum parsimony
     score for Infer_MP_Allop_2.0.
     """
+    # Per-score caches (set in ``XL``); avoid recomputing the MUL leaf set
+    # and root inside the hot parsimony traversal.
+    _mul_leaf_set: set = set()
+    _mul_root = None
+
     def extra_lineages(self,
                        coal_event_map: dict[tuple, str],
                        f: AlleleMap) -> int:
@@ -557,7 +572,7 @@ class Allop_MUL(MUL):
             int: number of extra lineages
         """
         edge_2_xl = {}
-        root = self.mul.root()
+        root = self._mul_root
         
         self.xl_helper(root, edge_2_xl, coal_event_map, f)
         
@@ -565,7 +580,7 @@ class Allop_MUL(MUL):
                    - len(coal_event_map[(None, root.label)]) - 1)
     
         extra_lin_total = 0
-        mul_leaves = self.mul.get_leaves()
+        mul_leaves = self._mul_leaf_set
         
         for edge in self.mul.E():
             if edge.src is not None:
@@ -598,7 +613,7 @@ class Allop_MUL(MUL):
         """
         fmap: dict[str, str] = f.map
         
-        if start_node in self.mul.get_leaves():
+        if start_node in self._mul_leaf_set:
             par: Node = self.mul.get_parents(start_node)[0]
             
             if start_node.label in fmap.values():
@@ -606,7 +621,7 @@ class Allop_MUL(MUL):
             else:
                 edge_xl_map[(par.label, start_node.label)] = [0, 0] 
         else:
-            if start_node == self.mul.root():
+            if start_node == self._mul_root:
                 par = None
             else:
                 par = self.mul.get_parents(start_node)[0]
@@ -644,7 +659,7 @@ class Allop_MUL(MUL):
         edgeloc_2_tnode = defaultdict(list)
         
         gene_tree_leaves = g.get_leaves()
-        mul_root = self.mul.root()
+        mul_root = self._mul_root
         
         leaf_desc_map = g.get_item("leaf descendants")
         
@@ -686,6 +701,12 @@ class Allop_MUL(MUL):
         allele_maps = g.get_item("allele maps")
         if not allele_maps:
             return 0
+        # Cache the MUL leaf set and root once per gene tree. Both are
+        # invariant for the lifetime of the current MUL tree and were
+        # previously recomputed inside xl_helper for every visited node
+        # (the dominant runtime hotspot for larger scenarios).
+        self._mul_leaf_set = set(self.mul.get_leaves())
+        self._mul_root = self.mul.root()
         xl = [max(0, self.XL_Allele(g, allele_map, mrca_cache))
               for allele_map in allele_maps]
         return min(xl)

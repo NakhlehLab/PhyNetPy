@@ -36,6 +36,11 @@ if USE_CYTHON:
                 ["src/cython/gt_msc_cy.pyx"],
                 extra_compile_args=["-O3"] if os.name != 'nt' else [],
             ),
+            Extension(
+                "phynetpy.cython.seq_engine_cy",
+                ["src/cython/seq_engine_cy.pyx"],
+                extra_compile_args=["-O3"] if os.name != 'nt' else [],
+            ),
         ]
         
         ext_modules = cythonize(

@@ -75,6 +75,11 @@ from ._mcmc_gt import (
     MCMCGTResult,
     log_prior_network,
 )
+from ._infernetworkml import (
+    InferNetwork_ML,
+    InferNetworkMLResult,
+    optimize_network_parameters,
+)
 
 # CUDA-accelerated BiMarkers (optional)
 # CUDA_AVAILABLE: True if CuPy can access GPU (works with CUDA 13.x)
