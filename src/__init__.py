@@ -81,6 +81,25 @@ from ._infernetworkml import (
     optimize_network_parameters,
 )
 
+# Data-oriented facade: choose an entry point by data type and pass a
+# scoring strategy.  See ``src/LikelihoodStrategies.py``.
+from .LikelihoodStrategies import (
+    Config,
+    InferenceResult,
+    ScoringStrategy,
+    Parsimony,
+    PseudoLikelihood,
+    MaximumLikelihood,
+    MCMC,
+    UnsupportedStrategyError,
+    Score_Network_Using_GT,
+    Infer_Network_From_GT,
+    Score_Network_Using_MSA,
+    Infer_Network_From_MSA,
+    Score_Network_Using_Sites,
+    Infer_Network_From_Sites,
+)
+
 # CUDA-accelerated BiMarkers (optional)
 # CUDA_AVAILABLE: True if CuPy can access GPU (works with CUDA 13.x)
 # NUMBA_CUDA_AVAILABLE: True if numba CUDA kernels work (requires compatible toolkit)

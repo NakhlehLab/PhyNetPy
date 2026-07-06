@@ -84,30 +84,25 @@ import numpy as np
 
 from .Network import Network, Node
 from .GeneTrees import GeneTrees
+from .GraphUtils import level as _network_level
 from .ModelGraph import Model
 from . import IO as io
 
 # Re-use MCMC_GT's likelihood scorer (posterior=False -> plain MSNC log
-# likelihood) and proposal kernel.  ``_LOG_FLOOR`` keeps incompatible
-# configurations finite so the hill-climb never compares against -inf.
+# likelihood) and proposal kernel.
 from ._mcmc_gt import (
     MCMCGTScorer,
     MCMCGTKernel,
     _populate_default_branch_lengths,
-    _LOG_FLOOR,
 )
 
-# Brent's bounded line search.  SciPy is a hard PhyNetPy dependency
-# (``scipy>=1.5`` in ``setup.py``), but we degrade gracefully to a pure-Python
-# golden-section search if it is somehow unavailable so the optimiser never
-# hard-crashes an inference run.
-try:  # pragma: no cover - import guard
-    from scipy.optimize import minimize_scalar as _scipy_minimize_scalar
-
-    _HAS_SCIPY = True
-except Exception:  # pragma: no cover - import guard
-    _scipy_minimize_scalar = None
-    _HAS_SCIPY = False
+# Continuous-parameter (branch length + gamma) optimiser.  Factored into a
+# scorer-agnostic module (``_optimize``) so MPL / MCMC_GT / InferNetwork_ML
+# can share the ``opt_bl`` behaviour without circular imports.  Re-exported
+# here for backward compatibility
+# (``from phynetpy.infer import optimize_network_parameters``).
+from ._optimize import optimize_network_parameters
+from ._search_flags import resolve_move_types, resolve_search_preset
 
 
 __all__ = [
@@ -115,28 +110,6 @@ __all__ = [
     "InferNetworkMLResult",
     "optimize_network_parameters",
 ]
-
-
-# ======================================================================
-# Numerical defaults
-# ======================================================================
-# Branch-length and gamma bounds mirror PhyloNet's defaults where one
-# exists (``-l maxBL`` defaults to 6 coalescent units) and use small
-# epsilons elsewhere so the optimiser never proposes a degenerate
-# zero-length branch or a gamma pinned exactly at 0/1 (both send the MSNC
-# log likelihood to -inf for some gene trees).
-_MIN_BRANCH_LENGTH: float = 1e-6
-_MAX_BRANCH_LENGTH: float = 6.0
-_GAMMA_EPS: float = 1e-4
-
-# Coordinate-ascent stopping.  ``_DEFAULT_MAX_ROUNDS`` matches PhyloNet's
-# ``-r maxRounds`` (100); in practice the per-round improvement check exits
-# far sooner.  ``_BRANCH_LINE_ITERS`` caps Brent evaluations per parameter so
-# a single coordinate sweep stays cheap.
-_DEFAULT_MAX_ROUNDS: int = 100
-_DEFAULT_IMPROVE_THRESHOLD: float = 1e-4
-_BRANCH_LINE_ITERS: int = 20
-_BRANCH_LINE_XATOL: float = 1e-3
 
 
 # ======================================================================
@@ -173,239 +146,6 @@ class InferNetworkMLResult:
     num_networks_examined: int = 0
     num_runs: int = 0
     wall_time_sec: float = 0.0
-
-
-# ======================================================================
-# Continuous-parameter optimisation (the "-o" behaviour)
-# ======================================================================
-
-def _line_minimize(
-    neg_obj: Callable[[float], float],
-    lo: float,
-    hi: float,
-    *,
-    max_iter: int,
-    xatol: float,
-) -> tuple[float, float]:
-    """Minimise a unimodal-ish 1-D objective on ``[lo, hi]``.
-
-    Wraps SciPy's bounded Brent minimiser (Brent, *Algorithms for
-    Minimization without Derivatives*, 1973 -- the exact reference
-    PhyloNet cites) when available, falling back to a fixed-iteration
-    golden-section search otherwise.  Both return the minimiser and the
-    objective value there.
-
-    Args:
-        neg_obj: The function to minimise.  Callers pass the *negative*
-            log likelihood so that minimisation == likelihood
-            maximisation.
-        lo, hi: Inclusive search bounds.
-        max_iter: Hard cap on objective evaluations.
-        xatol: Absolute tolerance on the minimiser location.
-
-    Returns:
-        ``(x_best, neg_obj(x_best))``.
-    """
-    if hi <= lo:
-        return lo, neg_obj(lo)
-
-    if _HAS_SCIPY:
-        res = _scipy_minimize_scalar(
-            neg_obj,
-            bounds=(lo, hi),
-            method="bounded",
-            options={"maxiter": max_iter, "xatol": xatol},
-        )
-        return float(res.x), float(res.fun)
-
-    # Golden-section fallback: no derivatives, guaranteed bracket
-    # contraction by the golden ratio each step.
-    invphi = (math.sqrt(5.0) - 1.0) / 2.0          # 1/phi  ~ 0.618
-    invphi2 = (3.0 - math.sqrt(5.0)) / 2.0         # 1/phi^2 ~ 0.382
-    a, b = lo, hi
-    c = a + invphi2 * (b - a)
-    d = a + invphi * (b - a)
-    fc = neg_obj(c)
-    fd = neg_obj(d)
-    for _ in range(max(1, max_iter)):
-        if (b - a) < xatol:
-            break
-        if fc < fd:
-            b, d, fd = d, c, fc
-            c = a + invphi2 * (b - a)
-            fc = neg_obj(c)
-        else:
-            a, c, fc = c, d, fd
-            d = a + invphi * (b - a)
-            fd = neg_obj(d)
-    if fc < fd:
-        return c, fc
-    return d, fd
-
-
-def _allele_counts(mapping: dict[str, list[str]]) -> dict[str, int]:
-    """Species label -> number of mapped gene copies (alleles)."""
-    return {sp: len(alleles) for sp, alleles in mapping.items()}
-
-
-def _collect_continuous_params(
-    net: Network,
-    allele_counts: dict[str, int],
-) -> tuple[list[Any], list[tuple[Any, Any]]]:
-    """Enumerate the free continuous parameters of ``net``.
-
-    Returns two lists:
-
-    * ``length_edges`` -- edges whose branch length is *identifiable*
-      and therefore worth optimising.  An external (pendant) edge that
-      leads to a leaf with a single sampled allele contributes nothing
-      to the gene-tree-topology likelihood (a lineage cannot coalesce
-      with itself), so we skip it.  This is a meaningful efficiency win
-      on single-allele datasets where pendant edges dominate the edge
-      count.
-    * ``gamma_pairs`` -- for every reticulation node, the pair of
-      in-edges ``(e0, e1)`` whose inheritance probabilities are
-      constrained to sum to 1.  Only ``e0``'s gamma is a free parameter;
-      ``e1`` is set to ``1 - gamma`` during optimisation.
-
-    Args:
-        net: Species network to scan.
-        allele_counts: Species label -> allele count (from the mapping).
-
-    Returns:
-        ``(length_edges, gamma_pairs)``.
-    """
-    length_edges: list[Any] = []
-    for e in net.E():
-        dest = e.dest
-        if net.out_degree(dest) == 0:
-            # Pendant edge: only identifiable when >1 allele can coalesce
-            # within the species branch.
-            if allele_counts.get(dest.label, 1) <= 1:
-                continue
-        length_edges.append(e)
-
-    gamma_pairs: list[tuple[Any, Any]] = []
-    for v in net.V():
-        if v.is_reticulation():
-            # ``in_edges`` may return a set; materialise before indexing.
-            in_edges = list(net.in_edges(v))
-            if len(in_edges) >= 2:
-                gamma_pairs.append((in_edges[0], in_edges[1]))
-
-    return length_edges, gamma_pairs
-
-
-def optimize_network_parameters(
-    model: Model,
-    scorer: MCMCGTScorer,
-    mapping: dict[str, list[str]],
-    *,
-    max_rounds: int = _DEFAULT_MAX_ROUNDS,
-    improve_threshold: float = _DEFAULT_IMPROVE_THRESHOLD,
-    min_branch: float = _MIN_BRANCH_LENGTH,
-    max_branch: float = _MAX_BRANCH_LENGTH,
-    branch_iters: int = _BRANCH_LINE_ITERS,
-) -> float:
-    """Maximise the likelihood of ``model.network`` over its continuous params.
-
-    Holds the topology fixed and optimises every identifiable branch
-    length and reticulation inheritance probability *in place* via
-    Brent coordinate ascent, returning the optimised log likelihood.
-
-    The objective is evaluated through ``scorer`` so it shares the one
-    :class:`~phynetpy._mcmc_gt._GTLikelihoodEngine` the search already
-    maintains.  Each evaluation flags a single network node dirty, which
-    routes the engine through its *partial* invalidation path (keep the
-    per-topology network index, drop only the length/gamma-dependent
-    memo) -- the reason per-parameter line searches stay cheap.
-
-    Args:
-        model: Live model whose ``network`` is optimised in place.
-        scorer: An :class:`MCMCGTScorer` (``posterior=False``) bound to
-            ``model`` via ``model.set_likelihood_calculator``.
-        mapping: Species -> allele-label map (used to skip
-            unidentifiable single-allele pendant edges).
-        max_rounds: Maximum coordinate-ascent sweeps over all params.
-        improve_threshold: Stop once a full sweep improves the log
-            likelihood by less than this.
-        min_branch, max_branch: Inclusive bounds on each branch length
-            (coalescent units).  ``max_branch`` mirrors PhyloNet's
-            ``-l`` default of 6.
-        branch_iters: Brent evaluation cap per parameter per sweep.
-
-    Returns:
-        The maximised MSNC log likelihood.
-    """
-    net = model.network
-    allele_counts = _allele_counts(mapping)
-    length_edges, gamma_pairs = _collect_continuous_params(net, allele_counts)
-
-    # A stable, non-empty node set so the scorer takes the engine's
-    # cheap partial-invalidation path on every re-score below.
-    dirty_anchor = {net.root()} if net.V() else set()
-
-    def evaluate() -> float:
-        model.mark_touched(set(dirty_anchor))
-        val = scorer(model)
-        return val if math.isfinite(val) else _LOG_FLOOR
-
-    best = evaluate()
-    if not length_edges and not gamma_pairs:
-        return best
-
-    for _ in range(max(1, max_rounds)):
-        round_start = best
-
-        # ---- branch lengths -------------------------------------------------
-        for e in length_edges:
-            saved = e.get_length()
-
-            def neg(x: float, _e=e) -> float:
-                _e.set_length(float(x))
-                return -evaluate()
-
-            x_best, neg_val = _line_minimize(
-                neg, min_branch, max_branch,
-                max_iter=branch_iters, xatol=_BRANCH_LINE_XATOL,
-            )
-            cand = -neg_val
-            if cand > best:
-                e.set_length(float(x_best))
-                best = cand
-            else:
-                # Brent found nothing better than the incumbent; restore.
-                e.set_length(saved if saved is not None else float(x_best))
-
-        # ---- inheritance probabilities -------------------------------------
-        for e0, e1 in gamma_pairs:
-            saved0 = e0.get_gamma()
-            saved1 = e1.get_gamma()
-
-            def neg(g: float, _e0=e0, _e1=e1) -> float:
-                _e0.set_gamma(float(g))
-                _e1.set_gamma(float(1.0 - g))
-                return -evaluate()
-
-            g_best, neg_val = _line_minimize(
-                neg, _GAMMA_EPS, 1.0 - _GAMMA_EPS,
-                max_iter=branch_iters, xatol=_BRANCH_LINE_XATOL,
-            )
-            cand = -neg_val
-            if cand > best:
-                e0.set_gamma(float(g_best))
-                e1.set_gamma(float(1.0 - g_best))
-                best = cand
-            else:
-                e0.set_gamma(saved0 if saved0 is not None else float(g_best))
-                e1.set_gamma(
-                    saved1 if saved1 is not None else float(1.0 - g_best)
-                )
-
-        if best - round_start < improve_threshold:
-            break
-
-    return best
 
 
 # ======================================================================
@@ -572,6 +312,7 @@ class InferNetwork_ML:
         self,
         *,
         optimize: bool = False,
+        pseudo: bool = False,
         n_workers: int = 1,
         **opt_kwargs: Any,
     ) -> float:
@@ -583,6 +324,10 @@ class InferNetwork_ML:
                 (mutating ``self.net`` in place), then report the
                 optimised likelihood.  When ``False`` (default), score
                 the network exactly as held.
+            pseudo: Pseudo-likelihood scoring (``pseudo`` flag).  When
+                ``True`` the full MSNC scorer is swapped for the triplet
+                :class:`MPLScorer` (Yu & Nakhleh 2015); the returned value
+                is then a log pseudo-likelihood.
             n_workers: Worker processes for parallel gene-tree scoring
                 (forwarded to :class:`MCMCGTScorer`).  ``1`` keeps the
                 serial path.
@@ -591,11 +336,22 @@ class InferNetwork_ML:
                 ``max_branch``).
 
         Returns:
-            MSNC log likelihood (``<= 0``; higher is better).
+            MSNC log likelihood (``<= 0``; higher is better), or the log
+            pseudo-likelihood when ``pseudo=True``.
         """
-        scorer = MCMCGTScorer(
-            self.gene_trees, self.mapping, posterior=False, n_workers=n_workers,
-        )
+        if pseudo:
+            from ._mpl import compute_gene_tree_triplets, MPLScorer
+            triplet_result = compute_gene_tree_triplets(
+                self.gene_trees, self.mapping,
+            )
+            scorer = MPLScorer(
+                triplet_result.rho_by_triplet, triplet_result.triplets,
+            )
+        else:
+            scorer = MCMCGTScorer(
+                self.gene_trees, self.mapping,
+                posterior=False, n_workers=n_workers,
+            )
         try:
             model = Model(rng=np.random.default_rng())
             model.network = self.net
@@ -606,7 +362,9 @@ class InferNetwork_ML:
                 )
             return float(scorer(model))
         finally:
-            scorer.close()
+            close_fn = getattr(scorer, "close", None)
+            if callable(close_fn):
+                close_fn()
 
     # ── Search ────────────────────────────────────────────────────
 
@@ -617,10 +375,16 @@ class InferNetwork_ML:
         num_iter: int = 2_000,
         max_failures: int = 100,
         max_examinations: Optional[int] = None,
-        optimize_params: bool = False,
-        final_optimize: bool = True,
+        preset: str = "default",
+        optimize_params: Optional[bool] = None,
+        optimize_scope: Optional[str] = None,
+        final_optimize: Optional[bool] = None,
         num_networks: int = 1,
         kernel: Optional[MCMCGTKernel] = None,
+        opt_bl: Optional[bool] = None,
+        fix_st: Optional[bool] = None,
+        max_lvl: Optional[int] = None,
+        pseudo: bool = False,
         seed: Any = None,
         n_workers: int = 1,
         progress: bool = False,
@@ -646,6 +410,23 @@ class InferNetwork_ML:
             max_examinations: Optional global cap on the number of
                 distinct topologies scored across all runs (PhyloNet
                 ``-m``).  ``None`` == unbounded.
+            preset: One-word search profile (see
+                :data:`phynetpy._search_flags.SEARCH_PRESETS`):
+                ``"default"`` (recommended), ``"fast"``, ``"accurate"``,
+                or ``"phylonet"``.  Sets ``optimize_params`` /
+                ``optimize_scope`` / ``opt_bl`` / ``fix_st`` /
+                ``final_optimize`` as a coherent bundle; any of those
+                passed explicitly overrides the preset.
+            optimize_scope: Which parameters per-topology optimisation
+                touches (``"gamma"`` / ``"reticulation"`` / ``"all"``);
+                see :func:`phynetpy._optimize.optimize_network_parameters`.
+                Defaults to ``None``; because ``InferNetwork_ML`` maximises
+                the full MSNC likelihood (every branch length is
+                identifiable), an unset scope resolves to the full
+                ``"all"`` scope -- correctness over runtime -- rather than
+                the cheaper ``"gamma"`` MPL default.  Pass an explicit
+                value to narrow it.  The end-of-search optimisation always
+                uses the full ``"all"`` scope regardless of this value.
             optimize_params: When ``True`` (PhyloNet ``-o``), fully
                 optimise branch lengths + gammas for every examined
                 topology before scoring it -- slower per step, but each
@@ -662,6 +443,25 @@ class InferNetwork_ML:
             kernel: Custom proposal kernel.  When ``None`` a default
                 :class:`MCMCGTKernel` is built honouring
                 ``max_reticulations``.
+            opt_bl: Optimise branch lengths (``opt_bl`` flag).  Forces
+                ``final_optimize=True`` and drops the continuous-parameter
+                moves from the default kernel so the climb is a pure
+                topology search with one Brent optimisation of the winner
+                at the end.  (InferNetwork_ML already optimises; this just
+                makes that behaviour explicit and removes redundant
+                continuous proposals.)  Ignored when a custom ``kernel``
+                is supplied (final optimisation still runs).
+            fix_st: Fix the starting-tree backbone (``fix_st`` flag).
+                Drops ``SPR`` from the default kernel.  Ignored when a
+                custom ``kernel`` is supplied.
+            max_lvl: Maximum network level (``max_lvl`` flag).  Proposals
+                exceeding this level are rejected by the inline hill-climb
+                guard; level-raising moves also self-reject early.
+                ``None`` disables the cap.
+            pseudo: Pseudo-likelihood scoring (``pseudo`` flag).  When
+                ``True`` the full MSNC scorer is swapped for the triplet
+                :class:`MPLScorer` (Yu & Nakhleh 2015); the same scorer is
+                used for the (final / per-topology) Brent optimisation.
             seed: Seed for all RNGs (any value accepted by
                 :class:`numpy.random.SeedSequence`).
             n_workers: Worker processes for parallel gene-tree scoring.
@@ -678,9 +478,54 @@ class InferNetwork_ML:
             else np.random.SeedSequence(seed)
         )
 
-        scorer = MCMCGTScorer(
-            self.gene_trees, self.mapping, posterior=False, n_workers=n_workers,
+        # Resolve the preset into concrete behaviour; explicit flags win.
+        explicit_scope = optimize_scope
+        settings = resolve_search_preset(
+            preset,
+            optimize_params=optimize_params,
+            optimize_scope=optimize_scope,
+            opt_bl=opt_bl,
+            fix_st=fix_st,
+            final_optimize=final_optimize,
         )
+        optimize_params = settings.optimize_params
+        optimize_scope = settings.optimize_scope
+        opt_bl = settings.opt_bl
+        fix_st = settings.fix_st
+        final_optimize = settings.final_optimize
+
+        # InferNetwork_ML maximises the *full* MSNC likelihood, where every
+        # branch length is identifiable and matters -- so unless the caller
+        # explicitly narrows the scope, per-topology optimisation uses the
+        # full ``"all"`` scope (correctness over runtime).  MPL keeps the
+        # cheaper preset scope (``"gamma"``) since its triplet objective is
+        # far less branch-length-sensitive.
+        if explicit_scope is None:
+            optimize_scope = "all"
+
+        # opt_bl: a pure-topology climb with one final optimisation.  It
+        # forces final_optimize and drops the continuous-parameter moves
+        # from the default kernel (see move_types below).
+        if opt_bl:
+            final_optimize = True
+
+        # pseudo: swap the full MSNC scorer for the triplet
+        # pseudo-likelihood.  The same scorer drives the Brent optimiser.
+        if pseudo:
+            from ._mpl import compute_gene_tree_triplets, MPLScorer
+            triplet_result = compute_gene_tree_triplets(
+                self.gene_trees, self.mapping,
+            )
+            scorer = MPLScorer(
+                triplet_result.rho_by_triplet, triplet_result.triplets,
+            )
+        else:
+            scorer = MCMCGTScorer(
+                self.gene_trees, self.mapping,
+                posterior=False, n_workers=n_workers,
+            )
+
+        move_types = resolve_move_types(opt_bl=opt_bl, fix_st=fix_st)
 
         # Leaderboard of distinct topologies, keyed by branch-length-free
         # signature -> (log_likelihood, deep-copied network).
@@ -705,6 +550,8 @@ class InferNetwork_ML:
                 if run_kernel is None:
                     run_kernel = MCMCGTKernel(
                         max_reticulations=self.max_reticulations,
+                        move_types=move_types,
+                        max_level=max_lvl,
                         rng=np.random.default_rng(kernel_ss),
                     )
                 elif getattr(run_kernel, "rng", None) is None:
@@ -735,9 +582,11 @@ class InferNetwork_ML:
                         else max_examinations - examined
                     ),
                     optimize_params=optimize_params,
+                    optimize_scope=optimize_scope,
                     leaderboard=leaderboard,
                     num_networks=num_networks,
                     opt_kwargs=opt_kwargs,
+                    max_lvl=max_lvl,
                 )
                 examined += run_examined
 
@@ -785,7 +634,10 @@ class InferNetwork_ML:
                 wall_time_sec=time.time() - start,
             )
         finally:
-            scorer.close()
+            # ``MPLScorer`` (pseudo path) has no ``close``; guard it.
+            close_fn = getattr(scorer, "close", None)
+            if callable(close_fn):
+                close_fn()
 
         self.net = result.best_network
         return result
@@ -805,6 +657,8 @@ class InferNetwork_ML:
         leaderboard: dict[frozenset, tuple[float, Network]],
         num_networks: int,
         opt_kwargs: dict[str, Any],
+        max_lvl: Optional[int] = None,
+        optimize_scope: str = "all",
     ) -> int:
         """Execute one hill-climbing run; update ``leaderboard`` in place.
 
@@ -834,7 +688,7 @@ class InferNetwork_ML:
         # so run 0 begins from its own ML optimum).
         if optimize_params:
             cur_score = optimize_network_parameters(
-                model, scorer, self.mapping, **opt_kwargs,
+                model, scorer, self.mapping, scope=optimize_scope, **opt_kwargs,
             )
         else:
             cur_score = float(scorer(model))
@@ -864,11 +718,25 @@ class InferNetwork_ML:
                 failures += 1
                 continue
 
+            # Authoritative ``max_lvl`` guard: reject any proposal whose
+            # network level exceeds the cap, regardless of which move
+            # produced it (covers reticulation relocation / endpoint moves
+            # that raise level without changing the reticulation count).
+            if max_lvl is not None and _network_level(model.network) > max_lvl:
+                try:
+                    move.undo(model)
+                except Exception:
+                    pass
+                kernel.report_outcome(False, delta=0.0)
+                failures += 1
+                continue
+
             examined += 1
             try:
                 if optimize_params:
                     prop_score = optimize_network_parameters(
-                        model, scorer, self.mapping, **opt_kwargs,
+                        model, scorer, self.mapping,
+                        scope=optimize_scope, **opt_kwargs,
                     )
                 else:
                     prop_score = float(scorer(model))

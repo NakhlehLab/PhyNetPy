@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Illinois Data Bank | Illinois</title>
+<script>
+  (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': new Date().getTime(),event:'gtm.js'});
+  var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;
+  j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
+  f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-P5CT7JQ');
+</script>
+<script src="/assets/modernizr-b5fd3edacc7aecc754459c4d3dafdda85a742606a1ffc159d743e4244837007a.js"></script>
+<meta charset="utf-8">
+<meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+<meta content="width=device-width,initial-scale=1" name="viewport">
+<!-- Internet Explorer use the highest version available -->
+<meta content="IE=edge" http-equiv="X-UA-Compatible">
+<link href="https://cdn.brand.illinois.edu/favicon.ico" rel="icon">
+<link href="https://cdn.brand.illinois.edu/touch-icon-40x40.png" rel="apple-touch-icon">
+<link href="https://cdn.brand.illinois.edu/touch-icon-152x152.png" rel="apple-touch-icon" sizes="152x152">
+<link href="https://cdn.brand.illinois.edu/touch-icon-167x167.png" rel="apple-touch-icon" sizes="167x167">
+<link href="https://cdn.brand.illinois.edu/touch-icon-180x180.png" rel="apple-touch-icon" sizes="180x180">
+<link href="//cdn.disability.illinois.edu" rel="dns-prefetch">
+<link href="https://cdn.toolkit.illinois.edu/3/toolkit.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com" type="text/javascript"></script>
+<script src="//cdn.toolkit.illinois.edu/3/toolkit.js" type="module"></script>
+<script async src="/idb-header.js" type="module"></script>
+<script async src="https://cdn.brand.illinois.edu/components/il-footer.mjs" type="module"></script>
+<link rel="stylesheet" href="/assets/application-1277d5defc5871793f32bd8960c2fad7a93e330d454105317abbda0122680959.css" media="all" data-turbolinks-track="true" />
+<script src="/assets/application-bc169ae9e925aee2835ffa590e9db067ec265f68c5759df51bf774d1394c409f.js" data-turbolinks-track="true"></script>
+<script src="https://cdn.disability.illinois.edu/skipto.min.js"></script>
+<script>
+  var SkipToConfig = { 'settings': { 'skipTo': { displayOption: 'static', colorTheme: 'illinois', headings: 'h1, h2, h3', } } };
+</script>
+<meta name="csrf-param" content="authenticity_token" />
+<meta name="csrf-token" content="lSv5zrI7-s3GC8xLzMPhhGdudQY-XDR8fFUx4bcnbUloekEdJZR04sHTeOyPtKAaRxwO8JuOV6MUrwFLg5BG-Q" />
+</head>
+<body data-action="error404" data-controller="errors" data-page="errors#error404" style="margin: 0; padding: 0;">
+<ilw-page>
+<noscript>
+<iframe height="0" src="https://www.googletagmanager.com/ns.html?id=GTM-P5CT7JQ" style="display:none;visibility:hidden" width="0"></iframe>
+</noscript>
+<div class="idb-anchor" id="page-top"></div>
+<il-header slot="header">
+<a href="https://databank.illinois.edu" slot="site-name">Illinois Data Bank</a>
+<nav aria-label="Utility" slot="links">
+<ul>
+<li>
+<a href="/">
+<p class="navitem">
+Welcome
+</p>
+</a>
+</li>
+<li>
+<a href="/login">
+<p class="navitem">
+Log in
+</p>
+</a>
+</li>
+</ul>
+</nav>
+<il-header-nav slot="navigation">
+<ul>
+<li>
+<a href="/datasets/pre_deposit" id="deposit_link">Deposit Dataset</a>
+</li>
+<li>
+<a href="/datasets">Find Data</a>
+</li>
+<li>
+<a href="/policies">Policies</a>
+</li>
+<li>
+<a href="/guides">Guides</a>
+</li>
+<li>
+<a href="/contact">Contact Us</a>
+</li>
+</ul>
+</il-header-nav>
+</il-header>
+
+<main id="main-content">
+<div id="message"></div>
+<div class="container-fluid">
+<div class="dialog text-center">
+<h2>The page you were looking for doesn't exist.</h2>
+<hr>
+<p>You may have mistyped the address or the page may have moved.</p>
+<p>
+Please
+<a href="/contact" target="_blank">
+contact the Research Data Service Team
+</a>
+with questions.
+</p>
+</div>
+
+</div>
+</main>
+<il-footer width="page">
+<a href="https://wordpress.library.illinois.edu/researchdataservice" slot="primary-unit">Research Data Service</a>
+<a href="/" slot="site-name">Illinois Data Bank</a>
+<div slot="actions">
+<a href="/policies">Access and Use Policies</a>
+<a href="https://www.vpaa.uillinois.edu/resources/web_privacy">Web Privacy Notice</a>
+<a href="/contact">Contact Us</a>
+</div>
+</il-footer>
+
+<script>
+//<![CDATA[
+window.rails_env = "production";
+
+//]]>
+</script><script>
+//<![CDATA[
+window.user_role = "guest";
+
+//]]>
+</script></ilw-page>
+</body>
+</html>

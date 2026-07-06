@@ -1,0 +1,509 @@
+{
+  "sha": "7f7ab6a29fe1539b476bd590cccf8b04da716515",
+  "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/7f7ab6a29fe1539b476bd590cccf8b04da716515",
+  "tree": [
+    {
+      "path": ".github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "89436d772f58072896ad37516c880f66f23d2742",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/89436d772f58072896ad37516c880f66f23d2742"
+    },
+    {
+      "path": ".github/workflows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5d08f7a37d925d172befdce40e57f2b95b9ed1ec",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/5d08f7a37d925d172befdce40e57f2b95b9ed1ec"
+    },
+    {
+      "path": ".github/workflows/go.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0385e8b4b819b562d2d594ff9a59a4238e29a699",
+      "size": 523,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/0385e8b4b819b562d2d594ff9a59a4238e29a699"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b5a955c7284a743a7cdc0e2959cf2a932c6cfff8",
+      "size": 234,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/b5a955c7284a743a7cdc0e2959cf2a932c6cfff8"
+    },
+    {
+      "path": ".golangci.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e65278292f2a9543f63d9bd34da8a45482d99258",
+      "size": 204,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/e65278292f2a9543f63d9bd34da8a45482d99258"
+    },
+    {
+      "path": "CITATION.bib",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "921ba708d17f2197b9036fc64532436e0678da46",
+      "size": 233,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/921ba708d17f2197b9036fc64532436e0678da46"
+    },
+    {
+      "path": "LICENSE.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "31fb00944c17819fc2ff892f705ab794738f0328",
+      "size": 1070,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/31fb00944c17819fc2ff892f705ab794738f0328"
+    },
+    {
+      "path": "Makefile",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3cdbc35a030f082879e295a849cc8f6618c084b3",
+      "size": 821,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/3cdbc35a030f082879e295a849cc8f6618c084b3"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a619e0675081e25a43732b6f74b29c8e174ebe00",
+      "size": 4783,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/a619e0675081e25a43732b6f74b29c8e174ebe00"
+    },
+    {
+      "path": "camus.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "86c880677caf817f8d2b92da46373e325547cd67",
+      "size": 8520,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/86c880677caf817f8d2b92da46373e325547cd67"
+    },
+    {
+      "path": "go.mod",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f904a2d2e174195fe1214efd5bfb6f38d493c81c",
+      "size": 923,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/f904a2d2e174195fe1214efd5bfb6f38d493c81c"
+    },
+    {
+      "path": "go.sum",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "32a2f1880e20ce3de6d7c758912049f001a96d8d",
+      "size": 6761,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/32a2f1880e20ce3de6d7c758912049f001a96d8d"
+    },
+    {
+      "path": "internal",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9f0152a88899d7e1db8106f39271c7a57e87f6dc",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/9f0152a88899d7e1db8106f39271c7a57e87f6dc"
+    },
+    {
+      "path": "internal/graphs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "8f50611fb98d5ef038fced0eb39826acae766814",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/8f50611fb98d5ef038fced0eb39826acae766814"
+    },
+    {
+      "path": "internal/graphs/net.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "93ed299296cdf1352d4b3ab9351dd41db3024d67",
+      "size": 3113,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/93ed299296cdf1352d4b3ab9351dd41db3024d67"
+    },
+    {
+      "path": "internal/graphs/net_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "757345ed959829d10beeed40a4f59f93eb0fd52f",
+      "size": 1576,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/757345ed959829d10beeed40a4f59f93eb0fd52f"
+    },
+    {
+      "path": "internal/graphs/quartet.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c95a836a2ecfe878db2e8bc0569925906ddc9d97",
+      "size": 6014,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/c95a836a2ecfe878db2e8bc0569925906ddc9d97"
+    },
+    {
+      "path": "internal/graphs/quartet_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "830b3a6fee9e3b0383c1654c52aa81f770650e4b",
+      "size": 5501,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/830b3a6fee9e3b0383c1654c52aa81f770650e4b"
+    },
+    {
+      "path": "internal/graphs/treedata.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "76b46a082195fabf6b27081368043ab35875a947",
+      "size": 8907,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/76b46a082195fabf6b27081368043ab35875a947"
+    },
+    {
+      "path": "internal/graphs/treedata_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "becedbd4722642c42a0464e949002e185b2a6404",
+      "size": 5900,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/becedbd4722642c42a0464e949002e185b2a6404"
+    },
+    {
+      "path": "internal/infer",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a553fb09e283165706121bdf6384e6675043b96d",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/a553fb09e283165706121bdf6384e6675043b96d"
+    },
+    {
+      "path": "internal/infer/helpers.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6c3bf8080076fc79706b4fdd4cab20f2c39a0bf5",
+      "size": 3036,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/6c3bf8080076fc79706b4fdd4cab20f2c39a0bf5"
+    },
+    {
+      "path": "internal/infer/infer.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1da0ad25e37a2028e49f483e29e32214d4096ff8",
+      "size": 3642,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/1da0ad25e37a2028e49f483e29e32214d4096ff8"
+    },
+    {
+      "path": "internal/infer/infer_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4277e7df79e9a0bc39edcb8916499ad3c75f2d62",
+      "size": 9349,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/4277e7df79e9a0bc39edcb8916499ad3c75f2d62"
+    },
+    {
+      "path": "internal/infer/main_dp.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f4abd9e08b6dd2484979e8771678a2e806a9e22b",
+      "size": 9776,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/f4abd9e08b6dd2484979e8771678a2e806a9e22b"
+    },
+    {
+      "path": "internal/infer/testdata",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d4d0edf950f773205a0ba7eb816f31cda1696901",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/d4d0edf950f773205a0ba7eb816f31cda1696901"
+    },
+    {
+      "path": "internal/infer/testdata/constraint.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "72fef0d3fe7fbd767373a623f8ae8bd5fa555573",
+      "size": 1373,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/72fef0d3fe7fbd767373a623f8ae8bd5fa555573"
+    },
+    {
+      "path": "internal/infer/testdata/gene-trees.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "efc1bbba23c818dcf566b79539a73cc882f7ad45",
+      "size": 1035524,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/efc1bbba23c818dcf566b79539a73cc882f7ad45"
+    },
+    {
+      "path": "internal/infer/testdata/net_q2_t05_max.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9bf380b3e2935ababe4befc4630b0f7c57aa7ed7",
+      "size": 3138,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/9bf380b3e2935ababe4befc4630b0f7c57aa7ed7"
+    },
+    {
+      "path": "internal/infer/testdata/net_q2_t05_norm.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "43fb0043d21ee4ac94eccb2ad79ae93d395c7b00",
+      "size": 3138,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/43fb0043d21ee4ac94eccb2ad79ae93d395c7b00"
+    },
+    {
+      "path": "internal/infer/testdata/net_q2_t05_sym_a01.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c4379758a026627d67bf4a5212126f9588bff512",
+      "size": 3138,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/c4379758a026627d67bf4a5212126f9588bff512"
+    },
+    {
+      "path": "internal/infer/testdata/network.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cda66dc5dd0defe0395092e8601bb0d6f09e9e74",
+      "size": 3950,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/cda66dc5dd0defe0395092e8601bb0d6f09e9e74"
+    },
+    {
+      "path": "internal/infer/traceback.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "96cecdfb79af0907b3f6b88c53d53ae93d067f22",
+      "size": 1592,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/96cecdfb79af0907b3f6b88c53d53ae93d067f22"
+    },
+    {
+      "path": "internal/prep",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a5155d536fc5e4aacebad71e2d189c9ef1863c0b",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/a5155d536fc5e4aacebad71e2d189c9ef1863c0b"
+    },
+    {
+      "path": "internal/prep/io.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f756f326196486d1619354311faad818e7db5485",
+      "size": 9544,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/f756f326196486d1619354311faad818e7db5485"
+    },
+    {
+      "path": "internal/prep/io_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bb9189c686ad8bcb28b1324d580d93717c9d4a5c",
+      "size": 5831,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/bb9189c686ad8bcb28b1324d580d93717c9d4a5c"
+    },
+    {
+      "path": "internal/prep/preprocess.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "acdfd752aa330ee3c12311dd87de417a7152eaa5",
+      "size": 5087,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/acdfd752aa330ee3c12311dd87de417a7152eaa5"
+    },
+    {
+      "path": "internal/prep/preprocess_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bbb3b38626e658b1a68e129e7357d7865321224f",
+      "size": 7924,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/bbb3b38626e658b1a68e129e7357d7865321224f"
+    },
+    {
+      "path": "internal/prep/quartetfilter.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d3ebdcd9dbfdfbdf980fd9d7b078fe4b094da2cf",
+      "size": 2195,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/d3ebdcd9dbfdfbdf980fd9d7b078fe4b094da2cf"
+    },
+    {
+      "path": "internal/prep/testdata",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "7500bdb7da5ae2abc6a6fbba0b288fa9df93cc4b",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/7500bdb7da5ae2abc6a6fbba0b288fa9df93cc4b"
+    },
+    {
+      "path": "internal/prep/testdata/badtree-nosemi.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8f424b7d27aba8ea733e667445781d43e987b162",
+      "size": 8,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/8f424b7d27aba8ea733e667445781d43e987b162"
+    },
+    {
+      "path": "internal/prep/testdata/badtree.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ca51bacbc60d00cad388dedcd1d7d33df1bddfc1",
+      "size": 8,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/ca51bacbc60d00cad388dedcd1d7d33df1bddfc1"
+    },
+    {
+      "path": "internal/prep/testdata/constraint.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a1b2756cfd20a39d3c22307762bc55ce9e3132f9",
+      "size": 40,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/a1b2756cfd20a39d3c22307762bc55ce9e3132f9"
+    },
+    {
+      "path": "internal/prep/testdata/empty.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    },
+    {
+      "path": "internal/prep/testdata/g100.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "77661e07c404af5adea146a970c7433ab4b8441a",
+      "size": 494000,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/77661e07c404af5adea146a970c7433ab4b8441a"
+    },
+    {
+      "path": "internal/prep/testdata/multi-net.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "32518214cba1ba9adb8b6244cdf91efa545cae3d",
+      "size": 230,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/32518214cba1ba9adb8b6244cdf91efa545cae3d"
+    },
+    {
+      "path": "internal/prep/testdata/net.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a6d8fe07d229a7c91b4c17263c560bc45e9a93d7",
+      "size": 115,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/a6d8fe07d229a7c91b4c17263c560bc45e9a93d7"
+    },
+    {
+      "path": "internal/prep/testdata/quartets.nex",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f444af36a3b2b8f57290cbbc2f49bd7c70610f5e",
+      "size": 77,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/f444af36a3b2b8f57290cbbc2f49bd7c70610f5e"
+    },
+    {
+      "path": "internal/prep/testdata/quartets.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "59ee9a2e1a4de376bd679a05f094decfabb798ba",
+      "size": 29,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/59ee9a2e1a4de376bd679a05f094decfabb798ba"
+    },
+    {
+      "path": "internal/prep/testdata/unresolved.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b474802aa3dc423c77dbcf564b2f24db77e3cde2",
+      "size": 113,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/b474802aa3dc423c77dbcf564b2f24db77e3cde2"
+    },
+    {
+      "path": "internal/prep/testdata/unrooted-net.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "978cf42b8d181cca2ab094a2f7dd51f8170161e8",
+      "size": 34,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/978cf42b8d181cca2ab094a2f7dd51f8170161e8"
+    },
+    {
+      "path": "internal/score",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "7ba7ceceda8664c30c8168c09ac102ce325565ce",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/7ba7ceceda8664c30c8168c09ac102ce325565ce"
+    },
+    {
+      "path": "internal/score/penalty.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c3ddd226c406c4f940b49116f6d7172d003dbebb",
+      "size": 2276,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/c3ddd226c406c4f940b49116f6d7172d003dbebb"
+    },
+    {
+      "path": "internal/score/penalty_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "28c3ba896725190f82b519e52c6ab4b36d89a08f",
+      "size": 2925,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/28c3ba896725190f82b519e52c6ab4b36d89a08f"
+    },
+    {
+      "path": "internal/score/quartettotals.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d44d19e178ab65dd12fdb8e494fe8676779d331f",
+      "size": 5417,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/d44d19e178ab65dd12fdb8e494fe8676779d331f"
+    },
+    {
+      "path": "internal/score/quartettotals_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a46f751b8dc412d1c8932b3860f173db619bfbf9",
+      "size": 7278,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/a46f751b8dc412d1c8932b3860f173db619bfbf9"
+    },
+    {
+      "path": "internal/score/score.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cbd6c20ebcf65fa74558f7f819dc869c84baede1",
+      "size": 2389,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/cbd6c20ebcf65fa74558f7f819dc869c84baede1"
+    },
+    {
+      "path": "internal/score/score_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bf296b1c77b409f52bcfaa1c0e0fc0b282df6198",
+      "size": 4933,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/bf296b1c77b409f52bcfaa1c0e0fc0b282df6198"
+    },
+    {
+      "path": "internal/score/scorers.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0fc99a294d921f531d405e0369ab35caa8094d4f",
+      "size": 3475,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/0fc99a294d921f531d405e0369ab35caa8094d4f"
+    },
+    {
+      "path": "internal/score/scorers_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bfed32f3f070784da7ff348fa3f93be19780ded7",
+      "size": 7412,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/bfed32f3f070784da7ff348fa3f93be19780ded7"
+    },
+    {
+      "path": "internal/score/testdata",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "09051c4fe8fc2355d08a5d69f8bc03cc0051b3b6",
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/trees/09051c4fe8fc2355d08a5d69f8bc03cc0051b3b6"
+    },
+    {
+      "path": "internal/score/testdata/gene-trees.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "efc1bbba23c818dcf566b79539a73cc882f7ad45",
+      "size": 1035524,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/efc1bbba23c818dcf566b79539a73cc882f7ad45"
+    },
+    {
+      "path": "internal/score/testdata/network.nwk",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8be3fee3931da24babd23fc7c0b7766d4c569f54",
+      "size": 812,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/8be3fee3931da24babd23fc7c0b7766d4c569f54"
+    },
+    {
+      "path": "internal/score/testdata/scores.csv",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e6615ea088dcecacdb1ed04ccb17a3895ec132df",
+      "size": 34400,
+      "url": "https://api.github.com/repos/jsdoublel/camus/git/blobs/e6615ea088dcecacdb1ed04ccb17a3895ec132df"
+    }
+  ],
+  "truncated": false
+}

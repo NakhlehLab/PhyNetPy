@@ -155,6 +155,7 @@ from .Network import Network, Node, Edge
 from .GeneTrees import GeneTrees
 from . import IO as io
 from . import _network_moves as _nm
+from .GraphUtils import level as _network_level
 from .ModelGraph import Model
 from ._chain_analysis import (
     ChainSummary,
@@ -179,6 +180,10 @@ from .ModelMove import (
     ChangeReticSource,
     ChangeReticDest,
     RelocateReticulation,
+)
+from ._optimize import optimize_network_parameters
+from ._search_flags import (
+    resolve_move_types, make_level_validator, resolve_search_preset,
 )
 
 from ._msnc_density import (
@@ -1899,6 +1904,8 @@ class MCMCGTKernel(ProposalKernel):
         weights: Optional[dict[type, float]] = None,
         rng: Optional[np.random.Generator] = None,
         *,
+        move_types: Optional[list[type]] = None,
+        max_level: Optional[int] = None,
         adaptive: bool = True,
         window_size: int = 30,
         min_weight: float = 0.05,
@@ -1913,6 +1920,16 @@ class MCMCGTKernel(ProposalKernel):
                 current network is at or above the cap,
                 :class:`AddReticulation` is filtered out of the
                 candidate pool.
+            move_types: Optional restriction of the move classes the
+                kernel may draw from (``opt_bl`` / ``fix_st`` search
+                flags filter this via
+                :func:`phynetpy._search_flags.resolve_move_types`).  When
+                ``None`` the full default set is used.
+            max_level: Cap on network level (``max_lvl`` search flag),
+                passed to every level-raising move so they self-reject
+                proposals that would exceed the cap.  ``None`` disables
+                the per-move check (the accept-path guard remains
+                authoritative).
             weights: When supplied, disables phase cycling and
                 adaptive tuning; the kernel reverts to the v1
                 fixed-weight behaviour.  Useful for unit tests and
@@ -1940,6 +1957,7 @@ class MCMCGTKernel(ProposalKernel):
         """
         super().__init__()
         self._max_retics = max_reticulations
+        self._max_level = max_level
         self.rng = rng if rng is not None else np.random.default_rng()
 
         # ΓöÇΓöÇ Mode flags ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -1957,6 +1975,12 @@ class MCMCGTKernel(ProposalKernel):
             if self._fixed_weights is not None
             else self._TOPOLOGY_BASE.keys()
         )
+        # ``move_types`` (from the opt_bl / fix_st flags) restricts the
+        # candidate pool; intersect so phased ``_active_moves_and_base``
+        # honours it automatically (it iterates ``self._all_moves``).
+        if move_types is not None:
+            allowed = set(move_types)
+            self._all_moves = [c for c in self._all_moves if c in allowed]
 
         # ΓöÇΓöÇ Phase / stagnation state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         self._phase: str = self.TOPOLOGY
@@ -2226,8 +2250,16 @@ class MCMCGTKernel(ProposalKernel):
         self._proposed[cls] = self._proposed.get(cls, 0) + 1
 
         # --- Instantiate with current adaptive knobs ----------------
-        if cls is AddReticulation and self._max_retics is not None:
-            return AddReticulation(max_reticulations=self._max_retics)
+        if cls is AddReticulation:
+            return AddReticulation(
+                max_reticulations=self._max_retics,
+                max_level=self._max_level,
+            )
+        if cls in (FlipReticulation, ChangeReticSource,
+                   ChangeReticDest, RelocateReticulation):
+            # Level-raising relocation / endpoint moves: pass the level
+            # cap so they can self-reject early.
+            return cls(max_level=self._max_level)
         if cls is ChangeNodeHeight:
             return ChangeNodeHeight(sigma_frac=self._nh_sigma)
         if cls is ChangeInheritanceProb:
@@ -2522,6 +2554,11 @@ class MCMC_GT:
         thin: int = 10,
         kernel: Optional[MCMCGTKernel] = None,
         max_reticulations: Optional[int] = None,
+        preset: str = "default",
+        opt_bl: Optional[bool] = None,
+        fix_st: Optional[bool] = None,
+        max_lvl: Optional[int] = None,
+        pseudo: bool = False,
         seed: Any = None,
         n_workers: int = 1,
         **kwargs: Any,
@@ -2542,6 +2579,32 @@ class MCMC_GT:
                 default one is constructed with
                 ``max_reticulations``.
             max_reticulations: Cap passed to the default kernel.
+            preset: One-word search profile (see
+                :data:`phynetpy._search_flags.SEARCH_PRESETS`):
+                ``"default"``, ``"fast"``, ``"accurate"``, or
+                ``"phylonet"``.  For MCMC_GT only the move-set fields
+                (``opt_bl`` / ``fix_st``) apply; explicit flags override
+                the preset.
+            opt_bl: Optimise branch lengths (``opt_bl`` flag).  Drops
+                the continuous-parameter moves from the default kernel
+                during the search and runs one Brent coordinate-ascent
+                pass over the best network's branch lengths + gammas at
+                the end (against the active scorer).  Ignored when a
+                custom ``kernel`` is supplied (the final optimisation
+                still runs).
+            fix_st: Fix the starting-tree backbone (``fix_st`` flag).
+                Drops ``SPR`` from the default kernel so only
+                reticulation / gamma moves are proposed.  Ignored when a
+                custom ``kernel`` is supplied.
+            max_lvl: Maximum network level (``max_lvl`` flag).  Proposals
+                exceeding this level are rejected by the accept-path
+                guard (and inline guard for MH); ``None`` disables it.
+            pseudo: Pseudo-likelihood scoring (``pseudo`` flag).  When
+                ``True`` the full MSNC scorer is swapped for the triplet
+                :class:`MPLScorer` (Yu & Nakhleh 2015).  Only meaningful
+                for the ``hc`` / ``sa`` optimisation drivers; combining
+                it with ``mh`` posterior sampling is not a calibrated
+                Bayesian target and raises ``ValueError``.
             seed: Seed for the chain's RNGs.  Accepts any value
                 :class:`np.random.SeedSequence` accepts (including
                 another :class:`SeedSequence`).
@@ -2568,6 +2631,15 @@ class MCMC_GT:
         if method not in {"mh", "hc", "sa"}:
             raise ValueError(f"Unknown method {method!r}; use 'mh', 'hc', or 'sa'.")
 
+        # Resolve the shared preset; MCMC_GT honours the move-set flags
+        # (``opt_bl`` drops the continuous moves and triggers a final
+        # optimisation; ``fix_st`` drops SPR).  Per-topology optimisation
+        # (``optimize_params``) is not applicable to the MCMC drivers, so
+        # those preset fields are ignored here.  Explicit flags win.
+        settings = resolve_search_preset(preset, opt_bl=opt_bl, fix_st=fix_st)
+        opt_bl = settings.opt_bl
+        fix_st = settings.fix_st
+
         if method == "mh":
             _nm.warn_if_large_mcmc(len(self.mapping), method="MCMC_GT")
 
@@ -2581,24 +2653,50 @@ class MCMC_GT:
         driver_ss, kernel_ss, model_ss = root_ss.spawn(3)
         driver_seed = int(driver_ss.generate_state(1)[0])
 
-        # Scorer + model.
-        posterior = (method == "mh")
-        scorer = MCMCGTScorer(
-            self.gene_trees, self.mapping, self.priors,
-            posterior=posterior, n_workers=n_workers,
-        )
+        # Scorer + model.  ``pseudo`` swaps the full MSNC scorer for the
+        # triplet pseudo-likelihood (Yu & Nakhleh 2015).  It is an
+        # optimisation objective, not a calibrated posterior, so it is
+        # disallowed with the MH sampler.
+        if pseudo:
+            if method == "mh":
+                raise ValueError(
+                    "pseudo=True is only supported with the optimisation "
+                    "drivers (method='hc' or 'sa'); it is not a calibrated "
+                    "Bayesian posterior for method='mh'.",
+                )
+            # Lazy import keeps the module-load graph acyclic.
+            from ._mpl import compute_gene_tree_triplets, MPLScorer
+            triplet_result = compute_gene_tree_triplets(
+                self.gene_trees, self.mapping,
+            )
+            scorer = MPLScorer(
+                triplet_result.rho_by_triplet, triplet_result.triplets,
+            )
+        else:
+            posterior = (method == "mh")
+            scorer = MCMCGTScorer(
+                self.gene_trees, self.mapping, self.priors,
+                posterior=posterior, n_workers=n_workers,
+            )
         model = Model(rng=np.random.default_rng(model_ss))
         model.network = copy.deepcopy(self.net)
         model.set_likelihood_calculator(scorer)
 
-        # Kernel.
+        # Kernel.  ``move_types`` (opt_bl / fix_st) and ``max_level``
+        # (max_lvl) only apply to the default kernel; a caller-supplied
+        # kernel is used as-is.
         if kernel is None:
             kernel = MCMCGTKernel(
                 max_reticulations=max_reticulations,
+                move_types=resolve_move_types(opt_bl=opt_bl, fix_st=fix_st),
+                max_level=max_lvl,
                 rng=np.random.default_rng(kernel_ss),
             )
         elif getattr(kernel, "rng", None) is None:
             kernel.rng = np.random.default_rng(kernel_ss)
+
+        # Authoritative level guard for the State-based drivers.
+        validate = make_level_validator(max_lvl)
 
         # Dispatch.  ``finally`` guarantees pool teardown even on
         # mid-chain exceptions; otherwise an exception in the MH loop
@@ -2614,12 +2712,14 @@ class MCMC_GT:
                     burn_in=burn_in,
                     thin=thin,
                     driver_seed=driver_seed,
+                    max_lvl=max_lvl,
                 )
             elif method == "hc":
                 searcher = HillClimbing(
                     pkernel=kernel,
                     model=model,
                     num_iter=num_iter,
+                    validate=validate,
                     **kwargs,
                 )
                 end_state = searcher.run()
@@ -2636,6 +2736,7 @@ class MCMC_GT:
                     pkernel=kernel,
                     model=model,
                     num_iter=num_iter,
+                    validate=validate,
                     **kwargs,
                 )
                 end_state = searcher.run()
@@ -2646,9 +2747,25 @@ class MCMC_GT:
                     best_log_posterior=best_score,
                     num_iter=num_iter,
                 )
+
+            # opt_bl: final Brent coordinate-ascent over branch lengths +
+            # gammas of the best network, against the active scorer.
+            if opt_bl:
+                opt_model = Model(rng=np.random.default_rng(model_ss))
+                opt_model.network = result.best_network
+                opt_model.set_likelihood_calculator(scorer)
+                opt_score = optimize_network_parameters(
+                    opt_model, scorer, self.mapping,
+                )
+                result.best_network = opt_model.network
+                result.best_log_posterior = opt_score
+
             result.wall_time_sec = time.time() - start
         finally:
-            scorer.close()
+            # ``MPLScorer`` (pseudo path) has no ``close``; guard it.
+            close_fn = getattr(scorer, "close", None)
+            if callable(close_fn):
+                close_fn()
 
         # Adopt the final network into self.net.  For MH we use the
         # final-state network (equivalent to "last sample"); callers
@@ -2668,6 +2785,7 @@ class MCMC_GT:
         burn_in: int,
         thin: int,
         driver_seed: int,
+        max_lvl: Optional[int] = None,
     ) -> MCMCGTResult:
         """Run a Metropolis-Hastings chain with burn-in and thinning.
 
@@ -2731,8 +2849,14 @@ class MCMC_GT:
                 # Reject structurally invalid proposals up front so they
                 # count toward the rejection denominator instead of being
                 # silently floored by the scorer (which breaks detailed
-                # balance and inflates apparent mixing).
-                if not _is_valid_network(model.network):
+                # balance and inflates apparent mixing).  The ``max_lvl``
+                # guard is authoritative here: it catches every move that
+                # raises network level (including reticulation relocation /
+                # endpoint moves), not just additions.
+                if not _is_valid_network(model.network) or (
+                    max_lvl is not None
+                    and _network_level(model.network) > max_lvl
+                ):
                     move.undo(model)
                     kernel.report_outcome(False, delta=0.0)
                     continue

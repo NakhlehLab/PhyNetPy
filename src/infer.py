@@ -144,6 +144,27 @@ from ._infer_mp_allop import (
 # when the optional dependencies are present).
 from .BiMarkers import MCMC_BIMARKERS, SNP_LIKELIHOOD
 
+# Data-oriented facade: pick an entry point by *data type* (GT / MSA / Sites)
+# and pass a *scoring strategy* (Parsimony / PseudoLikelihood /
+# MaximumLikelihood / MCMC).  This is the recommended high-level surface; it
+# routes to the concrete engines re-exported above.
+from .LikelihoodStrategies import (
+    Config,
+    InferenceResult,
+    ScoringStrategy,
+    Parsimony,
+    PseudoLikelihood,
+    MaximumLikelihood,
+    MCMC,
+    UnsupportedStrategyError,
+    Score_Network_Using_GT,
+    Infer_Network_From_GT,
+    Score_Network_Using_MSA,
+    Infer_Network_From_MSA,
+    Score_Network_Using_Sites,
+    Infer_Network_From_Sites,
+)
+
 __all__ = [
     # MPL
     "MPL",
@@ -212,4 +233,19 @@ __all__ = [
     # BiMarkers
     "MCMC_BIMARKERS",
     "SNP_LIKELIHOOD",
+    # Data-oriented facade (LikelihoodStrategies)
+    "Config",
+    "InferenceResult",
+    "ScoringStrategy",
+    "Parsimony",
+    "PseudoLikelihood",
+    "MaximumLikelihood",
+    "MCMC",
+    "UnsupportedStrategyError",
+    "Score_Network_Using_GT",
+    "Infer_Network_From_GT",
+    "Score_Network_Using_MSA",
+    "Infer_Network_From_MSA",
+    "Score_Network_Using_Sites",
+    "Infer_Network_From_Sites",
 ]

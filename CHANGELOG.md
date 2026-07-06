@@ -6,6 +6,96 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Search presets** -- a single `preset=` argument shared by every
+  gene-tree-topology method (`MPL`, `MCMC_GT`, `InferNetwork_ML`) that
+  expands to a coherent bundle of behaviour flags so users no longer have
+  to combine several booleans to get the result they want:
+  `"default"` (recommended -- accurate r>=1 inference at ~baseline speed),
+  `"fast"` (raw climb), `"accurate"` (per-topology optimisation of gammas
+  + incident branches), and `"phylonet"` (reproduce PhyloNet's
+  optimise-everything-per-topology behaviour for cross-checking).  Any
+  individual flag passed explicitly overrides the preset.  Lives in
+  `phynetpy._search_flags` (`SearchSettings`, `SEARCH_PRESETS`,
+  `resolve_search_preset`) so the three methods stay in lock-step.
+- **Per-topology continuous-parameter optimisation for `MPL`**
+  (`optimize_params` / `optimize_scope` / `optimize_band`): reticulation
+  topologies are judged near their parameter optimum during the climb
+  (matching PhyloNet's per-round behaviour) instead of at the
+  reticulation's birth gamma of 0.5.  The `"gamma"` scope fixes the
+  systematic r>=1 accuracy gap at essentially no runtime cost.
+- **Incremental MPL scorer** (`MPLScorer` lever 3): when only branch
+  lengths / gammas change, the cached `_TripleDPEngine` + extracted Cython
+  topology are reused and only the parameter arrays refreshed, instead of
+  rebuilding the engine every call.  Validated bit-for-bit against full
+  rebuilds (`tests/test_mpl_incremental.py`).
+- **Unified inference search flags** for the gene-tree-topology methods
+  (`MPL`, `MCMC_GT`, `InferNetwork_ML`): `opt_bl` (optimize branch
+  lengths once at the end of the topology search via Brent coordinate
+  ascent; drops the continuous-parameter moves during the search),
+  `fix_st` (fix the starting tree backbone -- only reticulation
+  add/remove/relocate and gamma moves are proposed, no `SPR`),
+  `max_lvl` (cap the network level via `GraphUtils.level`; the
+  authoritative guard runs in the accept path so it catches *every*
+  level-raising move -- including reticulation relocation / endpoint
+  moves that keep the reticulation count fixed -- while the
+  level-raising moves themselves self-reject early as an efficiency
+  layer), and `pseudo` (score with the triplet pseudo-likelihood
+  `MPLScorer` instead of the full MSNC likelihood).
+- **`phynetpy._optimize`** -- the Brent coordinate-ascent
+  branch-length/gamma optimiser (formerly embedded in
+  `_infernetworkml`) extracted into a scorer-agnostic module so all
+  three methods share the `opt_bl` optimisation;
+  `optimize_network_parameters` is re-exported from `_infernetworkml`
+  for backward compatibility.
+- **`phynetpy._search_flags`** -- shared `resolve_move_types` /
+  `make_level_validator` helpers backing the new flags.
+
+### Changed
+
+- **Default search behaviour is now the `"default"` preset**, which turns
+  on the near-free gamma optimisation.  This changes results for r>=1
+  inference versus the previous raw-climb default (now reachable via
+  `preset="fast"`): inferred networks are more accurate (better
+  log-pseudo-likelihood and lower topological distance to truth) at
+  approximately the same wall-clock time.  The flags controlled by a
+  preset (`optimize_params`, `optimize_scope`, `opt_bl`, `fix_st`,
+  `final_optimize`) now default to `None` and are filled from the preset;
+  passing any of them explicitly overrides the preset as before.
+- **`InferNetwork_ML` defaults to full-scope per-topology optimisation.**
+  Because it maximises the full MSNC likelihood (where every branch length
+  is identifiable and matters), an unset `optimize_scope` resolves to
+  `"all"` for `InferNetwork_ML` rather than the cheaper `"gamma"` MPL
+  default -- prioritising correctness over runtime.  Pass an explicit
+  `optimize_scope` (e.g. `"gamma"`) to dial it back.
+
+### Notes
+
+- **Pseudo-likelihood scope.** The `pseudo` flag currently applies to
+  **gene-tree inference only** (it swaps in the existing triplet
+  `MPLScorer`).  Pseudo-likelihood is a general composite-likelihood
+  technique and could be extended to BiMarkers/SNP (`BiMarkers`) and
+  sequence (`MCMC_SEQ`) inference by decomposing over taxon subsets and
+  computing the exact per-subset likelihood, but no such scorers exist
+  yet, so `pseudo` is intentionally not wired into those methods for
+  now.  Tracked as future work.
+- The search flags are **not** applied to `INFER_MP_ALLOP`: its only
+  move is `SwitchParentage`, so `fix_st` would leave it with nothing
+  useful to do.
+- **Level-1 scoring shortcut (investigated, not implemented).** When
+  `max_lvl == 1` the scoring DP could in principle be cheaper
+  (`count_displayed_trees` is exact for level-1, and per-blob displayed
+  tree enumeration is small), but the MSNC ancestral-configuration DP
+  and the triplet DP are already blob-aware and the shortcut would
+  require correctness-sensitive changes inside the scorers themselves.
+  It is deferred as future work rather than implemented now, since the
+  `max_lvl` flag's correctness must not depend on it.
+
+---
+
 ## [0.4.0] -- 2026-05-12
 
 ### Added

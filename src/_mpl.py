@@ -103,6 +103,7 @@ from __future__ import annotations
 import copy
 import math
 import os
+import warnings
 from collections import deque
 from itertools import combinations
 from pathlib import Path
@@ -116,6 +117,11 @@ from . import IO as io
 from .ModelGraph import Model
 from .MetropolisHastings import ProposalKernel, HillClimbing, SimulatedAnnealing
 from .ModelMove import *
+from ._optimize import optimize_network_parameters
+from ._search_flags import (
+    resolve_move_types, make_level_validator, CONTINUOUS_MOVES,
+    resolve_search_preset,
+)
  
 # log(p) for zero-probability triplet outcomes is replaced by this
 # floor to keep the score finite.  math.log(1e-200) ≈ -460; any triplet
@@ -994,6 +1000,24 @@ class _TripleDPEngine:
         # --- Memoize _gij for the distinct branch lengths in this network ---
         self._gij_cache: dict[tuple[float, int, int], float] = {}
 
+    def refresh_params(self) -> None:
+        """Re-read branch lengths / gammas from the bound network in place.
+
+        Lever 3 fast path for the pure-Python scorer: when only continuous
+        parameters changed (topology unchanged), the cached adjacency /
+        articulation structure is still valid -- only ``_edge_info`` needs
+        refreshing.  ``_gij_cache`` is keyed by the branch-length *value*,
+        so changed lengths simply miss the old keys; no clearing is needed
+        for correctness.
+        """
+        net = self.network
+        for node in self._topo_leaf_to_root:
+            for parent in self._node_parents[node]:
+                edge = net.get_edge(parent, node)
+                self._edge_info[(parent, node)] = (
+                    edge.get_length(), edge.get_gamma(),
+                )
+
     @staticmethod
     def _fact(start: int, end: int) -> float:
         """Return the product ``start * (start+1) * ... * end``.
@@ -1614,6 +1638,101 @@ def _extract_topology_for_cython(engine: _TripleDPEngine) -> dict:
     }
 
 
+def _build_cython_triplet_index(
+    topo: dict,
+    triplets: list[tuple[str, str, str]],
+    rho: dict[tuple[str, str, str], tuple[float, float, float]],
+) -> tuple[list[tuple[int, int, int]], list[tuple[float, float, float]]]:
+    """Translate species triplets into flat node indices for the Cython DP.
+
+    Triplets whose taxa are not all present in the network are silently
+    dropped (mirrors the Python path).  Depends only on the *topology*
+    (the ``label_to_idx`` map), so it is stable across branch-length /
+    gamma edits and can be cached alongside the extracted topology.
+
+    Args:
+        topo: The dict returned by :func:`_extract_topology_for_cython`.
+        triplets: Canonical species triplets to evaluate.
+        rho: Gene-tree triplet frequency table (constant for the run).
+
+    Returns:
+        ``(trip_idx, rho_vals)`` lists aligned by position.
+    """
+    lbl_idx = topo["label_to_idx"]
+    trip_idx: list[tuple[int, int, int]] = []
+    rho_vals: list[tuple[float, float, float]] = []
+    for t in triplets:
+        x, y, z = t
+        if x in lbl_idx and y in lbl_idx and z in lbl_idx:
+            trip_idx.append((lbl_idx[x], lbl_idx[y], lbl_idx[z]))
+            rho_vals.append(rho[t])
+    return trip_idx, rho_vals
+
+
+def _refresh_cython_params(engine: _TripleDPEngine, topo: dict) -> None:
+    """Re-read branch lengths / gammas into a cached Cython topology dict.
+
+    Lever 3 fast path: when only continuous parameters changed (the
+    topology is unchanged), the structural arrays in ``topo`` are still
+    valid -- only ``pa_bl`` / ``pa_gamma`` need updating from the live
+    network edges.  This mirrors exactly the parameter logic in
+    :func:`_extract_topology_for_cython` so a refreshed score is bit-for-bit
+    identical to a full rebuild.  The engine's ``_edge_info`` cache is kept
+    in sync for the pure-Python scoring path.
+
+    Args:
+        engine: The persistent engine bound to the (unchanged) topology.
+        topo: The cached dict from :func:`_extract_topology_for_cython`,
+            whose ``pa_bl`` / ``pa_gamma`` arrays are updated in place.
+    """
+    net = engine.network
+    nodes = engine._topo_leaf_to_root
+    pa_bl = topo["pa_bl"]
+    pa_gamma = topo["pa_gamma"]
+    for i, node in enumerate(nodes):
+        parents = engine._node_parents[node]
+        is_ret = engine._node_is_retic[node]
+        n_par = len(parents)
+        for j, parent in enumerate(parents[:_CY_MAX_PARENTS]):
+            edge = net.get_edge(parent, node)
+            bl = edge.get_length()
+            gamma = edge.get_gamma()
+            engine._edge_info[(parent, node)] = (bl, gamma)
+            pa_bl[i, j] = bl if bl is not None else -1.0
+            if is_ret:
+                if gamma is not None and gamma > 0:
+                    pa_gamma[i, j] = gamma
+                else:
+                    pa_gamma[i, j] = 1.0 / n_par
+            else:
+                pa_gamma[i, j] = 1.0
+
+
+def _cy_score_from_topo(
+    topo: dict,
+    trip_idx: list[tuple[int, int, int]],
+    rho_vals: list[tuple[float, float, float]],
+) -> float:
+    """Run the Cython DP from a (possibly cached) extracted topology."""
+    return _cy_score(
+        topo["n_nodes"],
+        topo["net_node_num"],
+        topo["is_leaf"],
+        topo["is_retic"],
+        topo["in_art"],
+        topo["in_low_art"],
+        topo["n_children"],
+        topo["children"],
+        topo["n_parents"],
+        topo["parents"],
+        topo["pa_bl"],
+        topo["pa_gamma"],
+        topo["ch_pa_slot"],
+        trip_idx,
+        rho_vals,
+    )
+
+
 def _score_with_cython(
     engine: _TripleDPEngine,
     triplets: list[tuple[str, str, str]],
@@ -1634,33 +1753,8 @@ def _score_with_cython(
         Log pseudo-likelihood across all evaluable triplets.
     """
     topo = _extract_topology_for_cython(engine)
-    lbl_idx = topo["label_to_idx"]
-
-    trip_idx: list[tuple[int, int, int]] = []
-    rho_vals: list[tuple[float, float, float]] = []
-    for t in triplets:
-        x, y, z = t
-        if x in lbl_idx and y in lbl_idx and z in lbl_idx:
-            trip_idx.append((lbl_idx[x], lbl_idx[y], lbl_idx[z]))
-            rho_vals.append(rho[t])
-
-    return _cy_score(
-        topo["n_nodes"],
-        topo["net_node_num"],
-        topo["is_leaf"],
-        topo["is_retic"],
-        topo["in_art"],
-        topo["in_low_art"],
-        topo["n_children"],
-        topo["children"],
-        topo["n_parents"],
-        topo["parents"],
-        topo["pa_bl"],
-        topo["pa_gamma"],
-        topo["ch_pa_slot"],
-        trip_idx,
-        rho_vals,
-    )
+    trip_idx, rho_vals = _build_cython_triplet_index(topo, triplets, rho)
+    return _cy_score_from_topo(topo, trip_idx, rho_vals)
 
 
 # ======================================================================
@@ -1818,11 +1912,38 @@ class MPLScorer:
             t for t in triplets if any(rho[t][i] > 0.0 for i in range(3))
         ]
 
+        # ---- Lever 3: incremental engine cache --------------------------
+        # When consecutive scoring calls touch the *same* network object
+        # and only its branch lengths / gammas changed (the dirty-set
+        # protocol reports a non-``None`` touched-node set), we reuse the
+        # cached engine + extracted Cython topology and refresh only the
+        # parameter arrays, skipping the (dominant) topology rebuild.
+        self._engine: _TripleDPEngine | None = None
+        self._engine_net = None              # network object identity guard
+        self._cy_topo: dict | None = None
+        self._cy_trip_idx = None
+        self._cy_rho_vals = None
+
+    def _needs_rebuild(self, model: Model) -> bool:
+        """Decide whether the cached engine must be rebuilt for ``model``.
+
+        Rebuild when there is no cache yet, the network object changed
+        (a different proposal / committed copy), or the move reported a
+        full ("topology changed") invalidation via ``_dirty_nodes is
+        None``.  A non-``None`` dirty set means parameters-only -> reuse.
+        """
+        if self._engine is None or self._engine_net is not model.network:
+            return True
+        dirty = getattr(model, "_dirty_nodes", None)
+        return dirty is None
+
     def __call__(self, model: Model) -> float:
         """Return log pseudo-likelihood of ``model.network``.
 
         Uses the Cython DP path when available, otherwise falls back
-        to the Python DP.  Both compute the same score.
+        to the Python DP.  Both compute the same score.  Reuses a cached
+        engine across calls on the same network when only continuous
+        parameters changed (lever 3).
 
         Args:
             model: :class:`Model` whose ``network`` attribute is the
@@ -1831,11 +1952,37 @@ class MPLScorer:
         Returns:
             Log pseudo-likelihood (higher is better; always <= 0).
         """
-        engine = _TripleDPEngine(model.network)
+        net = model.network
+        if self._needs_rebuild(model):
+            self._engine = _TripleDPEngine(net)
+            self._engine_net = net
+            if _HAS_CYTHON_MPL:
+                self._cy_topo = _extract_topology_for_cython(self._engine)
+                self._cy_trip_idx, self._cy_rho_vals = (
+                    _build_cython_triplet_index(
+                        self._cy_topo, self._triplets, self._rho,
+                    )
+                )
+        else:
+            # Parameters-only change: refresh edge values on the cached
+            # engine / topology rather than rebuilding the topology.
+            if _HAS_CYTHON_MPL:
+                _refresh_cython_params(self._engine, self._cy_topo)
+            else:
+                self._engine.refresh_params()
+
+        # The scorer has consumed the dirty set; reset it so a subsequent
+        # parameters-only call is recognised as such.
+        clear = getattr(model, "clear_dirty_nodes", None)
+        if callable(clear):
+            clear()
 
         if _HAS_CYTHON_MPL:
-            return _score_with_cython(engine, self._triplets, self._rho)
+            return _cy_score_from_topo(
+                self._cy_topo, self._cy_trip_idx, self._cy_rho_vals,
+            )
 
+        engine = self._engine
         total = 0.0
         for triplet in self._triplets:
             x, y, z = triplet
@@ -2004,6 +2151,7 @@ class MPLKernel(ProposalKernel):
                  move_types: list[type[Move]] | None = None,
                  weights: list[float] | None = None,
                  max_reticulations: int | None = None,
+                 max_level: int | None = None,
                  adaptive: bool = True,
                  window_size: int = 30,
                  min_weight: float = 0.05,
@@ -2021,6 +2169,12 @@ class MPLKernel(ProposalKernel):
                 current network is at the cap, ``AddReticulation`` is
                 dropped from the active move set so we don't waste
                 proposals on guaranteed no-ops.
+            max_level: Cap on network level (``max_lvl`` search flag).
+                Passed to every level-raising move (Add / Relocate /
+                ChangeReticSource / ChangeReticDest / Flip) so they
+                self-reject proposals that would exceed the cap.
+                ``None`` disables the per-move check (the accept-path
+                level guard remains authoritative).
             adaptive: Enable within-phase adaptive weight scaling.
             window_size: Sliding-window length for acceptance stats.
             min_weight: Minimum scale factor (fraction of base weight)
@@ -2051,6 +2205,7 @@ class MPLKernel(ProposalKernel):
         """
         super().__init__()
         self._max_retics: int | None = max_reticulations
+        self._max_level: int | None = max_level
         self._all_moves: list[type[Move]] = move_types or [
             SPR,
             ChangeNodeHeight,
@@ -2352,8 +2507,16 @@ class MPLKernel(ProposalKernel):
         self._proposed[cls] = self._proposed.get(cls, 0) + 1
 
         # --- Instantiate the move with its current tuning knobs ----
-        if cls is AddReticulation and self._max_retics is not None:
-            return AddReticulation(max_reticulations=self._max_retics)
+        if cls is AddReticulation:
+            return AddReticulation(
+                max_reticulations=self._max_retics,
+                max_level=self._max_level,
+            )
+        if cls in (FlipReticulation, ChangeReticSource,
+                   ChangeReticDest, RelocateReticulation):
+            # Level-raising relocation / endpoint moves: pass the level
+            # cap so they can self-reject early.
+            return cls(max_level=self._max_level)
         if cls is ChangeNodeHeight:
             return ChangeNodeHeight(sigma_frac=self._nh_sigma)
         if cls is ChangeInheritanceProb:
@@ -2756,6 +2919,14 @@ class MPL:
         kernel: MPLKernel | None = None,
         max_reticulations: int | None = None,
         *,
+        preset: str = "default",
+        opt_bl: bool | None = None,
+        fix_st: bool | None = None,
+        max_lvl: int | None = None,
+        pseudo: bool = True,
+        optimize_params: bool | None = None,
+        optimize_scope: str | None = None,
+        optimize_band: float = 5.0,
         save_best_path: str | os.PathLike[str] | None = None,
         reference_network: Network | None = None,
         comparison_report_path: str | os.PathLike[str] | None = None,
@@ -2776,6 +2947,15 @@ class MPL:
         unconditionally.
 
         Args:
+            preset: One-word search profile (see
+                :data:`phynetpy._search_flags.SEARCH_PRESETS`):
+                ``"default"`` (recommended -- accurate r>=1 results at
+                ~baseline speed via near-free gamma optimisation),
+                ``"fast"`` (raw climb), ``"accurate"`` (per-topology
+                optimisation of gammas + incident branches), or
+                ``"phylonet"`` (reproduce PhyloNet's optimise-everything
+                behaviour).  Any flag below passed explicitly overrides the
+                preset.
             method: Search driver -- ``"hc"`` (Hill Climbing, default)
                 or ``"sa"`` (Simulated Annealing).
             num_iter: Number of proposed moves to evaluate.
@@ -2784,6 +2964,62 @@ class MPL:
             max_reticulations: Upper bound on reticulation count.
                 ``None`` means unlimited.  Ignored when a custom
                 ``kernel`` is supplied.
+            opt_bl: Optimise branch lengths (``opt_bl`` flag).  When
+                ``True`` the proposal kernel drops the continuous
+                parameter moves (``ChangeNodeHeight`` /
+                ``ChangeInheritanceProb``) during the topology search,
+                and the best network's branch lengths + gammas are
+                optimised once at the end via Brent coordinate ascent
+                against the pseudo-likelihood objective.  Ignored when a
+                custom ``kernel`` is supplied (except the final
+                optimisation, which still runs).
+            fix_st: Fix the starting-tree backbone (``fix_st`` flag).
+                When ``True`` the kernel drops backbone-changing moves
+                (``SPR``) so only reticulation add/remove/relocate/
+                endpoint and gamma moves are proposed.  Ignored when a
+                custom ``kernel`` is supplied.
+            max_lvl: Maximum network level (``max_lvl`` flag).  When set
+                (e.g. ``1`` for level-1), proposals that would push the
+                network level above this are rejected by an accept-path
+                guard, and level-raising moves self-reject early.
+                ``None`` disables the cap.
+            pseudo: Pseudo-likelihood scoring (``pseudo`` flag).  MPL is
+                a pseudo-likelihood method, so this is always effectively
+                ``True``; passing ``False`` emits a warning and is
+                ignored (use ``MCMC_GT`` / ``InferNetwork_ML`` for full
+                likelihood).
+            optimize_params: When ``True`` (Hill-Climbing only), refine a
+                proposal's continuous parameters with a Brent coordinate
+                ascent *before* the accept/reject decision, so each
+                reticulation topology is judged at (near) its parameter
+                optimum -- matching PhyloNet's per-round behaviour.  This
+                is the fix for systematically-worse r>=1 inferences: with
+                it off, a new reticulation is only ever scored at its
+                birth gamma (0.5) during the climb.  Defaults to ``None``
+                -> taken from ``preset`` (``True`` for ``"default"``).
+                Ignored for ``method="sa"`` and when a custom ``kernel``
+                drops the relevant moves.
+            optimize_scope: Which parameters the per-topology optimisation
+                touches (see :func:`phynetpy._optimize.optimize_network_parameters`).
+                ``"gamma"`` optimises only the inheritance probabilities
+                -- the cheapest scope, a no-op for trees (r=0), and the
+                direct fix for the "reticulation judged at gamma=0.5"
+                bias.  ``"reticulation"`` also optimises the branches
+                incident to reticulations; ``"all"`` optimises every
+                identifiable branch length too (closest to a full
+                per-topology optimisation, but markedly slower).  Branch
+                lengths skipped here are still tuned by the one-time final
+                optimisation.  Defaults to ``None`` -> taken from
+                ``preset`` (``"gamma"`` for ``"default"``).  Only used
+                when ``optimize_params`` resolves to ``True``.
+            optimize_band: Lazy-gating tolerance (in log-pseudo-likelihood
+                units).  A reticulation-bearing proposal is optimised only
+                when its raw score is within ``optimize_band`` of the
+                current score (i.e. ``raw >= current - optimize_band``), so
+                clearly-bad random proposals never pay the optimisation
+                cost.  Larger values optimise more proposals (more
+                accurate, slower).  Only used when ``optimize_params`` is
+                ``True``.
             save_best_path: Optional Newick output path for the best
                 network found.
             reference_network: Optional ground-truth / baseline
@@ -2819,6 +3055,27 @@ class MPL:
         Raises:
             ValueError: If ``method`` is not ``"hc"`` or ``"sa"``.
         """
+        if not pseudo:
+            warnings.warn(
+                "MPL only supports pseudo-likelihood scoring; the "
+                "pseudo=False flag is ignored.  Use MCMC_GT or "
+                "InferNetwork_ML for full-likelihood inference.",
+                stacklevel=2,
+            )
+
+        # Resolve the preset into concrete behaviour; explicit flags win.
+        settings = resolve_search_preset(
+            preset,
+            optimize_params=optimize_params,
+            optimize_scope=optimize_scope,
+            opt_bl=opt_bl,
+            fix_st=fix_st,
+        )
+        opt_bl = settings.opt_bl
+        fix_st = settings.fix_st
+        optimize_params = settings.optimize_params
+        optimize_scope = settings.optimize_scope
+
         scorer = MPLScorer(self._rho, self._active_triplets)
 
         # ----------------------------------------------------------------
@@ -2859,20 +3116,68 @@ class MPL:
         # ----------------------------------------------------------------
         if kernel is None:
             kernel = MPLKernel(
+                move_types=resolve_move_types(opt_bl=opt_bl, fix_st=fix_st),
                 max_reticulations=max_reticulations,
+                max_level=max_lvl,
                 rng=np.random.default_rng(kernel_ss),
             )
         elif getattr(kernel, "rng", None) is None:
             kernel.rng = np.random.default_rng(kernel_ss)
 
         # ----------------------------------------------------------------
-        # Dispatch to the chosen search driver.
+        # Dispatch to the chosen search driver.  The level validator is
+        # the authoritative ``max_lvl`` guard: it level-checks every
+        # accepted proposal regardless of which move produced it.
         # ----------------------------------------------------------------
+        validate = make_level_validator(max_lvl)
+
+        # ----------------------------------------------------------------
+        # Per-topology continuous-parameter optimisation (levers 1 + 2).
+        # Lever 1: optimise only the reticulation parameters (gammas +
+        # incident branches) so reticulation topologies are judged near
+        # their optimum -- the fix for systematically-worse r>=1 results.
+        # Lever 2: lazy gating -- only optimise reticulation-bearing
+        # proposals that are already within ``optimize_band`` of the
+        # incumbent, so the vast majority of rejected proposals stay cheap.
+        # ----------------------------------------------------------------
+        optimize_proposal = None
+        should_optimize = None
+        if optimize_params:
+            if method != "hc":
+                warnings.warn(
+                    "optimize_params is only supported for method='hc'; "
+                    "ignoring it for this run.",
+                    stacklevel=2,
+                )
+            else:
+                def optimize_proposal(opt_m: Model) -> float:
+                    return optimize_network_parameters(
+                        opt_m, scorer, self.mapping, scope=optimize_scope,
+                    )
+
+                def should_optimize(
+                    opt_m: Model, raw_proposed: float, current: float, move,
+                ) -> bool:
+                    # Only re-optimise after a *topology* move (matching
+                    # PhyloNet's per-round behaviour); pure continuous moves
+                    # already explored their parameter, so re-optimising the
+                    # whole reticulation neighbourhood after them is wasted
+                    # work.
+                    if isinstance(move, CONTINUOUS_MOVES):
+                        return False
+                    net = opt_m.network
+                    if not any(v.is_reticulation() for v in net.V()):
+                        return False
+                    return raw_proposed >= current - optimize_band
+
         if method == "hc":
             searcher = HillClimbing(
                 pkernel=kernel,
                 model=model,
                 num_iter=num_iter,
+                validate=validate,
+                optimize_proposal=optimize_proposal,
+                should_optimize=should_optimize,
                 **kwargs,
             )
         elif method == "sa":
@@ -2880,6 +3185,7 @@ class MPL:
                 pkernel=kernel,
                 model=model,
                 num_iter=num_iter,
+                validate=validate,
                 **kwargs,
             )
         else:
@@ -2905,6 +3211,24 @@ class MPL:
         self.net = end_state.current_model.network
         self._triple_engine = _TripleDPEngine(self.net)
 
+        # ----------------------------------------------------------------
+        # Final Brent coordinate-ascent over *all* branch lengths and
+        # gammas of the best network, against the pseudo-likelihood
+        # objective (the same scorer the search used).  Runs whenever the
+        # resolved preset requests a final optimisation (always for the
+        # shipped presets) or ``opt_bl`` dropped the continuous moves.
+        # ----------------------------------------------------------------
+        final_score: float | None = None
+        if settings.final_optimize or opt_bl:
+            opt_model = Model(rng=np.random.default_rng())
+            opt_model.network = self.net
+            opt_model.set_likelihood_calculator(scorer)
+            final_score = optimize_network_parameters(
+                opt_model, scorer, self.mapping,
+            )
+            self.net = opt_model.network
+            self._triple_engine = _TripleDPEngine(self.net)
+
         if save_best_path is not None:
             save_mpl_network_newick(self.net, save_best_path)
 
@@ -2921,6 +3245,8 @@ class MPL:
             if comparison_report_path is not None:
                 Path(comparison_report_path).write_text(report + "\n", encoding="utf-8")
 
+        if final_score is not None:
+            return final_score
         return end_state.likelihood()
 
     # ── Internal ──────────────────────────────────────────────────

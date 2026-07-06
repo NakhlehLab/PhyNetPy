@@ -82,18 +82,22 @@ import math
 import time
 import random
 from abc import ABC, abstractmethod
-from typing import Literal, Optional
+from typing import Callable, Literal, Optional
 
 import numpy as np
 
 # Relative imports
-from .State import State
+from .State import State, network_invariants_routine
 from .MSA import MSA
 from .Matrix import Matrix
 from .ModelGraph import Model
 from .ModelMove import Move, SwitchParentage
 from .GTR import GTR, JC
 from .Network import Network
+from ._optimize import (
+    snapshot_continuous_params,
+    restore_continuous_params,
+)
 
 
 ###########################
@@ -238,7 +242,10 @@ class HillClimbing:
                  model: Model | None = None,
                  num_iter: int = 500,
                  stochastic: int = -1,
-                 enhanced_stop: bool = True) -> None:
+                 enhanced_stop: bool = True,
+                 validate: Callable[[Model], bool] = network_invariants_routine,
+                 optimize_proposal: Callable[[Model], float] | None = None,
+                 should_optimize: Callable[[Model, float, float, Move], bool] | None = None) -> None:
         """
         Initialize a Hill Climb search.
 
@@ -250,6 +257,27 @@ class HillClimbing:
             num_iter (int, optional): Number of iterations. Defaults to 500.
             stochastic (int, optional): Random seed. Defaults to -1.
             enhanced_stop (bool, optional): Early stopping flag. Defaults to True.
+            validate (Callable[[Model], bool]): Proposal-validity predicate
+                forwarded to :class:`State`.  Defaults to
+                ``network_invariants_routine``; the ``max_lvl`` search flag
+                composes this with a level guard via
+                :func:`phynetpy._search_flags.make_level_validator`.
+            optimize_proposal (Callable[[Model], float] | None): Optional
+                per-topology continuous-parameter optimiser.  When supplied,
+                an accepted-candidate proposal whose continuous parameters
+                should be refined is passed to this callable, which optimises
+                ``model.network`` *in place* and returns the optimised score.
+                The driver snapshots the proposal's branch lengths / gammas
+                first and restores them if the (optimised) proposal is
+                rejected, so the optimisation is fully reversible.  ``None``
+                (default) preserves the legacy raw-score climb.
+            should_optimize (Callable[[Model, float, float, Move], bool] | None):
+                Optional gate deciding whether a given proposal is worth the
+                optimisation cost, called as
+                ``should_optimize(proposed_model, raw_proposed_score,
+                current_score, move)``.  ``None`` optimises every proposal
+                when ``optimize_proposal`` is set.  Ignored when
+                ``optimize_proposal`` is ``None``.
         Returns:
             N/A
         """
@@ -257,11 +285,11 @@ class HillClimbing:
             submodel = JC()
             
         if model is None:
-            self.current_state = State()
+            self.current_state = State(validate=validate)
             if data is not None:
                 self.current_state.bootstrap(data, submodel)
         else:
-            self.current_state = State(model)
+            self.current_state = State(model, validate=validate)
             
         self.data = data
         self.submodel = submodel
@@ -269,6 +297,8 @@ class HillClimbing:
         self.num_iter = num_iter
         self.nets_2_scores = {}
         self.enhanced_stop = enhanced_stop
+        self.optimize_proposal = optimize_proposal
+        self.should_optimize = should_optimize
         
         if stochastic != -1:
             self.rng = np.random.default_rng(stochastic)
@@ -318,7 +348,38 @@ class HillClimbing:
                         no_progress += 1
                     iter_no += 1
                     continue
-                
+
+                # Optional per-topology continuous-parameter optimisation.
+                # Snapshot the proposal's branch lengths / gammas first so a
+                # rejected (optimised) proposal can be fully reverted -- the
+                # structural Move.undo does not restore the optimiser's sweep.
+                opt_snapshot = None
+                if self.optimize_proposal is not None:
+                    proposed_model = self.current_state.proposed()
+                    if (
+                        self.should_optimize is None
+                        or self.should_optimize(
+                            proposed_model, proposed, cur, next_move
+                        )
+                    ):
+                        opt_snapshot = snapshot_continuous_params(
+                            proposed_model.network
+                        )
+                        try:
+                            proposed = self.optimize_proposal(proposed_model)
+                        except Exception:
+                            restore_continuous_params(opt_snapshot)
+                            opt_snapshot = None
+                            try:
+                                self.current_state.revert(next_move)
+                            except Exception:
+                                pass
+                            self.kernel.report_outcome(False, delta=0.0)
+                            if self.enhanced_stop:
+                                no_progress += 1
+                            iter_no += 1
+                            continue
+
                 delta: float = cur - proposed
                 accepted: bool = True 
                 
@@ -328,6 +389,8 @@ class HillClimbing:
                     no_progress = 0
                 else:
                     accepted = False
+                    if opt_snapshot is not None:
+                        restore_continuous_params(opt_snapshot)
                     self.current_state.revert(next_move)
                     if self.enhanced_stop:
                         no_progress += 1
@@ -423,7 +486,8 @@ class MetropolisHastings:
                  submodel: GTR = None, 
                  data: Matrix | None = None, 
                  model: Model | None = None,
-                 num_iter: int = 500) -> None:
+                 num_iter: int = 500,
+                 validate: Callable[[Model], bool] = network_invariants_routine) -> None:
         """
         Initialize a Metropolis Hastings search.
 
@@ -433,13 +497,18 @@ class MetropolisHastings:
             data (Matrix | None, optional): The data. Defaults to None.
             model (Model | None, optional): A phylogenetic model. Defaults to None.
             num_iter (int, optional): Number of iterations. Defaults to 500.
+            validate (Callable[[Model], bool]): Proposal-validity predicate
+                forwarded to :class:`State`.  Defaults to
+                ``network_invariants_routine``; the ``max_lvl`` search flag
+                composes this with a level guard via
+                :func:`phynetpy._search_flags.make_level_validator`.
         Returns:
             N/A  
         """
         if submodel is None:
             submodel = JC()
             
-        self.current_state = State(model)
+        self.current_state = State(model, validate=validate)
         
         if model is None and data is not None:
             self.current_state.bootstrap(data, submodel)
@@ -620,7 +689,8 @@ class SimulatedAnnealing:
                  reheat_min_improve: float = 1.0,
                  reheat_on_no_uphill: bool = True,
                  reheat_cap_mult: float = 1.0,
-                 reheat_max_consecutive: int = 5) -> None:
+                 reheat_max_consecutive: int = 5,
+                 validate: Callable[[Model], bool] = network_invariants_routine) -> None:
         """
         Args:
             pkernel: Proposal kernel that generates moves.
@@ -669,6 +739,7 @@ class SimulatedAnnealing:
         """
         self.kernel = pkernel
         self.init_model = model
+        self.validate = validate
         self.num_iter = num_iter
         self.t_start = t_start
         self.t_end = t_end
@@ -1059,7 +1130,7 @@ class SimulatedAnnealing:
 
         for restart in range(self.n_restarts):
             model = copy.deepcopy(self.init_model)
-            state = State(model)
+            state = State(model, validate=self.validate)
 
             stats = self._single_run(state)
             self.run_stats.append(stats)
@@ -1071,7 +1142,7 @@ class SimulatedAnnealing:
         final_model = copy.deepcopy(self.init_model)
         final_model.network = self.best_network
         final_model.update_network()
-        final_state = State(final_model)
+        final_state = State(final_model, validate=self.validate)
         return final_state
 
 

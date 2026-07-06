@@ -379,6 +379,44 @@ class Move(ABC):
         """
         return None
 
+    def _revert_if_exceeds_level(self, model: Model) -> bool:
+        """Self-reject the proposal when it pushes the network past ``max_level``.
+
+        Efficiency layer for the ``max_lvl`` search flag.  A move that can
+        *raise* network level (add / relocate / endpoint reticulation moves)
+        calls this right before finalising ``execute``.  If the resulting
+        network's level exceeds the move's ``_max_level`` cap, the network is
+        restored from the ``undo_info`` snapshot and the proposal becomes a
+        no-op (zero Hastings).
+
+        This is purely an optimisation: it avoids wasting a likelihood
+        evaluation on a proposal the accept-path level guard
+        (:func:`phynetpy._search_flags.make_level_validator`) would reject
+        anyway.  Moves that never set ``_max_level`` are unaffected.
+
+        Args:
+            model: Model whose ``network`` was just mutated by ``execute``.
+
+        Returns:
+            ``True`` when the proposal was reverted (caller should return
+            immediately), ``False`` otherwise.
+        """
+        max_level = getattr(self, "_max_level", None)
+        if max_level is None:
+            return False
+        # Local import keeps the module-load graph acyclic (GraphUtils ->
+        # Network only; ModelMove is imported very early).
+        from .GraphUtils import level as _network_level
+        net = model.network
+        if net is None or _network_level(net) <= max_level:
+            return False
+        if self.undo_info is not None:
+            model.network = self.undo_info
+        self.undo_info = None
+        self._log_hr = 0.0
+        model.update_network()
+        return True
+
     def log_hastings_ratio(self) -> float:
         r"""Log proposal-asymmetry correction ``log[ q(x|x') / q(x'|x) ]``.
 
@@ -462,7 +500,11 @@ class AddReticulation(Move):
     Uses deep-copy for undo/same_move to guarantee correctness.
     """
 
-    def __init__(self, max_reticulations: int | None = None) -> None:
+    def __init__(
+        self,
+        max_reticulations: int | None = None,
+        max_level: int | None = None,
+    ) -> None:
         """Create a new ``AddReticulation`` proposal.
 
         Args:
@@ -471,9 +513,14 @@ class AddReticulation(Move):
                 ``max_reticulations`` reticulation nodes, the
                 proposal silently returns without modifying the
                 network.  ``None`` disables the cap.
+            max_level: Optional cap on network level (``max_lvl``
+                search flag).  If the addition would push the network
+                level above this, the move self-reverts to a no-op.
+                ``None`` disables the per-move check.
         """
         super().__init__()
         self._max_retics = max_reticulations
+        self._max_level = max_level
 
     def execute(self, model: Model) -> Model:
         """Insert a new reticulation into ``model.network``.
@@ -572,6 +619,9 @@ class AddReticulation(Move):
             )
         except ValueError:
             self._log_hr = 0.0
+
+        if self._revert_if_exceeds_level(model):
+            return model
 
         model.update_network()
         return model
@@ -693,9 +743,16 @@ class FlipReticulation(Move):
     other paths), the move rolls itself back via deep-copy undo.
     """
 
-    def __init__(self) -> None:
-        """Initialise with no per-instance parameters (see :class:`Move`)."""
+    def __init__(self, max_level: int | None = None) -> None:
+        """Create a new ``FlipReticulation`` proposal.
+
+        Args:
+            max_level: Optional cap on network level (``max_lvl`` search
+                flag).  If the flip raises the level above this, the move
+                self-reverts to a no-op.  ``None`` disables the check.
+        """
         super().__init__()
+        self._max_level = max_level
 
     def execute(self, model: Model) -> Model:
         """Propose a single reticulation-edge flip on ``model.network``.
@@ -761,6 +818,9 @@ class FlipReticulation(Move):
             model.network = self.undo_info
             self.undo_info = None
             model.update_network()
+            return model
+
+        if self._revert_if_exceeds_level(model):
             return model
 
         model.update_network()
@@ -1626,9 +1686,17 @@ class ChangeReticSource(Move):
     Uses deep-copy for undo/same_move to guarantee correctness.
     """
 
-    def __init__(self) -> None:
-        """Initialise with no per-instance parameters (see :class:`Move`)."""
+    def __init__(self, max_level: int | None = None) -> None:
+        """Create a new ``ChangeReticSource`` proposal.
+
+        Args:
+            max_level: Optional cap on network level (``max_lvl`` search
+                flag).  If relocating the source raises the level above
+                this, the move self-reverts to a no-op.  ``None`` disables
+                the check.
+        """
         super().__init__()
+        self._max_level = max_level
 
     def execute(self, model: Model) -> Model:
         """Propose a source-relocation for one reticulation edge.
@@ -1691,6 +1759,9 @@ class ChangeReticSource(Move):
         if net.in_degree(c) > 1:
             c.set_is_reticulation(True)
 
+        if self._revert_if_exceeds_level(model):
+            return model
+
         model.update_network()
         return model
 
@@ -1731,9 +1802,17 @@ class RelocateReticulation(Move):
     uses to change reticulation number.
     """
 
-    def __init__(self) -> None:
-        """Initialise with no per-instance parameters (see :class:`Move`)."""
+    def __init__(self, max_level: int | None = None) -> None:
+        """Create a new ``RelocateReticulation`` proposal.
+
+        Args:
+            max_level: Optional cap on network level (``max_lvl`` search
+                flag).  If the relocation moves a reticulation into an
+                already-occupied blob and raises the level above this, the
+                move self-reverts to a no-op.  ``None`` disables the check.
+        """
         super().__init__()
+        self._max_level = max_level
 
     def execute(self, model: Model) -> Model:
         """Propose a whole-reticulation relocation.
@@ -1863,6 +1942,9 @@ class RelocateReticulation(Move):
 
         net.add_edges(Edge(new_retic, child, length=saved_child_len))
 
+        if self._revert_if_exceeds_level(model):
+            return model
+
         model.update_network()
         return model
 
@@ -1888,9 +1970,17 @@ class ChangeReticDest(Move):
     Uses deep-copy for undo/same_move to guarantee correctness.
     """
 
-    def __init__(self) -> None:
-        """Initialise with no per-instance parameters (see :class:`Move`)."""
+    def __init__(self, max_level: int | None = None) -> None:
+        """Create a new ``ChangeReticDest`` proposal.
+
+        Args:
+            max_level: Optional cap on network level (``max_lvl`` search
+                flag).  If relocating the destination raises the level
+                above this, the move self-reverts to a no-op.  ``None``
+                disables the check.
+        """
         super().__init__()
+        self._max_level = max_level
 
     def execute(self, model: Model) -> Model:
         """Propose a destination-relocation for one reticulation edge.
@@ -1958,6 +2048,9 @@ class ChangeReticDest(Move):
         net.add_edges(Edge(a, c_new, length=host_len * split, gamma=gamma_a))
         net.add_edges(Edge(c_new, b, length=host_len * (1.0 - split)))
         net.add_edges(Edge(z, c_new, length=saved_length, gamma=sg))
+
+        if self._revert_if_exceeds_level(model):
+            return model
 
         model.update_network()
         return model
