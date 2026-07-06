@@ -27,9 +27,11 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import ptitprince as pt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import defj_common as dc  # noqa: E402
@@ -41,8 +43,51 @@ OUT = ROOT / "paper_figures"
 METHOD_ORDER = ["MP-HC", "MP-SA3", "PhyloNet"]
 # Set at runtime; when True, the PhyloNet CSV is ignored entirely.
 MP_ONLY = False
-METHOD_COLORS = {"MP-HC": "#1f77b4", "MP-SA3": "#2ca02c", "PhyloNet": "#d62728"}
+
+# ── Colour palette (colour-blind friendly, Nature-style) ──────────────────
+METHOD_COLORS = {
+    "MP-HC":    "#0072B2",   # deep blue
+    "MP-SA3":   "#009E73",   # teal green
+    "PhyloNet": "#D55E00",   # vermillion
+}
 SCEN_ORDER = ["D", "E", "F", "J"]
+
+# ── Global matplotlib style (Nature / PLOS ONE aesthetic) ────────────────
+FONT_SIZE   = 8      # pt  – matches typical journal body text
+TITLE_SIZE  = 9
+LABEL_SIZE  = 8
+TICK_SIZE   = 7
+LEGEND_SIZE = 7
+DPI         = 300
+
+def _apply_style() -> None:
+    """Apply a clean, publication-ready rcParams style."""
+    plt.rcParams.update({
+        "font.family":        "sans-serif",
+        "font.sans-serif":    ["Arial", "Helvetica", "DejaVu Sans"],
+        "font.size":          FONT_SIZE,
+        "axes.titlesize":     TITLE_SIZE,
+        "axes.labelsize":     LABEL_SIZE,
+        "xtick.labelsize":    TICK_SIZE,
+        "ytick.labelsize":    TICK_SIZE,
+        "legend.fontsize":    LEGEND_SIZE,
+        "legend.frameon":     True,
+        "legend.framealpha":  0.9,
+        "legend.edgecolor":   "#cccccc",
+        "axes.spines.top":    False,
+        "axes.spines.right":  False,
+        "axes.linewidth":     0.7,
+        "xtick.major.width":  0.7,
+        "ytick.major.width":  0.7,
+        "axes.grid":          True,
+        "grid.color":         "#e5e5e5",
+        "grid.linewidth":     0.5,
+        "grid.linestyle":     "-",
+        "figure.dpi":         DPI,
+        "savefig.dpi":        DPI,
+        "savefig.bbox":       "tight",
+        "savefig.pad_inches": 0.05,
+    })
 
 
 def _numify(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
@@ -102,142 +147,296 @@ def _method_palette(methods: list[str]) -> dict[str, str]:
     return {m: METHOD_COLORS[m] for m in methods if m in METHOD_COLORS}
 
 
-def _swarmplot(
+# ── Metric display helpers ────────────────────────────────────────────────
+METRIC_LABELS = {
+    "mu_d":  r"$\mu$-distance to true network",
+    "hw_d":  "Hardwired-cluster distance to true network",
+}
+METRIC_TITLES = {
+    "mu_d":  r"Species-network error ($\mu$-distance)",
+    "hw_d":  "Species-network error (hardwired-cluster distance)",
+}
+
+def _ylabel(metric: str) -> str:
+    return METRIC_LABELS.get(metric, metric)
+
+def _fig_title(metric: str, subtitle: str = "") -> str:
+    base = METRIC_TITLES.get(metric, metric)
+    return f"{base}\n{subtitle}" if subtitle else base
+
+
+# ── Shared raincloud helper ───────────────────────────────────────────────
+def _raincloud(
     ax: plt.Axes,
     data: pd.DataFrame,
     *,
     x: str,
     y: str,
-    hue: str = "method",
-    x_order: list | None = None,
-    hue_order: list[str] | None = None,
-    dodge: bool = True,
+    x_order: list,
+    hue_order: list[str],
+    orient: str = "v",
 ) -> None:
-    """Beeswarm of individual runs; one point per replicate/condition."""
-    if hue_order is None:
-        hue_order = _present_methods(data)
-    sns.swarmplot(
+    """
+    Raincloud = half-violin (ptitprince) + raw jittered strip + box overlay.
+    Each method is drawn separately at a slight horizontal offset so they
+    don't overlap.
+    """
+    palette = _method_palette(hue_order)
+    n_methods = len(hue_order)
+    # ptitprince width and offset bookkeeping
+    width_viol = 0.35
+    # draw raincloud with dodge
+    pt.RainCloud(
         data=data,
         x=x,
         y=y,
-        hue=hue,
+        hue="method",
         order=x_order,
         hue_order=hue_order,
-        palette=_method_palette(hue_order),
-        dodge=dodge,
-        size=2.0,
-        alpha=0.65,
+        palette=palette,
+        orient=orient,
+        width_viol=width_viol,
+        width_box=0.12,
+        move=0.18,
+        point_size=1.8,
+        alpha=0.70,
+        dodge=True,
+        linewidth=0.8,
+        box_linewidth=0.8,
+        box_flierprops={"marker": "D", "markersize": 2.5,
+                        "markeredgewidth": 0.5},
         ax=ax,
-        warn_thresh=2000,
     )
 
 
+# ── Figure A: accuracy by scenario (raincloud) ───────────────────────────
 def fig_accuracy_by_scenario(df: pd.DataFrame, metric: str) -> None:
-    """Swarm plot: every run's metric, grouped by scenario and method (n=1)."""
+    """Raincloud plot: every run, grouped by scenario and method (n=1)."""
+    _apply_style()
     sub = df[df["n"] == 1].copy()
     if sub.empty:
         return
-    scen = [s for s in SCEN_ORDER if s in set(sub["scenario"])]
-    fig, ax = plt.subplots(figsize=(7.5, 4.5))
-    _swarmplot(ax, sub, x="scenario", y=metric, x_order=scen)
-    ax.set_xlabel("Scenario")
-    ax.set_ylabel(f"{metric} to true network")
-    ax.set_title(f"Species-network error ({metric}), single individual (n=1)")
-    ax.legend(title="", loc="upper right")
-    fig.tight_layout()
+    scen   = [s for s in SCEN_ORDER if s in set(sub["scenario"])]
+    hue_order = _present_methods(sub)
+
+    # one panel per scenario, shared y-axis
+    fig, axes = plt.subplots(
+        1, len(scen),
+        figsize=(2.5 * len(scen), 3.6),
+        sharey=True, squeeze=False,
+    )
+    for k, s in enumerate(scen):
+        ax = axes[0][k]
+        d = sub[sub["scenario"] == s].copy()
+        d["_x"] = "  "   # single-group raincloud; method encoded by hue
+        _raincloud(ax, d, x="_x", y=metric, x_order=["  "],
+                   hue_order=hue_order)
+        ax.set_xlabel(f"Scenario {s}", labelpad=4)
+        ax.set_title(f"({chr(65 + k)})", loc="left", fontsize=TITLE_SIZE,
+                     fontweight="bold")
+        ax.set_xticks([])
+        ax.tick_params(axis="x", length=0)
+        if k == 0:
+            ax.set_ylabel(_ylabel(metric), labelpad=6)
+        else:
+            ax.set_ylabel("")
+        # legend only on last panel
+        leg = ax.get_legend()
+        if k < len(scen) - 1:
+            if leg: leg.remove()
+        else:
+            if leg:
+                leg.set_title("")
+                for lh in leg.legend_handles:
+                    lh.set_alpha(1.0)
+                    lh._sizes = [25]
+
+    fig.suptitle(_fig_title(metric, "single individual (n = 1)"),
+                 y=1.01, fontsize=TITLE_SIZE)
+    fig.tight_layout(w_pad=0.3)
     out = OUT / f"defj_accuracy_by_scenario_{metric}.png"
-    fig.savefig(out, dpi=200)
+    fig.savefig(out)
     plt.close(fig)
     print(f"  wrote {out}")
 
 
+# ── Figure B: accuracy vs ILS (faceted box plots) ────────────────────────
 def fig_accuracy_vs_ils(df: pd.DataFrame, metric: str) -> None:
-    """Swarm plot vs ILS level t for D/E/F (n=1, g=1)."""
-    sub = df[(df["n"] == 1) & (df["g"] == 1)
-             & (df["scenario"].isin(["D", "E", "F"]))].copy()
+    """Faceted box plots: error vs ILS level, one panel per scenario (n=1, g=1)."""
+    _apply_style()
+    sub = df[
+        (df["n"] == 1) & (df["g"] == 1)
+        & (df["scenario"].isin(["D", "E", "F"]))
+    ].copy()
     if sub.empty:
         print("  (skip accuracy_vs_ils: no D/E/F g1 n1 data yet)")
         return
-    sub["t"] = sub["t"].astype(int).astype(str)
-    t_order = sorted(sub["t"].unique(), key=int)
-    scen = [s for s in ["D", "E", "F"] if s in set(sub["scenario"])]
-    fig, axes = plt.subplots(1, len(scen), figsize=(4.5 * len(scen), 4.2),
-                             sharey=True, squeeze=False)
+    sub["t_label"] = sub["t"].astype(int).map({4: "Low\n(t=4)", 20: "Med\n(t=20)",
+                                                100: "High\n(t=100)"})
+    t_order   = ["Low\n(t=4)", "Med\n(t=20)", "High\n(t=100)"]
+    scen      = [s for s in ["D", "E", "F"] if s in set(sub["scenario"])]
+    hue_order = _present_methods(sub)
+    palette   = _method_palette(hue_order)
+
+    fig, axes = plt.subplots(
+        1, len(scen),
+        figsize=(2.6 * len(scen), 3.4),
+        sharey=True, squeeze=False,
+    )
     for k, s in enumerate(scen):
         ax = axes[0][k]
-        d = sub[sub["scenario"] == s]
-        _swarmplot(ax, d, x="t", y=metric, x_order=t_order)
-        ax.set_title(f"Scenario {s}")
-        ax.set_xlabel("ILS level (t)")
+        d  = sub[sub["scenario"] == s]
+        sns.boxplot(
+            data=d, x="t_label", y=metric,
+            hue="method", order=t_order, hue_order=hue_order,
+            palette=palette,
+            width=0.55, linewidth=0.8, fliersize=2.5,
+            flierprops={"marker": "D", "markeredgewidth": 0.5},
+            ax=ax,
+        )
+        ax.set_title(f"({chr(65 + k)}) Scenario {s}", loc="left",
+                     fontsize=TITLE_SIZE, fontweight="bold")
+        ax.set_xlabel("ILS level", labelpad=4)
         if k == 0:
-            ax.set_ylabel(metric)
-        if k != len(scen) - 1:
-            leg = ax.get_legend()
-            if leg is not None:
-                leg.remove()
-    fig.suptitle(f"Network error vs ILS ({metric}), n=1, 1 gene")
-    fig.tight_layout()
+            ax.set_ylabel(_ylabel(metric), labelpad=6)
+        else:
+            ax.set_ylabel("")
+        leg = ax.get_legend()
+        if k < len(scen) - 1:
+            if leg: leg.remove()
+        else:
+            if leg:
+                leg.set_title("")
+                leg.set_bbox_to_anchor((1.02, 1))
+                leg.set_loc("upper left")
+
+    fig.suptitle(_fig_title(metric, "1 gene tree, n = 1"),
+                 y=1.02, fontsize=TITLE_SIZE)
+    fig.tight_layout(w_pad=0.4)
     out = OUT / f"defj_accuracy_vs_ils_{metric}.png"
-    fig.savefig(out, dpi=200)
+    fig.savefig(out)
     plt.close(fig)
     print(f"  wrote {out}")
 
 
+# ── Figure C: accuracy vs gene count (faceted box plots) ─────────────────
 def fig_accuracy_vs_genes(df: pd.DataFrame, metric: str) -> None:
-    """Swarm plot vs gene count, pooled over scenarios (n=1)."""
+    """Faceted box plots: error vs gene count, one panel per scenario (n=1)."""
+    _apply_style()
     sub = df[df["n"] == 1].copy()
     if sub.empty:
         return
-    sub["g"] = sub["g"].astype(int).astype(str)
-    g_order = sorted(sub["g"].unique(), key=int)
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    _swarmplot(ax, sub, x="g", y=metric, x_order=g_order)
-    ax.set_xlabel("Number of gene trees (g)")
-    ax.set_ylabel(metric)
-    ax.set_title(f"Network error vs gene count ({metric}), n=1")
-    ax.legend(title="", loc="upper right")
-    fig.tight_layout()
+    sub["g_label"] = sub["g"].astype(int).astype(str)
+    g_order   = [str(g) for g in sorted(sub["g"].dropna().astype(int).unique())]
+    scen      = [s for s in SCEN_ORDER if s in set(sub["scenario"])]
+    hue_order = _present_methods(sub)
+    palette   = _method_palette(hue_order)
+
+    fig, axes = plt.subplots(
+        1, len(scen),
+        figsize=(2.6 * len(scen), 3.6),
+        sharey=True, squeeze=False,
+    )
+    for k, s in enumerate(scen):
+        ax = axes[0][k]
+        d  = sub[sub["scenario"] == s]
+        sns.boxplot(
+            data=d, x="g_label", y=metric,
+            hue="method", order=g_order, hue_order=hue_order,
+            palette=palette,
+            width=0.55, linewidth=0.8, fliersize=2.5,
+            flierprops={"marker": "D", "markeredgewidth": 0.5},
+            ax=ax,
+        )
+        ax.set_title(f"({chr(65 + k)}) Scenario {s}", loc="left",
+                     fontsize=TITLE_SIZE, fontweight="bold")
+        ax.set_xlabel("Number of gene trees", labelpad=4)
+        if k == 0:
+            ax.set_ylabel(_ylabel(metric), labelpad=6)
+        else:
+            ax.set_ylabel("")
+        leg = ax.get_legend()
+        if k < len(scen) - 1:
+            if leg: leg.remove()
+        else:
+            if leg:
+                leg.set_title("")
+                leg.set_bbox_to_anchor((1.02, 1))
+                leg.set_loc("upper left")
+
+    fig.suptitle(_fig_title(metric, "single individual (n = 1)"),
+                 y=1.02, fontsize=TITLE_SIZE)
+    fig.tight_layout(w_pad=0.4)
     out = OUT / f"defj_accuracy_vs_genes_{metric}.png"
-    fig.savefig(out, dpi=200)
+    fig.savefig(out)
     plt.close(fig)
     print(f"  wrote {out}")
 
 
+# ── Runtime figures (box plots, log scale) ───────────────────────────────
 def fig_runtime_vs_genes(df: pd.DataFrame) -> None:
+    _apply_style()
     sub = df.dropna(subset=["seconds"]).copy()
     if sub.empty:
         return
-    sub["g"] = sub["g"].astype(int).astype(str)
-    g_order = sorted(sub["g"].unique(), key=int)
-    sub["log_seconds"] = np.log10(sub["seconds"].clip(lower=0.1))
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    _swarmplot(ax, sub, x="g", y="log_seconds", x_order=g_order)
-    ax.set_xlabel("Number of gene trees (g)")
-    ax.set_ylabel("log10 wall-clock seconds")
-    ax.set_title("Runtime vs gene count")
-    ax.legend(title="", loc="upper left")
+    sub["g_label"]   = sub["g"].astype(int).astype(str)
+    g_order          = [str(g) for g in sorted(sub["g"].dropna().astype(int).unique())]
+    hue_order        = _present_methods(sub)
+    palette          = _method_palette(hue_order)
+
+    fig, ax = plt.subplots(figsize=(5.5, 3.4))
+    sns.boxplot(
+        data=sub, x="g_label", y="seconds",
+        hue="method", order=g_order, hue_order=hue_order,
+        palette=palette, width=0.55, linewidth=0.8, fliersize=2,
+        flierprops={"marker": "D", "markeredgewidth": 0.5},
+        ax=ax,
+    )
+    ax.set_yscale("log")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(
+        lambda v, _: f"{v:.0f}" if v >= 1 else f"{v:.1f}"
+    ))
+    ax.set_xlabel("Number of gene trees", labelpad=4)
+    ax.set_ylabel("Wall-clock time (s, log scale)", labelpad=6)
+    ax.set_title("Runtime vs gene count", fontsize=TITLE_SIZE)
+    leg = ax.get_legend()
+    if leg: leg.set_title("")
     fig.tight_layout()
     out = OUT / "defj_runtime_vs_genes.png"
-    fig.savefig(out, dpi=200)
+    fig.savefig(out)
     plt.close(fig)
     print(f"  wrote {out}")
 
 
 def fig_runtime_by_scenario(df: pd.DataFrame) -> None:
+    _apply_style()
     sub = df.dropna(subset=["seconds"]).copy()
     if sub.empty:
         return
-    scen = [s for s in SCEN_ORDER if s in set(sub["scenario"])]
-    sub["log_seconds"] = np.log10(sub["seconds"].clip(lower=0.1))
-    fig, ax = plt.subplots(figsize=(7.5, 4.5))
-    _swarmplot(ax, sub, x="scenario", y="log_seconds", x_order=scen)
-    ax.set_xlabel("Scenario")
-    ax.set_ylabel("log10 wall-clock seconds")
-    ax.set_title("Runtime by scenario")
-    ax.legend(title="", loc="upper left")
+    scen      = [s for s in SCEN_ORDER if s in set(sub["scenario"])]
+    hue_order = _present_methods(sub)
+    palette   = _method_palette(hue_order)
+
+    fig, ax = plt.subplots(figsize=(5.5, 3.4))
+    sns.boxplot(
+        data=sub, x="scenario", y="seconds",
+        hue="method", order=scen, hue_order=hue_order,
+        palette=palette, width=0.55, linewidth=0.8, fliersize=2,
+        flierprops={"marker": "D", "markeredgewidth": 0.5},
+        ax=ax,
+    )
+    ax.set_yscale("log")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(
+        lambda v, _: f"{v:.0f}" if v >= 1 else f"{v:.1f}"
+    ))
+    ax.set_xlabel("Scenario", labelpad=4)
+    ax.set_ylabel("Wall-clock time (s, log scale)", labelpad=6)
+    ax.set_title("Runtime by scenario", fontsize=TITLE_SIZE)
+    leg = ax.get_legend()
+    if leg: leg.set_title("")
     fig.tight_layout()
     out = OUT / "defj_runtime_by_scenario.png"
-    fig.savefig(out, dpi=200)
+    fig.savefig(out)
     plt.close(fig)
     print(f"  wrote {out}")
 
