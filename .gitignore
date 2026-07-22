@@ -16,11 +16,14 @@ lib64/
 parts/
 sdist/
 var/
-Data/
-Nexus/
-NexusFiles/
-Guides/
-DEFJ/
+# Anchored to the repo root only -- unanchored patterns here previously
+# shadowed same-named nested dirs (e.g. "Data/" was silently matching
+# tests/data/ too, due to case-insensitive matching on Windows/Mac,
+# leaving tests/data/MCMCseq_example0.nex permanently untracked).
+/Data/
+/Nexus/
+/NexusFiles/
+/DEFJ/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -65,3 +68,14 @@ archive/
 # writable target; only the contents are ignored.
 runs/*
 !runs/.gitkeep
+
+# Compiled Java bytecode for the PhyloNet cross-check harness -- rebuilt
+# on demand by tests/test_crosscheck_phylonet.py via javac.
+tests/crosscheck/*.class
+
+# Cursor canvas artifacts (local, not part of the library)
+.canvas/
+
+# Generated tree/log output from demo_runs/ probe scripts
+demo_runs/*.trees
+demo_runs/*.log

@@ -2,9 +2,9 @@
 """
 Profile Infer_MP_Allop on the paper_net topology with a valid polyploid gene map.
 
-``NexusFiles/paper_net.nex`` alone uses species-labeled tips (A,B,C) on a bubble
-network; MUL expansion yields four leaves, so a diploid identity map cannot
-score. This script uses the same network from that file with
+``tests/testfiles/paper_net.nex`` alone uses species-labeled tips (A,B,C) on a
+bubble network; MUL expansion yields four leaves, so a diploid identity map
+cannot score. This script uses the same network from that file with
 ``B`` mapped to two gene copies (``B_a``, ``B_b``) and three binary gene trees
 on four tips — the setup expected by Allop_MUL / MPAllopScorer.
 """
@@ -43,7 +43,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    nex = _project_root() / "NexusFiles" / "paper_net.nex"
+    nex = _project_root() / "tests" / "testfiles" / "paper_net.nex"
     start = read_nexus(str(nex))[0]
     gene_map = {"A": ["A_a"], "B": ["B_a", "B_b"], "C": ["C_a"]}
     gt_strs = [

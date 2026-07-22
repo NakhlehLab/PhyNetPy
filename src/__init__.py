@@ -45,41 +45,25 @@ from .Validation import (ValidationSummary, ValidationError,
 from .BiMarkers import *
 from .SNPSimulator import simulate as simulate_snp, random_network, SimulatedSNPData
 
-# Old architecture (v1) - for CUDA BiMarkers support
+# v1 architecture -- NOT CUDA-only.  This is the live Model/ModelGraph search
+# infrastructure underneath every gene-tree-topology method (MPL, MCMC_GT,
+# InferNetwork_ML, INFER_MP_ALLOP) as well as the CPU BiMarkers pipeline.
 from .ModelGraph import *
 from .ModelFactory import *
 from .MetropolisHastings import MetropolisHastings, HillClimbing, SimulatedAnnealing, ProposalKernel
 from .State import State
 from .ModelMove import Move, SwitchParentage, AddReticulation, RemoveReticulation, FlipReticulation, SPR
 from .ModelSelection import reticulation_sweep, SweepResult, SweepRow
-from .Sync import Sync
 from .Logger import Logger
 
 # Inference methods.  The public, recommended import path is
 # ``phynetpy.infer`` -- see ``src/infer.py`` for the curated surface.  The
 # underscore-prefixed modules below hold the actual implementations and
-# are not part of the public API.
+# are not part of the public API.  ``infer.py``'s ``__all__`` already covers
+# INFER_MP_ALLOP / MCMC_GT / InferNetwork_ML and friends, so they don't need
+# to be re-imported directly here.
 from . import infer
 from .infer import *  # noqa: F401,F403  -- top-level re-export for ergonomics
-from ._infer_mp_allop import (
-    INFER_MP_ALLOP, INFER_MP_ALLOP_BOOTSTRAP, ALLOP_SCORE,
-    InferMPAllop, MPAllopComponent, MPAllopScorer,
-    Allop_MUL, AlleleMap,
-)
-from ._mcmc_gt import (
-    MCMC_GT,
-    MCMCGTScorer,
-    MCMCGTKernel,
-    MCMC_GTPriors,
-    MCMCSample,
-    MCMCGTResult,
-    log_prior_network,
-)
-from ._infernetworkml import (
-    InferNetwork_ML,
-    InferNetworkMLResult,
-    optimize_network_parameters,
-)
 
 # Data-oriented facade: choose an entry point by data type and pass a
 # scoring strategy.  See ``src/LikelihoodStrategies.py``.
@@ -100,37 +84,29 @@ from .LikelihoodStrategies import (
     Infer_Network_From_Sites,
 )
 
-# CUDA-accelerated BiMarkers (optional)
-# CUDA_AVAILABLE: True if CuPy can access GPU (works with CUDA 13.x)
-# NUMBA_CUDA_AVAILABLE: True if numba CUDA kernels work (requires compatible toolkit)
+# CUDA-accelerated BiMarkers (optional, currently unpackaged).
+#
+# A CUDA implementation (``MCMC_BiMarkers_CUDA.py``) exists in the pre-restructure
+# ``1.1/`` snapshot but has not been ported into ``src/`` or validated against
+# the current ``ModelGraph``/``Network`` API, so it is intentionally not wired
+# up here.  Flip this back to a ``try: from .MCMC_BiMarkers_CUDA import ...``
+# block once a vetted copy lands in ``src/``.
+#
+# NOTE: ``MCMC_BIMARKERS`` and ``SNP_LIKELIHOOD`` already have working CPU
+# implementations re-exported above via ``from .infer import *`` -- they are
+# deliberately *not* redefined here so that CUDA being unavailable doesn't
+# clobber the CPU path.  Only the CUDA-exclusive names are stubbed.
 CUDA_AVAILABLE = False
 CUPY_AVAILABLE = False
 NUMBA_CUDA_AVAILABLE = False
-try:
-    from .MCMC_BiMarkers_CUDA import (
-        MCMC_BIMARKERS, SNP_LIKELIHOOD, SNP_LIKELIHOOD_DATA,
-        benchmark_cuda_vs_cpu, get_cuda_device_info, CUDAEvaluator,
-        BiMarkersTransition, PartialLikelihoods,
-        CUPY_AVAILABLE as _CUPY_AVAIL,
-        NUMBA_CUDA_AVAILABLE as _NUMBA_CUDA_AVAIL,
-        CUDA_IMPORTS_AVAILABLE
-    )
-    CUPY_AVAILABLE = _CUPY_AVAIL
-    NUMBA_CUDA_AVAILABLE = _NUMBA_CUDA_AVAIL
-    CUDA_AVAILABLE = CUPY_AVAILABLE  # CuPy is the primary GPU backend
-except ImportError:
-    # CUDA dependencies not installed - provide stub functions
-    def MCMC_BIMARKERS(*args, **kwargs):
-        raise ImportError("CUDA BiMarkers requires cupy and numba. Install with: pip install phynetpy[cuda]")
-    def SNP_LIKELIHOOD(*args, **kwargs):
-        raise ImportError("CUDA BiMarkers requires cupy and numba. Install with: pip install phynetpy[cuda]")
-    def SNP_LIKELIHOOD_DATA(*args, **kwargs):
-        raise ImportError("CUDA BiMarkers requires cupy and numba. Install with: pip install phynetpy[cuda]")
-    def benchmark_cuda_vs_cpu(*args, **kwargs):
-        raise ImportError("CUDA BiMarkers requires cupy and numba. Install with: pip install phynetpy[cuda]")
-    def get_cuda_device_info(*args, **kwargs):
-        print("CUDA BiMarkers not available. Install with: pip install phynetpy[cuda]")
-        return False
+
+def SNP_LIKELIHOOD_DATA(*args, **kwargs):
+    raise ImportError("CUDA BiMarkers is not yet packaged in phynetpy. Use the CPU path (phynetpy.infer.SNP_LIKELIHOOD) instead.")
+def benchmark_cuda_vs_cpu(*args, **kwargs):
+    raise ImportError("CUDA BiMarkers is not yet packaged in phynetpy.")
+def get_cuda_device_info(*args, **kwargs):
+    print("CUDA BiMarkers not available: not yet packaged in phynetpy.")
+    return False
 
 __version__ = "0.4.0"
 __author__ = "Mark Kessler"

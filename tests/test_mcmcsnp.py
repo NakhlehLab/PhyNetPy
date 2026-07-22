@@ -31,10 +31,13 @@ from phynetpy.SNPSimulator import simulate, random_network
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent
 _PROJECT_ROOT = _PACKAGE_ROOT.parent
-_STRESS_TEST_DIR = _PROJECT_ROOT / "NexusFiles" / "stress_tests"
+_TESTFILES_DIR = _PACKAGE_ROOT / "testfiles"
+# Generated per-run output (not a fixture); lives alongside the other
+# gitignored run artifacts under runs/.
+_STRESS_TEST_DIR = _PROJECT_ROOT / "runs" / "mcmc_snp_stress_tests"
 
-_nexus_path = _PROJECT_ROOT / "NexusFiles" / "paper_net.nex"
-_large_nexus_path = _PROJECT_ROOT / "NexusFiles" / "paper_net_largeseq.nex"
+_nexus_path = _TESTFILES_DIR / "paper_net.nex"
+_large_nexus_path = _TESTFILES_DIR / "paper_net_largeseq.nex"
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +92,7 @@ def _snp_correctness_level1():
     for grouping, expected in tbl.items():
         set_reds = {"A": grouping[0], "B": grouping[1], "C": grouping[2]}
         result = SNP_LIKELIHOOD_DATA(
-            "../NexusFiles/paper_net.nex", set_reds, 1, 1, 0.005
+            str(_nexus_path), set_reds, 1, 1, 0.005
         )
         if not 1 + 1e-10 > abs(result / expected) > 1 - 1e-10:
             print(f"Expected: {expected}, but got: {result} for grouping: {grouping}")

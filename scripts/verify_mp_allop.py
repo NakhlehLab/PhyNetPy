@@ -39,6 +39,12 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 
+# Ground-truth networks, gene maps, and dataset paths are single-sourced in
+# defj_common so every DEFJ script agrees on e.g. the corrected 3-reticulation
+# J topology (see defj_common.TRUE_NETWORKS for the history of that fix).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import defj_common as dc  # noqa: E402
+
 from phynetpy.IO import read_newick
 from phynetpy.Infer_MP_Allop import (
     MPAllopComponent,
@@ -60,51 +66,14 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-DEFJ_ROOT = _project_root() / "DEFJ" / "10Genes" / "withOG"
-
-TRUE_NETWORKS = {
-    "D": "(((b:0.009,((x:0.006,(y:0.003,z:0.003):0.003):0.003)#H1:0):0.003,(#H1:0,a:0.009):0.003):0.04366667,o:0.10233333);",
-    "E": "(o:0.10283333,(((a:0.006,((y:0.003,z:0.003):0.003)#H1:0):0.003,(x:0.009)#H2:0):0.003,(#H2:0,(#H1:0,b:0.006):0.003):0.003):0.04316667);",
-    "F": "(o:0.10383333,((((a:0.003,(z:0.003)#H1:0):0.003,(y:0.006)#H2:0):0.003,(x:0.009)#H3:0):0.003,((#H2:0,(#H1:0,b:0.003):0.003):0.003,#H3:0):0.003):0.04216667);",
-    "J": "((((b:0.017,a:0.017):0.01,((c:0.011,(d:0.006,(v:0.006)#H1:0):0.005):0.012,(((x:0.013,(y:0.01,z:0.01):0.003):0.003,w:0.016):0.007)#H2:0):0.004):0.008,((((#H1:0,e:0.006):0.006,(t:0.003,u:0.003):0.009):0.013,#H2:0):0.005,f:0.032):0.003):0.002275,o:0.043225);",
-}
-
-GENE_MAPS = {
-    "D": {
-        "a": ["01aA"], "b": ["01bA"], "o": ["01oA"],
-        "x": ["01xA", "01xB"], "y": ["01yA", "01yB"], "z": ["01zA", "01zB"],
-    },
-    "E": {
-        "a": ["01aA"], "b": ["01bA"], "o": ["01oA"],
-        "x": ["01xA", "01xB"], "y": ["01yA", "01yB"], "z": ["01zA", "01zB"],
-    },
-    "F": {
-        "a": ["01aA"], "b": ["01bA"], "o": ["01oA"],
-        "x": ["01xA", "01xB"], "y": ["01yA", "01yB"], "z": ["01zA", "01zB"],
-    },
-    "J": {
-        "o": ["01oA"],
-        "a": ["01aA"], "b": ["01bA"], "c": ["01cA"],
-        "d": ["01dA"], "e": ["01eA"], "f": ["01fA"],
-        "t": ["01tA", "01tB"], "u": ["01uA", "01uB"], "v": ["01vA", "01vB"],
-        "w": ["01wA", "01wB"], "x": ["01xA", "01xB"],
-        "y": ["01yA", "01yB"], "z": ["01zA", "01zB"],
-    },
-}
+DEFJ_TIER = 10
+DEFJ_ROOT = dc.defj_root(DEFJ_TIER)
+TRUE_NETWORKS = dc.TRUE_NETWORKS
+GENE_MAPS = dc.GENE_MAPS
 
 
 def load_gene_trees(scenario: str, g: int, n: int, t: int, r: int) -> list:
-    filename = f"{scenario}2GTg{g}n{n}t{t}r{r}-g_trees.newick"
-    path = DEFJ_ROOT / scenario / f"g{g}" / f"n{n}" / f"t{t}" / f"r{r}" / filename
-    if not path.exists():
-        raise FileNotFoundError(f"Gene tree file not found: {path}")
-    trees = []
-    with open(path) as fh:
-        for line in fh:
-            line = line.strip()
-            if line and line.startswith("("):
-                trees.append(read_newick(line))
-    return trees
+    return dc.load_gene_trees(scenario, DEFJ_TIER, g, n, t, r, collapse=False)
 
 
 def build_model(scenario: str, g: int, n: int, t: int, r: int, seed: int):
