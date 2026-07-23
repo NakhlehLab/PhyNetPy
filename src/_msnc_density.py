@@ -25,6 +25,26 @@ except ImportError:
     _combine_configs_cy = None
     _CYTHON_AVAILABLE = False
 
+try:
+    from .cython.gt_msc_cy import network_dp_cy as _network_dp_cy
+    _CYTHON_NETWORK_DP = True
+except ImportError:
+    _network_dp_cy = None
+    _CYTHON_NETWORK_DP = False
+
+try:
+    from .cython.gt_msc_cy import network_dp_timed_cy as _network_dp_timed_cy
+    _CYTHON_TIMED_DP = True
+except ImportError:
+    _network_dp_timed_cy = None
+    _CYTHON_TIMED_DP = False
+
+# The Cython frontier DPs represent every lineage configuration as a
+# 64-bit ``long`` bitmask; masks are unions of gene-tree node bits, so
+# the C path is only valid when the gene tree has at most 62 nodes.
+# Larger gene trees fall back to the arbitrary-precision Python loop.
+_CY_MAX_BITS = 62
+
 
 class MSCBranchKernel:
     """Kingman branch-coalescent kernel with explicit theta (4 N mu)."""
@@ -121,17 +141,29 @@ def _node_height(net: Network, node: Node, cache: dict[Node, float]) -> float:
 
 
 def _gene_coalescence_events(
-    gene_tree: Network, gti: "_GeneTreeIndex"
+    gene_tree: Network,
+    gti: "_GeneTreeIndex",
+    heights: Optional[dict[Node, float]] = None,
 ) -> list[tuple[float, int, int, int]]:
-    """Sorted gene-tree coalescences as (time, parent_bit, child0_bit, child1_bit)."""
-    height_cache: dict[Node, float] = {}
+    """Sorted gene-tree coalescences as (time, parent_bit, child0_bit, child1_bit).
+
+    When ``heights`` (a Node -> height-above-present map covering every node)
+    is supplied it is used directly, skipping the recursive ``_node_height``
+    walk -- the caller (e.g. the MCMC_SEQ candidate enumerator) already holds
+    the exact ultrametric heights it just wrote onto the tree.
+    """
+    height_cache: dict[Node, float] = {} if heights is None else heights
     events: list[tuple[float, int, int, int]] = []
     for node in gene_tree.V():
         kids = gene_tree.get_children(node)
         if len(kids) == 2:
+            if heights is not None:
+                h = heights[node]
+            else:
+                h = _node_height(gene_tree, node, height_cache)
             events.append(
                 (
-                    _node_height(gene_tree, node, height_cache),
+                    h,
                     gti.bit_of[node],
                     gti.bit_of[kids[0]],
                     gti.bit_of[kids[1]],
@@ -191,6 +223,11 @@ def _msnc_log_density_timed(
         return 0.0
     if net_idx.n_nodes == 0 or net_idx.root < 0:
         return _LOG_FLOOR
+
+    # C-typed timed frontier DP (bit-for-bit identical to the Python
+    # loop below; see ``network_dp_timed_cy`` in gt_msc_cy.pyx).
+    if _CYTHON_TIMED_DP and gti.n_total <= _CY_MAX_BITS:
+        return _network_dp_timed_cy(net_idx, gti, events, sp_heights, theta)
 
     species_to_bits: dict[str, int] = {}
     for leaf_bit in gti.leaves:
@@ -315,6 +352,100 @@ def _msnc_log_density_timed(
     return _logsumexp(log_terms)
 
 
+def build_network_msnc_index(
+    species_net: Network,
+) -> tuple["_NetworkIndex", Optional[list[float]]]:
+    """Build the reusable network view + node-height vector for the timed DP.
+
+    Split out of :func:`gene_tree_msnc_log_density` so a caller (e.g. the
+    MCMC_SEQ likelihood engine) can build this *once per species network* and
+    reuse it across every locus, instead of rebuilding the identical index and
+    recomputing identical node heights once per (locus, network) pair.
+
+    Returns:
+        ``(net_idx, sp_heights)`` where ``sp_heights[i]`` is the ultrametric
+        height of node ``i`` above the present.  ``sp_heights`` is ``None`` for
+        an empty / rootless network (the caller should score such states as
+        ``-inf``).
+    """
+    net_idx = _NetworkIndex(species_net)
+    if net_idx.n_nodes == 0 or net_idx.root < 0:
+        return net_idx, None
+    height_cache: dict[Node, float] = {}
+    sp_heights = [
+        _node_height(species_net, net_idx._node_objs[i], height_cache)
+        for i in range(net_idx.n_nodes)
+    ]
+    return net_idx, sp_heights
+
+
+def build_gene_tree_msnc_index(
+    gene_tree: Network,
+    species_of: dict[str, str],
+) -> tuple["_GeneTreeIndex", list[tuple[float, int, int, int]]]:
+    """Build the reusable gene-tree view + coalescence-event list.
+
+    Reusable for the lifetime of the (immutable) ``gene_tree`` object; the
+    MCMC_SEQ engine caches this per locus keyed by gene-tree identity and only
+    rebuilds it when that locus's gene tree is actually mutated.
+    """
+    gti = _GeneTreeIndex(gene_tree, species_of)
+    events = _gene_coalescence_events(gene_tree, gti)
+    return gti, events
+
+
+def build_gene_tree_topology_index(
+    gene_tree: Network,
+    species_of: dict[str, str],
+) -> "_GeneTreeIndex":
+    """Build only the *topology* view of ``gene_tree`` (no timed events).
+
+    The index (bit assignments, parent/children, coarsening + linear-extension
+    caches) depends solely on topology.  A caller scoring one topology under
+    several branch-length rescalings -- e.g. the MCMC_SEQ candidate enumerator
+    over :data:`_HEIGHT_SCALE_GRID` -- can build this once and pair it with a
+    fresh :func:`gene_tree_events` list per rescaling, so the (expensive)
+    coarsening cache is populated once and reused across scales.
+    """
+    return _GeneTreeIndex(gene_tree, species_of)
+
+
+def gene_tree_events(
+    gene_tree: Network,
+    gti: "_GeneTreeIndex",
+    heights: Optional[dict[Node, float]] = None,
+) -> list[tuple[float, int, int, int]]:
+    """Timed coalescence events for ``gene_tree`` against a prebuilt ``gti``.
+
+    Only this list changes when a gene tree's branch lengths (node heights)
+    are rescaled; the topology :class:`_GeneTreeIndex` is invariant.  Pass
+    ``heights`` (Node -> height-above-present) to reuse heights the caller
+    already computed instead of re-deriving them from edge lengths.
+    """
+    return _gene_coalescence_events(gene_tree, gti, heights)
+
+
+def msnc_log_density_prebuilt(
+    net_idx: "_NetworkIndex",
+    sp_heights: Optional[list[float]],
+    gti: "_GeneTreeIndex",
+    events: list[tuple[float, int, int, int]],
+    theta: float,
+) -> float:
+    """Timed MSNC density from pre-built indices (hot MCMC_SEQ entry point).
+
+    Equivalent to :func:`gene_tree_msnc_log_density` but takes the network /
+    gene-tree views and node-height vector the caller has already built and
+    cached.  Applies the same ``-inf`` floor for incompatible embeddings.
+    """
+    if sp_heights is None or net_idx.n_nodes == 0 or net_idx.root < 0:
+        return float("-inf")
+    score = _msnc_log_density_timed(net_idx, gti, events, sp_heights, theta)
+    if score <= _LOG_FLOOR + 1:
+        return float("-inf")
+    return float(score)
+
+
 def gene_tree_msnc_log_density(
     gene_tree: Network,
     species_net: Network,
@@ -328,20 +459,11 @@ def gene_tree_msnc_log_density(
         raise NotImplementedError(
             "per-branch pop_sizes not yet supported in shared MSNC DP"
         )
-    gti = _GeneTreeIndex(gene_tree, species_of)
-    net_idx = _NetworkIndex(species_net)
-    if net_idx.n_nodes == 0 or net_idx.root < 0:
+    net_idx, sp_heights = build_network_msnc_index(species_net)
+    if sp_heights is None:
         return float("-inf")
-    height_cache: dict[Node, float] = {}
-    sp_heights = [
-        _node_height(species_net, net_idx._node_objs[i], height_cache)
-        for i in range(net_idx.n_nodes)
-    ]
-    events = _gene_coalescence_events(gene_tree, gti)
-    score = _msnc_log_density_timed(net_idx, gti, events, sp_heights, theta)
-    if score <= _LOG_FLOOR + 1:
-        return float("-inf")
-    return float(score)
+    gti, events = build_gene_tree_msnc_index(gene_tree, species_of)
+    return msnc_log_density_prebuilt(net_idx, sp_heights, gti, events, theta)
 
 
 __all__ = [
@@ -1072,6 +1194,13 @@ def _msnc_log_prob_network_int(
         if sp is None:
             continue
         species_to_bits[sp] = species_to_bits.get(sp, 0) | (1 << leaf_bit)
+
+    # C-typed frontier DP (bit-for-bit identical to the Python loop
+    # below; see ``src/cython/gt_msc_cy.pyx``).  The whole per-node
+    # frontier bookkeeping runs in C, which the profiler flagged as
+    # the hot path (25M dict.get + 5M tuple rebuilds per chain).
+    if _CYTHON_NETWORK_DP and gti.n_total <= _CY_MAX_BITS:
+        return _network_dp_cy(net_idx, gti, engine, species_to_bits)
 
     apply_branch = _apply_branch_coalescent_int
     log_floor = _LOG_FLOOR

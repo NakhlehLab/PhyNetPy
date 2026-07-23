@@ -46,7 +46,7 @@ from phynetpy.Infer_MP_Allop import (
 )
 from phynetpy.ModelFactory import ModelFactory
 from phynetpy.ModelGraph import Model
-from phynetpy.Network import Network, Node, Edge
+from phynetpy.Network import Network, Node, Edge, NetworkError
 from phynetpy.NetworkMoves import add_hybrid
 
 
@@ -244,6 +244,31 @@ class TestAlleleMapSet:
         maps = allele_map_set_ilp(gt, gene_map)
         assert len(maps) >= 1
 
+    def test_species_named_gene_tips(self) -> None:
+        """Gene tips may reuse species names when alleles use other labels."""
+        gt = read_newick("((A,B),C);")
+        gene_map = {"A": ["A_a"], "B": ["B_a"], "C": ["C_a", "C_b"]}
+        maps = allele_map_set(gt, gene_map)
+        assert len(maps) == 2
+        mapped_targets = {frozenset(m.map.values()) for m in maps}
+        assert mapped_targets == {
+            frozenset({"A_a", "B_a", "C_a"}),
+            frozenset({"A_a", "B_a", "C_b"}),
+        }
+        for m in maps:
+            assert m.map["C"] in {"C_a", "C_b"}
+
+    def test_arbitrary_allele_labels(self) -> None:
+        """Allele labels need not resemble the species name."""
+        gt = read_newick("((A,B),C);")
+        gene_map = {"A": ["alpha"], "B": ["beta"], "C": ["gamma", "delta"]}
+        maps = allele_map_set(gt, gene_map)
+        assert len(maps) == 2
+        for m in maps:
+            assert m.map["A"] == "alpha"
+            assert m.map["B"] == "beta"
+            assert m.map["C"] in {"gamma", "delta"}
+
 
 # ---------------------------------------------------------------------------
 # Unit tests -- helper functions
@@ -348,6 +373,45 @@ class TestAllopMULScoring:
             individual_sum += m.score([gt])
 
         assert total == individual_sum
+
+    def test_to_mul_rejects_underspecified_allele_map(
+            self, rng: np.random.Generator) -> None:
+        """Identity map on a hybrid taxon must raise a clear NetworkError."""
+        gene_map = {t: [t] for t in ["A", "B", "C", "D", "E", "F"]}
+        net = read_newick("(((A,B),#H1),((C)#H1,(D,(E,F))));")
+        mul = Allop_MUL(gene_map, rng)
+
+        with pytest.raises(NetworkError, match="too few copies for species 'C'"):
+            mul.to_mul(net)
+
+    def test_infer_rejects_underspecified_allele_map(
+            self, rng: np.random.Generator) -> None:
+        """InferMPAllop should fail fast with InferAllopError, not -inf."""
+        gene_map = {t: [t] for t in ["A", "B", "C"]}
+        net = read_newick("((A,(B)#H1),(C,#H1));")
+        gt = read_newick("((A,B),C);")
+
+        with pytest.raises(InferAllopError, match="too few copies"):
+            InferMPAllop(net, gene_map, [gt], iter_ct=10, rng=rng)
+
+    def test_score_species_tips_with_named_alleles(
+            self, rng: np.random.Generator) -> None:
+        """Gene tips named like species; alleles use distinct labels."""
+        gene_map = {
+            "A": ["A_a"], "B": ["B_a"], "C": ["C_a", "C_b"],
+            "D": ["D_a"], "E": ["E_a"], "F": ["F_a"],
+        }
+        net = read_newick("(((A,B),#H1),((C)#H1,(D,(E,F))));")
+        gts = [
+            read_newick("(((A,B),(D,(E,F))),C);"),
+            read_newick("(((A,B),C),(D,(E,F)));"),
+        ]
+        _prepare_gene_trees(gts, gene_map)
+
+        mul = Allop_MUL(gene_map, rng)
+        mul.to_mul(net)
+        score = mul.score(gts)
+        assert score >= 0
 
 
 # ---------------------------------------------------------------------------

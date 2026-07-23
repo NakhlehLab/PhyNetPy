@@ -33,10 +33,12 @@ import pytest
 from phynetpy import _network_moves as nm
 from phynetpy.Network import Network, Node, Edge
 from phynetpy.ModelGraph import Model
-from phynetpy.ModelMove import AddReticulation, ChangeInheritanceProb
+from phynetpy.ModelMove import AddReticulation, ChangeInheritanceProb, SPR
 
 # SciPy is already a project test dependency (see tests/test_mcmc_seq.py).
-kstest = pytest.importorskip("scipy.stats").kstest
+_stats = pytest.importorskip("scipy.stats")
+kstest = _stats.kstest
+chisquare = _stats.chisquare
 
 
 # ----------------------------------------------------------------------
@@ -211,20 +213,16 @@ class TestSampleFromPrior:
         x = 0.5
         samples: list[float] = []
         for it in range(self.N_ITERS):
+            # Draw from N(x, sigma) truncated to (lo, hi) by rejection; the
+            # truncation asymmetry is what the Hastings ratio corrects for.
             prop = float(rng.normal(x, sigma))
-            ok = lo < prop < hi
-            if not ok:
-                for _ in range(8):
-                    prop = float(rng.normal(x, sigma))
-                    if lo < prop < hi:
-                        ok = True
-                break
-            if ok:
-                log_alpha = nm.random_walk_truncated_log_hastings(
-                    old=x, new=prop, sigma=sigma, lo=lo, hi=hi
-                )
-                if log_alpha >= 0.0 or math.log(rng.random()) < log_alpha:
-                    x = prop
+            while not (lo < prop < hi):
+                prop = float(rng.normal(x, sigma))
+            log_alpha = nm.random_walk_truncated_log_hastings(
+                old=x, new=prop, sigma=sigma, lo=lo, hi=hi
+            )
+            if log_alpha >= 0.0 or math.log(rng.random()) < log_alpha:
+                x = prop
             if it >= self.BURN_IN and (it - self.BURN_IN) % self.THIN == 0:
                 samples.append(x)
 
@@ -259,3 +257,97 @@ class TestSampleFromPrior:
         arr = np.asarray(samples)
         p = _ks_uniform_pvalue(arr, 0.0, 1.0)
         assert p > 0.01, f"reflected walk not uniform (KS p={p:.4g})"
+
+
+# ----------------------------------------------------------------------
+# 3. SPR topology sampler -- detailed balance on a tiny discrete space
+# ----------------------------------------------------------------------
+
+def _three_taxon_start() -> Network:
+    """Rooted binary tree ``((A, B), C)`` with unit branch lengths."""
+    labels = ["R", "I", "A", "B", "C"]
+    nodes = {l: Node(l) for l in labels}
+    net = Network()
+    net.add_nodes(*nodes.values())
+    net.add_edges([
+        Edge(nodes["R"], nodes["I"], length=1.0),
+        Edge(nodes["R"], nodes["C"], length=1.0),
+        Edge(nodes["I"], nodes["A"], length=1.0),
+        Edge(nodes["I"], nodes["B"], length=1.0),
+    ])
+    return net
+
+
+def _cherry(net: Network) -> frozenset:
+    """The pair of leaf labels that are siblings (unique on 3 taxa)."""
+    for v in net.V():
+        leaf_kids = [k for k in net.get_children(v) if not net.get_children(k)]
+        if len(leaf_kids) == 2:
+            return frozenset(k.label for k in leaf_kids)
+    return frozenset()
+
+
+class TestSPRDetailedBalance:
+    """The MH-correct SPR must sample the tree prior under a flat likelihood.
+
+    On three taxa there are exactly three rooted binary topologies, one
+    per cherry ``{A,B} / {A,C} / {B,C}``.  With the likelihood held
+    constant and an ``Exp(1)`` prior on every branch length, the target
+    marginal over topology is *uniform* (each topology has the same edge
+    count, and each length integrates to 1).      A correct Hastings ratio --
+    including the subtree-count term and the subdivide/merge branch-length
+    Jacobian -- is the only way the sampled topology frequencies come out
+    uniform; the old ``log_hastings_ratio() == 0`` SPR skews them.
+
+    Thinning note.  The SPR chain is strongly autocorrelated in topology:
+    the measured lag-1 autocorrelation of a cherry indicator is ~0.64 at
+    ``THIN == 1`` and only falls to ~0.13 at ``THIN == 40``.  A chi-square
+    on under-thinned (correlated) draws is anti-conservative and fails
+    *spuriously* even when the target is exactly uniform -- an earlier
+    ``THIN == 5`` version of this test did just that.  ``THIN == 40`` gives
+    near-independent samples; a sweep over ten independent seeds at this
+    thinning produced chi-square p-values spread across ``[0, 1]``
+    (min 0.04, median 0.35), i.e. consistent with a uniform target rather
+    than clustered near zero.  See ``scripts/_probe_spr_thin.py`` for the
+    autocorrelation-vs-thinning measurement and the multi-seed check.
+    """
+
+    N_ITERS = 200_000
+    BURN_IN = 40_000
+    THIN = 40
+
+    def test_spr_recovers_uniform_topology_prior(self):
+        model = Model(rng=np.random.default_rng(2024))
+        model.network = _three_taxon_start()
+        model.update_network()
+        accept_rng = np.random.default_rng(17)
+
+        def log_target(net: Network) -> float:
+            # Flat likelihood + Exp(1) prior on branch lengths.
+            return -sum(float(e.get_length() or 0.0) for e in net.E())
+
+        cur = log_target(model.network)
+        counts: dict[frozenset, int] = {}
+        for it in range(self.N_ITERS):
+            move = SPR()
+            move.execute(model)
+            prop = log_target(model.network)
+            log_alpha = (prop - cur) + move.log_hastings_ratio()
+            if log_alpha >= 0.0 or math.log(accept_rng.random()) < log_alpha:
+                cur = prop
+            else:
+                move.undo(model)
+            if it >= self.BURN_IN and (it - self.BURN_IN) % self.THIN == 0:
+                c = _cherry(model.network)
+                counts[c] = counts.get(c, 0) + 1
+
+        # All three cherries must be visited.
+        assert len(counts) == 3, f"did not explore all topologies: {counts}"
+        observed = np.array([counts[k] for k in sorted(counts, key=sorted)])
+        expected = np.full(3, observed.sum() / 3.0)
+        p = float(chisquare(observed, expected).pvalue)
+        freqs = observed / observed.sum()
+        assert p > 0.01, (
+            f"SPR topology marginal not uniform (chi2 p={p:.4g}, "
+            f"freqs={freqs})"
+        )

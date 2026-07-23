@@ -31,6 +31,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 import copy
 import math
+import re
 from typing import Any, Callable, Union
 import warnings
 import numpy as np
@@ -53,15 +54,19 @@ sys.setrecursionlimit(300)
 #### CYTHON ACCELERATION #
 ##########################
 
-# Try to use Cython-accelerated NodeSet if available (2-5x faster)
+# Try to use Cython-accelerated NodeSet / EdgeSet if available (2-5x faster)
 _USING_CYTHON = False
 _CNodeSet = None
+_CEdgeSet = None
 
 try:
-    from .cython.graph_core_cy import CNodeSet as _CNodeSet  # type: ignore[import-not-found]
+    from .cython.graph_core_cy import (  # type: ignore[import-not-found]
+        CNodeSet as _CNodeSet,
+        CEdgeSet as _CEdgeSet,
+    )
     _USING_CYTHON = True
 except ImportError:
-    pass  # Fall back to pure Python NodeSet defined below
+    pass  # Fall back to pure Python NodeSet / EdgeSet defined below
 
 def using_cython() -> bool:
     """Check if Cython acceleration is enabled.
@@ -82,27 +87,26 @@ def _make_nodeset(directed: bool = True):
     # NodeSet is defined below in this file
     return NodeSet(directed=directed)
 
+def _make_edgeset(directed: bool = True):
+    """
+    Factory function that returns the fastest available EdgeSet implementation.
+    Uses Cython CEdgeSet if compiled, otherwise pure Python EdgeSet.
+
+    Both implementations expose an identical API (``add``, ``remove``, ``get``,
+    ``get_set``, ``rehash_node``, ``__contains__``), so ``self._edges`` can be
+    either type transparently.
+    """
+    if _USING_CYTHON and _CEdgeSet is not None:
+        return _CEdgeSet(directed=directed)
+    # EdgeSet is defined below in this file
+    return EdgeSet(directed=directed)
+
 
 ### add_edge + reclassify
 
 ##########################           
 #### HELPER FUNCTIONS ####
 ##########################
-
-def __random_object(mylist : list[Any], rng : np.random.Generator) -> object:
-    """
-    Select a random item from a list using an rng object 
-    (for testing consistency and debugging purposes)
-
-    Args:
-        mylist (list[Any]): a list of any type
-        rng (np.random.Generator) : the result of a .default_rng(seed) call
-
-    Returns:
-        object : an item from mylist
-    """
-    rand_index : int = rng.integers(0, len(mylist)) # type: ignore
-    return mylist[rand_index]
 
 def __dict_merge(a : dict[Any, Any], b : dict[Any, Any]) -> dict[Any, Any]:
     """
@@ -227,7 +231,7 @@ class Node:
     reticulation nodes and other phylogenetic attributes.
     """
     __slots__ = ('_Node__attributes', '_Node__is_retic', '_Node__name', 
-                 '_Node__seq', '_Node__t', '_Node__is_dirty')
+                 '_Node__hash', '_Node__seq', '_Node__t', '_Node__is_dirty')
 
     def __init__(self, 
                  name : str, 
@@ -258,6 +262,13 @@ class Node:
         self.__attributes : dict[Union[str, Any], Any] = attr
         self.__is_retic : bool = is_reticulation
         self.__name : str = name
+        # Cache the (name-based) hash. ``__hash__`` is called tens of millions
+        # of times per MCMC chain via node dict/set lookups; recomputing
+        # ``hash(name)`` each time (a builtin call) was ~12% of chain runtime
+        # in profiling. The cache is refreshed in ``set_name`` -- the sole
+        # rename path (NodeSet.update -> set_name) -- so it stays consistent,
+        # and collections already discard/re-add around renames.
+        self.__hash : int = hash(name)
         self.__seq : Union[DataSequence, None] = seq
         self.__t : Union[float, None] = t
         self.__is_dirty : bool = False
@@ -434,7 +445,7 @@ class Node:
         Returns:
             int: Hash value based on the node name
         """
-        return hash(self.__name)
+        return self.__hash
     
     def to_string(self) -> str:
         """
@@ -475,6 +486,7 @@ class Node:
             N/A
         """
         self.__name = new_name
+        self.__hash = hash(new_name)
         self.__is_dirty = True
 
     def set_is_reticulation(self, new_is_retic : bool) -> None:
@@ -695,7 +707,29 @@ class NodeSet:
         Returns:
             int: the in degree of the node
         """
-        return len(self.__in_map[node])
+        edges = self.__in_map.get(node)
+        return len(edges) if edges is not None else 0
+
+    def _edge_set(self, mp : "dict[Node, set[Any]]", node : Node) -> set[Any]:
+        """Return the live edge set for ``node`` without leaking absent keys.
+
+        ``__in_map`` / ``__out_map`` are ``defaultdict(set)``, so the naive
+        ``mp[node]`` access silently *inserts* an empty set for any node
+        that is queried -- including transient / already-removed nodes.
+        Over a long MCMC chain those phantom keys (and the ``Node`` objects
+        they key on) accumulate without bound, ballooning every
+        ``copy.deepcopy`` of the network in the undo hot path.  We only
+        auto-create the entry for nodes that are genuinely in the set;
+        everything else gets a fresh empty set that is *not* retained.
+        """
+        entry = mp.get(node)
+        if entry is not None:
+            return entry
+        if node in self.__nodes:
+            fresh : set[Any] = set()
+            mp[node] = fresh
+            return fresh
+        return set()
 
     def out_deg(self, node : Node) -> int:
         """
@@ -709,7 +743,8 @@ class NodeSet:
         Returns:
             int: the out degree of the node
         """
-        return len(self.__out_map[node])
+        edges = self.__out_map.get(node)
+        return len(edges) if edges is not None else 0
     
     def in_edges(self, node : Node) -> set[Any]:
         """
@@ -726,7 +761,7 @@ class NodeSet:
         Returns:
             set[Any]: the in edges of the node
         """
-        return self.__in_map[node]
+        return self._edge_set(self.__in_map, node)
     
     def out_edges(self, node : Node) -> set[Any]:
         """
@@ -743,7 +778,7 @@ class NodeSet:
         Returns:
             set[Any]: the out edges of the node
         """
-        return self.__out_map[node]
+        return self._edge_set(self.__out_map, node)
     
     def process(self, 
                 edge : Union[Edge, UEdge], 
@@ -1911,6 +1946,33 @@ class Graph:
             self.__uid += 1
             return node
     
+    def uid_count(self) -> int:
+        """
+        Return the current value of the unique-id counter used by
+        :meth:`add_uid_node`.
+
+        Structural copies (see :meth:`Network.copy`) must carry this
+        counter forward so that regenerated ``UID_*`` node names never
+        collide with names already present in the graph.
+
+        Args:
+            N/A
+        Returns:
+            int: The next unique id that :meth:`add_uid_node` will use.
+        """
+        return self.__uid
+
+    def set_uid_count(self, value : int) -> None:
+        """
+        Set the unique-id counter used by :meth:`add_uid_node`.
+
+        Args:
+            value (int): The value to assign to the counter.
+        Returns:
+            N/A
+        """
+        self.__uid = value
+    
     # @singledispatchmethod
     # def add_edges(self, *edges : UEdge) -> None:
     #     """
@@ -2022,7 +2084,10 @@ class Graph:
                 edge = self.get_edge(edge[0], edge[1])  
             else:
                 raise NetworkError("Please provide a list of two nodes.")
-        if edge in self.E():
+        # ``edge in self._edges`` is an O(1) EdgeSet hash membership test;
+        # ``edge in self.E()`` would materialize the whole edge list (O(E))
+        # every call -- and remove_edge is one of the hottest move primitives.
+        if edge in self._edges:
             if type(edge) is UEdge:
                 # Remove the edge from the edge set
                 self._edges.remove(edge)
@@ -2256,7 +2321,7 @@ class Network(Graph):
             N/A
         """
         if type(edges) is set[Edge]:
-            edges_set = EdgeSet()
+            edges_set = _make_edgeset(directed=True)
             for edge in edges:
                 edges_set.add(edge)
             edges = edges_set
@@ -2270,7 +2335,7 @@ class Network(Graph):
         if edges is not None and nodes is not None:
             super().__init__(edges, nodes)
         elif edges is None and nodes is not None:
-            super().__init__(EdgeSet(), nodes)
+            super().__init__(_make_edgeset(directed=True), nodes)
         elif edges is not None and nodes is None:
             # Use Cython-accelerated NodeSet if available
             ns = _make_nodeset(directed=True)
@@ -2281,8 +2346,9 @@ class Network(Graph):
                 ns.add(e.src, e.dest)
             super().__init__(edges, ns)
         else:
-            # Use Cython-accelerated NodeSet if available
-            super().__init__(EdgeSet(), _make_nodeset(directed=True))
+            # Use Cython-accelerated NodeSet / EdgeSet if available
+            super().__init__(_make_edgeset(directed=True),
+                             _make_nodeset(directed=True))
         
         self.__leaves : set[Node] = {node for node in self._nodes.get_set()
                         if self._nodes.out_deg(node) == 0}
@@ -2579,13 +2645,21 @@ class Network(Graph):
             # Copy the edge sets to avoid modifying during iteration
             in_edges = self._nodes.in_edges(node).copy()
             out_edges = self._nodes.out_edges(node).copy()
-            
+
             for edge in in_edges:
                 self.remove_edge(edge)
             for edge in out_edges:
                 self.remove_edge(edge)
-            
+
             self._nodes.remove(node)
+
+            # Drop the node from the leaf/root caches.  Edge removal above
+            # reclassifies a soon-to-be-deleted node as a leaf and/or root
+            # (out-deg 0 / in-deg 0); without this discard those stale
+            # references pile up in ``__leaves`` / ``__roots`` across a long
+            # search, bloating every ``copy.deepcopy`` in the MCMC undo path.
+            self.__leaves.discard(node)
+            self.__roots.discard(node)
                      
     def remove_edge(self, 
                     edge : Union[Edge, UEdge, list[Node]], 
@@ -2613,7 +2687,10 @@ class Network(Graph):
             else:
                 raise NetworkError("Please provide a list of two nodes,\
                                  in the format [src, dest]")
-        if edge in self.E() and type(edge) is Edge:
+        # O(1) EdgeSet membership instead of building the full edge list
+        # (O(E)) up to twice per call; remove_edge is called on every move.
+        edge_present = edge in self._edges
+        if edge_present and type(edge) is Edge:
             # Remove the edge from the edge set
             self._edges.remove(edge)
         
@@ -2623,7 +2700,7 @@ class Network(Graph):
             # Reclassify the nodes, as they may be leaves/roots/etc now.
             self.__reclassify_node(edge.src, True, False)
             self.__reclassify_node(edge.dest, False, False)
-        elif edge not in self.E() and type(edge) is Edge:
+        elif not edge_present and type(edge) is Edge:
             return
         else:
             raise NetworkError("Tried to remove undirected edge object from a\
@@ -2857,51 +2934,7 @@ class Network(Graph):
         Returns:
             N/A
         """
-        if options[0]:
-            #Delete floater nodes
-            floaters = [node for node in self.V() \
-                        if self.in_degree(node) == 0 \
-                        and self.out_degree(node) == 0]
-            
-            for floater in floaters:
-                self._nodes.remove(floater)
-    
-        if options[1]:
-            #Delete spurious root/root edge combo
-            root : Node = self.root()
-            if self.out_degree(root) == 1:
-                spurious_edge = self.get_edge(root, self.get_children(root)[0])
-                self.remove_edge(spurious_edge)
-                self.remove_nodes(root)
-        if options[2]:
-            #Delete spurious "speciation events" marked by nodes with in/out = 1 
-            spacers = [n for n in self.V() \
-                       if self.in_degree(n) == 1 and self.out_degree(n) == 1]
-            
-            while len(spacers) != 0:
-                cur = spacers[0]
-                spacer_par = self.get_parents(cur)[0]
-                spacer_child = self.get_children(cur)[0]
-                
-                edge_in = self.get_edge(spacer_par, cur)
-                edge_out = self.get_edge(cur, spacer_child)
-                
-                len_in = edge_in.get_length() if edge_in.get_length() else 0.0
-                len_out = edge_out.get_length() if edge_out.get_length() else 0.0
-                gamma_out = edge_out.get_gamma()
-                
-                self.remove_edge(edge_in)
-                self.remove_edge(edge_out)
-                self.remove_nodes(cur)
-                
-                merged = Edge(spacer_par, spacer_child,
-                              length=len_in + len_out)
-                if gamma_out:
-                    merged.set_gamma(gamma_out)
-                self.add_edges(merged)
-                
-                spacers = [n for n in self.V() if self.in_degree(n) == 1 and \
-                           self.out_degree(n) == 1]
+        _nopt.clean(self, options)
 
     def mrca(self, set_of_nodes: set[Node] | set[str]) -> Node:
         """
@@ -2915,74 +2948,7 @@ class Network(Graph):
             NetworkError: If any node in the set is not in the graph, or if
                           elements are of an unexpected type.
         """
-        format_set : set[Node] = set()
-        for item in set_of_nodes:
-            if type(item) is str:
-                node_version = self.has_node_named(item)
-                if node_version is None:
-                    raise NetworkError("A node in 'set_of_nodes' is not \
-                                      in the graph")
-                else:
-                    format_set.add(node_version)
-            elif type(item) is Node:
-                if item in self.V():
-                    format_set.add(item)
-                else:
-                    raise NetworkError("A node in 'set_of_nodes' is not \
-                                      in the graph")
-            else:
-                raise NetworkError(f"Wrong type for parameter set_of_nodes. \
-                                  Expected set[Node] or set[str].")
-        
-        set_of_nodes = format_set
-                
-        # mapping from each node in set_of_nodes to 
-        # a mapping from ancestors to dist from node.
-        leaf_2_parents : dict[Node, dict[Node, int]] = {} 
-
-        for leaf in set_of_nodes:
-            #Run bfs upward from each node 
-            node_2_lvl : dict[Node, int] = {}
-            
-            # queue for bfs
-            q : deque[Node] = deque()
-            q.append(leaf)
-            visited : set[Node] = set()
-            node_2_lvl[leaf] = 0
-
-            while len(q) != 0:
-                cur = q.popleft()
-
-                #Seach cur's parents
-                for neighbor in self.get_parents(cur):
-                    if neighbor not in visited:
-                        node_2_lvl[neighbor] = node_2_lvl[cur] + 1
-                        q.append(neighbor)
-                        visited.add(neighbor)
-            
-            leaf_2_parents[leaf] = node_2_lvl
-        
-        
-        #Compare each leaf's parents
-        intersection = self._nodes.get_set()
-        for leaf, par_level in leaf_2_parents.items():
-            intersection = intersection.intersection(set(par_level.keys()))
-        
-        # Map potential LCA's to cumulative distance from all the nodes
-        additive_level = {} 
-        
-        for node in intersection: # A LCA has to be in each node's ancestor set
-            lvl = 0
-            for leaf in set_of_nodes:
-                try:
-                    lvl += leaf_2_parents[leaf][node]
-                except KeyError:
-                    continue
-            
-            additive_level[node] = lvl
-        
-        #The LCA is the node that minimizes cumulative distance
-        return min(additive_level, key=additive_level.get) # type: ignore
+        return _nopt.mrca(self, set_of_nodes)
                       
     def leaf_descendants(self, node : Node) -> set[Node]:
         """
@@ -2996,26 +2962,7 @@ class Network(Graph):
         Raises:
             NetworkError: If node is not found in the graph.
         """
-        if node not in self.V():
-            raise NetworkError("Node not found in graph.")
-        
-        root = node
-
-        # stack for dfs
-        q : deque[Node]= deque()
-        q.appendleft(root)
-        leaves : set[Node] = set()
-
-        while len(q) != 0:
-            cur = q.popleft()
-        
-            if self.out_degree(cur) == 0:
-                leaves.add(cur)
-                
-            for neighbor in self.get_children(cur): #Continue path to a leaf
-                q.append(neighbor)
-        
-        return leaves    
+        return _nopt.leaf_descendants(self, node)
         
     def diff_subtree_edges(self, rng : np.random.Generator) -> list[Edge]:
         """
@@ -3029,26 +2976,7 @@ class Network(Graph):
             list[Edge]: a list of 2 edges such that neither edge 
                         is reachable from either starting point.
         """
-        #Grab a random edge
-        first_edge = __random_object(self.E(), rng)
-        assert(type(first_edge) is Edge)
-        
-        #Find another edge while excluding descendants of the first edge
-        first_edge_subtree = self.leaf_descendants(first_edge.dest)
-       
-        #Accumulate pairs of edges that satisfy the requirement
-        valid_edges : list[Edge] = []
-        for edge in self.E():
-            leaf_desc_edge : set[Node] = self.leaf_descendants(edge.dest)
-            # If the intersection of leaf sets is null, then neither edge
-            # can be found from the other.
-            if len(leaf_desc_edge.intersection(first_edge_subtree)) == 0:
-                valid_edges.append(edge)
-            
-        second_edge = __random_object(valid_edges, rng)
-        assert(type(second_edge) is Edge)
-        
-        return [first_edge, second_edge]
+        return _nopt.diff_subtree_edges(self, rng)
     
     def subgenome_count(self, n : Node) -> int:
         """
@@ -3063,14 +2991,7 @@ class Network(Graph):
             NetworkError: If the input node is not in the graph.
         """
         
-        if n not in self.V():
-            raise NetworkError("Input node is not in the graph")
-        
-        if self.root() == n:
-            return 1
-        else:
-            parents = self.get_parents(n)
-            return sum([self.subgenome_count(parent) for parent in parents])
+        return _nopt.subgenome_count(self, n)
             
     def edges_downstream_of_node(self, n : Node) -> list[Edge]:
         """
@@ -3083,27 +3004,7 @@ class Network(Graph):
         Raises:
             NetworkError: If the input node is not in the graph.
         """
-        if n not in self.V():
-            raise NetworkError("Input node is not in the graph.")
-        
-        q : deque[Node] = deque()
-        q.appendleft(n)
-        visited: set[Node] = set()
-        
-        edges : list[Edge] = list()
-        
-        while len(q) != 0:
-            cur = q.pop()
-            if cur in visited:
-                continue
-            visited.add(cur)
-
-            edge : Edge
-            for edge in self.out_edges(cur):
-                edges.append(edge)
-                q.append(edge.dest)
-        
-        return edges
+        return _nopt.edges_downstream_of_node(self, n)
     
     def edges_upstream_of_node(self, n : Node) -> list[Edge]:
         """
@@ -3119,27 +3020,7 @@ class Network(Graph):
         Raises:
             NetworkError: If the input node is not in the graph.
         """
-        if n not in self.V():
-            raise NetworkError("Input node is not in the graph.")
-        
-        q : deque[Node] = deque()
-        q.appendleft(n)
-        visited: set[Node] = set()
-        
-        edges : list[Edge] = list()
-        
-        while len(q) != 0:
-            cur = q.pop()
-            if cur in visited:
-                continue
-            visited.add(cur)
-
-            edge : Edge
-            for edge in self.in_edges(cur):
-                edges.append(edge)
-                q.append(edge.src)
-        
-        return edges
+        return _nopt.edges_upstream_of_node(self, n)
     
     def subgenome_ct_edges(self, 
                            downstream_node : Union[Node, None]= None, 
@@ -3165,16 +3046,8 @@ class Network(Graph):
             dict[Edge, int]: a map from edges to subgenome counts
         """
     
-        old_map = self.edges_to_subgenome_count(downstream_node, 
-                                                delta, 
-                                                start_node)
-        rev_map : dict[Edge, int] = {}
-        
-        for key, edges in old_map.items():
-            for edge in edges:
-                rev_map[edge] = key
-        
-        return rev_map
+        return _nopt.subgenome_ct_edges(self, downstream_node, delta,
+                                        start_node)
                 
     def edges_to_subgenome_count(self, 
                                  downstream_node : Union[Node, None]= None, 
@@ -3201,80 +3074,8 @@ class Network(Graph):
             dict[int, list[Edge]]: a map from edges to subgenome counts
         """
     
-        if start_node is None:
-            start_node = self.root()
-            
-        q : deque[Node] = deque()
-        q.appendleft(start_node)
-        
-        edges_2_sub = {edge : 0 for edge in self.E()}
-        
-        
-        while len(q) != 0:
-            cur = q.pop() #pop right for bfs
-
-            for neighbor in self.get_children(cur):
-                
-                edges_2_sub[self._edges.get(cur, neighbor)] += 1
-                
-                # Resume search from the end of the chain if one existed, 
-                # or this is neighbor if nothing was done
-                q.append(neighbor)
-    
-        
-        partition : dict[int, list[Edge]] = {}
-        for edge, value in edges_2_sub.items():
-            if value not in partition.keys():
-                partition[value] = [edge]
-            else:
-                partition[value].append(edge)
-        
-        #Filter out invalid keys
-        filter1 = {key : value for (key, value) in partition.items() 
-                   if key <= delta}
-        
-        #Filter out edges that would create a cycle from param edge
-        if downstream_node is not None:
-            filter2 : dict[int, list[Edge]] = {}
-            for subct, edges in filter1.items():
-                for target in edges:
-                    downstream_edges = self.edges_downstream_of_node(downstream_node)
-                    if target not in downstream_edges:
-                        if subct not in filter2.keys():
-                            filter2[subct] = [target]
-                        else:
-                            filter2[subct].append(target)
-            return filter2
-        else:
-            return filter1
-
-    def __leaf_desc_help(self, 
-                         node : Node, 
-                         leaves : list[Node], 
-                         desc_map : dict[Node, set[Node]]) -> set[Node]:
-        """
-        Helper function for "leaf_descedants_all".  
-
-        Args:
-            node (Node): a node in 'net'
-            leaves (list[Node]): the set of all leaves in the graph
-            desc_map (dict[Node, set[Node]]): a map from nodes to their leaf
-                                              descendants
-        Returns:
-            set[Node]: the leaf descendents of the 'node' param
-        """
-        if node not in desc_map.keys():
-            if node in leaves:
-                desc_map[node] = {node}
-            else:
-                desc_map[node] = set()
-                for child in self.get_children(node):
-                    child_desc = self.__leaf_desc_help(child, leaves, desc_map)
-                    #A node's leaf descendant set is the union of all its children's
-                    #leaf descendant sets
-                    desc_map[node] = desc_map[node].union(child_desc)
-                        
-        return desc_map[node]  
+        return _nopt.edges_to_subgenome_count(self, downstream_node, delta,
+                                              start_node)
 
     def leaf_descendants_all(self) -> dict[Node, set[Node]]:
         """
@@ -3286,57 +3087,7 @@ class Network(Graph):
             dict[Node, set[Node]]: map from graph nodes to their 
                                    leaf descendants
         """
-        desc_map : dict[Node, set[Node]] = {}
-        
-        #Mutates desc_map
-        self.__leaf_desc_help(self.root(), self.get_leaves(), desc_map)
-        
-        return desc_map
-    
-    def __newick_help(self, 
-                      node : Node, 
-                      processed_retics : set[Node]) -> str:
-        """
-        Helper function to "newick". Generates the newick string (sans ending 
-        semicolon) of the subnetwork defined by 'node'.
-
-        Args:
-            node (Node): a Node in 'net'
-            processed_retics (set[Node]): A set of all reticulation nodes that
-                                        have already been seen by the search 
-                                        function. Helps to avoid rewriting the
-                                        subnetwork string of a reticulation.
-
-        Returns:
-            str: The newick representation of a subnetwork.
-        """
-            
-        if node in self.get_leaves():
-            return node.label
-        else:
-            if self.in_degree(node) >= 2 and node in processed_retics:
-                if node.label[0] != "#":
-                    return "#" + node.label
-                return node.label
-            else:
-                if self.in_degree(node) >= 2:
-                    processed_retics.add(node)
-                    if node.label[0] != "#":
-                        node_name = "#" + node.label
-                    else:
-                        node_name = node.label
-                else:
-                    node_name = node.label    
-                    
-                substr = "("
-                for child in self.get_children(node):
-                    substr += self.__newick_help(child, processed_retics)
-                    substr += ","
-                substr = substr[0:-1]
-                substr += ")"
-                substr += node_name
-                
-                return substr
+        return _nopt.leaf_descendants_all(self)
     
     def newick(self) -> str:
         """
@@ -3347,37 +3098,8 @@ class Network(Graph):
         Returns:
             str: The newick representation of the network.
         """
-        return self.__newick_help(self.root(), set[Node]()) + ";"
+        return _nopt.newick(self)
     
-    def _is_cyclic_util(self, 
-                        v : Node,
-                        visited : dict[Node, bool], 
-                        rec_stack : dict[Node, bool]) -> bool:
-        """
-        Utility function for is_acyclic.
-
-        Args:
-            v (Node): A node
-            visited (dict[Node, bool]): A map from nodes to their visited status
-            rec_stack (dict[Node, bool]): A map from nodes to their recursive
-                                          stack status
-
-        Returns:
-            bool: True if a cycle is found, False otherwise.
-        """
-        visited[v] = True
-        rec_stack[v] = True
-
-        for neighbor in self.get_children(v):
-            if not visited[neighbor]:
-                if self._is_cyclic_util(neighbor, visited, rec_stack):
-                    return True
-            elif rec_stack[neighbor]:
-                return True
-
-        rec_stack[v] = False
-        return False
-
     def is_acyclic(self) -> bool:
         """
         Checks if each of this graph's connected components is acyclic
@@ -3387,18 +3109,7 @@ class Network(Graph):
         Returns:
             bool: True if acyclic, False if cyclic. 
         """
-        
-        #Maintain structures for checking nodes that are visited or in the recursive stack
-        visited = {node : False for node in self.V()}
-        rec_stack = {node : False for node in self.V()}
-
-        #Call recursive dfs on each root node / each connected component
-        for node in self.roots():
-            if not visited[node]:
-                if self._is_cyclic_util(node, visited, rec_stack):
-                    return False
-
-        return True
+        return _nopt.is_acyclic(self)
     
     def bfs_dfs(self, 
                 start_node : Union[Node, None] = None,
@@ -3431,43 +3142,8 @@ class Network(Graph):
             tuple[dict[Node, int], Any]: Mapping from nodes to their distance 
                              from the start node.
         """
-        q : deque[Node] = deque()
-        visited : set[Node] = set()
-        
-        
-        if start_node is not None:
-            q.append(start_node)
-            dist = {start_node : 0}
-            visited.add(start_node)
-        else:
-            root : Node = self.root()
-            q.append(root)
-            dist = {root : 0}
-            visited.add(root)
-        
-        while len(q) != 0:
-            if dfs: 
-                #Adding to left, so popleft is LIFO behavior
-                cur : Node = q.popleft() 
-            else: 
-                #Popright is FIFO behavior
-                cur : Node = q.pop() #Popright is FIFO behavior
-            
-            if accumulator is not None and accumulated is not None:
-                accumulated = accumulator(cur, accumulated)
-            
-            for neighbor in self.get_children(cur):
-                dist[neighbor] = dist[cur] + 1
-                q.appendleft(neighbor)
-                visited.add(neighbor)
-        
-        if is_connected:
-            if len(set(self.V()).difference(visited)) != 0:
-                print("GRAPH HAS MORE THAN 1 CONNECTED COMPONENT")
-            else:
-                print("GRAPH IS FULLY CONNECTED")
-        
-        return dist, accumulated
+        return _nopt.bfs_dfs(self, start_node, dfs, is_connected,
+                             accumulator, accumulated)
          
     # def rootpaths(self, start : Node) -> list[list[Edge]]:
     #     """
@@ -3499,32 +3175,7 @@ class Network(Graph):
         Returns:
             Network: A subnetwork of the DAG being operated on
         """
-        UID_suffix = 0
-        q : deque[Node] = deque()
-        q.appendleft(retic_node)
-        net_copy = Network()
-        
-        new_node = Node(name = retic_node.label + "_copy" + str(UID_suffix))
-        UID_suffix += 1
-        net_copy.add_nodes(new_node)
-        net_2_mul = {retic_node : new_node}
-        
-
-        while len(q) != 0:
-            cur = q.pop() #pop right for bfs
-
-            for neighbor in self.get_children(cur):
-                new_node = Node(name = neighbor.label + "_copy" + str(UID_suffix))
-                UID_suffix += 1
-                net_copy.add_nodes(new_node)
-                net_2_mul[neighbor] = new_node
-                net_copy.add_edges(Edge(net_2_mul[cur], new_node))
-                
-                # Resume search from the end of the chain if one 
-                # existed, or this is neighbor if nothing was done
-                q.append(neighbor)
-        
-        return net_copy 
+        return _nopt.subnet(self, retic_node)
     
     def copy(self) -> tuple[Network, dict[Node, Node]]:
         """
@@ -3538,23 +3189,7 @@ class Network(Graph):
                                               and a map from old nodes to new 
                                               nodes.
         """
-        net_copy : Network = Network()
-        
-        old_new : dict[Node, Node] = {}
-        
-        for node in self.V():
-            new = node.copy()
-            old_new[node] = new
-            net_copy.add_nodes(new)
-        
-        for edge in self.E():
-            new_src = old_new[edge.src]
-            new_dest = old_new[edge.dest]
-            new = edge.copy(new_src, new_dest)
-            
-            net_copy.add_edges(new)
-        
-        return net_copy, old_new
+        return _nopt.copy(self)
     
     def to_networkx(self) -> nx.Graph:
         """
@@ -3565,10 +3200,7 @@ class Network(Graph):
         Returns:
             nx.Graph: A NetworkX graph object.
         """
-        nx_network = nx.MultiDiGraph()
-        nx_network.add_nodes_from([node.label for node in self.V()]) # type: ignore
-        nx_network.add_edges_from([edge.to_names() for edge in self.E()]) # type: ignore
-        return nx_network
+        return _nopt.to_networkx(self)
 
     def compare_network(self, net : Network, measure : str) -> float:
         """
@@ -3598,45 +3230,7 @@ class Network(Graph):
             NetworkError: If an unrecognized measure string is provided.
         """
         
-        temp = tempfile.NamedTemporaryFile(suffix='.nex')
-        temp_dir = tempfile.TemporaryDirectory()
-
-        nex_file = NexusTemplate()
-        net1_name = self.newick()
-        net2_name = net.newick()
-       
-        nex_file.add(net1_name)
-        nex_file.add(net2_name)
-        
-        ret_type : str
-        flag : str = measure.strip().lower()
-        if flag in ["tree", "tri", "cluster"]:
-            ret_type = "avg"
-        elif flag == "luay":
-            ret_type = "dist"
-        elif flag in ["rnbs", "apd", "normapd", "wapd", "normwapd"]:
-            ret_type = "dissim"
-        else:
-            raise NetworkError(f"Unrecognized compare network option: {flag}. \
-                                 Please select from [tree|tri|cluster|luay|\
-                                 rnbs|apd|normapd|wapd|normwapd]")
-        
-        nex_file.add_phylonet_cmd(f"Cmpnets net1 net2 -m {flag}")
-        nex_file.generate(temp_dir.name, temp.name)
-        
-        location : str = temp_dir.name + "/" + temp.name
-        return_stream : list[Any] = run(location)
-        
-        print(return_stream)
-        
-        if ret_type == "avg":
-            pass
-        elif ret_type == "dist":
-            pass
-        else:
-            pass
-        
-        return 0.0
+        return _nopt.compare_network(self, net, measure)
     
     def is_isomorphic(self, other: Network) -> bool:
         """
@@ -3672,105 +3266,7 @@ class Network(Graph):
             float: The rooted triplet distance (0 = identical, 1 = completely different).
         """
         
-        def get_rooted_triplets(network: Network) -> Set[Tuple[str, str, str]]:
-            """
-            Extract all rooted triplets from a network, encoding their topology.
-            
-            For each triplet of leaves {x, y, z}, determines which pair are siblings
-            (share the most recent common ancestor) and encodes this relationship.
-            
-            Args:
-                network (Network): The network to extract triplets from.
-            
-            Returns:
-                Set[Tuple[str, str, str]]: Set of rooted triplets in format
-                                        ((sibling1, sibling2), other)
-            """
-            triplets = set()
-            leaves = network.get_leaves()
-            
-            # Get all combinations of 3 leaves
-            for x, y, z in combinations(leaves, 3):
-                # Get leaf labels for comparison
-                x_label = x.label
-                y_label = y.label
-                z_label = z.label
-                
-                try:
-                    # Find the MRCA for each pair
-                    mrca_xy = network.mrca({x, y})
-                    mrca_xz = network.mrca({x, z})
-                    mrca_yz = network.mrca({y, z})
-                    
-                    # Calculate distances from root to each MRCA
-                    # (Further from root = more recent = lower in tree)
-                    dist_xy = network.dist_from_root(mrca_xy)
-                    dist_xz = network.dist_from_root(mrca_xz)
-                    dist_yz = network.dist_from_root(mrca_yz)
-                    
-                    # The pair with the highest distance (furthest from root) are siblings
-                    if dist_xy >= dist_xz and dist_xy >= dist_yz:
-                        # x and y are siblings
-                        triplet = tuple(sorted([
-                            tuple(sorted([x_label, y_label])),
-                            z_label
-                        ], key=str))
-                    elif dist_xz >= dist_xy and dist_xz >= dist_yz:
-                        # x and z are siblings
-                        triplet = tuple(sorted([
-                            tuple(sorted([x_label, z_label])),
-                            y_label
-                        ], key=str))
-                    else:
-                        # y and z are siblings
-                        triplet = tuple(sorted([
-                            tuple(sorted([y_label, z_label])),
-                            x_label
-                        ], key=str))
-                    
-                    triplets.add(triplet)
-                    
-                except Exception as e:
-                    # If MRCA computation fails (shouldn't happen in valid networks),
-                    # we could either skip this triplet or handle it differently
-                    print(f"Warning: Could not compute MRCA for triplet {x_label}, {y_label}, {z_label}: {e}")
-                    continue
-            
-            return triplets
-        
-        def triplet_distance(triplets1: Set[Tuple], triplets2: Set[Tuple]) -> float:
-            """
-            Compute normalized distance between two sets of rooted triplets.
-            
-            Args:
-                triplets1: First set of rooted triplets
-                triplets2: Second set of rooted triplets
-            
-            Returns:
-                float: Normalized distance (0 = identical, 1 = completely different)
-            """
-            if not triplets1 and not triplets2:
-                return 0.0
-            
-            if not triplets1 or not triplets2:
-                return 1.0
-            
-            # Calculate symmetric difference
-            common_triplets = triplets1.intersection(triplets2)
-            total_triplets = triplets1.union(triplets2)
-            
-            if len(total_triplets) == 0:
-                return 0.0
-            
-            # Return normalized distance
-            return 1.0 - (len(common_triplets) / len(total_triplets))
-        
-        # Extract rooted triplets from both networks
-        triplets_self = get_rooted_triplets(self)
-        triplets_other = get_rooted_triplets(other)
-        
-        # Compute and return the distance
-        return triplet_distance(triplets_self, triplets_other)
+        return _nopt.rooted_triplet_distance(self, other)
 
     def get_subtree_at(self, node: Node) -> set[Node]:
         """
@@ -3782,16 +3278,7 @@ class Network(Graph):
         Returns:
             set[Node]: A set of nodes in the subtree.
         """
-        subtree_nodes: set[Node] = set()
-        q: deque[Node] = deque([node])
-        while q:
-            current = q.popleft()
-            if current in subtree_nodes:
-                continue
-            subtree_nodes.add(current)
-            for child in self.get_children(current):
-                q.append(child)
-        return subtree_nodes
+        return _nopt.get_subtree_at(self, node)
 
     def dist_from_root(self, node : Node) -> int:
         """
@@ -3804,7 +3291,7 @@ class Network(Graph):
             int: The number of edges on the BFS-shortest path from the root
                  to the given node.
         """
-        return self.bfs_dfs()[0][node]
+        return _nopt.dist_from_root(self, node)
     
     def topological_order(self) -> list[Node]:
         """
@@ -3816,22 +3303,7 @@ class Network(Graph):
             NetworkError: If the network contains a directed cycle and no
                           valid topological order exists.
         """
-        indeg : dict[Node, int] = {n: self.in_degree(n) for n in self.V()}
-        q : deque[Node] = deque([n for n, d in indeg.items() if d == 0])
-        
-        order: list[Node] = []
-        while q:
-            u = q.popleft()
-            order.append(u)
-            for e in self.out_edges(u):
-                v = e.dest
-                indeg[v] -= 1
-                if indeg[v] == 0:
-                    q.append(v)
-        
-        if len(order) != len(self.V()):
-            raise NetworkError("Graph has cycles; no topological order exists")
-        return order
+        return _nopt.topological_order(self)
     
     def distance_from_root(self, node: Node, use_time: bool = True) -> float:
         """
@@ -3847,47 +3319,7 @@ class Network(Graph):
         Raises:
             NetworkError: If node is not in the network or no path to root exists
         """
-        if node not in self.V():
-            raise NetworkError("Node not found in network")
-        
-        if use_time and node.get_time() is not None:
-            try:
-                root_time = self.root().get_time()
-                if root_time is not None:
-                    return node.get_time() - root_time
-            except (NetworkError, Exception):
-                pass  # Fall through to BFS approach
-        
-        # BFS to find distance from root (edge count or branch length sum)
-        root = self.root()
-        if root == node:
-            return 0.0
-            
-        visited = set()
-        queue = deque([(root, 0.0)])
-        visited.add(root)
-        
-        while queue:
-            current, dist = queue.popleft()
-            
-            for child in self.get_children(current):
-                if child == node:
-                    if use_time:
-                        edge = self.get_edge(current, child)
-                        return dist + edge.get_length()
-                    else:
-                        return dist + 1.0
-                        
-                if child not in visited:
-                    visited.add(child)
-                    if use_time:
-                        edge = self.get_edge(current, child)
-                        new_dist = dist + edge.get_length()
-                    else:
-                        new_dist = dist + 1.0
-                    queue.append((child, new_dist))
-        
-        raise NetworkError(f"No path found from root to node {node.label}")
+        return _nopt.distance_from_root(self, node, use_time)
     
     def set_node_times_from_root(self) -> None:
         """
@@ -3901,26 +3333,7 @@ class Network(Graph):
         Returns:
             None
         """
-        try:
-            root = self.root()
-        except NetworkError:
-            return  # No root available
-            
-        # BFS to set times based on cumulative branch lengths
-        root.set_time(0.0)
-        visited : set[Node] = {root}
-        queue : deque[tuple[Node, float]] = deque([(root, 0.0)])
-        
-        while queue:
-            current, current_time = queue.popleft()
-            
-            for child in self.get_children(current):
-                if child not in visited:
-                    visited.add(child)
-                    edge = self.get_edge(current, child)
-                    child_time = current_time + edge.get_length()
-                    child.set_time(child_time)
-                    queue.append((child, child_time))
+        _nopt.set_node_times_from_root(self)
     
     def set_node_times_by_edge_count(self) -> None:
         """
@@ -3935,25 +3348,7 @@ class Network(Graph):
         Returns:
             None
         """
-        try:
-            root = self.root()
-        except NetworkError:
-            return  # No root available
-            
-        # BFS to set times based on edge count from root
-        root.set_time(0.0)
-        visited : set[Node] = {root}
-        queue : deque[tuple[Node, float]] = deque([(root, 0.0)])
-        
-        while queue:
-            current, current_time = queue.popleft()
-            
-            for child in self.get_children(current):
-                if child not in visited:
-                    visited.add(child)
-                    child_time = current_time + 1.0  # Increment by 1 for each edge
-                    child.set_time(child_time)
-                    queue.append((child, child_time))
+        _nopt.set_node_times_by_edge_count(self)
 
 class MUL(Network):
     """
@@ -4182,13 +3577,90 @@ class MUL(Network):
         # Rename tips based on the gene mapping. Iterate leaves in sorted label
         # order so the (arbitrary) assignment of homeolog labels to the
         # duplicated copies of a species is reproducible across runs.
+        #
+        # Reticulation expansion duplicates hybrid subtrees, so a species that
+        # sits under (or is) a reticulation needs as many allele/subgenome
+        # labels in ``gene_map`` as MUL tips of that species. A 1:1 identity
+        # map is not enough when the network has hybrids.
+        #
+        # Network leaf labels are species names; ``subnet`` appends
+        # ``_copyN`` when duplicating. Allele labels in ``gene_map`` values
+        # may be any strings and are applied only in this rename step.
         for leaf in sorted(mul_tree.get_leaves(), key=lambda l: l.label):
-            new_name : str = copy_gene_map[leaf.label.split("_")[0]].pop()
+            species = _mul_tip_species(leaf.label, self.gene_map)
+            if species is None:
+                raise NetworkError(
+                    f"Species tip '{leaf.label}' (after reticulation "
+                    f"expansion) does not match any key in the "
+                    f"allele/subgenome map. Map keys: "
+                    f"{sorted(self.gene_map.keys())}."
+                )
+            remaining = copy_gene_map[species]
+            if not remaining:
+                provided = len(self.gene_map.get(species, []))
+                raise NetworkError(
+                    f"Allele/subgenome map has too few copies for species "
+                    f"'{species}' (provided {provided}). Reticulation "
+                    f"expansion created more MUL tips for this taxon than "
+                    f"the map supplies. Provide one distinct allele label "
+                    f"per parental lineage of each hybrid (e.g. "
+                    f"'{species}': ['{species}_a', '{species}_b'] for a "
+                    f"single reticulation involving '{species}')."
+                )
+            new_name: str = remaining.pop()
             mul_tree.update_node_name(leaf, new_name)
+
+        leftovers = {
+            sp: copies for sp, copies in copy_gene_map.items() if copies
+        }
+        if leftovers:
+            detail = ", ".join(
+                f"'{sp}' has {len(copies)} unused "
+                f"({'/'.join(copies)})" for sp, copies in sorted(leftovers.items())
+            )
+            raise NetworkError(
+                f"Allele/subgenome map has more copies than MUL tips after "
+                f"reticulation expansion: {detail}. Reduce the map to one "
+                f"allele label per MUL tip for each species."
+            )
 
         self.mul = mul_tree
 
-        return mul_tree  
+        return mul_tree
 
 
+def _mul_tip_species(leaf_label: str,
+                     gene_map: dict[str, list[str]]) -> str | None:
+    """
+    Recover the species key for a MUL tip label produced by reticulation
+    expansion.
+
+    Tips are either the original network leaf name (a ``gene_map`` key) or
+    that name plus a ``_copyN`` suffix from :meth:`Network.subnet`. Allele
+    labels in ``gene_map`` values are unrelated and are not consulted here.
+    """
+    if leaf_label in gene_map:
+        return leaf_label
+
+    # Strip trailing ``_copy<digits>`` suffixes (may nest for nested retics).
+    label = leaf_label
+    while True:
+        match = re.fullmatch(r"(.*)_copy\d+", label)
+        if match is None:
+            break
+        label = match.group(1)
+        if label in gene_map:
+            return label
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Backdoor optimization module. Imported at the *bottom* of the file so that
+# ``_network_optimizations`` can ``from .Network import NetworkError`` at its
+# own top level without a circular-import failure (all class/exception names it
+# needs are already defined by the time we get here). ``Network`` methods
+# delegate their heavy graph algorithms to ``_nopt`` -- keeping this module a
+# lightweight data-structure + public-API layer.
+from . import _network_optimizations as _nopt  # noqa: E402
 

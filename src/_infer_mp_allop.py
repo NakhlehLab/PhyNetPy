@@ -414,26 +414,44 @@ def partition_gene_trees(gene_map: dict[str, list[str]],
 def get_other_copies(gene_tree_leaf: Node,
                      gene_map: dict[str, list[str]]) -> list[str]:
     """
-    Given a gene tree leaf, get all other gene copy names for the
-    Taxon for which gene_tree_leaf is a value.
-    
+    Return the MUL/subgenome allele labels that a gene-tree leaf may map to.
+
+    Gene-tree tip names are matched in this order:
+
+    1. As an allele label in any ``gene_map`` value list (typical when tips
+       are already named like ``C_a`` / ``01xA``).
+    2. As a species key in ``gene_map`` (typical when tips reuse the network
+       leaf names, e.g. tip ``C`` with ``{"C": ["C_a", "C_b"]}``).
+
+    Allele labels themselves may be any strings; they need not resemble the
+    species name.
+
     Raises:
-        InferAllopError: raised if gene_tree_leaf is not listed in the taxon map 
+        InferAllopError: if the tip matches neither a value nor a species key.
 
     Args:
         gene_tree_leaf (Node): Leaf node of a gene tree
-        gene_map (dict[str, list[str]]): a taxon map.
-        
+        gene_map (dict[str, list[str]]): species -> allele/subgenome labels
+
     Returns:
-        list[str]: List of other gene copy names
+        list[str]: Allele labels available for this tip's species
     """
+    label = gene_tree_leaf.label
+
     for copy_names in gene_map.values():
-        if gene_tree_leaf.label in copy_names:
+        if label in copy_names:
             return copy_names
-    
-    raise InferAllopError(f"Leaf name '{gene_tree_leaf.label}' not found "
-                          f"in gene copy mapping")
-          
+
+    if label in gene_map:
+        return gene_map[label]
+
+    raise InferAllopError(
+        f"Gene-tree leaf '{label}' is not in the allele/subgenome map. "
+        f"Each tip must either equal a species key "
+        f"({sorted(gene_map.keys())}) or appear in that species' allele "
+        f"list (map values)."
+    )
+
 def allele_map_set(g: Network,
                    gene_map: dict[str, list[str]]) -> list[AlleleMap]: 
     """
@@ -874,6 +892,15 @@ class InferMPAllop:
             leaf_descendants = gene_tree.leaf_descendants_all()
             gene_tree.put_item("leaf descendants", leaf_descendants)
 
+        # Fail fast if the allele map cannot label the MUL tips of the
+        # starting network (e.g. identity map on a hybrid taxon). Without
+        # this, MPAllopScorer would swallow the error as -inf and search
+        # would look broken rather than misconfigured.
+        try:
+            Allop_MUL(gene_map, rng).to_mul(network)
+        except NetworkError as exc:
+            raise InferAllopError(str(exc)) from exc
+
         mp_allop_comp = MPAllopComponent(network, gene_map, gene_trees, rng)
         model_fac: ModelFactory = ModelFactory(mp_allop_comp)
         self.mp_allop_model: Model = model_fac.build()
@@ -996,7 +1023,10 @@ def ALLOP_SCORE(net_filename: str,
     rng = np.random.default_rng()
     
     T = Allop_MUL(subgenome_map, rng)
-    T.to_mul(read_nexus(net_filename)[0])
+    try:
+        T.to_mul(read_nexus(net_filename)[0])
+    except NetworkError as exc:
+        raise InferAllopError(str(exc)) from exc
    
     gene_trees = read_nexus(gene_trees_filename)
     

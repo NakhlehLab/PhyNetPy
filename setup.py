@@ -22,7 +22,7 @@ if USE_CYTHON:
         # Define Cython extensions
         cython_extensions = [
             Extension(
-                "phynetpy.graph_core_cy",
+                "phynetpy.cython.graph_core_cy",
                 ["src/cython/graph_core_cy.pyx"],
                 extra_compile_args=["-O3"] if os.name != 'nt' else [],
             ),

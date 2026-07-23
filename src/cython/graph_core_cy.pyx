@@ -355,6 +355,33 @@ cdef class CEdgeSet:
                 del self._uhash[key]
             self._uedges.discard(edge)
     
+    cpdef void rehash_node(self, node, affected_edges):
+        """Rebuild the (src, dest) lookup hash after a node was renamed.
+
+        A rename changes ``Node.__hash__`` (name-based), so every hash key
+        that references *node* is now stale/unreachable. The set of live
+        Edge/UEdge objects is unaffected, so we simply rebuild both hash
+        maps from the authoritative edge sets. ``affected_edges`` is accepted
+        for API parity with the pure-Python EdgeSet but is not needed here.
+        """
+        cdef dict rebuilt = {}
+        cdef dict rebuilt_u = {}
+        cdef tuple key
+        for edge in self._edges:
+            key = (edge.src, edge.dest)
+            if key in rebuilt:
+                rebuilt[key].append(edge)
+            else:
+                rebuilt[key] = [edge]
+        for edge in self._uedges:
+            key = (edge.n1, edge.n2)
+            if key in rebuilt_u:
+                rebuilt_u[key].append(edge)
+            else:
+                rebuilt_u[key] = [edge]
+        self._hash = rebuilt
+        self._uhash = rebuilt_u
+
     cpdef object get(self, n1, n2, gamma=None, tag=None):
         """
         Get edge(s) between two nodes.

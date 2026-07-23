@@ -73,7 +73,7 @@ snapshot so the caller can treat the outcome as a no-op.
 
 from __future__ import annotations
 from collections import deque
-import copy
+import math
 from abc import ABC, abstractmethod
 import numpy as np
 from typing import TYPE_CHECKING, Any, Sequence
@@ -85,6 +85,36 @@ from .Logger import Logger
 
 if TYPE_CHECKING:
     from .ModelGraph import Model
+
+# Floor for branch lengths entering the SPR log-Jacobian, so a zero /
+# missing length never produces a ``log(0)`` in the Hastings ratio.
+_SPR_MIN_LEN: float = 1e-9
+
+
+def _clone_net(net: Network) -> Network:
+    """Structural snapshot of ``net`` for cheap whole-network rollback.
+
+    Topology-changing moves (:class:`SPR`, :class:`AddReticulation`,
+    :class:`RemoveReticulation`, :class:`FlipReticulation`,
+    :class:`SwitchParentage`, :class:`ChangeReticSource`,
+    :class:`RelocateReticulation`, :class:`ChangeReticDest`) snapshot the
+    network before mutating it in place so :meth:`Move.undo` can restore
+    it wholesale.  ``copy.deepcopy`` walks the entire object graph
+    reflectively -- nested attribute values, sequence data, and
+    back-references -- which profiling showed to dominate per-iteration
+    cost (the same bottleneck already fixed in :mod:`phynetpy._mcmc_seq`).
+
+    :meth:`Network.copy` instead builds fresh ``Node`` / ``Edge`` objects
+    directly in O(V+E), preserving topology, branch lengths, gammas, node
+    times, and reticulation flags -- everything the coalescent /
+    Felsenstein scorers read.  This is safe because no move (nor any
+    scorer) mutates a node's *attribute dictionary* in place: the per-node
+    state moves change (time, reticulation flag) and per-edge state
+    (length, gamma) are copied by value, so the snapshot stays pristine
+    across the execute -> undo window even though attribute dicts are
+    shared by reference.
+    """
+    return net.copy()[0]
 
 
 ############################
@@ -539,7 +569,7 @@ class AddReticulation(Move):
             if cur_retics >= self._max_retics:
                 return model
 
-        self.undo_info = copy.deepcopy(net)
+        self.undo_info = _clone_net(net)
 
         rng = model.rng
         all_edges = net.E()
@@ -652,7 +682,7 @@ class RemoveReticulation(Move):
 
     def execute(self, model: Model) -> Model:
         net: Network = model.network
-        self.undo_info = copy.deepcopy(net)
+        self.undo_info = _clone_net(net)
 
         retic_nodes = [n for n in net.V()
                        if n.is_reticulation() and net.in_degree(n) == 2]
@@ -764,7 +794,7 @@ class FlipReticulation(Move):
             The same ``model`` (mutated) for chaining convenience.
         """
         net: Network = model.network
-        self.undo_info = copy.deepcopy(net)
+        self.undo_info = _clone_net(net)
 
         root = net.root()
         # Enumerate edges that are safe to flip (see class docstring
@@ -864,7 +894,7 @@ class SwitchParentage(Move):
             Model: The modified model with a newly proposed network topology.
         """
         net: Network = model.network
-        self.undo_info = copy.deepcopy(net)
+        self.undo_info = _clone_net(net)
         self.valid_attachment_edges = []
 
         # Record the pre-move per-leaf ploidy. SwitchParentage MUST preserve
@@ -993,12 +1023,12 @@ class SwitchParentage(Move):
         # a no-op rather than an invalid network.
         if not self._ploidy_preserved(net, pre_ploidy):
             model.network = self.undo_info
-            self.same_move_info = copy.deepcopy(self.undo_info)
+            self.same_move_info = _clone_net(self.undo_info)
             model.update_network()
             return model
 
         model.update_network()
-        self.same_move_info = copy.deepcopy(net)
+        self.same_move_info = _clone_net(net)
         return model
 
     def _ploidy_preserved(self, net: Network, pre_ploidy: dict) -> bool:
@@ -1023,7 +1053,7 @@ class SwitchParentage(Move):
     def same_move(self, model: Model) -> None:
         """Replays the same topology change on a different model instance."""
         if self.same_move_info is not None:
-            model.network = copy.deepcopy(self.same_move_info)
+            model.network = _clone_net(self.same_move_info)
         model.update_network()
          
     def _reconcile_reticulation_flags(self, net: Network) -> None:
@@ -1114,7 +1144,7 @@ class SwitchParentage(Move):
 
 
 class SPR(Move):
-    """Subtree Prune and Regraft on a phylogenetic network.
+    r"""Subtree Prune and Regraft on a phylogenetic network.
 
     Network-safe algorithm:
       1. Select a random edge (u -> v) to prune, subject to:
@@ -1135,26 +1165,45 @@ class SPR(Move):
 
     Uses deep-copy for undo/same_move to guarantee correctness.
 
-    Hastings ratio.  Computing the exact reverse proposal density for a
-    distance-weighted SPR on a *network* (the reverse prune-and-regraft
-    must be enumerated on the post-move topology, and the host-edge split
-    contributes a branch-length Jacobian) is expensive and brittle.  Per
-    the design decision recorded in the unified-MCMC plan, this move
-    therefore reports ``log_hastings_ratio() == 0.0`` -- the exact value
-    only for a *symmetric* local regraft.  It is consequently a topology
-    *optimisation* move (used by Hill-Climbing / Simulated-Annealing,
-    which ignore the Hastings term) and is excluded from the
-    posterior-correct sampler kernel; strict topology sampling is provided
-    by the sequence stack (:class:`phynetpy.infer.MCMC_SEQ`).  Set a low
-    ``distance_decay`` to make the regraft closer to uniform if the move
-    is used in an MH context.
+    Hastings ratio (posterior-correct).  This move is a proper
+    Metropolis-Hastings proposal: it prunes a subtree edge ``u -> v``
+    (restricted to a *suppressible* internal parent ``u``, i.e.
+    ``in-degree(u) == 1`` and ``out-degree(u) == 2``, so the move is
+    self-reversible by another SPR of the same family), removes it,
+    suppresses the resulting degree-2 ``u`` into a single edge ``e*``,
+    then regrafts ``v`` by subdividing a uniformly chosen eligible edge
+    ``a -> b`` (length ``L_t``) at a point ``split ~ U(0, 1)`` and
+    attaching ``w -> v``.
+
+    Because the intermediate network (subtree detached, ``u``
+    suppressed) is identical in the forward and reverse directions, the
+    eligible-edge counts cancel and the exact log Hastings ratio reduces
+    to a clean, closed form:
+
+    .. math::
+
+        \log H = \log|P(N)| - \log|P(N')|
+                 + \log L_t - \log \ell_{e^*}
+
+    where ``|P(N)|`` / ``|P(N')|`` are the prunable-edge counts before /
+    after the move, ``L_t`` is the (pre-split) length of the subdivided
+    target edge, and ``\ell_{e^*}`` is the length of the edge created by
+    suppressing ``u``.  The final two terms are the reversible-jump
+    branch-length log-Jacobian ``log(L_t / \ell_{e^*})`` of the
+    subdivide/merge transform (the ``split`` auxiliary maps a single
+    length to two, and the suppression merges two lengths into one).
+    See ``tests/test_network_moves.py`` for the numerical detailed-balance
+    check and the derivation reference.
+
+    The regraft is deliberately *uniform* over eligible edges: a
+    distance-weighted regraft would make the reverse proposal density
+    depend on the post-move topology in a way that is expensive and
+    brittle to evaluate exactly.  ``distance_decay`` is retained only for
+    backward-compatible construction and is ignored.
     """
 
-    # Default decay matches the prior class-constant value.  ``MPLKernel``
-    # now adapts this per-proposal: high decay == tight local regrafts,
-    # low decay == broad search.  Bumping the decay means edges at
-    # distance d get sampled with weight ``1 / d**decay``, so decay=2
-    # strongly favors nearby regrafts, decay=0.5 is nearly flat.
+    # Retained for backward-compatible construction only; the MH-correct
+    # regraft is uniform, so this value no longer affects behaviour.
     _DEFAULT_DISTANCE_DECAY = 2.0
 
     def __init__(self,
@@ -1170,41 +1219,42 @@ class SPR(Move):
         )
 
     @staticmethod
-    def _hop_distances(net: Network, origin: Node,
-                       forbidden: set[Node]) -> dict[Node, int]:
-        """BFS hop-distance from *origin* ignoring forbidden nodes."""
-        dist: dict[Node, int] = {origin: 0}
-        q: deque[Node] = deque([origin])
-        while q:
-            cur = q.popleft()
-            d = dist[cur] + 1
-            for nbr in list(net.get_children(cur)) + list(net.get_parents(cur)):
-                if nbr in forbidden or nbr in dist:
-                    continue
-                dist[nbr] = d
-                q.append(nbr)
-        return dist
+    def _prunable_edges(net: Network) -> list[Edge]:
+        """Edges ``u -> v`` this move may prune (self-reversible subset).
+
+        The parent ``u`` must be a plain internal node (``in-degree 1``,
+        ``out-degree 2``) so that removing ``u -> v`` leaves ``u``
+        degree-2 and it collapses into a single edge -- the condition
+        that makes the prune/regraft reversible by another SPR and gives
+        the closed-form Hastings ratio.  ``v`` must not be a reticulation
+        (we never detach a reticulation child, which would orphan its
+        other parent).
+
+        Leaf children *are* prunable: single-leaf regrafts are exactly
+        what makes the SPR chain irreducible over rooted binary
+        topologies.  Forbidding them (the historical behaviour) left
+        balanced trees such as ``((A,B),(C,D))`` with zero prunable edges
+        -- an absorbing state that silently broke topology mixing.
+        """
+        prunable: list[Edge] = []
+        for e in net.E():
+            u, v = e.src, e.dest
+            if v.is_reticulation():
+                continue
+            if net.in_degree(u) != 1 or net.out_degree(u) != 2:
+                continue
+            prunable.append(e)
+        return prunable
 
     def execute(self, model: Model) -> Model:
         net: Network = model.network
-        self.undo_info = copy.deepcopy(net)
+        self.undo_info = _clone_net(net)
+        self._log_hr = 0.0
 
-        root = net.root()
-        prunable = []
-        for e in net.E():
-            u, v = e.src, e.dest
-            if v in net.get_leaves():
-                continue
-            if v.is_reticulation():
-                continue
-            if u == root and net.out_degree(root) <= 2:
-                continue
-            if u.is_reticulation() and net.out_degree(u) <= 1:
-                continue
-            prunable.append(e)
-
+        prunable = self._prunable_edges(net)
         if not prunable:
             return model
+        p_before = len(prunable)
 
         rng = model.rng
         prune_edge: Edge = _rng_pick(rng, prunable)
@@ -1214,7 +1264,17 @@ class SPR(Move):
 
         subtree_nodes = net.get_subtree_at(subtree_root)
 
+        # Length of the edge that the suppression of ``prune_parent`` will
+        # create (e*): its remaining in-edge + remaining out-edge.  Captured
+        # before mutation for the branch-length Jacobian.
         net.remove_edge(prune_edge)
+        in_edges = list(net.in_edges(prune_parent))
+        out_edges = list(net.out_edges(prune_parent))
+        e_star_len = 1.0
+        if len(in_edges) == 1 and len(out_edges) == 1:
+            e_star_len = (in_edges[0].get_length() or 0.0) + \
+                         (out_edges[0].get_length() or 0.0)
+        e_star_len = max(e_star_len, _SPR_MIN_LEN)
 
         _suppress_deg2(net, prune_parent)
 
@@ -1227,18 +1287,12 @@ class SPR(Move):
             model.update_network()
             return model
 
-        hop = self._hop_distances(net, prune_parent, forbidden)
-        weights: list[float] = []
-        for e in eligible:
-            d_src = hop.get(e.src, len(hop))
-            d_dst = hop.get(e.dest, len(hop))
-            d = min(d_src, d_dst) + 1
-            weights.append(1.0 / (d ** self._distance_decay))
-
-        target_edge: Edge = _rng_pick_weighted(rng, eligible, weights)
+        # Uniform regraft (see class docstring: keeps the reverse density
+        # tractable so the Hastings ratio is exact).
+        target_edge: Edge = _rng_pick(rng, eligible)
         a: Node = target_edge.src
         b: Node = target_edge.dest
-        target_len: float = target_edge.get_length() or 1.0
+        target_len: float = max(target_edge.get_length() or 1.0, _SPR_MIN_LEN)
 
         new_node: Node = net.add_uid_node()
         split = float(rng.random())
@@ -1249,6 +1303,15 @@ class SPR(Move):
         net.add_edges(Edge(new_node, subtree_root, length=prune_len))
 
         model.update_network()
+
+        # Exact log Hastings ratio (incl. the subdivide/merge RJ Jacobian).
+        # The eligible-target counts cancel because the intermediate network
+        # is shared by the forward and reverse proposals.
+        p_after = len(self._prunable_edges(net))
+        self._log_hr = (
+            math.log(p_before) - math.log(p_after)
+            + math.log(target_len) - math.log(e_star_len)
+        )
         return model
 
     def undo(self, model: Model) -> None:
@@ -1330,8 +1393,10 @@ def _prune_orphan_chain(net: Network, node: Node) -> None:
     while stack:
         n = stack.pop()
         # The same parent may appear in multiple orphan chains and could
-        # have been removed already; skip nodes that are no longer in V().
-        if n not in net.V():
+        # have been removed already; skip nodes that are no longer present.
+        # ``n in net`` is an O(1) membership test (Graph.__contains__) vs.
+        # ``n in net.V()`` which materializes the whole node list.
+        if n not in net:
             continue
         if net.in_degree(n) == 0:
             continue
@@ -1345,7 +1410,7 @@ def _prune_orphan_chain(net: Network, node: Node) -> None:
         except Exception:
             pass
         for p in parents:
-            if p not in net.V():
+            if p not in net:
                 continue
             if net.in_degree(p) > 0 and net.out_degree(p) == 0:
                 stack.append(p)
@@ -1708,7 +1773,7 @@ class ChangeReticSource(Move):
             The same ``model`` (mutated) for chaining convenience.
         """
         net: Network = model.network
-        self.undo_info = copy.deepcopy(net)
+        self.undo_info = _clone_net(net)
 
         retic_edges = [e for e in net.E() if e.dest.is_reticulation()]
         if not retic_edges:
@@ -1824,7 +1889,7 @@ class RelocateReticulation(Move):
             The same ``model`` (mutated) for chaining convenience.
         """
         net: Network = model.network
-        self.undo_info = copy.deepcopy(net)
+        self.undo_info = _clone_net(net)
 
         retic_nodes = [n for n in net.V() if n.is_reticulation()]
         if not retic_nodes:
@@ -1992,7 +2057,7 @@ class ChangeReticDest(Move):
             The same ``model`` (mutated) for chaining convenience.
         """
         net: Network = model.network
-        self.undo_info = copy.deepcopy(net)
+        self.undo_info = _clone_net(net)
 
         retic_edges = [e for e in net.E() if e.dest.is_reticulation()]
         if not retic_edges:

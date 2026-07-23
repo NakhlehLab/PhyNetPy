@@ -1,4 +1,4 @@
-# PhyNetPy
+PhyNetPy
 
 PhyNetPy is a Python library for phylogenetic network inference and analysis, providing improved methods from PhyloNet as well as a framework for developing new Bayesian/simulation-based methods and structures.
 
