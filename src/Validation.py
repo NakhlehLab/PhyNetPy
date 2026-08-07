@@ -33,17 +33,14 @@ import os
 import re
 import warnings
 from abc import ABC, abstractmethod
-from collections import Counter, defaultdict
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from collections import Counter
+from typing import Any, Dict, List, Optional, Set
 from io import StringIO
 from pathlib import Path
 
 # BioPython imports
 try:
     from Bio import Phylo, SeqIO, AlignIO
-    from Bio.Seq import Seq
-    from Bio.SeqRecord import SeqRecord
-    from Bio.Align import MultipleSeqAlignment
     HAS_BIOPYTHON = True
 except ImportError:
     HAS_BIOPYTHON = False
@@ -77,20 +74,6 @@ class ValidationError(Exception):
     def __init__(self, message: str = "Validation error occurred") -> None:
         self.message = message
         super().__init__(self.message)
-
-
-class FileFormatError(ValidationError):
-    """
-    Exception raised when file format is invalid or corrupted.
-    """
-    pass
-
-
-class DataIntegrityError(ValidationError):
-    """
-    Exception raised when data integrity checks fail.
-    """
-    pass
 
 
 ######################
@@ -295,7 +278,7 @@ class GeneTreeReport:
         lines.append(f"    Taxa: {sorted(self.taxa)}")
         
         if self.has_reticulation:
-            lines.append(f"    Network: Yes (contains reticulation nodes)")
+            lines.append("    Network: Yes (contains reticulation nodes)")
         
         if self.duplicate_taxa:
             lines.append(f"    [!] DUPLICATE TAXA: {sorted(self.duplicate_taxa)}")
@@ -312,7 +295,7 @@ class GeneTreeReport:
             if self.zero_branch_lengths > 0:
                 lines.append(f"    [~] {self.zero_branch_lengths} zero-length branch(es)")
         elif not self.has_branch_lengths:
-            lines.append(f"    Branch Lengths: Not present")
+            lines.append("    Branch Lengths: Not present")
         
         if self.polytomy_nodes > 0:
             lines.append(f"    Polytomies: {self.polytomy_nodes} node(s) with >2 children")

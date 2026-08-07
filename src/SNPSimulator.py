@@ -48,11 +48,9 @@ Design - [x]
 
 from __future__ import annotations
 
-import copy
 import numpy as np
 from collections import deque
-from dataclasses import dataclass, field
-from typing import Optional, Union
+from dataclasses import dataclass
 
 from .Network import Network, Node, Edge
 from .BirthDeath import Yule
@@ -309,24 +307,17 @@ def _get_internal_edges(net: Network) -> list[Edge]:
 
 def _get_descendants(net: Network, node: Node) -> set[Node]:
     """
-    Get all descendants of a node via BFS.
+    Get all strict descendants of a node.
 
     Args:
         net (Network): The network.
         node (Node): Starting node.
 
     Returns:
-        set[Node]: All nodes reachable from node going down the network.
+        set[Node]: All nodes reachable from node going down the network,
+                   excluding node itself.
     """
-    desc = set()
-    queue = deque([node])
-    while queue:
-        cur = queue.popleft()
-        for child in net.get_children(cur):
-            if child not in desc:
-                desc.add(child)
-                queue.append(child)
-    return desc
+    return net.get_subtree_at(node) - {node}
 
 
 def _add_reticulation(
@@ -500,9 +491,6 @@ def simulate(
                 f"Sample keys {set(samples.keys())} don't match "
                 f"leaf names {set(leaf_names)}."
             )
-
-    # Build node lookup for fast access
-    node_lookup: dict[str, Node] = {nd.label: nd for nd in net.V()}
 
     # Precompute edge info for BFS traversal
     # For each node, store (parent_node, branch_length, gamma_or_none)

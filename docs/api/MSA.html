@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSA - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; MSA
+                </div>
+                
+                <h1>MSA Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>Multiple Sequence Alignment parsing, storage, grouping, and distance computation.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>MSA.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#datasequence">DataSequence</a></li>
+                        <li><a href="#msa">MSA</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="datasequence">DataSequence</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">DataSequence</span>
+                    </div>
+                    <div class="class-body">
+                        <p>An individual sequence record. A sequence record is defined by 1) the data sequence 2) a name/string identifier 3) potentially a group ID number [0, inf).</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">sequence: list, name: str, gid: int = -1</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a Sequence Record</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sequence</span></td>
+                                        <td><span class="param-type">list</span></td>
+                                        <td>a sequence of some type of biological data</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>some name or label</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gid</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>a group id number. Defaults to -1. This signals that the sequence does not belong to any group.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_name</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>Get the name of the sequence.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> str: sequence label</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_seq</span> <span class="keyword">-&gt;</span> list[object]
+                            </div>
+                            <div class="function-body">
+                                <p>This getter returns the sequence, as parsed from any sort of file. The likely type is a list[str] or a list of characters/strings.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[object]: A list of data (of some type, commonly a string)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_numerical_seq</span> <span class="keyword">-&gt;</span> list[int]
+                            </div>
+                            <div class="function-body">
+                                <p>This getter returns the sequence, but in the event that the sequence is not already a list[int], translates each character into an integer. In the event that the sequence contains a character that is not mappable in hexadecimal, then it will be skipped.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[int]: an integer data sequence, in hexadecimal.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_gid</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the group id for this sequence</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: group id.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_ploidy</span>(<span class="params">ploidyness: int</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the ploidy of a data sequence. Only applicable for bimarker data, but there is no consequence for setting this value for other data.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">ploidyness</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>the level of ploidy for a data sequence</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ploidy</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the ploidy for this sequence. Only relevant for Bimarker data.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: ploidy value.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__len__</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Define the length of a DataSequence to be the length of the sequence</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: _description_</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">distance</span>(<span class="params">seq2: DataSequence</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Calculate the distance between two DataSequence objects. The distance is calculated by the number of differences between the two sequences. If the sequences are of different lengths, the distance is the difference in length plus the number of differences in the shorter sequence compared to the longer sequence for the length of the shorter sequence.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">seq2</span></td>
+                                        <td><span class="param-type">DataSequence</span></td>
+                                        <td>The second sequence to compare.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The distance between the two sequences.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="msa">MSA</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">MSA</span>(<span class="params">Iterable[DataSequence]</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Class that provides all packaging and functionality services to do with Multiple Sequence Alignments. This class stores all data and metadata about a sequence alignment, and can handle file I/O from nexus files that contain a matrix data block. If there is a grouping that applies to a set of sequences, it can be defined here.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">filename: Union[str, None] = None, data: Union[list[DataSequence], None] = None, grouping: Union[dict[DataSequence, int], None] = None, grouping_auto_detect: bool = False</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize an MSA object. Either a filename or a list of DataSequence objects can be provided. If a filename is provided, the MSA will be parsed from the file. If a list of DataSequence objects is provided, the MSA will be constructed from those objects. If grouping is provided, the sequences will be grouped accordingly.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">filename</span></td>
+                                        <td><span class="param-type">Union[str, None], optional</span></td>
+                                        <td>A filename to a nexus file that contains a matrix data block. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type">Union[list[DataSequence], None], optional</span></td>
+                                        <td>A list of DataSequence objects. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">grouping</span></td>
+                                        <td><span class="param-type">Union[dict[DataSequence, int], None], optional</span></td>
+                                        <td>A grouping map from DataSequence objects to group IDs. Defaults to None.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">grouping_auto_detect</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If set to True, the MSA will attempt to group sequences based on sequence name similarity. Defaults to False.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">add_data</span>(<span class="params">data_seq: DataSequence</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Add a DataSequence object to the MSA. If the DataSequence object has a group ID, it will be added to the appropriate group. If the DataSequence object does not have a group ID, it will be added to the MSA as a new group.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data_seq</span></td>
+                                        <td><span class="param-type">DataSequence</span></td>
+                                        <td>A DataSequence object to add to the MSA</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">retroactive_group</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Take all DataSequence objects placed inside the MSA and if the groupid is -1 (indicating the DataSequence does not belong to any grouping), attempt to use autogrouping to pair with other like data. After calling this function, no DataSequence objects will have gid of -1. If autogrouping is not possible, the DataSequence will be placed in a group of its own.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_records</span> <span class="keyword">-&gt;</span> list[DataSequence]
+                            </div>
+                            <div class="function-body">
+                                <p>Retrieve all sequences that are in this alignment.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[DataSequence]: list of all sequence records.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">parse</span> <span class="keyword">-&gt;</span> list[DataSequence]
+                            </div>
+                            <div class="function-body">
+                                <p>Take a filename and grab the sequences and put them into DataSequence objects. If a grouping is defined (in the case of SNPs), group IDs will be assigned to each DataSequence for ease of counting red alleles.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[DataSequence]: A list of DataSequence objs</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">num_groups</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the number of groups in the MSA.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: the number of groups in the MSA.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">group_given_id</span>(<span class="params">gid</span>) <span class="keyword">-&gt;</span> list[DataSequence]
+                            </div>
+                            <div class="function-body">
+                                <p>Get the set of DataSequences that belong to a given group ID.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gid</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>group id</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[DataSequence]: the set (as a list) of DataSequences that have a given gid</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_category</span>(<span class="params">name: str</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the group ID for a given sequence name. If the sequence name is not found in the grouping map, raise a KeyError.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The name of the sequence to get the group ID for.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: The group ID for the sequence.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>KeyError</code>: If the sequence name is not found in the grouping map.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">group_auto_detect</span> <span class="keyword">-&gt;</span> dict[int, str]
+                            </div>
+                            <div class="function-body">
+                                <p>If no grouping of sequences is provided, but a grouping is still desired, group the sequences by name/label string &quot;likeness&quot;. Note: not guaranteed to group things properly if the labels used for sequences does not follow some sort of general pattern. IE: human1 human2 human3 gorilla1 gorilla2 chimp1 is group-able. xh1 jp0 an2 am3 is less group-able.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[int, str]: a grouping map from gid's to sequence names</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">seq_by_name</span>(<span class="params">name: str</span>) <span class="keyword">-&gt;</span> DataSequence
+                            </div>
+                            <div class="function-body">
+                                <p>Retrieves the sequence that belongs to this MSA that has a given name</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">name</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The taxa/label name of the sequence. Must match exactly (same case, spacing, etc)</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> DataSequence: the sequence with the label 'name'</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">total_samples</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>For each record, accumulate the ploidyness to gather the total number of samples of alleles. If ploidy is not set (-1), treats as 1 sample.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: the total number of samples</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">samples_given_group</span>(<span class="params">gid: int</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Return the number of samples within a given group.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gid</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>group id</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: total samples within the group defined by 'gid'</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_sequence_ploidy</span>(<span class="params">sequence_ploidy: list[int] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Sets the ploidy of each group of sequences in the MSA. If sequence_ploidy is provided, it should be a list of numbers &gt;= 1 where each index corresponds to the group ID. For example: [1,2,1] indicates that group 0 has ploidy 1, group 1 has ploidy 2, and group 2 has ploidy 1. If sequence_ploidy is not given, then the ploidy will be set to the maximum SNP data point found in the sequence. For a SNP sequence of 010120022202, the ploidy is 2. NOTE: It is assumed that if sequence_ploidy is not given, that ploidy values for each record within a group are identical!</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sequence_ploidy</span></td>
+                                        <td><span class="param-type">list[int], optional</span></td>
+                                        <td>implicit mapping from group ids (index) to the ploidy of that sequence, or set of sequences. Defaults to None.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">dim</span> <span class="keyword">-&gt;</span> tuple[int]
+                            </div>
+                            <div class="function-body">
+                                <p>Return the dimensions of the MSA. The number of rows (first index) is equal to the number of DataSequence objects, and the number of columns (second index), is equal to the length of each DataSequence (they should all be the same).</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[int]: row, col tuple that describes the dimensions of the MSA.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">distance_matrix</span> <span class="keyword">-&gt;</span> dict[tuple[DataSequence, DataSequence], float]
+                            </div>
+                            <div class="function-body">
+                                <p>Using the distance helper, calculates pairwise distances for each pair of (different) DataSequences in this MSA.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[tuple[DataSequence, DataSequence], float]: Map from DataSequence pairs to the distance between them.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__iter__</span> <span class="keyword">-&gt;</span> Iterable[DataSequence]
+                            </div>
+                            <div class="function-body">
+                                <p>Iterate over the DataSequence objects in this MSA.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Iterable[DataSequence]: an iterable of DataSequence objects.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">ratio</span>(<span class="params">a: str, b: str</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the similarity ratio between two strings.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">a</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>first string</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">b</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>second string</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: similarity ratio between a and b</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">group_some_strings</span>(<span class="params">data: list[str]</span>) <span class="keyword">-&gt;</span> list[list[str]]
+                            </div>
+                            <div class="function-body">
+                                <p>Group a list of strings by similarity.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type">list[str]</span></td>
+                                        <td>a list of strings</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[list[str]]: a list of groups of strings</div>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html" class="current">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html">criteria</a></li>
+                <li><a href="data.html">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html">models</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#datasequence">DataSequence</a></li>
+                <li><a href="#msa">MSA</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

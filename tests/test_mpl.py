@@ -19,7 +19,7 @@ import pytest
 
 from phynetpy.Network import Network
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL import MPL
+from phynetpy._mpl import MPL
 
 
 # ═══════════════════════════════════════════════════════════════════════

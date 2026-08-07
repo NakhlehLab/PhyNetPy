@@ -16,13 +16,13 @@ samplers (gene trees, sequences, biallelic SNP markers) on a *known-truth*
 
 Why this harness exists
 -----------------------
-The three Bayesian samplers -- ``MCMC_GT`` (multispecies network coalescent
-on gene-tree topologies), ``MCMC_SEQ`` (co-estimation from DNA alignments),
-and ``MCMC_BIMARKERS`` (SNAPP-style biallelic-marker likelihood) -- are all
-supposed to converge on the *same* true network when handed data simulated
-from it.  This module builds one canonical ground-truth network, simulates
-each data type from it under the model each sampler assumes, runs the sampler
-for a fixed budget, and reports two things the overhaul cares about:
+The three Bayesian samplers -- the multispecies network coalescent on
+gene-tree topologies, co-estimation from DNA alignments, and the SNAPP-style
+biallelic-marker likelihood -- are all supposed to converge on the *same* true
+network when handed data simulated from it.  This module builds one canonical
+ground-truth network, simulates each data type from it under the model each
+sampler assumes, runs the sampler for a fixed budget, and reports two things
+the overhaul cares about:
 
 * **Accuracy**: does the MAP / best network recover the true topology,
   reticulation, and inheritance probability?  Measured with the network
@@ -46,12 +46,14 @@ Usage
 from __future__ import annotations
 
 import argparse
-import os
 import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 from phynetpy.Network import Network, Node, Edge
+from phynetpy.criteria import Bayesian, Likelihood
+from phynetpy.infer import JC69, MCMCSeqPriors, MCMC_GTPriors, infer, simulate
+from phynetpy.models import MSC
 
 
 # ======================================================================
@@ -329,24 +331,23 @@ class RunResult:
 def run_gt(true_net: Network, *, loci: int, sites: int, iters: int,
            burnin: int, thin: int, seed: int,
            max_reticulations: int = 2) -> RunResult:
-    """Simulate gene trees on ``true_net`` and run MCMC_GT (Bayesian, mh)."""
-    from phynetpy.GeneTrees import GeneTrees
-    from phynetpy.infer import MCMC_GT, MCMC_GTPriors, JC69, simulate_multilocus
-
-    data = simulate_multilocus(true_net, MAPPING, n_loci=loci,
-                               seq_length=sites, theta=0.02, model=JC69(),
-                               seed=seed)
-    gts = GeneTrees(gene_tree_list=list(data.gene_trees),
-                    species_gene_mapping=MAPPING)
-    mcmc = MCMC_GT.from_consensus(gts, MAPPING, priors=MCMC_GTPriors())
+    """Simulate gene trees on ``true_net`` and sample the posterior."""
+    gts = simulate(MSC(theta=0.02), true_net, n=loci, data="gene_trees",
+                   mapping=MAPPING, seed=seed)
     t0 = time.perf_counter()
-    res = mcmc.search(method="mh", num_iter=iters, burn_in=burnin, thin=thin,
-                      max_reticulations=max_reticulations, seed=seed)
+    res = infer(
+        gts,
+        model=MSC(theta=0.02),
+        criterion=Bayesian(objective=Likelihood(), prior=MCMC_GTPriors(),
+                           chain_length=iters, burnin=burnin,
+                           sample_freq=thin, seed=seed),
+        max_reticulations=max_reticulations,
+    )
     dt = time.perf_counter() - t0
     return RunResult(
         label="GT ", num_iter=iters, wall_time_sec=dt,
-        best_score=res.best_log_posterior,
-        accuracy=score_accuracy(res.best_network, true_net),
+        best_score=res.score,
+        accuracy=score_accuracy(res.best, true_net),
         acceptance_rate=res.acceptance_rate,
     )
 
@@ -355,43 +356,49 @@ def run_seq(true_net: Network, *, loci: int, sites: int, iters: int,
             burnin: int, thin: int, seed: int,
             max_reticulations: int = 2, max_level: "int | None" = None,
             warm_start: bool = True, gt_iters: int = 6000) -> RunResult:
-    """Simulate DNA alignments on ``true_net`` and run MCMC_SEQ.
+    """Simulate DNA alignments on ``true_net`` and co-estimate from them.
 
-    ``warm_start`` (default) bootstraps the starting network with a fast MCMC_GT
-    search so the coupled chain begins from a reticulation-bearing network it can
-    refine, instead of a plain tree it would never leave (the joint-mode barrier).
+    Only the data axis changes relative to :func:`run_gt`: an ``Alignment``
+    instead of ``GeneTrees``, with the same criterion.
+
+    ``warm_start`` (default) bootstraps the starting network with a fast
+    gene-tree search so the coupled chain begins from a reticulation-bearing
+    network it can refine, instead of a plain tree it would never leave (the
+    joint-mode barrier).
 
     ``max_level`` (e.g. ``1``) restricts the sampler to networks of at most that
     level; reticulation-adding / relocating proposals that would exceed it
     self-reject before the expensive coupled scoring, which both bounds the
     state space and skips the displayed-tree combinatorial blow-up.
     """
-    from phynetpy.infer import (
-        MCMC_SEQ, MCMCSeqPriors, JC69, simulate_multilocus,
-    )
-
-    data = simulate_multilocus(true_net, MAPPING, n_loci=loci,
-                               seq_length=sites, theta=0.02, model=JC69(),
-                               seed=seed)
-    sampler = MCMC_SEQ(**data.to_mcmc_seq_kwargs(),
-                       priors=MCMCSeqPriors(max_reticulations=max_reticulations,
-                                            max_level=max_level))
+    alignment = simulate(MSC(theta=0.02), true_net, n=loci, data="alignment",
+                         mapping=MAPPING, seq_length=sites,
+                         substitution_model=JC69(), seed=seed)
     t0 = time.perf_counter()
-    res = sampler.search(num_iter=iters, burn_in=burnin, sample_freq=thin,
-                         seed=seed, warm_start=warm_start,
-                         warm_start_kwargs={"gt_iters": gt_iters})
+    res = infer(
+        alignment,
+        model=MSC(theta=0.02),
+        criterion=Bayesian(
+            objective=Likelihood(),
+            prior=MCMCSeqPriors(max_reticulations=max_reticulations,
+                                max_level=max_level),
+            chain_length=iters, burnin=burnin, sample_freq=thin, seed=seed,
+        ),
+        warm_start=warm_start,
+        warm_start_kwargs={"gt_iters": gt_iters},
+    )
     dt = time.perf_counter() - t0
     return RunResult(
         label="SEQ", num_iter=iters, wall_time_sec=dt,
-        best_score=res.map_log_posterior,
-        accuracy=score_accuracy(res.map_network, true_net),
+        best_score=res.score,
+        accuracy=score_accuracy(res.best, true_net),
         extra={"map_theta": getattr(res, "map_theta", None),
                "model_selection": _format_model_selection(res)},
     )
 
 
 def _format_model_selection(res) -> str:
-    """Render the AIC/BIC-by-reticulation table for a MCMC_SEQ result.
+    """Render the AIC/BIC-by-reticulation table for a sequence run.
 
     Reports, per reticulation count sampled, the best log likelihood, parameter
     count and information criteria with deltas to the best model -- so an extra
@@ -425,29 +432,29 @@ def _format_model_selection(res) -> str:
 def run_snp(true_net: Network, *, sites: int, iters: int, burnin: int,
             thin: int, seed: int, u: float = 1.0, v: float = 1.0,
             coal: float = 0.005, max_reticulations: int = 2) -> RunResult:
-    """Simulate biallelic SNP data on ``true_net`` and run MCMC_BIMARKERS."""
-    from phynetpy.SNPSimulator import simulate
-    from phynetpy.infer import MCMC_BIMARKERS
+    """Simulate biallelic SNP data on ``true_net`` and sample the posterior.
 
+    The mutation rates ``u`` / ``v`` and the coalescent rate live on the model
+    axis, so the same ``MSC`` object configures the simulator and the sampler --
+    no NEXUS round-trip in between.
+    """
     samples = {leaf.label: 1 for leaf in true_net.get_leaves()}
-    sim = simulate(n=len(TAXA), s=sites, net=true_net, samples=samples,
-                   u=u, v=v, coal=coal, seed=seed)
-    os.makedirs("runs", exist_ok=True)
-    path = os.path.join("runs", "harness_6t_1r.nex")
-    sim.write_nexus(path)
+    model = MSC(u=u, v=v, coal=coal)
+    markers = simulate(model, true_net, n=sites, data="markers",
+                       mapping=MAPPING, samples=samples, seed=seed)
 
     t0 = time.perf_counter()
-    result = MCMC_BIMARKERS(path, u=u, v=v, coal=coal, num_iter=iters,
-                            burn_in=burnin, sample_freq=thin, seed=seed,
-                            samples=samples, max_reticulations=max_reticulations)
+    res = infer(
+        markers,
+        model=model,
+        criterion=Bayesian(objective=Likelihood(), chain_length=iters,
+                           burnin=burnin, sample_freq=thin, seed=seed),
+        max_reticulations=max_reticulations,
+    )
     dt = time.perf_counter() - t0
-
-    # MCMC_BIMARKERS returns {network: score}; pick the best.
-    best_net = max(result, key=result.get)
-    best_score = result[best_net]
     return RunResult(
-        label="SNP", num_iter=iters, wall_time_sec=dt, best_score=best_score,
-        accuracy=score_accuracy(best_net, true_net),
+        label="SNP", num_iter=iters, wall_time_sec=dt, best_score=res.score,
+        accuracy=score_accuracy(res.best, true_net),
     )
 
 
@@ -472,9 +479,9 @@ def main() -> None:
                          "networks); rejects above-level proposals before "
                          "scoring. Default: no cap.")
     ap.add_argument("--no-warm-start", action="store_true",
-                    help="disable the MCMC_GT warm start for the seq chain")
+                    help="disable the gene-tree warm start for the seq chain")
     ap.add_argument("--gt-iters", type=int, default=6000,
-                    help="MCMC_GT bootstrap iterations for the seq warm start")
+                    help="gene-tree bootstrap iterations for the seq warm start")
     args = ap.parse_args()
 
     which = set(args.which)

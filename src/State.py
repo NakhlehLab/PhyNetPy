@@ -44,28 +44,11 @@ from typing import Callable
 
 # Relative imports
 from .BirthDeath import CBDP
+from .GraphUtils import _valid_network_degrees
 from .ModelGraph import Model
 from .Matrix import Matrix
-from .GTR import GTR, JC
+from .GTR import GTR
 from .ModelMove import Move
-from .Network import Network
-
-
-def acyclic_routine(model: Model) -> bool:
-    """
-    Checks the Model's network for cycles. 
-
-    Args:
-        model (Model): A Model with a phylogenetic network.
-
-    Returns:
-        bool: True if the model's network is free of cycles, False if it 
-              contains cycles.
-    """
-    assert(model.network is not None)
-    if model.network.is_acyclic():
-        return True
-    return False
 
 
 def network_invariants_routine(model: Model) -> bool:
@@ -85,29 +68,7 @@ def network_invariants_routine(model: Model) -> bool:
         True when all invariants hold, False otherwise.
     """
     net = model.network
-    if net is None:
-        return False
-
-    root_count = 0
-    for n in net.V():
-        ind = net.in_degree(n)
-        outd = net.out_degree(n)
-
-        if ind == 0:
-            root_count += 1
-            if outd < 2:
-                return False
-        elif outd == 0:
-            if ind != 1:
-                return False
-        elif n.is_reticulation():
-            if ind != 2 or outd != 1:
-                return False
-        else:
-            if ind != 1 or outd < 2:
-                return False
-
-    if root_count != 1:
+    if net is None or not _valid_network_degrees(net):
         return False
 
     return net.is_acyclic()
@@ -146,10 +107,12 @@ class State:
                                                 should be a Model object, and 
                                                 return True if the Model is 
                                                 valid, False if not.
-                                                Defaults to 'acyclic_routine',
-                                                which checks that the Model's 
-                                                phylogenetic network is 
-                                                free of cycles.
+                                                Defaults to
+                                                'network_invariants_routine',
+                                                which checks that the Model's
+                                                phylogenetic network is acyclic
+                                                and has well-formed root, leaf,
+                                                and reticulation degrees.
         Returns:
             N/A                                   
         """
@@ -190,7 +153,7 @@ class State:
                   otherwise.
         """
         try:
-            self.proposed_model = self.proposed_model.execute_move(move)
+            self.proposed_model = move.execute(self.proposed_model)
             valid = self.validate_proposed_network(move)
         except Exception:
             try:
@@ -261,20 +224,6 @@ class State:
         self.current_model = Model()
         self.current_model.network = network
         self.proposed_model = copy.deepcopy(self.current_model)
-
-    def write_line_to_summary(self, line: str) -> None:
-        """
-        Accumulate log output by appending line to the end of the
-        current string.
-
-        'line' need not be new line terminated.
-        
-        Args:
-            line (str): logging information, plain text.
-        Returns:
-            N/A
-        """
-        self.current_model.summary_str += line.strip() + "\n"
 
     def validate_proposed_network(self, prev_move: Move) -> bool:
         """

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>criteria - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; criteria
+                </div>
+                
+                <h1>criteria Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>Axis 3 -- the statistical objective: MDC, Likelihood, PseudoLikelihood, and Bayesian, which wraps one of the likelihoods rather than sitting parallel to them.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Source:</dt>
+                        <dd>criteria.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#criterion">Criterion</a></li>
+                        <li><a href="#mdc">MDC</a></li>
+                        <li><a href="#likelihood">Likelihood</a></li>
+                        <li><a href="#pseudolikelihood">PseudoLikelihood</a></li>
+                        <li><a href="#bayesian">Bayesian</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">CriterionError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when a criterion is misconfigured.</p>
+                    </div>
+                </div>
+
+                <h2 id="criterion">Criterion</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Criterion</span>(<span class="params">ABC</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Base class for a statistical objective. A criterion says *what number is being optimised*: a parsimony cost, a full likelihood, a pseudo-likelihood, or a posterior. It is independent of both the data type and the biology, which is why it is its own axis. Two class attributes make the legality of a run checkable before any computation starts: * ``accepts_data`` -- the data types the objective is mathematically defined on. Violating it is a :class:`TypeError`, not a missing feature: MDC over a sequence alignment is not unimplemented, it is undefined. * ``scorable`` -- whether the objective can score a single fixed network. ``False`` for :class:`~phynetpy.criteria.Bayesian`, whose value on one network collapses to its wrapped objective. Attributes: use_branch_lengths: Tri-valued branch-length...</p>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="mdc">MDC</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">MDC</span>(<span class="params">Criterion</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Minimizing deep coalescences: a parsimony criterion. Counts the extra gene lineages needed to reconcile the gene trees with the species network and prefers the network needing fewest. Defined over gene-tree *topologies*, so branch lengths are ignored by construction -- ``use_branch_lengths`` is fixed at ``False`` and cannot be overridden. Lower is better, unlike every other criterion here; the verbs normalise this so that :attr:`~phynetpy.infer.InferenceResult.score` is always reported in the criterion's own natural direction and documented as such.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">weighting: Optional[str] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Configure the parsimony criterion.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">weighting</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Per-tree weighting scheme (``&quot;bootstrap&quot;``, ``&quot;posterior&quot;``, ...).  ``None`` weights every gene tree equally.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>CriterionError</code>: If a weighting scheme is requested.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="likelihood">Likelihood</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Likelihood</span>(<span class="params">Criterion</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Full likelihood of the data under the model. Integrates over all coalescent histories rather than summarising them, so it is the most statistically efficient of the point-estimate criteria and the most expensive. Defined on all three data types. Attributes: use_branch_lengths: ``True`` requires and uses gene-tree branch lengths, ``False`` scores topologies only, ``None`` uses them when present.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">use_branch_lengths: Optional[bool] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Configure the full-likelihood criterion.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">use_branch_lengths</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Branch-length policy.  ``None`` (default) uses gene-tree branch lengths when the data carries them.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="pseudolikelihood">PseudoLikelihood</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">PseudoLikelihood</span>(<span class="params">Criterion</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Pseudo-likelihood over subsets of the taxa. Replaces the full likelihood with a product of likelihoods over small subsets (by default rooted triples), which is far cheaper and scales to many more taxa at some cost in efficiency (Yu &amp; Nakhleh 2015; Solis-Lemus &amp; Ane 2016). Defined on gene-tree topologies and on biallelic markers, but not on alignments: a pseudo-likelihood over subsets of gene trees needs gene trees, and PhyNetPy does not estimate them from sequences. Attributes: subsets: Which subsets the product runs over. Only ``&quot;trinets&quot;`` (rooted triples) is implemented. use_branch_lengths: Branch-length policy; the triplet method consumes topologies only.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">subsets: str = 'trinets', use_branch_lengths: Optional[bool] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Configure the pseudo-likelihood criterion.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">subsets</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Subset family for the product.  ``&quot;trinets&quot;`` (3-taxon subnetworks) is the only supported value.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">use_branch_lengths</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Branch-length policy.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>CriterionError</code>: If *subsets* is not ``&quot;trinets&quot;``.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="bayesian">Bayesian</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Bayesian</span>(<span class="params">Criterion</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Bayesian mode: sample a posterior built on an objective. Not a fourth objective but a *mode layered on one*. The casual user writes ``Bayesian()`` and gets the full likelihood; the power user writes ``Bayesian(objective=PseudoLikelihood())``. Which data types are legal follows from the wrapped objective, so ``accepts_data`` is delegated to it. Scoring a single fixed network under a Bayesian criterion collapses to computing its likelihood or posterior density, so ``scorable`` is ``False`` and :func:`phynetpy.infer.score` refuses it, pointing the caller at ``.objective`` instead. Attributes: objective: The wrapped likelihood (full or pseudo). prior: Prior hyperparameters, or ``None`` for the engine's defaults. chain_length: Total proposed moves. burnin: Iterations discarded before sampling b...</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">accepts_data</span> <span class="keyword">-&gt;</span> tuple <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Data types the wrapped objective is defined on.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">use_branch_lengths</span> <span class="keyword">-&gt;</span> Optional[bool] <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Branch-length policy of the wrapped objective.</p>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">objective: Optional[Criterion] = None, prior: Optional[Any] = None, chain_length: int = 1000000, burnin: int = 100000, sample_freq: int = 100, seed: Any = None, temperatures: Optional[list] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Configure the Bayesian mode.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">objective</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The likelihood the posterior is built on.  ``None``</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">selects</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>class:`Likelihood`.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">prior</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Prior hyperparameters (:class:`~phynetpy.infer.MCMC_GTPriors` for gene trees and</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">markers</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>:class:`~phynetpy.infer.MCMCSeqPriors` for alignments).  ``None`` uses the engine's defaults.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">chain_length</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Total proposed moves.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">burnin</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Iterations discarded before sampling.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sample_freq</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Thinning interval for retained samples.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">seed</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Master RNG seed.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">temperatures</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>MC3 temperature ladder (alignments only).</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>CriterionError</code>: If the objective is itself Bayesian, or the chain budget is inconsistent.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">resolve_criterion</span>(<span class="params">spec: Union[Criterion, str, type, None]</span>) <span class="keyword">-&gt;</span> Criterion
+                            </div>
+                            <div class="function-body">
+                                <p>Coerce a criterion shortcut into a :class:`Criterion` instance. Lets the casual user write ``criterion=&quot;MPL&quot;`` and reserve the object form for when parameters are actually needed.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">spec</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A :class:`Criterion` instance (returned unchanged), a :class:`Criterion` subclass (instantiated with defaults), a case-insensitive shortcut string, or ``None`` for the default (:class:`Likelihood`).</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Criterion: The resolved criterion.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>CriterionError</code>: If *spec* is not a recognised criterion.</div>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html" class="current">criteria</a></li>
+                <li><a href="data.html">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html">models</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#criterion">Criterion</a></li>
+                <li><a href="#mdc">MDC</a></li>
+                <li><a href="#likelihood">Likelihood</a></li>
+                <li><a href="#pseudolikelihood">PseudoLikelihood</a></li>
+                <li><a href="#bayesian">Bayesian</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

@@ -28,7 +28,8 @@ import math
 import numpy as np
 import pytest
 
-from phynetpy.infer import MCMC_SEQ, MCMCSeqPriors
+from phynetpy.infer import MCMCSeqPriors
+from phynetpy._mcmc_seq import MCMC_SEQ
 from phynetpy import _mcmc_seq as ms
 
 
@@ -227,7 +228,7 @@ class TestRelocation:
         p1 = ms._geometric_placements(s1.species_net, s1.net_heights)
         import copy as _copy
         net2 = _copy.deepcopy(s1.species_net)
-        h2 = ms._heights(net2)
+        h2 = ms._node_heights(net2)
         p2 = ms._geometric_placements(net2, h2)
         assert len(p1) == len(p2) and len(p1) > 0
         assert {(*x["donor_labels"], *x["retic_labels"]) for x in p1} == \
@@ -329,7 +330,6 @@ class TestInformationCriteria:
         assert math.isnan(ic2["BIC"])
 
     def test_result_model_selection_populated(self):
-        from phynetpy.infer import MCMC_SEQ, MCMCSeqPriors
         rng = np.random.default_rng(5)
 
         def rand(n):
@@ -419,8 +419,6 @@ class TestLevelCap:
         # End-to-end guarantee: a full short chain with max_level=1 (and a
         # generous reticulation cap) samples only level<=1 networks, and the
         # MAP network is level<=1.
-        from phynetpy.infer import MCMC_SEQ, MCMCSeqPriors
-
         rng = np.random.default_rng(7)
 
         def rand(n):

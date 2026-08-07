@@ -39,7 +39,7 @@ verified to match PhyloNet bit-for-bit -- lives in
   reticulation inheritance probabilities, and reticulation count via
   add/delete), and the population mutation rate ``theta``,
 * the public :class:`MCMC_SEQ` driver, mirroring the surface of
-  :class:`phynetpy.infer.MCMC_GT`.
+  :class:`phynetpy._mcmc_gt.MCMC_GT`.
 
 Units & defaults follow PhyloNet exactly: heights/branch lengths are in
 expected substitutions per site, ``theta = 4 N mu`` (per-pair coalescent rate
@@ -55,7 +55,6 @@ Design - [x]
 
 from __future__ import annotations
 
-import copy
 import math
 import multiprocessing as mp
 import queue as _queue
@@ -68,14 +67,20 @@ import numpy as np
 
 from .Network import Network, Node, Edge
 from . import _network_moves as _nm
-from .GraphUtils import level as _network_level
+from .GraphUtils import (
+    count_reticulations,
+    level as _network_level,
+    _clone_net,
+    _edge_between,
+    _leaf_labels_below,
+    _node_height,
+    _node_heights,
+)
 from .MSA import MSA
 from ._seq_likelihood import (
     SubstitutionModel,
     JC69,
     FelsensteinCalculator,
-    gene_tree_msnc_log_density,
-    _node_height,
 )
 from ._msnc_density import (
     build_network_msnc_index,
@@ -366,7 +371,7 @@ def log_prior_seq(
     if priors.use_branch_length_prior and priors.branch_length_mean > 0.0:
         bl_rate = 1.0 / priors.branch_length_mean
         log_bl_rate = math.log(bl_rate)
-        heights = _heights(species_net)
+        heights = _node_heights(species_net)
         for e in species_net.E():
             length = heights[e.src] - heights[e.dest]
             if length < 0.0:
@@ -404,14 +409,6 @@ def log_prior_seq(
 # Height bookkeeping (ultrametric, substitution units)
 # ======================================================================
 
-def _heights(net: Network) -> dict[Node, float]:
-    """Map every node to its height above the present (memoised post-order)."""
-    cache: dict[Node, float] = {}
-    for v in net.V():
-        _node_height(net, v, cache)
-    return cache
-
-
 def _sync_lengths(net: Network, heights: dict[Node, float]) -> None:
     """Set every edge length to ``height(parent) - height(child)``.
 
@@ -429,22 +426,6 @@ def _sync_lengths(net: Network, heights: dict[Node, float]) -> None:
         if length < 0.0:
             length = 0.0
         e.set_length(float(length))
-
-
-def _clone_net(net: Network) -> Network:
-    """Fast structural clone of a species network / gene tree.
-
-    Uses :meth:`Network.copy` -- which rebuilds fresh ``Node`` / ``Edge``
-    objects directly -- instead of :func:`copy.deepcopy`.  It is ~4x faster
-    because it skips generic deepcopy's reflective, memoised object graph walk,
-    and it is *exact* for sampling purposes: node labels, reticulation flags,
-    edge lengths and inheritance probabilities (everything the Felsenstein and
-    MSNC likelihood factors read) are all reproduced.  Node attribute dicts are
-    shared with the source, which is safe throughout the samplers because they
-    never mutate node attributes in place -- ultrametric heights live in
-    external ``dict[Node, float]`` maps and are written back onto edge lengths.
-    """
-    return net.copy()[0]
 
 
 def _descendant_species(
@@ -637,7 +618,6 @@ def build_upgma_gene_tree(alignment: dict[str, str]) -> Network:
         # Update distances (UPGMA average linkage).
         remaining = [x for k, x in enumerate(active) if k not in (a, b)]
         for ic in remaining:
-            cc = clusters[ic]
             d_ac = dist[(min(ia, ic), max(ia, ic))]
             d_bc = dist[(min(ib, ic), max(ib, ic))]
             avg = (ca["size"] * d_ac + cb["size"] * d_bc) / (ca["size"] + cb["size"])
@@ -822,8 +802,8 @@ class SeqState:
         # Explicit ultrametric heights are the source of truth; edge lengths
         # are kept in sync so the likelihood factors see one consistent
         # geometry.
-        self.net_heights: dict[Node, float] = _heights(species_net)
-        self.gt_heights: list[dict[Node, float]] = [_heights(gt) for gt in gene_trees]
+        self.net_heights: dict[Node, float] = _node_heights(species_net)
+        self.gt_heights: list[dict[Node, float]] = [_node_heights(gt) for gt in gene_trees]
         # Independently-built starting trees may place gene coalescences below
         # species divergences (invalid embedding -> -inf likelihood).  Shrink
         # the species network until every locus embeds validly.
@@ -858,7 +838,7 @@ class SeqState:
 
     def num_reticulations(self) -> int:
         """Reticulation-node count of the species network."""
-        return sum(1 for v in self.species_net.V() if v.is_reticulation())
+        return count_reticulations(self.species_net)
 
 
 # ======================================================================
@@ -880,12 +860,6 @@ def _internal_nodes(net: Network) -> list[Node]:
         v for v in net.V()
         if net.out_degree(v) > 0 and net.in_degree(v) > 0
     ]
-
-
-def _edge_between(net: Network, parent: Node, child: Node) -> Edge:
-    """The single directed edge ``parent -> child``."""
-    e = net.get_edge(parent, child)
-    return e[0] if isinstance(e, list) else e
 
 
 def op_change_theta(
@@ -924,7 +898,7 @@ def op_change_gamma(
     snap = state._engine.clone_caches()
 
     new_net = _clone_net(old_net)
-    new_heights = _heights(new_net)
+    new_heights = _node_heights(new_net)
     rets = [v for v in new_net.V() if v.is_reticulation()]
     r = rets[int(rng.integers(len(rets)))]
     in_edges = list(new_net.in_edges(r))
@@ -1000,7 +974,7 @@ def op_net_node_height(
     snap = state._engine.clone_caches()
 
     new_net = _clone_net(old_net)
-    new_heights = _heights(new_net)
+    new_heights = _node_heights(new_net)
     loghr = _slide_height_move(new_net, new_heights, rng, root_scale_window)
     if loghr is None:
         return None
@@ -1029,7 +1003,7 @@ def op_gene_node_height(
     snap = state._engine.clone_caches()
 
     new_gt = _clone_net(old_gt)
-    new_h = _heights(new_gt)
+    new_h = _node_heights(new_gt)
     loghr = _slide_height_move(new_gt, new_h, rng, root_scale_window)
     if loghr is None:
         return None
@@ -1064,7 +1038,7 @@ def op_gene_tree_nni(
     snap = state._engine.clone_caches()
 
     new_gt = _clone_net(old_gt)
-    new_h = _heights(new_gt)
+    new_h = _node_heights(new_gt)
 
     # Eligible internal edges: (p, v) where v is internal and p has a sibling.
     internal = [v for v in new_gt.V() if new_gt.out_degree(v) >= 2]
@@ -1272,7 +1246,7 @@ def _add_reticulation_placements(
                 continue
             t1 = 0.5 * (lo + hi)
             cand = _clone_net(net)
-            ch = _heights(cand)
+            ch = _node_heights(cand)
             cd = _find_edge_by_labels(cand, v3.label, v4.label)
             cr = _find_edge_by_labels(cand, v5.label, v6.label)
             if cd is None or cr is None:
@@ -1406,7 +1380,7 @@ def op_add_reticulation(
 
     snap = state._engine.clone_caches()
     new_net = _clone_net(old_net)
-    new_heights = _heights(new_net)
+    new_heights = _node_heights(new_net)
     d = _find_edge_by_labels(new_net, *chosen["donor_labels"])
     r = _find_edge_by_labels(new_net, *chosen["retic_labels"])
     if d is None or r is None:
@@ -1549,7 +1523,7 @@ def op_delete_reticulation(
 
     snap = state._engine.clone_caches()
     new_net = _clone_net(old_net)
-    new_heights = _heights(new_net)
+    new_heights = _node_heights(new_net)
     cv2 = None
     for v in new_net.V():
         if v.is_reticulation() and v.label == v2.label:
@@ -1681,44 +1655,8 @@ def _suppress_degree2(
 
 
 def _leaf_descendants(net: Network, node: Node) -> frozenset:
-    """Frozenset of leaf labels reachable below ``node`` (small trees only)."""
-    kids = net.get_children(node)
-    if not kids:
-        return frozenset({node.label})
-    acc: set = set()
-    for c in kids:
-        acc |= _leaf_descendants(net, c)
-    return frozenset(acc)
-
-
-def _all_leaf_descendants(net: Network) -> dict[Node, frozenset]:
-    """Descendant-leaf-set of *every* node in one memoised post-order pass.
-
-    Equivalent to calling :func:`_leaf_descendants` on each node but O(n)
-    instead of O(n^2): the per-node call recomputes each subtree from scratch,
-    whereas this shares subtree results.  Used by :func:`_gt_signature`, which
-    is on the coupled-move hot path (evaluated for every candidate gene tree).
-    """
-    memo: dict[Node, frozenset] = {}
-
-    def rec(v: Node) -> frozenset:
-        cached = memo.get(v)
-        if cached is not None:
-            return cached
-        kids = net.get_children(v)
-        if not kids:
-            r = frozenset({v.label})
-        else:
-            acc: set = set()
-            for c in kids:
-                acc |= rec(c)
-            r = frozenset(acc)
-        memo[v] = r
-        return r
-
-    for v in net.V():
-        rec(v)
-    return memo
+    """Frozenset of leaf *labels* reachable below ``node``."""
+    return frozenset(leaf.label for leaf in net.leaf_descendants(node))
 
 
 def _gt_signature(gt: Network, heights: dict[Node, float]) -> frozenset:
@@ -1731,10 +1669,9 @@ def _gt_signature(gt: Network, heights: dict[Node, float]) -> frozenset:
     boundary (object identity is not preserved by copying, but the signature
     is).
     """
-    desc = _all_leaf_descendants(gt)
     return frozenset(
-        (desc[v], round(float(heights.get(v, 0.0)), 12))
-        for v in gt.V()
+        (labels, round(float(heights.get(v, 0.0)), 12))
+        for v, labels in _leaf_labels_below(gt).items()
         if gt.get_children(v)
     )
 
@@ -1786,7 +1723,7 @@ def _gene_tree_nni_neighbors(
     seen: set = set()
     for s_ls, c_ls, _v_ls in quads:
         cand = _clone_net(gt)
-        ch = _heights(cand)
+        ch = _node_heights(cand)
         cs = _node_by_leafset(cand, s_ls)
         cc = _node_by_leafset(cand, c_ls)
         if cs is None or cc is None:
@@ -1852,7 +1789,7 @@ def _scaled_gene_tree(
     (still a fresh copy so the caller owns an independent object).
     """
     cand = _clone_net(gt)
-    ch = _heights(cand)
+    ch = _node_heights(cand)
     if s != 1.0:
         ch = {v: h * s for v, h in ch.items()}
         _sync_lengths(cand, ch)
@@ -1996,7 +1933,7 @@ def _enumerate_scored_candidates(
         bi, s = descriptors[k]
         b_gt, _b_h = bases[bi]
         cg = _clone_net(b_gt)
-        ch = _heights(cg)
+        ch = _node_heights(cg)
         if s != 1.0:
             ch = {v: h * s for v, h in ch.items()}
         _sync_lengths(cg, ch)
@@ -2123,7 +2060,7 @@ def op_add_reticulation_coupled(
 
     snap = state._engine.clone_caches()
     new_net = _clone_net(old_net)
-    new_heights = _heights(new_net)
+    new_heights = _node_heights(new_net)
     d = _find_edge_by_labels(new_net, *chosen["donor_labels"])
     r = _find_edge_by_labels(new_net, *chosen["retic_labels"])
     if d is None or r is None:
@@ -2274,7 +2211,7 @@ def op_delete_reticulation_coupled(
 
     snap = state._engine.clone_caches()
     new_net = _clone_net(old_net)
-    new_heights = _heights(new_net)
+    new_heights = _node_heights(new_net)
     cv2 = None
     for v in new_net.V():
         if v.is_reticulation() and v.label == v2.label:
@@ -2398,7 +2335,7 @@ def op_add_reticulation_decoupled(
 
     snap = state._engine.clone_caches()
     new_net = _clone_net(old_net)
-    new_heights = _heights(new_net)
+    new_heights = _node_heights(new_net)
     d = _find_edge_by_labels(new_net, *chosen["donor_labels"])
     r = _find_edge_by_labels(new_net, *chosen["retic_labels"])
     if d is None or r is None:
@@ -2528,7 +2465,7 @@ def op_delete_reticulation_decoupled(
 
     snap = state._engine.clone_caches()
     new_net = _clone_net(old_net)
-    new_heights = _heights(new_net)
+    new_heights = _node_heights(new_net)
     cv2 = None
     for v in new_net.V():
         if v.is_reticulation() and v.label == v2.label:
@@ -2702,7 +2639,7 @@ def op_relocate_reticulation_coupled(
     # Build N0 = old_net - A (deep copy; suppress the two degree-2 nodes).
     snap = state._engine.clone_caches()
     n0 = _clone_net(old_net)
-    n0_h = _heights(n0)
+    n0_h = _node_heights(n0)
     cv2 = next(
         (v for v in n0.V() if v.is_reticulation() and v.label == v2.label), None
     )
@@ -2732,7 +2669,7 @@ def op_relocate_reticulation_coupled(
 
     # Build N_B = N0 + B.
     new_net = _clone_net(n0)
-    new_heights = _heights(new_net)
+    new_heights = _node_heights(new_net)
     d = _find_edge_by_labels(new_net, *b["donor_labels"])
     r = _find_edge_by_labels(new_net, *b["retic_labels"])
     if d is None or r is None:
@@ -3077,7 +3014,7 @@ class MCMCSeqResult:
         L = self._num_leaves()
         if L is None:
             return None
-        r = sum(1 for v in self.map_network.V() if v.is_reticulation())
+        r = count_reticulations(self.map_network)
         k = _count_free_parameters(L, r)
         ic = _information_criteria(self.map_log_likelihood, k, self.total_sites)
         ic["num_reticulations"] = r
@@ -3191,7 +3128,7 @@ class MCMC_SEQ:
     over the gene trees, species network, inheritance probabilities and
     population mutation rate.
 
-    Mirrors the public surface of :class:`phynetpy.infer.MCMC_GT`:
+    Mirrors the public surface of :class:`phynetpy._mcmc_gt.MCMC_GT`:
 
     * :meth:`score` -- log posterior of the current state.
     * :meth:`search` -- run the sampler and return an :class:`MCMCSeqResult`.
@@ -3290,7 +3227,7 @@ class MCMC_SEQ:
         (see :func:`op_add_reticulation_coupled`) and the chain collapses to a
         tree.  This method sidesteps the barrier by inferring a
         reticulation-bearing network *cheaply, from the gene-tree topologies
-        alone* -- running :class:`~phynetpy.MCMC_GT` on this object's current
+        alone* -- running :class:`~phynetpy._mcmc_gt.MCMC_GT` on this object's current
         per-locus gene-tree estimates -- and adopting it as the SEQ chain's
         starting network.  Seeded there, the coupled add/delete move holds and
         *refines* the reticulation (inheritance probabilities, node heights,
@@ -3916,11 +3853,6 @@ class MultiChainStatus:
     elapsed_sec: float
     running: list[int]
     finished: list[int]
-
-    def min_rhat_ok(self, target: float = 1.05) -> bool:
-        """``True`` iff every finite R-hat is at or below ``target``."""
-        finite = [v for v in self.rhat.values() if math.isfinite(v)]
-        return bool(finite) and all(v <= target for v in finite)
 
 
 @dataclass

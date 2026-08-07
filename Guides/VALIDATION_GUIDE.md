@@ -134,12 +134,10 @@ Each validation produces a `ValidationSummary` object with the following attribu
 
 ## Error Handling
 
-The validation module uses a hierarchy of exception classes:
+Problems are reported through a single exception class:
 
 ```python
-ValidationError          # Base validation exception
-├── FileFormatError     # Invalid or corrupted file format
-└── DataIntegrityError  # Data integrity issues
+ValidationError          # Raised for any validation failure
 ```
 
 Common error scenarios:

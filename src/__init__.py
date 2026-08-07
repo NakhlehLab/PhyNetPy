@@ -10,104 +10,292 @@
 ##############################################################################
 
 """
-PhyNetPy - Phylogenetic Network Python Library
+PhyNetPy -- a Python library for phylogenetic network inference and analysis.
 
-A comprehensive library for phylogenetic network inference and analysis.
+Getting started
+---------------
+There are two verbs, ``infer`` and ``score``.  What used to be a menu of
+fifteen command names is now three orthogonal axes, each a typed object: the
+data, the model (biology), and the criterion (statistical objective)::
+
+    from phynetpy.infer import infer, score
+    from phynetpy.data import GeneTrees
+    from phynetpy.models import MSC, Allopolyploid
+    from phynetpy.criteria import MDC, Likelihood, PseudoLikelihood, Bayesian
+
+    gts = GeneTrees.from_file("gene_trees.nex", mapping)
+
+    result = infer(gts, model=MSC(), criterion=PseudoLikelihood())
+    print(result.best, result.score)
+
+    s = score(result.best, gts, criterion=MDC())
+
+Build or read a network, then analyse it::
+
+    from phynetpy import read_newick, Network, Node, Edge, compare_networks
+
+    net = read_newick("((A,B),C);")[0]
+
+Layout
+------
+The top-level ``phynetpy`` namespace, re-exported below, holds the data
+structures and analysis helpers you need to prepare inputs and inspect
+outputs. It is deliberately curated -- ``__all__`` lists everything that is
+public and supported.
+
+Submodules worth importing directly:
+
+* :mod:`phynetpy.infer` -- the two verbs, ``InferenceResult``, ``Start``,
+  MCMC diagnostics, and simulation. Start here.
+* :mod:`phynetpy.data`, :mod:`phynetpy.models`, :mod:`phynetpy.criteria` --
+  the three inference axes.
+* :mod:`phynetpy.Network` -- the :class:`~phynetpy.Network.Network` graph type
+  and its primitives.
+* :mod:`phynetpy.GraphUtils` -- network decomposition, distances, and
+  structural edits.
+* :mod:`phynetpy.IO` -- readers and writers for Newick, NEXUS, FASTA, VCF.
+* :mod:`phynetpy.GTR` -- substitution models for the model-graph engines. Note
+  that the sequence-MCMC engine has its own model classes
+  (``JC69``/``HKY85``/``GTR``) exported from :mod:`phynetpy.infer`.
+
+.. note::
+   ``phynetpy.Model`` is :class:`phynetpy.ModelGraph.Model`, the
+   probabilistic graphical model the search drivers mutate.  The *biological
+   process* on the inference model axis is ``phynetpy.models.Model``; the
+   bare name is deliberately not re-exported here, so neither shadows the
+   other.
 """
 
+from ._version import __version__
+
+__author__ = "Mark Kessler"
+
+# =============================================================================
 # Core data structures
-from .Network import Network, Node, Edge
-from .MSA import MSA
+# =============================================================================
+
+from .Network import (
+    Network,
+    MUL,
+    Node,
+    Edge,
+    Branch,
+    NodeSet,
+    EdgeSet,
+    NetworkError,
+    NodeError,
+    EdgeError,
+)
+from .MSA import MSA, DataSequence
 from .Matrix import Matrix
 from .Alphabet import Alphabet
-
-# Parsing and I/O
-from .Newick import get_labels, NexusTemplate, NewickParserError
-from .IO import (read_fasta, write_fasta, read_fasta_records, 
-                  write_fasta_from_network, read_vcf, write_vcf, 
-                  read_vcf_metadata, read_newick, read_newick_file,
-                  write_newick, write_newick_file, read_nexus,
-                  read_nexus_msa, write_nexus, convert_newick,
-                  detect_newick_standard)
-
-# Models and utilities
-from .GTR import GTR, JC, K80, HKY
-from .BirthDeath import CBDP
-from .GraphUtils import *
 from .GeneTrees import GeneTrees
 
-# Validation
-from .Validation import (ValidationSummary, ValidationError, 
-                          GeneTreeReport, GeneTreeAggregateSummary)
+# =============================================================================
+# Parsing and I/O
+# =============================================================================
 
-# New architecture (v1.1+)
+from .Newick import get_labels, NexusTemplate, NewickParserError
+from .IO import (
+    read_fasta,
+    read_fasta_records,
+    write_fasta,
+    write_fasta_from_network,
+    read_vcf,
+    read_vcf_metadata,
+    write_vcf,
+    read_newick,
+    read_newick_file,
+    write_newick,
+    write_newick_file,
+    read_nexus,
+    read_nexus_msa,
+    write_nexus,
+    convert_newick,
+    detect_newick_standard,
+)
+from .Validation import (
+    ValidationSummary,
+    ValidationError,
+    GeneTreeReport,
+    GeneTreeAggregateSummary,
+)
 
-from .BiMarkers import *
-from .SNPSimulator import simulate as simulate_snp, random_network, SimulatedSNPData
+# =============================================================================
+# Substitution models (model-graph engines)
+# =============================================================================
+# The bare name ``GTR`` is intentionally *not* re-exported here: it would
+# collide with the ``phynetpy.GTR`` module, and the sequence-MCMC engine has a
+# separate ``GTR`` class of its own.  Use ``from phynetpy.GTR import GTR`` for
+# the model-graph class, or ``from phynetpy.infer import GTR`` for the
+# sequence-likelihood class.
 
-# v1 architecture -- NOT CUDA-only.  This is the live Model/ModelGraph search
-# infrastructure underneath every gene-tree-topology method (MPL, MCMC_GT,
-# InferNetwork_ML, INFER_MP_ALLOP) as well as the CPU BiMarkers pipeline.
-from .ModelGraph import *
-from .ModelFactory import *
-from .MetropolisHastings import MetropolisHastings, HillClimbing, SimulatedAnnealing, ProposalKernel
+from .GTR import JC, K80, HKY, F81, K81, SYM, TN93, SubstitutionModelError
+
+# =============================================================================
+# Simulation
+# =============================================================================
+
+from .BirthDeath import CBDP
+from .SNPSimulator import (
+    simulate as simulate_snp,
+    random_network,
+    SimulatedSNPData,
+)
+
+# =============================================================================
+# Network analysis: decomposition, distances, structural edits
+# =============================================================================
+# ``GraphUtils`` declares an explicit ``__all__``, so this star import brings in
+# exactly its documented helpers (including the reticulation-comparison metrics
+# it re-exports from ``ReticulationComparison``).
+
+from .GraphUtils import *
+from .GraphUtils import __all__ as _graphutils_all
+
+# =============================================================================
+# Search framework
+# =============================================================================
+# A Model pairs a network with the callable that scores it.  Import these to
+# plug a custom likelihood into the shared search machinery: attach a scorer
+# with Model.set_likelihood_calculator, propose topologies with Move subclasses
+# or your own ProposalKernel, and drive it with HillClimbing or
+# SimulatedAnnealing.
+
+from .ModelGraph import Model, ModelError
+from .MetropolisHastings import (
+    ProposalKernel,
+    HillClimbing,
+    SimulatedAnnealing,
+)
 from .State import State
-from .ModelMove import Move, SwitchParentage, AddReticulation, RemoveReticulation, FlipReticulation, SPR
+from .ModelMove import (
+    Move,
+    AddReticulation,
+    RemoveReticulation,
+    FlipReticulation,
+    RelocateReticulation,
+    SwitchParentage,
+    SPR,
+    ChangeNodeHeight,
+    ChangeInheritanceProb,
+    ChangeReticSource,
+    ChangeReticDest,
+)
 from .ModelSelection import reticulation_sweep, SweepResult, SweepRow
 from .Logger import Logger
 
-# Inference methods.  The public, recommended import path is
-# ``phynetpy.infer`` -- see ``src/infer.py`` for the curated surface.  The
-# underscore-prefixed modules below hold the actual implementations and
-# are not part of the public API.  ``infer.py``'s ``__all__`` already covers
-# INFER_MP_ALLOP / MCMC_GT / InferNetwork_ML and friends, so they don't need
-# to be re-imported directly here.
-from . import infer
-from .infer import *  # noqa: F401,F403  -- top-level re-export for ergonomics
+# =============================================================================
+# Inference
+# =============================================================================
+# ``phynetpy.infer`` is the full, curated inference surface (the two verbs,
+# result types, scorers, proposal kernels, prior containers, MCMC diagnostics,
+# and simulation).  The verbs and the result type are lifted to the top level;
+# the three axes stay in their own subpackages so ``Model`` and ``Criterion``
+# do not collide with ``ModelGraph.Model`` and ``ModelSelection.Criterion``.
 
-# Data-oriented facade: choose an entry point by data type and pass a
-# scoring strategy.  See ``src/LikelihoodStrategies.py``.
-from .LikelihoodStrategies import (
-    Config,
-    InferenceResult,
-    ScoringStrategy,
-    Parsimony,
-    PseudoLikelihood,
-    MaximumLikelihood,
-    MCMC,
-    UnsupportedStrategyError,
-    Score_Network_Using_GT,
-    Infer_Network_From_GT,
-    Score_Network_Using_MSA,
-    Infer_Network_From_MSA,
-    Score_Network_Using_Sites,
-    Infer_Network_From_Sites,
-)
-
-# CUDA-accelerated BiMarkers (optional, currently unpackaged).
+# The two verbs live in ``phynetpy.infer`` and are *not* lifted to the top
+# level: ``phynetpy.infer`` has to stay the module, or ``import
+# phynetpy.infer`` would resolve to a function.  One import gets you both:
 #
-# A CUDA implementation (``MCMC_BiMarkers_CUDA.py``) exists in the pre-restructure
-# ``1.1/`` snapshot but has not been ported into ``src/`` or validated against
-# the current ``ModelGraph``/``Network`` API, so it is intentionally not wired
-# up here.  Flip this back to a ``try: from .MCMC_BiMarkers_CUDA import ...``
-# block once a vetted copy lands in ``src/``.
+#     from phynetpy.infer import infer, score
 #
-# NOTE: ``MCMC_BIMARKERS`` and ``SNP_LIKELIHOOD`` already have working CPU
-# implementations re-exported above via ``from .infer import *`` -- they are
-# deliberately *not* redefined here so that CUDA being unavailable doesn't
-# clobber the CPU path.  Only the CUDA-exclusive names are stubbed.
-CUDA_AVAILABLE = False
-CUPY_AVAILABLE = False
-NUMBA_CUDA_AVAILABLE = False
+# The result and starting-phylogeny types are lifted, since a caller that
+# consumes an ``InferenceResult`` should not need a second import for it.
 
-def SNP_LIKELIHOOD_DATA(*args, **kwargs):
-    raise ImportError("CUDA BiMarkers is not yet packaged in phynetpy. Use the CPU path (phynetpy.infer.SNP_LIKELIHOOD) instead.")
-def benchmark_cuda_vs_cpu(*args, **kwargs):
-    raise ImportError("CUDA BiMarkers is not yet packaged in phynetpy.")
-def get_cuda_device_info(*args, **kwargs):
-    print("CUDA BiMarkers not available: not yet packaged in phynetpy.")
-    return False
+from . import criteria, data, infer, models
+from .infer import InferenceResult, Start, StartMode
 
-__version__ = "0.4.0"
-__author__ = "Mark Kessler"
 
+__all__ = [
+    "__version__",
+    # Core data structures
+    "Network",
+    "MUL",
+    "Node",
+    "Edge",
+    "Branch",
+    "NodeSet",
+    "EdgeSet",
+    "NetworkError",
+    "NodeError",
+    "EdgeError",
+    "MSA",
+    "DataSequence",
+    "Matrix",
+    "Alphabet",
+    "GeneTrees",
+    # Parsing and I/O
+    "get_labels",
+    "NexusTemplate",
+    "NewickParserError",
+    "read_fasta",
+    "read_fasta_records",
+    "write_fasta",
+    "write_fasta_from_network",
+    "read_vcf",
+    "read_vcf_metadata",
+    "write_vcf",
+    "read_newick",
+    "read_newick_file",
+    "write_newick",
+    "write_newick_file",
+    "read_nexus",
+    "read_nexus_msa",
+    "write_nexus",
+    "convert_newick",
+    "detect_newick_standard",
+    "ValidationSummary",
+    "ValidationError",
+    "GeneTreeReport",
+    "GeneTreeAggregateSummary",
+    # Substitution models
+    "JC",
+    "K80",
+    "HKY",
+    "F81",
+    "K81",
+    "SYM",
+    "TN93",
+    "SubstitutionModelError",
+    # Simulation
+    "CBDP",
+    "simulate_snp",
+    "random_network",
+    "SimulatedSNPData",
+    # Search framework
+    "Model",
+    "ModelError",
+    "ProposalKernel",
+    "HillClimbing",
+    "SimulatedAnnealing",
+    "State",
+    "Move",
+    "AddReticulation",
+    "RemoveReticulation",
+    "FlipReticulation",
+    "RelocateReticulation",
+    "SwitchParentage",
+    "SPR",
+    "ChangeNodeHeight",
+    "ChangeInheritanceProb",
+    "ChangeReticSource",
+    "ChangeReticDest",
+    "reticulation_sweep",
+    "SweepResult",
+    "SweepRow",
+    "Logger",
+    # Inference: the two verbs live in ``phynetpy.infer``; the three axes
+    # live in ``phynetpy.data`` / ``.models`` / ``.criteria``.
+    "infer",
+    "data",
+    "models",
+    "criteria",
+    "InferenceResult",
+    "Start",
+    "StartMode",
+    # Network analysis (from GraphUtils.__all__)
+    *_graphutils_all,
+]
+
+del _graphutils_all

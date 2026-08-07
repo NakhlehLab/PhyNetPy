@@ -27,142 +27,30 @@ Design - [ ]
 """
 
 from __future__ import annotations
-# from abc import ABC, abstractmethod
-from collections import defaultdict, deque
 import copy
 import math
 import re
-from typing import Any, Callable, Union
 import warnings
-import numpy as np
-import sys
+from typing import Any, Callable, Union
+
 import networkx as nx
-from functools import singledispatchmethod
+import numpy as np
 
-from .Phylo import Branch
 from .MSA import DataSequence
-from .PhyloNet import run
-#from .Newick import *
-import tempfile
-from itertools import combinations
-from typing import Set, Tuple
- 
 
-sys.setrecursionlimit(300)
-
-##########################           
-#### CYTHON ACCELERATION #
-##########################
-
-# Try to use Cython-accelerated NodeSet / EdgeSet if available (2-5x faster)
-_USING_CYTHON = False
-_CNodeSet = None
-_CEdgeSet = None
-
+# ``NodeSet`` / ``EdgeSet`` are the compiled adjacency structures that back
+# every Network. They are required, not an optional accelerator: keeping a
+# second pure-Python implementation in sync by hand had already let the two
+# drift apart on four behaviours.
 try:
-    from .cython.graph_core_cy import (  # type: ignore[import-not-found]
-        CNodeSet as _CNodeSet,
-        CEdgeSet as _CEdgeSet,
-    )
-    _USING_CYTHON = True
-except ImportError:
-    pass  # Fall back to pure Python NodeSet / EdgeSet defined below
-
-def using_cython() -> bool:
-    """Check if Cython acceleration is enabled.
-
-    Returns:
-        bool: True if the Cython-accelerated NodeSet implementation is
-            available and in use, False if using the pure-Python fallback.
-    """
-    return _USING_CYTHON
-
-def _make_nodeset(directed: bool = True):
-    """
-    Factory function that returns the fastest available NodeSet implementation.
-    Uses Cython CNodeSet if compiled, otherwise pure Python NodeSet.
-    """
-    if _USING_CYTHON and _CNodeSet is not None:
-        return _CNodeSet(directed=directed)
-    # NodeSet is defined below in this file
-    return NodeSet(directed=directed)
-
-def _make_edgeset(directed: bool = True):
-    """
-    Factory function that returns the fastest available EdgeSet implementation.
-    Uses Cython CEdgeSet if compiled, otherwise pure Python EdgeSet.
-
-    Both implementations expose an identical API (``add``, ``remove``, ``get``,
-    ``get_set``, ``rehash_node``, ``__contains__``), so ``self._edges`` can be
-    either type transparently.
-    """
-    if _USING_CYTHON and _CEdgeSet is not None:
-        return _CEdgeSet(directed=directed)
-    # EdgeSet is defined below in this file
-    return EdgeSet(directed=directed)
-
-
-### add_edge + reclassify
-
-##########################           
-#### HELPER FUNCTIONS ####
-##########################
-
-def __dict_merge(a : dict[Any, Any], b : dict[Any, Any]) -> dict[Any, Any]:
-    """
-    Essentially the Union of two dictionaries, where if a key is in both 
-    dictionaries, the 2 values are placed in a list -- [a value, b value].
-
-    Args:
-        a (dict[Any, Any]): A dictionary
-        b (dict[Any, Any]): A dictionary
-
-    Returns:
-        dict[Any, Any]: A dictionary that contains all the unique keys of 'a' and 'b', 
-              and where there is overlap, puts each value into a list.
-    """
-    merged : dict[Any, Any] = dict()
-    
-    for key in set(a.keys()).union(set(b.keys())):
-        if key in a.keys() and key in b.keys():
-            result = [a[key]]
-            result.extend([b[key]])
-            merged[key] = result
-        elif key in a.keys():
-            merged[key] = [a[key]]
-        else:
-            merged[key] = [b[key]]
-    
-    return merged
-  
-def print_graph(g : Union[Graph, Network]) -> None:
-    """
-    For each node in g's V set (node set), print out the node's information and
-    attributes.
-    
-    Args:
-        g (Union[Graph, Network]): A network or graph object.
-    Returns:
-        N/A
-    """
-    for node in g.V():
-        print(node.to_string())
-
-def pretty_print_edges(g : Union[Graph, Network]) -> None:
-    """
-    Prints the two node names as a tuple for all the edges in g's 
-    E set (edge set). 
-
-    Args:
-        g (Union[Graph, Network]): A network or graph object.
-    Returns:
-        N/A
-    """
-    print("------------------")
-    print("Printing edges...")
-    for edge in g.E():
-        print(edge.to_names())
-    print("------------------") 
+    from .cython.graph_core_cy import NodeSet, EdgeSet
+except ImportError as exc:  # pragma: no cover - build configuration issue
+    raise ImportError(
+        "PhyNetPy requires its compiled Cython extensions. Build them with "
+        "`pip install -e .` from the repository root. If PhyNetPy is already "
+        "installed, the extensions were most likely built against a different "
+        "Python version than the interpreter now running."
+    ) from exc
 
 #############################
 ####  EXCEPTION CLASSES  ####
@@ -225,6 +113,156 @@ class EdgeError(Exception):
 #### NODES AND EDGES #####
 ##########################
 
+class Branch:
+    """
+    A lightweight, detached view of a single branch (edge) of a phylogenetic
+    tree or network.
+    
+    Holds the branch length, inheritance probability, and the label of the
+    parent node. Unlike :class:`Edge`, a ``Branch`` is not wired into a
+    :class:`Network`; it is the value type handed to model nodes and other
+    consumers that need branch parameters without the surrounding topology.
+    """
+    def __init__(self,
+                 length : float = None,
+                 inheritance_probability : float = None,
+                 parent_id : str = None) -> None:
+        """
+        Initialize a Branch.
+        
+        Args:
+            length (float, optional): Branch length. Defaults to None.
+            inheritance_probability (float, optional): Inheritance probability
+                                                       (gamma) for a
+                                                       reticulation branch.
+                                                       Defaults to None.
+            parent_id (str, optional): Label of the parent node. Defaults to
+                                       None.
+        Returns:
+            N/A
+        """
+        self.length = length
+        self.inheritance_probability = inheritance_probability
+        self.parent_id = parent_id
+    
+    def __len__(self) -> float:
+        """
+        Get the length of the branch.
+        
+        Args:
+            N/A
+        Returns:
+            float: The branch length.
+        """
+        return self.length
+
+    @property
+    def length(self) -> float:
+        """
+        Get the length of the branch.
+        
+        Args:
+            N/A
+        Returns:
+            float: The branch length.
+        """
+        return self._length
+    
+    @length.setter
+    def length(self, value : float) -> None:
+        """
+        Set the length of the branch. Negative values are rejected with a
+        warning and leave the current value untouched.
+        
+        Args:
+            value (float): The new branch length.
+        Returns:
+            N/A
+        """
+        if value is not None and value < 0:
+            warnings.warn("Branch length cannot be negative, the length will "
+                          "not be changed")
+            return
+
+        self._length = value
+    
+    @property
+    def inheritance_probability(self) -> float:
+        """
+        Get the inheritance probability (gamma) of the branch.
+        
+        Args:
+            N/A
+        Returns:
+            float: The inheritance probability.
+        """
+        return self._inheritance_probability
+    
+    @inheritance_probability.setter
+    def inheritance_probability(self, value : float) -> None:
+        """
+        Set the inheritance probability of the branch. Values outside [0, 1]
+        are rejected with a warning and leave the current value untouched.
+        
+        Args:
+            value (float): The new inheritance probability.
+        Returns:
+            N/A
+        """
+        if value is not None and (value < 0 or value > 1):
+            warnings.warn("Inheritance probability must be between 0 and 1, "
+                          "the inheritance probability will not be changed")
+            return
+        self._inheritance_probability = value
+    
+    @property
+    def parent_id(self) -> str:
+        """
+        Get the label of the branch's parent node.
+        
+        Args:
+            N/A
+        Returns:
+            str: The parent node label.
+        """
+        return self._parent_id
+    
+    @parent_id.setter
+    def parent_id(self, value : str) -> None:
+        """
+        Set the label of the branch's parent node.
+        
+        Args:
+            value (str): The new parent node label.
+        Returns:
+            N/A
+        """
+        self._parent_id = value
+    
+    def __str__(self) -> str:
+        """
+        Return a string representation of the branch.
+        
+        Args:
+            N/A
+        Returns:
+            str: Human readable description of the branch.
+        """
+        return (f"Branch(length={self.length}, "
+                f"inheritance_probability={self.inheritance_probability})")
+    
+    def __repr__(self) -> str:
+        """
+        Return a string representation of the branch.
+        
+        Args:
+            N/A
+        Returns:
+            str: Human readable description of the branch.
+        """
+        return self.__str__()
+
+
 class Node:
     """
     Node class that provides support for managing network constructs like 
@@ -236,7 +274,7 @@ class Node:
     def __init__(self, 
                  name : str, 
                  is_reticulation : bool = False, 
-                 attr : dict[Union[str, Any], Any] = dict(),
+                 attr : Union[dict[Any, Any], None] = None,
                  seq : Union[DataSequence, None] = None,
                  t : Union[float, None] = None) -> None:
         """
@@ -249,17 +287,18 @@ class Node:
                                               reticulation node if set to True. 
                                               Defaults to False.
             
-            attr (dict[Union[str, Any], Any], optional): Fill a mapping with any 
-                                                         other user defined 
-                                                         values. Defaults to an 
-                                                         empty dictionary.
+            attr (dict[Any, Any], optional): Fill a mapping with any other user
+                                             defined values. Defaults to a new
+                                             empty dictionary.
             seq (Union[DataSequence, None], optional): A data sequence wrapper.
             t (Union[float, None], optional): A speciation time for this node.
         Returns:
             N/A
         """
-        
-        self.__attributes : dict[Union[str, Any], Any] = attr
+        # A shared ``{}`` default would alias one dictionary across every Node
+        # in every Network, so attributes written on one node would appear on
+        # all of them.
+        self.__attributes : dict[Any, Any] = {} if attr is None else attr
         self.__is_retic : bool = is_reticulation
         self.__name : str = name
         # Cache the (name-based) hash. ``__hash__`` is called tens of millions
@@ -512,10 +551,7 @@ class Node:
         """
         return self.__is_retic
 
-    def add_attribute(self, 
-                      key : Any, 
-                      value : Any, 
-                      append : bool = False) -> None:
+    def add_attribute(self, key : Any, value : Any) -> None:
         """
         Put a key and value pair into the node attribute dictionary.
 
@@ -524,26 +560,10 @@ class Node:
         Args:
             key (Any): Attribute key.
             value (Any): Attribute value for the key.
-            append (bool, optional): If True, appends the given value to the 
-                                     existing value for the key.   
-                                     If false, simply replaces. 
-                                     Defaults to False.
         Returns:
             N/A
         """
-        
-        if append:
-            if key in self.__attributes.keys():
-                content = self.__attributes[key]
-        
-                if type(content) is dict[Any, Any]:
-                    content = __dict_merge(content, value)
-                    self.__attributes[key] = content
-                elif type(content) is list[Any]:
-                    content.extend(value)
-                    self.__attributes[key] = content
-        else:
-            self.__attributes[key] = value
+        self.__attributes[key] = value
 
     def attribute_value(self, key : Any) -> object:
         """
@@ -557,10 +577,7 @@ class Node:
         Returns:
             object: The value of key, if key is present.
         """
-        if key in self.__attributes.keys():
-            return self.__attributes[key]
-        else:
-            return None
+        return self.__attributes.get(key)
     
     def set_seq(self, new_sequence : DataSequence) -> None:
         """
@@ -604,7 +621,9 @@ class Node:
             Node: An equivalent node to this node, with all the same data but 
                   technically are not "=="
         """
-        dopel = Node(self.__name, self.__is_retic, self.__attributes)
+        # Shallow-copy the attribute mapping: sharing it would couple the
+        # copy's attributes to the original's, which defeats the point.
+        dopel = Node(self.__name, self.__is_retic, dict(self.__attributes))
         if self.__seq is not None:
             dopel.set_seq(self.__seq)
             
@@ -615,543 +634,6 @@ class Node:
         
         return dopel
     
-class NodeSet:
-    """
-    Data structure that is in charge of managing the nodes that are in a given
-    Network
-    """
-    
-    def __init__(self, directed : bool = True) -> None:
-        """
-        Initialize an empty set of network nodes
-        
-        Args:
-            directed (bool, optional): True if the network is directed, False 
-                                       otherwise. Defaults to True.
-        Returns:
-            N/A
-        """
-        self.__nodes : set[Node] = set()
-        self.__in_map : dict[Node, set[Any]] = defaultdict(set)
-        self.__out_map : dict[Node, set[Any]] = defaultdict(set)
-        self.__node_names : dict[str, Node] = {}
-        self.__directed : bool = directed
-    
-    def __contains__(self, n : Node) -> bool:
-        """
-        Check if a node is in the network node set.
-
-        Args:
-            n (Node): A node to check for in the network.
-
-        Returns:
-            bool: True if the node is in the network, False otherwise.
-        """
-        return n in self.__nodes
-
-    def add(self, *nodes : Node | list[Node]) -> None:
-        """
-        Add a list of nodes to the network node set.
-
-        Args:
-            node (Node | list[Node]): A list of new nodes to put in the network.
-        Returns:
-            N/A
-        """
-        for node in nodes:
-            if type(node) is list[Node]:
-                for n in node:
-                    if n not in self.__nodes:
-                        self.__nodes.add(n)
-                        self.__node_names[n.label] = n
-            if type(node) is Node:
-                if node not in self.__nodes:
-                    self.__nodes.add(node)
-                    if node.label in self.__node_names.keys():
-                        raise NodeError(f"Node {node.label} already exists in NodeSet")
-                    self.__node_names[node.label] = node
-    
-    def ready(self, edge : Union[Edge, UEdge]) -> bool:
-        """
-        Check if an edge is allowed to be added to the network (both nodes must
-        be in the node set before an edge can be added).
-        
-        A undirected edge is not allowed to be inserted into a directed network,
-        and a directed edge is not allowed to be inserted into an undirected 
-        graph. False will be returned in such instances.
- 
-        Args:
-            edge (Union[Edge, UEdge]): A potential new network edge.
-        Returns:
-            bool: True if edge can be safely added, False otherwise.
-        """
-        if self.__directed:
-            if type(edge) is Edge:
-                return edge.src in self.__nodes and edge.dest in self.__nodes
-            return False
-        
-        if type(edge) is UEdge:
-            return edge.n1 in self.__nodes and edge.n2 in self.__nodes
-        return False
-            
-    
-    def in_deg(self, node : Node) -> int:
-        """
-        Gets the in degree of a node in this set.
-        Returns 0 if the node has no in edges, or if the node is not in the 
-        node set. It is up to the user to make sure the parameter
-        node is in the node set.
-
-        Args:
-            node (Node): any Node obj
-        Returns:
-            int: the in degree of the node
-        """
-        edges = self.__in_map.get(node)
-        return len(edges) if edges is not None else 0
-
-    def _edge_set(self, mp : "dict[Node, set[Any]]", node : Node) -> set[Any]:
-        """Return the live edge set for ``node`` without leaking absent keys.
-
-        ``__in_map`` / ``__out_map`` are ``defaultdict(set)``, so the naive
-        ``mp[node]`` access silently *inserts* an empty set for any node
-        that is queried -- including transient / already-removed nodes.
-        Over a long MCMC chain those phantom keys (and the ``Node`` objects
-        they key on) accumulate without bound, ballooning every
-        ``copy.deepcopy`` of the network in the undo hot path.  We only
-        auto-create the entry for nodes that are genuinely in the set;
-        everything else gets a fresh empty set that is *not* retained.
-        """
-        entry = mp.get(node)
-        if entry is not None:
-            return entry
-        if node in self.__nodes:
-            fresh : set[Any] = set()
-            mp[node] = fresh
-            return fresh
-        return set()
-
-    def out_deg(self, node : Node) -> int:
-        """
-        Gets the out degree of a node in this set.
-        Returns 0 if the node has no out edges, or if the node is not in the 
-        node set. It is up to the user to make sure the parameter
-        node is in the node set.
-
-        Args:
-            node (Node): any Node obj
-        Returns:
-            int: the out degree of the node
-        """
-        edges = self.__out_map.get(node)
-        return len(edges) if edges is not None else 0
-    
-    def in_edges(self, node : Node) -> set[Any]:
-        """
-        Gets the in edges of a node in this set.
-        Returns an empty set if the node has no in edges, or if the node 
-        is not in the node set. It is up to the user to make sure the parameter
-        node is in the node set.
-        
-        Note: Returns a reference to the internal set. Copy before iterating
-        if you plan to modify the graph during iteration.
-
-        Args:
-            node (Node): any Node obj
-        Returns:
-            set[Any]: the in edges of the node
-        """
-        return self._edge_set(self.__in_map, node)
-    
-    def out_edges(self, node : Node) -> set[Any]:
-        """
-        Gets the out edges of a node in this set.
-        Returns an empty set if the node has no out edges, or if the node 
-        is not in the node set. It is up to the user to make sure the parameter
-        node is in the node set.
-        
-        Note: Returns a reference to the internal set. Copy before iterating
-        if you plan to modify the graph during iteration.
-
-        Args:
-            node (Node): any Node obj
-        Returns:
-            set[Any]: the out edges of the node
-        """
-        return self._edge_set(self.__out_map, node)
-    
-    def process(self, 
-                edge : Union[Edge, UEdge], 
-                removal : bool = False) -> None:
-        """
-        Keep track of network data (in/out degrees, in/out edge maps) upon 
-        the addition or removal of an edge for a network.
-
-        Args:
-            edge (Union[Edge, UEdge]): The edge that is being added or removed
-            removal (bool, optional): False if edge is being added, True if 
-                                      edge is being removed. Defaults to False.
-        Returns:
-            N/A
-        """
-        n1 : Node
-        n2 : Node
-        
-        if type(edge) is Edge and self.__directed:
-            n1 = edge.src
-            n2 = edge.dest
-        elif type(edge) is UEdge and not self.__directed:
-            n1 = edge.n1
-            n2 = edge.n2
-        else:
-            raise EdgeError("Tried to process wrong type of edge!")
-            
-        if self.ready(edge):
-            if not removal:
-                self.__out_map[n1].add(edge)
-                self.__in_map[n2].add(edge)
-                if not self.__directed:
-                    self.__out_map[n2].add(edge)
-                    self.__in_map[n1].add(edge)
-            else:
-                self.__out_map[n1].discard(edge)
-                self.__in_map[n2].discard(edge)
-                
-                if not self.__directed:
-                    self.__out_map[n2].discard(edge)
-                    self.__in_map[n1].discard(edge)
-        else:
-            raise EdgeError("Tried to add edge to the network, and the edge \
-                             contains a node that is not part of the network. \
-                             Please add the node first and retry!")
-                
-    def get_set(self) -> set[Node]:
-        """
-        Grab the set of nodes.
-
-        Args:
-            N/A
-        Returns:
-            set[Node]: V, the node set of a network.
-        """
-        return self.__nodes
-    
-    def remove(self, node : Node) -> None:
-        """
-        Remove a node from V, and update necessary mappings.
-
-        Args:
-            node (Node): Node to remove from the network.
-        Returns:
-            N/A
-        """
-        
-        if node in self.__nodes:
-            self.__nodes.remove(node)
-            
-            # There is a world where a node may not ever be a key in either one 
-            # of these maps. Ie, a leaf node that is subsequently detached from
-            # its parent will not be in the out_map (or a root that gets 
-            # detached from all children... but this isn't likely).
-            if node in self.__out_map.keys():
-                del self.__out_map[node]
-            if node in self.__in_map.keys():
-                del self.__in_map[node] 
-            
-            del self.__node_names[node.label] 
-    
-    def update(self, node : Node, new_name : str) -> None:
-        """
-        Protected method that processes updates to node labels within the 
-        NodeSet.
-        
-        You may not set a Node's name to None.
-
-        Raises:
-            NodeError: If @new_name is None or if @node is not present in this 
-                       NodeSet.
-        Args:
-            node (Node): The Node that is being renamed 
-            new_name (str): The new name.
-        Returns:
-            N/A
-        """
-    
-        if node not in self:
-            raise NodeError(f"Error updating the name of node \
-                            {node.label}, node could not be found in this \
-                            NodeSet.")
-        
-        # Since Node's __hash__ and __eq__ are based on name, we must remove the
-        # node from all hash-based collections BEFORE changing its name, then
-        # re-add it after. Otherwise the node ends up in the wrong hash bucket.
-        
-        # Save degree information before removing
-        in_edges = self.__in_map.get(node, set()).copy()
-        out_edges = self.__out_map.get(node, set()).copy()
-        
-        # Remove node from all hash-based collections
-        self.__nodes.discard(node)
-        if node in self.__in_map:
-            del self.__in_map[node]
-        if node in self.__out_map:
-            del self.__out_map[node]
-        if node.label in self.__node_names:
-            del self.__node_names[node.label]
-            
-        # Now change the node's name (this changes its hash)
-        node.set_name(new_name)
-        
-        # Re-add node to all collections with new hash
-        self.__nodes.add(node)
-        self.__in_map[node] = in_edges
-        self.__out_map[node] = out_edges
-        self.__node_names[new_name] = node
-    
-    def get(self, name : str) -> Union[Node, None]:
-        """
-        Get a node by name.
-
-        Args:
-            name (str): The name of the node to get.
-
-        Returns:
-            Union[Node, None]: The node with the given name, or None if the node
-                               does not exist.
-        """
-        if name in self.__node_names.keys():
-            return self.__node_names[name]
-        return None
-
-
-class UEdge:
-    """
-    Undirected dge class that is essentially a wrapper class for a set
-    {a, b} where a and b are Node objects. There is no ordering/direction.
-    """
-    
-    __slots__ = ('_n1', '_n2', '_UEdge__length', '_UEdge__weight')
-    
-    def __init__(self, 
-                 n1 : Node,
-                 n2 : Node,
-                 length : float | None = None, 
-                 weight : float | None = None) -> None:
-        """
-        Initialize an undirected Edge.
-
-        Raises:
-            EdgeError: If @length does not match the difference in node times
-                       should both n1 and n2 have set time attributes.
-        Args:
-            n1 (Node): A Node (designated member #1 for efficient retrieval)
-            n2 (Node): A Node (designated member #2 for efficient retrieval)
-            length (float, optional): Branch length of this edge. Defaults
-                                      to None.
-            weight (float, optional): Edge weight value. Defaults to None.
-        Returns:
-            N/A
-        
-        """
-        super().__init__()
-
-        self._n1 = n1
-        self._n2 = n2
-        
-        if weight is not None:
-            self.set_weight(weight)
-        
-        if length is not None:
-            self.set_length(length, False)
-    
-    @property
-    def n1(self) -> Node:
-        """
-        Gets the "first" node in this edge. (No ordering, but for
-        efficient retrieval, we designate one as the first).
-
-        Args:
-            N/A
-        Returns:
-            Node: The "first" node in this edge.
-        """
-        return self._n1
-    
-    @property
-    def n2(self) -> Node:
-        """
-        Gets the "second" node in this edge. (No ordering, but for
-        efficient retrieval, we designate one as the second).
-
-        Args:
-            N/A
-        Returns:
-            Node: The "second" node in this edge.
-        """
-        return self._n2
-    
-    def __contains__(self, x : Node) -> bool:
-        """
-        Check if a node is a member of this edge.
-
-        Args:
-            x (Node): A node to check for membership in this edge.
-
-        Returns:
-            bool: True if x is a member of this edge, False otherwise.  
-        """
-        return x == self._n1 or x == self._n2 
-    
-    def get_length(self) -> float:
-        """
-        Gets the branch length of this edge. If it is not equivalent to the
-        current times of the source and destination nodes, then a warning
-        is raised that the branch lengths are not equivalent, and that either
-        the times are outdated or the branch length field is outdated.
-
-        Args:
-            N/A
-        Returns:
-            float: branch length.
-        """
-        n1t = self._n1.get_time() 
-        n2t = self._n2.get_time()
-        #if n1t is not None and n2t is not None and self.__length is not None:
-        if self.__length != abs(n2t - n1t):
-            warnings.warn("This edge has a length field set to a number \
-                            that is not equal to the differences in time for\
-                            its node members!")
-        return self.__length
-
-    def set_length(self, 
-                   branch_length : float, 
-                   enforce_times : bool = True) -> None:
-        """
-        Sets the branch length of this edge.
-
-        Raises:
-            EdgeError: If @branch_length is not equivalent to the difference in
-                       times of the source and destination nodes
-        Args:
-            branch_length (float): The new branch length.
-            enforce_times (bool, optional): If True, checks that the branch 
-                                           length is equivalent to the difference
-                                           in times of the source and destination
-                                           nodes. Defaults to True.
-        Returns:
-            N/A
-        """
-        #If the source and destination nodes already have defined times, 
-        # go ahead and use them.
-        # if self._n1.get_time() is not None \
-        #         and self._n2.get_time() is not None:
-            
-        # Get difference in speciation times.
-        new_len : float = abs(self._n2.get_time() - self._n1.get_time())
-        matches : bool = branch_length == new_len
-        #They should match!
-        if enforce_times:
-            if not matches:
-                #and branch_length is not None:
-                    
-                raise EdgeError("Provided length is not equivalent to \
-                                provided n1 and n2 times!")
-        else:
-            if not matches: 
-                warnings.warn("Setting branch length of an edge to a value\
-                                that is not equivalent to the difference \
-                                in their set speciation times")      
-        
-        self.__length : float = new_len
-    
-    def copy(self, 
-             new_n1 : Node | None = None, 
-             new_n2 : Node | None = None) -> UEdge:
-        """
-        Duplicate this edge by copying all data into a separate UEdge object.
-        
-        Args:
-            new_n1 (Node | None, optional): A new node to replace the first
-                                            node in this edge. Defaults to None.
-            new_n2 (Node | None, optional): A new node to replace the second
-                                            node in this edge. Defaults to None.   
-        Returns:
-            UEdge: An equivalent edge to this undirected edge.
-        """
-        # If new nodes are provided, great. If not, duplicate the current nodes
-        if new_n1 is None or new_n2 is None: 
-            new_edge = UEdge(self._n1.copy(), self._n2.copy())
-        else:
-            new_edge = UEdge(new_n1, new_n2)
-       
-        # Copy over the data
-        new_edge.set_length(self.__length)
-        new_edge.set_weight(self.__weight)
-        
-        return new_edge
-    
-    def to_directed(self, src : Node) -> Edge:
-        """
-        Convert this edge to a directed edge. 
-
-        Raises: 
-            EdgeError: If 'src' is not a node in this Edge.
-        Args:
-            src (Node): Must be one of the Nodes that is in this edge. Sets this
-                        Node as the source node, and the other node as the 
-                        destination                     
-        Returns:
-           Edge: An equivalent edge to this undirected edge, but with a 
-                    direction now enforced.
-                    
-        """
-        if src == self._n1:
-            new_edge = Edge(self._n1.copy(), self._n2.copy())
-        elif src == self._n2:
-            new_edge = Edge(self._n2.copy(), self._n1.copy())
-        else:
-            raise EdgeError("'src' parameter not one of the nodes that is a \
-                             member of this edge")
-        
-        # Copy over the data
-        new_edge.set_length(self.__length)
-        new_edge.set_weight(self.__weight)
-        
-        return new_edge
-    
-    def get_weight(self) -> float:
-        """
-        Gets the weight of this edge.
-
-        Args:
-            N/A
-        Returns:
-            float: Edge weight.
-        """
-        return self.__weight
-    
-    def set_weight(self, weight : float) -> None:
-        """
-        Sets the weight of this edge.
-
-        Args:
-            weight (float): The new edge weight.
-        Returns:
-            N/A
-        """
-        self.__weight = weight
-    
-    def to_names(self) -> tuple[str, str]:
-        """
-        Get the names of the nodes in this edge.
-
-        Args:
-            N/A
-        Returns:
-            tuple[str, str]: A tuple of the names of the nodes in this edge.
-        """
-        return (self._n1.label, self._n2.label)
-           
 class Edge:
     """
     Class for directed edges. 
@@ -1452,474 +934,124 @@ class Edge:
         """
         return Branch(self.__length, self.__gamma, self.src.label)
     
-class EdgeSet:
-    """
-    Data structure that serves the purpose of keeping track of edges that belong
-    to a network. We call this set E.
-    """
-    
-    def __init__(self, directed : bool = True) -> None:
-        """
-        Initialize the set of edges, E, for a network.
-        
-        Args:
-            directed (bool, optional): True if the network is directed, False 
-                                       otherwise. Defaults to True.
-        Returns:
-            N/A
-        """
-        
-        # Map (src, dest) tuples to a list of edges. this list will have 1 
-        # element for most, but in the case of bubbles will contain 2. This 
-        # exists purely to deal with bubbles 
-        self.__hash : dict[tuple[Node, Node], list[Edge]] = dict()
-        self.__uhash : dict[tuple[Node, Node], list[UEdge]] = dict()
-        
-        # Edge set, E
-        self.__edges : set[Edge] = set()
-        self.__uedges : set[UEdge] = set()
-        self.__directed : bool = directed
-    
-    def __contains__(self, e : Union[Edge, UEdge]) -> bool:
-        """
-        An undirected edge (Edge) is in the EdgeSet if there is an equivalent 
-        edge object OR if there is anUEdgeobject with equivalent node members.
-        
-        A directed edge (DiEdge) is in the EdgeSet only if the EdgeSet has a 
-        reference to @e.
-
-        Args:
-            e (Union[Edge, UEdge]): An undirected or directed edge.
-
-        Returns:
-            bool: If the Edge @e is represented in the graph
-        
-        """
-        if self.__directed:
-            if type(e) is Edge:
-                return e in self.__edges
-            return False
-        else:
-            if type(e) is UEdge:
-                return e in self.__uedges #self.__retrieve(e.n1, e.n2) != []
-            return False
-    
-    def __add_to_hash(self, 
-                      n1 : Node,
-                      n2 : Node, 
-                      e : Union[Edge, UEdge]) -> None:
-        """
-        Add an edge to the hash map. 
-
-        Args:
-            n1 (Node): The first node in the edge
-            n2 (Node): The second node in the edge
-            e (Union[Edge, UEdge]): The edge to add to the hash map.
-        Returns:
-            N/A
-        """
-        
-        if type(e) is UEdge:
-            if (n1, n2) in self.__uhash.keys():
-                self.__uhash[(n1, n2)].append(e)
-            else:
-                self.__uhash[(n1, n2)] = [e]
-        elif type(e) is Edge:
-            if (n1, n2) in self.__hash.keys():
-                self.__hash[(n1, n2)].append(e)
-            else:
-                self.__hash[(n1, n2)] = [e]
-            
-   
-    # @singledispatchmethod
-    def add(self, *edges : Union[Edge, UEdge]) -> None:
-        """
-        Add any number of edges to E.
-
-        Raises:
-            TypeError: If the edge type (undirected or directed) doesn't
-                       match the designated type of network/graph associated 
-                       with this edge set.
-        Args:
-            *edges (Union[Edge, UEdge]): An amount of new edges to add to E.
-        Returns:
-            N/A
-        """
-        
-        for edge in edges:
-            if self.__directed and type(edge) is not Edge:
-                raise TypeError("This edge set is associated with a directed \
-                                graph. An undirected edge was provided.")
-            
-            if not self.__directed and type(edge) is Edge:
-                raise TypeError("This edge set is associated with an undirected \
-                                graph. A directed edge was provided.")
-                
-            
-            if type(edge) is UEdge:
-                if edge not in self.__uedges:
-                    if (edge.n1, edge.n2) in self.__uhash.keys() \
-                        or (edge.n2, edge.n1) in self.__uhash.keys():
-                        warnings.warn("Adding duplicate edge to undirected Graph. \
-                                    This function call will have no effect.")
-                        return
-                    
-                    self.__add_to_hash(edge.n1, edge.n2, edge) 
-                    self.__uedges.add(edge) 
-            elif type(edge) is Edge:
-                if edge not in self.__edges:
-                    self.__add_to_hash(edge.src, edge.dest, edge)
-                    self.__edges.add(edge)
-            
-    
-    # @add.register
-    # def _(self, edges : list) -> None: # type: ignore
-    #     """
-    #     Add all edges from a list of edges to E.
-
-    #     Args:
-    #         edges (list[AEdge]): A list of new edges to add to E.
-        
-    #     Raises:
-    #         TypeError: If the edge type (undirected or directed) doesn't
-    #                    match the designated type of network/graph associated 
-    #                    with this edge set.
-    #     """
-        
-    #     for edge in edges:
-    #         if self.__directed and type(edge) is not Edge:
-    #             raise TypeError("This edge set is associated with a directed \
-    #                             graph. An undirected edge was provided.")
-            
-    #         if not self.__directed and type(edge) is Edge:
-    #             raise TypeError("This edge set is associated with an undirected \
-    #                             graph. A directed edge was provided.")
-                
-            
-    #         if type(edge) is UEdge:
-    #             if edge not in self.__uedges:
-    #                 if (edge.n1, edge.n2) in self.__uhash.keys() \
-    #                     or (edge.n2, edge.n1) in self.__uhash.keys():
-    #                     warnings.warn("Adding duplicate edge to undirected Graph. \
-    #                                 This function call will have no effect.")
-    #                     return
-                    
-    #                 self.__add_to_hash(edge.n1, edge.n2, edge) 
-    #                 self.__uedges.add(edge) 
-    #         elif type(edge) is Edge:
-    #             if edge not in self.__edges:
-    #                 self.__add_to_hash(edge.src, edge.dest, edge)
-    #                 self.__edges.add(edge)
-            
-            
-    def remove(self, edge : Union[Edge, UEdge]) -> None:
-        """
-        Remove an edge from E.
-
-        Args:
-            edge (Edge): An edge that is currently in E.
-        Returns:
-            N/A
-        """
-        if edge in self.__edges:
-            self.__hash[(edge.src, edge.dest)].remove(edge)
-            
-            # Delete the key from the hash if there is no bubble / same edge
-            if self.__retrieve(edge.src, edge.dest) == []:
-                del self.__hash[(edge.src, edge.dest)]
-                
-            self.__edges.remove(edge)
-        if edge in self.__uedges:
-            self.__uhash[(edge.n1, edge.n2)].remove(edge)
-        
-            # Delete the key from the hash if there is no bubble / same edge
-            if self.__retrieve(edge.n1, edge.n2) == []:
-                del self.__uhash[(edge.n1, edge.n2)]
-                
-            self.__uedges.remove(edge)
-                
-    def rehash_node(self, node: Node, affected_edges: set) -> None:
-        """Rebuild hash entries for all edges touching *node*.
-
-        Must be called **after** the node's name (and therefore its hash)
-        has already been changed.  The caller supplies the set of Edge /
-        UEdge objects that touch *node* so that we can remove them under
-        the *old* hash bucket (which is now unreachable because the node
-        hash changed) and re-insert under the *new* hash.
-        """
-        stale_keys = [k for k in self.__hash if k not in self.__hash]
-        
-        new_hash: dict[tuple[Node, Node], list[Edge]] = {}
-        for key, edges in list(self.__hash.items()):
-            new_hash.setdefault(key, []).extend(edges)
-        self.__hash = new_hash
-
-        rebuilt: dict[tuple[Node, Node], list[Edge]] = {}
-        for edge in self.__edges:
-            k = (edge.src, edge.dest)
-            rebuilt.setdefault(k, []).append(edge)
-        self.__hash = rebuilt
-
-        rebuilt_u: dict[tuple[Node, Node], list[UEdge]] = {}
-        for edge in self.__uedges:
-            k = (edge.n1, edge.n2)
-            rebuilt_u.setdefault(k, []).append(edge)
-        self.__uhash = rebuilt_u
-
-    def __retrieve(self, n1 : Node, n2 : Node) -> Union[list[Edge], list[UEdge]]:
-        """
-        Private method. If (n1, n2) is not a key in the hash map,
-        then just return an empty list instead of throwing a key error.
-
-        Args:
-            n1 (Node): 1st node in the edge
-            n2 (Node): 2nd node in the edge
-
-        Returns:
-            list[Union[Edge, UEdge]]: A list of edges that have n1 and n2 as their nodes
-        """
-        try:
-            hashed = self.__hash[(n1, n2)]
-            return hashed
-        except KeyError:
-            try:
-                uhashed = self.__uhash[(n1, n2)]
-                return uhashed
-            except KeyError:
-                return []
-        
-    def get(self,
-            n1 : Node, 
-            n2 : Node, 
-            gamma : float | None = None,
-            tag : str | None = None) -> Union[Edge, UEdge]:
-        """
-        Given the nodes that make up the edge and an inheritance probability,
-        get the edge in E that matches the data. Inheritance probability is only
-        required for when a directed network has two edges with the same source 
-        and destination nodes, and it is known that a bubble edge is being 
-        looked up. Inheritance probabilities are insufficient for 
-        identifiability of directed bubble edges should gamma 
-        be .5, in which case please tag your edges with some sort of key. 
-        
-        If a bubble edge is being looked up and there is no gamma and/or tag 
-        provided, then one of the two bubble edges will be returned at random.
-        
-        There are no identifiability problems with undirected graphs, since 
-        duplicate edges are not a thing, and there exists only one edge with
-        a given pair of member nodes.
-        
-        Raises:
-            EdgeError: If there are any problems looking up the desired edge,
-                       or if there is no such edge in the graph/network.
-        Args:
-            n1 (Node): If directed, this is "src" / the parent. If undirected,
-                       node ordering does not matter.
-            destination (Node): If directed, this is "dest" / the child. If 
-                                undirected, node ordering does not matter.
-            gamma (float, optional): Inheritance probability, for bubble 
-                                     identifiability. Defaults to None.
-            tag (str, optional): In the event that gamma is .5 AND THERE IS A 
-                                 BUBBLE, then edges should be tagged with a 
-                                 unique identifier string.
-        Returns:
-            Edge: The edge in E that matches the given data.
-        """
-        valid_edges = self.__retrieve(n1, n2)
-        
-           
-        if len(valid_edges) == 0:
-            raise EdgeError("Found 0 matching edges in this network or \
-                                graph")
-        elif len(valid_edges) == 1:
-            return valid_edges[0]
-        elif len(valid_edges) == 2:
-            if gamma is None:
-                warnings.warn("No gamma provided, but a bubble is being \
-                                looked up. Returning a random bubble edge!")
-                return valid_edges[0]
-            else:
-                assert(type(valid_edges[0]) is Edge)
-                assert(type(valid_edges[1]) is Edge)
-                
-                if valid_edges[0].get_gamma() == gamma\
-                    and valid_edges[1].get_gamma() == gamma:
-                        
-                    tag0 = valid_edges[0].get_tag()
-                    tag1 = valid_edges[1].get_tag()
-                    
-                    
-                    if tag0 == tag:
-                        return valid_edges[0]
-                    elif tag1 == tag:
-                        return valid_edges[1]
-                    else:
-                        raise EdgeError(f"Tags of the edges \
-                                            {(tag0, tag1)} do not \
-                                            match passed in tag parameter \
-                                            : {tag} !")
-                elif valid_edges[0].get_gamma() == gamma:
-                    return valid_edges[0]
-                elif valid_edges[1].get_gamma() == gamma:
-                    return valid_edges[1]
-                else:
-                    raise EdgeError("Error looking up an edge. Inheritance\
-                                    probability is not a match for any Edge\
-                                    in this set.")
-        else:
-            raise EdgeError("Found more than 2 eligible edges... something\
-                            is wrong with the network topology. Bubbles \
-                            can only have 2 edges.")
-    
-        # elif type(valid_edges) is list[UEdge]:
-        #     # No use for tags and gamma here, in an undirected context there are
-        #     # no duplicate edges or bubbles.
-        #     valid_edges_set : set[UEdge] = set(valid_edges)
-        #     other_valid_edges : set[UEdge] = set(self.__retrieve(n2, n1))
-        #     valid_edges = valid_edges.union(other_valid_edges)
-
-        #     if len(valid_edges) > 1:
-        #         raise EdgeError("Found a duplicate edge in an undirected graph")
-            
-        #     return valid_edges
-            
-    def get_set(self) -> set[Union[Edge, UEdge, Any]]:
-        """
-        Get the set, E, for a network.
-
-        Args:
-            N/A
-        Returns:
-            set[Union[Edge, UEdge]]: The set of edges in this network.
-        """
-        if self.__directed:
-            return self.__edges
-        else:
-            return self.__uedges
-    
 #########################
 #### NETWORK CLASSES ####
 #########################
-class Graph:
+class Network:
     """
-    Superclass that defines the general constructs for working with graphs
-    in a phylogenetic context. This object assumes that edges are undirected 
-    and the graph is therefore unrooted.
+    A directed (and potentially acyclic) graph of Nodes joined by Edges.
     
-    Nodes may have as many neighbors as needed, and no topological restrictions
-    are assumed.
+    An 'Edge' object is a wrapper class for a tuple of two nodes, (a, b),
+    where a and b are Node objects, and the direction of the edge is from 
+    a to b (a is b's parent) -- thus (a, b) is NOT the same as (b, a).
+
+    Notes and Allowances:
+    
+    1) You may create cycles -- however we have provided a method to check if 
+       this graph object is acyclic. This method is internally called on 
+       methods that assume that a network has no cycles, so be mindful of the 
+       state of networks that are passed as arguments.
+    
+    2) You may have multiple roots. Be mindful of whether this graph is 
+       connected and what root you wish to operate on.
+    
+    3) You may end up with floater nodes/edges, ie this may be an unconnected 
+       network with multiple connected components. We will provide a method to 
+       check for whether your object is one single connected component. 
+       We have also provided methods to remove such artifacts.      
     """
     
     def __init__(self, 
-                 edges : EdgeSet | None = None, 
-                 nodes : NodeSet | None = None) -> None:
+                 edges : Union[EdgeSet, set[Edge], None] = None, 
+                 nodes : Union[NodeSet, set[Node], None] = None) -> None:
         """
         Initialize a Network object.
         You may initialize with any combination of edges/nodes,
         or provide none at all.
+        
+        If you provide edges and no nodes, each node present in those edges
+        *WILL* be added to the network.
 
+        Raises:
+            TypeError: If any provided edge is not an Edge object.
         Args:
-            edges (EdgeSet, optional): A set of Edges. 
-                                       Defaults to an empty EdgeSet.
-            nodes (NodeSet, optional): A set of Nodes. 
-                                       Defaults to an empty NodeSet.
+            edges (EdgeSet | set[Edge], optional): The edges of the network.
+                                                   Defaults to no edges.
+            nodes (NodeSet | set[Node], optional): The nodes of the network.
+                                                   Defaults to no nodes.
         Returns:
             N/A
         """
+        if isinstance(edges, set):
+            edge_set = EdgeSet()
+            edge_set.add(*edges)
+            edges = edge_set
         
-        # Blob storage for anything that you want to associate with 
-        # this network. Just give it a string key!
-        self.__items : dict[str, object] = {}
-
-        if edges is not None:
-            self._edges : EdgeSet = edges
-        else:
-            self._edges : EdgeSet = EdgeSet(directed = False)
+        if isinstance(nodes, set):
+            node_set = NodeSet()
+            node_set.add(*nodes)
+            nodes = node_set
+        
+        self._edges : EdgeSet = EdgeSet() if edges is None else edges
         
         if nodes is not None:
             self._nodes : NodeSet = nodes
         else:
-            self._nodes : NodeSet = NodeSet(directed = False)
+            # No node set given: derive V from the endpoints of E.
+            self._nodes = NodeSet()
+            for edge in self._edges.get_set():
+                if type(edge) is not Edge:
+                    raise TypeError("Networks are directed and take Edge "
+                                    f"objects. Got a {type(edge).__name__}.")
+                self._nodes.add(edge.src, edge.dest)
         
+        # Blob storage for anything that you want to associate with 
+        # this network. Just give it a string key!
+        self.__items : dict[str, object] = {}
         
-        # Initialize the unique id count
+        # Counter behind add_uid_node's "UID_<n>" names.
         self.__uid : int = 0
-    
         
-        #Free floater nodes/edges are allowed
+        # Free floater nodes/edges are allowed.
         for edge in list(self._edges.get_set()):
             self._nodes.process(edge)
         
-        self.__leaves : set[Node] = {node for node in self.V()
-                                      if self._nodes.out_deg(node) == 0}
+        self.__leaves : set[Node] = {node for node in self._nodes.get_set()
+                                     if self._nodes.out_deg(node) == 0}
+        self.__roots : set[Node] = {node for node in self._nodes.get_set()
+                                    if self._nodes.in_deg(node) == 0}
     
-    def __contains__(self, obj : Union[Node, UEdge, Edge]) -> bool:
+    def __contains__(self, obj : Union[Node, Edge]) -> bool:
         """
-        Allows a simple pythonic "n in graph" or "e in graph" check.
+        Allows a simple pythonic "n in network" or "e in network" check.
         
         Raises: 
-            TypeError: If @obj is of any type other than Node, Edge, orEdge.
+            TypeError: If @obj is neither a Node nor an Edge.
         Args:
-            obj (Node | UEdge |Edge): A node or edge.
+            obj (Node | Edge): A node or edge.
         Returns:
-            bool: True if obj is a node or edge in the graph
-        
+            bool: True if obj is a node or edge in the network.
         """
-        if type(obj) is UEdge or type(obj) is Edge:
+        if type(obj) is Edge:
             return obj in self._edges
         elif type(obj) is Node:
             return obj in self._nodes
         else:
-            raise TypeError("Graphs and Networks only contain Node, Edge, \
-                            orEdge objects.")
+            raise TypeError("Networks only contain Node and Edge objects.")
     
-    def __reclassify_node(self, node : Node) -> None:
+    def add_nodes(self, *nodes : Union[Node, list[Node]]) -> None:
         """
-        PRIVATE. FOR IN CLASS USE ONLY
-        Whenever an edge is added or removed from a network, the nodes that make
-        up the edge need to be reclassified. 
-
+        Add any amount of nodes to this network.
+        
+        Accepts nodes as separate arguments, as lists, or as a mixture of
+        both.
+        
         Args:
-            node (Node): A node in the graph
+            *nodes (Node | list[Node]): Any amount of node objects.
         Returns:
             N/A
         """
-        
-        # If out degree now = 2, then the node was previously a leaf, 
-        # and is not anymore
-        if self._nodes.out_deg(node) == 2 or \
-            self._nodes.out_deg(node) == 0:
-            self.__leaves.discard(node)
-            
-        if self._nodes.out_deg(node) == 1:
-            self.__leaves.add(node)            
-    
-    @singledispatchmethod
-    def add_nodes(self, *nodes : Node) -> None:
-        """
-        Add any amount of nodes to this graph (or Network).
-        
-        Args:
-            *nodes (Node): Any amount of node objects.
-        Returns:
-            N/A
-        """
-        for node in nodes:
-            self._nodes.add(node)
-    
-    @add_nodes.register
-    def _(self, nodes : list) -> None: # type: ignore
-        """
-        Add any amount of nodes to this graph (or Network). This
-        version of the method takes a list of Nodes.
-        
-        Args:
-            nodes (list): A list of Node objs.
-        Returns:
-            N/A
-        """
-        for n in nodes: # type: ignore
-            self._nodes.add(n) # type: ignore
+        self._nodes.add(*nodes)
                          
     def add_uid_node(self, node : Union[Node, None] = None) -> Node:
         """
@@ -1973,152 +1105,6 @@ class Graph:
         """
         self.__uid = value
     
-    # @singledispatchmethod
-    # def add_edges(self, *edges : UEdge) -> None:
-    #     """
-    #     Add any amount of edges to the graph.
-        
-    #     Duplicate edges, in an undirected context, is not allowed (will have
-    #     no effect).
-        
-    #     Note: Each edge that you attempt to add must be between two nodes that
-    #     exist in the network. Otherwise, an error will be thrown.
-        
-    #     Args:
-    #         *edges (Edge): Any amount of edge objects.
-
-    #     Raises:
-    #         NetworkError: If any edge provided contains nodes that are not in  
-    #                       the graph. 
-    #         TypeError: If any edge provided is undirected when it should be
-    #                    directed, or directed when it should be undirected.
-    #     """
-        
-    #     for edge in edges: 
-    #         if self._nodes.ready(edge): 
-    #             if edge not in self._edges:             
-    #                 self._edges.add(edge)
-    #                 self._nodes.process(edge)  
-    #                 self.__reclassify_node(edge.n1)
-    #                 self.__reclassify_node(edge.n2)
-    #         else:
-    #             raise NetworkError("Tried to add an edge between two nodes,\
-    #                                 at least one of which does not belong\
-    #                                 to this network.")
-    
-    # @add_edges.register
-    # def _(self, edges : list) -> None: # type: ignore
-    #     """
-    #     Add all edges from a list of edges to the graph.
-        
-    #     Duplicate edges, in an undirected context, is not allowed (will have
-    #     no effect).
-        
-    #     Note: Each edge that you attempt to add must be between two nodes that
-    #     exist in the network. Otherwise, an error will be thrown.
-        
-    #     Args:
-    #         edges (list[AEdge]): A list of edges
-
-    #     Raises:
-    #         NetworkError: If any edge provided contains nodes that are not in  
-    #                       the graph. 
-    #         TypeError: If any edge provided is undirected when it should be
-    #                    directed, or directed when it should be undirected.
-    #     """
-    #     for edge in edges: 
-    #         if self._nodes.ready(edge):
-    #             if edge not in self._edges:              
-    #                 self._edges.add(edge)
-    #                 self._nodes.process(edge)  
-    #                 self.__reclassify_node(edge.n1)
-    #                 self.__reclassify_node(edge.n2)
-    #         else:
-    #             raise NetworkError("Tried to add an edge between two nodes,\
-    #                                 at least one of which does not belong\
-    #                                 to this network.")
-          
-    @singledispatchmethod
-    def remove_nodes(self, *nodes : Node) -> None:
-        """
-        Removes any amount of nodes from the list of nodes.
-        Also prunes all edges from the graph that are connected to the removed 
-        node(s).
-        
-        Has no effect if a node is not in this network.
-        
-        Args:
-            *nodes (Node): Any amount of Node objs
-        Returns:
-            N/A
-        """
-        node : Node
-        for node in nodes:
-            if node in self._nodes:
-                #in_edges are the same as outedges in the undirected context
-                # Copy the edge set to avoid modifying during iteration
-                for edge in self._nodes.in_edges(node).copy():
-                    self.remove_edge(edge)
-        
-                self._nodes.remove(node)
-     
-    def remove_edge(self, edge : Union[Edge, UEdge, list[Node]]) -> None:
-        """
-        Removes an edge from the EdgeSet. Does not delete nodes with no edges
-        Has no effect if 'edge' is not in the graph.
-    
-        Raises: 
-            NetworkError: If given as a list, and the list of nodes is malformed 
-                          in any way.
-        Args:
-            edge (Edge | UEdge | list[Node]): An edge to remove from the graph, 
-                                              either represented as an 
-                                              Edge/UEdge object or as a list
-                                              of Nodes (length 2).
-        Returns:
-            N/A                            
-        """
-        
-        if type(edge) is list[Node]:
-            if len(edge) == 2:
-                edge = self.get_edge(edge[0], edge[1])  
-            else:
-                raise NetworkError("Please provide a list of two nodes.")
-        # ``edge in self._edges`` is an O(1) EdgeSet hash membership test;
-        # ``edge in self.E()`` would materialize the whole edge list (O(E))
-        # every call -- and remove_edge is one of the hottest move primitives.
-        if edge in self._edges:
-            if type(edge) is UEdge:
-                # Remove the edge from the edge set
-                self._edges.remove(edge)
-            
-                #Make the node set aware of the edge removal
-                self._nodes.process(edge, removal = True)
-                
-                # Reclassify the nodes, as they may be leaves/roots/etc now.
-                
-                self.__reclassify_node(edge.n1)
-                self.__reclassify_node(edge.n2)
-        else:
-            raise NetworkError("Attempted to remove edge fr")
- 
-    def get_edge(self, n1 : Node, n2 : Node) -> Any:
-        """
-        Gets the edge in the graph with the given members.
-        
-        Args:
-            n1 (Node): A Node that is a member of an edge with @n2
-            n2 (Node): A Node that is a member of an edge with @n1
-        Returns:
-            Any: The edge in the graph that has @n1 and @n2 as its members.
-        """
-        e = self._edges.get(n1, n2)
-        if type(e) is UEdge:
-            return e   
-        else:
-            raise NetworkError("Retrieved an edge from a Graph object that is \
-                                not undirected") 
-   
     def V(self) -> list[Node]:
         """
         Get all nodes in V.
@@ -2165,31 +1151,6 @@ class Graph:
         if key not in self.__items:
             self.__items[key] = item
 
-    def update_node_name(self, node : Node, name : str) -> None:
-        """
-        Rename a node and update the bookkeeping.
-
-        Because Node.__hash__ is name-based, we must remove the node from
-        all hash-keyed collections *before* changing the name and re-add
-        it *after*.
-
-        Args:
-            node (Node): a node in the graph
-            name (str): the new name for the node.
-        Returns:
-            N/A
-        """
-        is_leaf = node in self.__leaves
-        if is_leaf:
-            self.__leaves.discard(node)
-
-        affected = (self._nodes.in_edges(node) | self._nodes.out_edges(node))
-        self._nodes.update(node, name)
-        self._edges.rehash_node(node, affected)
-
-        if is_leaf:
-            self.__leaves.add(node)
-    
     def has_node_named(self, name : str) -> Union[Node, None]:
         """
         Check whether the graph has a node with a certain name.
@@ -2274,87 +1235,6 @@ class Graph:
                 not in the graph-- returning an empty list")
             return []
 
-class Network(Graph):
-    """
-    This class represents a directed (and potentially acyclic) graph containing 
-    nodes and edges.
-    
-    An 'Edge' object is a wrapper class for a tuple of two nodes, (a, b),
-    where a and b are Node objects, and the direction of the edge is from 
-    a to b (a is b's parent) -- thus (a, b) is NOT the same as (b, a).
-    
-    Use of 'UEdge' objects is strictly prohibited here.
-
-    Notes and Allowances:
-    
-    1) You may create cycles -- however we have provided a method to check if 
-       this graph object is acyclic. This method is internally called on 
-       methods that assume that a network has no cycles, so be mindful of the 
-       state of networks that are passed as arguments.
-    
-    2) You may have multiple roots. Be mindful of whether this graph is 
-       connected and what root you wish to operate on.
-    
-    3) You may end up with floater nodes/edges, ie this may be an unconnected 
-       network with multiple connected components. We will provide a method to 
-       check for whether your object is one single connected component. 
-       We have also provided methods to remove such artifacts.      
-    """
-
-    def __init__(self,
-                 edges : EdgeSet | set[Edge] = None, 
-                 nodes : NodeSet | set[Node] = None) -> None:
-        """
-        Initialize a Network object.
-        You may initialize with any combination of edges/nodes,
-        or provide none at all.
-        
-        If you provide an EdgeSet and no nodes, each node present in the 
-        EdgeSet *WILL* be added to the network.
-
-        Args:
-            edges (EdgeSet, optional): A set of Edges. 
-                                       Defaults to an empty EdgeSet.
-            nodes (NodeSet, optional): A set of Nodes. 
-                                       Defaults to an empty NodeSet.
-        Returns:
-            N/A
-        """
-        if type(edges) is set[Edge]:
-            edges_set = _make_edgeset(directed=True)
-            for edge in edges:
-                edges_set.add(edge)
-            edges = edges_set
-        
-        if type(nodes) is set[Node]:
-            nodes_set = NodeSet()
-            for node in nodes:
-                nodes_set.add(node)
-            nodes = nodes_set
-        
-        if edges is not None and nodes is not None:
-            super().__init__(edges, nodes)
-        elif edges is None and nodes is not None:
-            super().__init__(_make_edgeset(directed=True), nodes)
-        elif edges is not None and nodes is None:
-            # Use Cython-accelerated NodeSet if available
-            ns = _make_nodeset(directed=True)
-            for e in edges.get_set():
-                if type(e) is not Edge:
-                     raise TypeError("Network objects takeEdge objects. \
-                                    Gave an undirected edge (Edge obj).")
-                ns.add(e.src, e.dest)
-            super().__init__(edges, ns)
-        else:
-            # Use Cython-accelerated NodeSet / EdgeSet if available
-            super().__init__(_make_edgeset(directed=True),
-                             _make_nodeset(directed=True))
-        
-        self.__leaves : set[Node] = {node for node in self._nodes.get_set()
-                        if self._nodes.out_deg(node) == 0}
-        self.__roots : set[Node] = {node for node in self._nodes.get_set() 
-                        if self._nodes.in_deg(node) == 0}
-    
     @classmethod
     def from_newick(cls, newick : str) -> Network:
         """
@@ -2400,7 +1280,10 @@ class Network(Graph):
             Raises:
                 NewickParserError: If the Newick string is malformed
             """
-            
+            # Imported here because :mod:`Newick` reaches this module
+            # through :mod:`GeneTrees`.
+            from .Newick import NewickParserError
+
             class NewickNode:
                 """Helper class to represent nodes during parsing"""
                 def __init__(self, name=None, length=None, children=None):
@@ -2627,7 +1510,6 @@ class Network(Graph):
                                     at least one of which does not belong\
                                     to this network.") 
     
-    @singledispatchmethod
     def remove_nodes(self, node : Node) -> None:
         """
         Removes node from the list of nodes.
@@ -2662,14 +1544,16 @@ class Network(Graph):
             self.__roots.discard(node)
                      
     def remove_edge(self, 
-                    edge : Union[Edge, UEdge, list[Node]], 
+                    edge : Union[Edge, list[Node]], 
                     gamma : float | None = None) -> None:
         """    
         Removes edge from the list of edges. Does not delete nodes with no edges
         Has no effect if 'edge' is not in the graph.
         
+        Raises:
+            NetworkError: If 'edge' is neither an Edge nor a [src, dest] pair.
         Args:
-            edge (Union[Edge, UEdge, list[Node]): an edge to remove from the graph
+            edge (Edge | list[Node]): an edge to remove from the graph
             gamma (float): an inheritance probability from [0,1], if the edge is
                            provided as a list of nodes, and there is an 
                            identifiability issue that needs resolving (ie,
@@ -2703,30 +1587,31 @@ class Network(Graph):
         elif not edge_present and type(edge) is Edge:
             return
         else:
-            raise NetworkError("Tried to remove undirected edge object from a\
-                                directed Network")
+            raise NetworkError(f"Tried to remove a {type(edge).__name__} from "
+                               "a Network, which holds only Edge objects.")
     
-    def update_node_name(self, node: Node, name: str) -> None:
+    def update_node_name(self, node : Node, name : str) -> None:
         """
         Rename a node and update *all* bookkeeping (NodeSet, EdgeSet,
         leaf/root sets).
 
-        Overrides Graph.update_node_name to additionally rehash the
-        Network-level ``__leaves`` and ``__roots`` sets whose keys
-        depend on Node.__hash__ (which is name-based).
+        Node.__hash__ is name-based, so the node must be pulled out of every
+        hash-keyed collection *before* the rename and put back *after*.
 
         Args:
             node (Node): a node in the graph
             name (str): the new name for the node.
+        Returns:
+            N/A
         """
         is_leaf = node in self.__leaves
         is_root = node in self.__roots
-        if is_leaf:
-            self.__leaves.discard(node)
-        if is_root:
-            self.__roots.discard(node)
+        self.__leaves.discard(node)
+        self.__roots.discard(node)
 
-        super().update_node_name(node, name)
+        affected = self._nodes.in_edges(node) | self._nodes.out_edges(node)
+        self._nodes.update(node, name)
+        self._edges.rehash_node(node, affected)
 
         if is_leaf:
             self.__leaves.add(node)
@@ -3202,36 +2087,6 @@ class Network(Graph):
         """
         return _nopt.to_networkx(self)
 
-    def compare_network(self, net : Network, measure : str) -> float:
-        """
-        Compares the topology of this network compared to another network.
-        
-        The following are options for the distance measure:
-        [tree|tri|cluster|luay|rnbs|apd|normapd|wapd|normwapd]
-        
-        If [tree | tri | cluster] is used, the return value will be the average
-        of the false positive and false negative rates.
-        
-        If [luay] is used, the return value will be the distance between the
-        two networks.
-        
-        If [rnbs | apd | normapd | wapd | normwapd] is used, the return value
-        is the dissimilarity between the two networks.
-
-        Args:
-            net (Network): The other network.
-            measure (str): Distance measure to use. One of
-                           ``tree``, ``tri``, ``cluster``, ``luay``,
-                           ``rnbs``, ``apd``, ``normapd``, ``wapd``, or
-                           ``normwapd``.
-        Returns:
-            float: Measure of the two networks similarity/distance.
-        Raises:
-            NetworkError: If an unrecognized measure string is provided.
-        """
-        
-        return _nopt.compare_network(self, net, measure)
-    
     def is_isomorphic(self, other: Network) -> bool:
         """
         Check if this network is topologically isomorphic to another network.
@@ -3368,133 +2223,12 @@ class MUL(Network):
         Returns:    
             N/A
         """
-        
+        super().__init__()
         self.net : Network | None = None
         self.mul : Network | None = None
         self.gene_map : dict[str, list[str]] = gene_map
         self.rng : np.random.Generator = rng
-     
    
-    def network_to_mul_recursive(net: Network) -> Network:
-        """
-        Recursively expand reticulations, handling nested reticulations
-        correctly.
-
-        Each reticulation node with multiple parents is expanded by
-        duplicating the downstream subnetwork for each additional parent,
-        processing the deepest reticulations first.
-
-        Args:
-            net (Network): A phylogenetic network potentially containing
-                           reticulation nodes.
-        Returns:
-            Network: A tree (MUL tree) with all reticulations removed
-                     through subnetwork duplication.
-        """
-        
-        def expand_at_reticulation(network : Network, retic_node : Node) -> Network:
-            """Expand network at a single reticulation, return modified network"""
-            if network.in_degree(retic_node) <= 1:
-                return network
-            
-            parents = network.get_parents(retic_node)
-            
-            # For each parent after the first, duplicate entire subnetwork
-            for i, parent in enumerate(parents[1:], 1):
-                # Get subnetwork rooted at retic_node
-                subnet = network.subnet(retic_node)
-                
-                # Recursively expand any reticulations in the subnetwork
-                subnet = remove_all_reticulations(subnet)
-                
-                # Add expanded subnetwork to main network
-                network.remove_edge(parent, retic_node)
-                network.add_nodes(subnet.V())
-                network.add_edges(subnet.E())
-                network.add_edge(Edge(parent, subnet.root()))
-            
-            return network
-        
-        def remove_all_reticulations(network : Network) -> Network:
-            """Remove all reticulations from network"""
-            while True:
-                retics = [n for n in network.V() if network.in_degree(n) >= 2]
-                if not retics:
-                    break
-                
-                # Process deepest reticulation first (furthest from root)
-                deepest = max(retics, key=lambda n: network.distance_from_root(n))
-                network = expand_at_reticulation(network, deepest)
-            
-            return network
-        
-        mul = net.copy()
-        mul = remove_all_reticulations(mul)
-        mul.clean()
-        
-        return mul
-                
-    # def to_mul(self, net : Network) -> Network:
-    #     """
-    #     Convert binary network to MUL tree. Works for level-k binary networks.
-
-    #     Args:
-    #         N/A
-    #     Returns:
-    #         Network: A MUL tree.
-    #     Raises:
-    #         NetworkError: If the network is malformed in any way/with regards to 
-    #                       the given gene map.
-    #     """
-        
-    #     def expand_binary_reticulation(network : Network, retic : Node) -> Network:
-    #         """For binary network: retic has exactly 2 parents"""
-    #         if network.in_degree(retic) != 2:
-    #             return network  # Not a reticulation
-            
-    #         parents = network.get_parents(retic)
-    #         parent1 = parents[0]
-    #         parent2 = parents[1]
-            
-    #         # Keep edge from parent1, duplicate for parent2
-    #         subnet = network.subnet(retic)
-    #         print(subnet.newick())
-    #         subnet = remove_all_reticulations(subnet)  # Recursive!
-            
-    #         network.remove_edge([parent2, retic])
-    #         network.add_nodes(subnet.V())
-    #         network.add_edges(subnet.E())
-    #         network.add_edges(Edge(parent2, subnet.root()))
-            
-    #         return network
-        
-    #     def remove_all_reticulations(network : Network) -> Network:
-    #         """
-    #         Use topological sort to ensure bottom-up processing
-    #         """
-    #         # Get topological order (root first, leaves last)
-    #         topo_order = network.topological_order()
-            
-    #         # Process in REVERSE topological order (leaves to root)
-    #         for node in reversed(topo_order):
-    #             if network.in_degree(node) == 2:  # Is reticulation
-    #                 network = expand_binary_reticulation(network, node)
-            
-    #         return network
-                
-    #     base_mul = remove_all_reticulations(net.copy()[0]) 
-    #     copy_gene_map = copy.deepcopy(self.gene_map)
-        
-    #     base_mul.clean([False, False, True])
-        
-    #     #Rename tips based on gene mapping
-    #     for leaf in base_mul.get_leaves():
-    #         new_name : str = copy_gene_map[leaf.label.split("_")[0]].pop()
-    #         base_mul.update_node_name(leaf, new_name)
-
-    #     self.mul = base_mul 
-    #     return self.mul
-        
     def to_mul(self, net : Network) -> Network:
         """
         Creates a (MU)lti-(L)abeled Species Tree from a network
@@ -3536,15 +2270,8 @@ class MUL(Network):
         # is already a pure tree. This is what makes a single ``subnet`` copy a
         # faithful duplicate and keeps the result order-independent.
         def _descendants(node : Node) -> set[Node]:
-            seen : set[Node] = set()
-            stack : list[Node] = [node]
-            while stack:
-                cur = stack.pop()
-                for child in mul_tree.get_children(cur):
-                    if child not in seen:
-                        seen.add(child)
-                        stack.append(child)
-            return seen
+            """Strict descendants of 'node' in the working MUL tree."""
+            return mul_tree.get_subtree_at(node) - {node}
 
         while True:
             retics = [n for n in mul_tree.V() if mul_tree.in_degree(n) >= 2]

@@ -31,7 +31,7 @@ Design - [ ]
 
 import numpy as np
 import math
-from .Alphabet import *
+from .Alphabet import Alphabet, DNA
 from .MSA import MSA, DataSequence
 import numpy.typing as npt
 

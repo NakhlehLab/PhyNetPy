@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import collections
 import copy
-import os
 import sys
 import time
 import warnings
@@ -46,16 +45,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import defj_common as dc  # noqa: E402
 
 from phynetpy.IO import read_newick
-from phynetpy.Infer_MP_Allop import (
-    MPAllopComponent,
-    allele_map_set,
-    partition_gene_trees,
-)
+from phynetpy.infer import MPAllopComponent
+from phynetpy._infer_mp_allop import allele_map_set, partition_gene_trees
 from phynetpy.ModelFactory import ModelFactory
 from phynetpy.ModelMove import SwitchParentage
 from phynetpy.MetropolisHastings import (
     Infer_MP_Allop_Kernel,
-    HillClimbing,
     SimulatedAnnealing,
 )
 from phynetpy.State import State

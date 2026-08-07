@@ -32,17 +32,17 @@ informative, but the absolute AIC/BIC values should not be compared to
 those of a fully-specified likelihood model.  The slope/elbow heuristic
 has no such caveat and is often the most honest of the three.
 
-Typical use with MPL::
+Typical use with the pseudo-likelihood criterion::
 
-    from phynetpy.infer import MPL
+    from phynetpy.infer import infer
+    from phynetpy.criteria import PseudoLikelihood
     from phynetpy.ModelSelection import reticulation_sweep
 
     def run_k(k: int, seed: int) -> float:
-        mpl = MPL(start_network_copy(), gene_trees, species_to_alleles)
-        return mpl.search(
+        return infer(
+            gene_trees, criterion=PseudoLikelihood(),
             method="sa", num_iter=20000, max_reticulations=k, seed=seed,
-            schedule="geometric_reheat", ...,
-        )
+        ).score
 
     result = reticulation_sweep(
         run_k, k_values=[0, 1, 2, 3],
@@ -66,7 +66,9 @@ from pathlib import Path
 from typing import Callable, List, Literal, Optional, Sequence
 
 
-# Criterion name accepted by :meth:`SweepResult.best_by`.
+# Selection rule accepted by :meth:`SweepResult.best_by`.  Unrelated to
+# :class:`phynetpy.criteria.Criterion`: this names how to pick ``k`` from a
+# finished sweep, not what objective the sweep optimised.
 Criterion = Literal["logL", "aic", "bic", "elbow"]
 
 

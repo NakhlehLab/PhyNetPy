@@ -15,7 +15,7 @@ from phynetpy.GraphUtils import (
     bridges_and_articulations, is_tree, ascii,
     count_displayed_trees, get_all_clusters,
 )
-from phynetpy.IO import read_newick, write_newick
+from phynetpy.IO import write_newick
 
 
 # ---- 1. Build a level-2 network with two reticulation events ---------------

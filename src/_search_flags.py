@@ -75,7 +75,7 @@ from .ModelMove import (
 )
 from .ModelGraph import Model
 from .State import network_invariants_routine
-from .GraphUtils import level as network_level
+from .GraphUtils import level as network_level, network_clusters
 
 
 __all__ = [
@@ -83,8 +83,10 @@ __all__ = [
     "CONTINUOUS_MOVES",
     "BACKBONE_MOVES",
     "LEVEL_RAISING_MOVES",
+    "STRUCTURE_DESTROYING_MOVES",
     "resolve_move_types",
     "make_level_validator",
+    "make_containment_validator",
     "SearchSettings",
     "SEARCH_PRESETS",
     "resolve_search_preset",
@@ -245,10 +247,27 @@ LEVEL_RAISING_MOVES: tuple[type[Move], ...] = (
 )
 
 
+# Moves that can destroy structure already present in the network, and so
+# cannot preserve a backbone the result is required to contain.  Dropped
+# under ``StartMode.AUGMENT`` (see :func:`resolve_move_types`).  This is only
+# the efficiency layer; :func:`make_containment_validator` is authoritative,
+# exactly as with ``max_lvl``.
+STRUCTURE_DESTROYING_MOVES: tuple[type[Move], ...] = (
+    SPR,
+    RemoveReticulation,
+    RelocateReticulation,
+    ChangeReticSource,
+    ChangeReticDest,
+    FlipReticulation,
+)
+
+
 def resolve_move_types(
     opt_bl: bool = False,
     fix_st: bool = False,
     base: Optional[list[type[Move]]] = None,
+    *,
+    augment_only: bool = False,
 ) -> list[type[Move]]:
     """Resolve the kernel's move set from the ``opt_bl`` / ``fix_st`` flags.
 
@@ -261,17 +280,77 @@ def resolve_move_types(
             and only reticulation/gamma moves are proposed.
         base: Optional base move set to filter.  Defaults to
             :data:`DEFAULT_MOVE_TYPES`.
+        augment_only: When ``True`` drop every move that can destroy
+            existing structure (:data:`STRUCTURE_DESTROYING_MOVES`), leaving
+            reticulation *addition* and the continuous moves.  Used by
+            ``Start(net, mode=StartMode.AUGMENT)``, where the result must
+            contain the starting network.
 
     Returns:
         The filtered list of move classes (a new list; never mutates
         ``base``).
+
+    Raises:
+        ValueError: If the flags leave no moves at all.
     """
     moves = list(base) if base is not None else list(DEFAULT_MOVE_TYPES)
     if opt_bl:
         moves = [m for m in moves if m not in CONTINUOUS_MOVES]
     if fix_st:
         moves = [m for m in moves if m not in BACKBONE_MOVES]
+    if augment_only:
+        moves = [m for m in moves if m not in STRUCTURE_DESTROYING_MOVES]
+    if not moves:
+        raise ValueError(
+            "the requested flag combination leaves the proposal kernel with "
+            "no moves (opt_bl="
+            f"{opt_bl}, fix_st={fix_st}, augment_only={augment_only})."
+        )
     return moves
+
+
+def make_containment_validator(
+    backbone,
+    base: Callable[[Model], bool] = network_invariants_routine,
+) -> Callable[[Model], bool]:
+    """Compose ``base`` with a "must still contain the backbone" guard.
+
+    The authoritative enforcement of ``Start(net, mode=StartMode.AUGMENT)``.
+    Containment is tested on clusters: every clade the backbone displays
+    must still be displayed by the candidate network.  Adding reticulations
+    to a network preserves its clusters, so "augment only" is a genuine
+    constraint on the search space and not merely a starting hint -- which
+    is what makes this checkable in the accept path rather than only
+    approximable by restricting moves.
+
+    Args:
+        backbone: The network the result must contain (usually a tree).
+            ``None`` means unconstrained, in which case *base* is returned
+            unwrapped -- so callers can pass their optional backbone straight
+            through instead of branching on it.
+        base: Underlying validator to compose with.  Defaults to
+            :func:`phynetpy.State.network_invariants_routine`.
+
+    Returns:
+        A ``Callable[[Model], bool]`` returning ``True`` iff the model is
+        valid *and* still displays every backbone cluster.
+    """
+    if backbone is None:
+        return base
+
+    required = network_clusters(backbone)
+    if not required:
+        return base
+
+    def _validator(model: Model) -> bool:
+        if not base(model):
+            return False
+        net = model.network
+        if net is None:
+            return False
+        return required <= network_clusters(net)
+
+    return _validator
 
 
 def make_level_validator(

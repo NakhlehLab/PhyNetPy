@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from phynetpy.Network import Network
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL import MPL
+from phynetpy._mpl import MPL
 from phynetpy.IO import convert_newick
 from phynetpy.GraphUtils import mu_distance, hardwired_cluster_distance
 

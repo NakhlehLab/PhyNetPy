@@ -8,7 +8,7 @@ simulation, and newick conversion.
 #Mark's preferred style of importing
 from phynetpy.Network import Network, Node, Edge
 from phynetpy.GraphUtils import * #check docs for all that is included here
-from phynetpy.IO import read_newick, write_newick, read_newick_file, write_nexus, convert_newick, detect_newick_standard
+from phynetpy.IO import read_newick, write_newick, write_nexus, convert_newick, detect_newick_standard
 from phynetpy.BirthDeath import CBDP
 from phynetpy.GTR import JC
 

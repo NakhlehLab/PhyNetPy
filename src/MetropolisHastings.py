@@ -79,8 +79,6 @@ from __future__ import annotations
 
 import copy
 import math
-import time
-import random
 from abc import ABC, abstractmethod
 from typing import Callable, Literal, Optional
 
@@ -88,7 +86,6 @@ import numpy as np
 
 # Relative imports
 from .State import State, network_invariants_routine
-from .MSA import MSA
 from .Matrix import Matrix
 from .ModelGraph import Model
 from .ModelMove import Move, SwitchParentage
@@ -99,48 +96,6 @@ from ._optimize import (
     restore_continuous_params,
 )
 
-
-###########################
-#### EXCEPTION CLASSES ####
-###########################
-
-class HillClimbException(Exception):
-    """
-    This exception is raised when there is an error running the Hill Climbing
-    algorithm.
-    """
-
-    def __init__(self, 
-                 message: str = "Error during a Hill Climbing run") -> None:
-        """
-        Initialize the exception with an error message.
-
-        Args:
-            message (str, optional): A custom error message.
-        Returns:
-            N/A
-        """
-        self.message = message
-        super().__init__(self.message)
-        
-class MetropolisHastingsException(Exception):
-    """
-    This exception is raised when there is an error running the Metropolis 
-    Hastings algorithm.
-    """
-
-    def __init__(self, 
-                 message: str = "Error running Metropolis-Hastings") -> None:
-        """
-        Initialize the exception with an error message.
-
-        Args:
-            message (str, optional): A custom error message.
-        Returns:
-            N/A
-        """
-        self.message = message
-        super().__init__(self.message)
 
 ##########################
 #### PROPOSAL KERNELS ####
@@ -314,10 +269,6 @@ class HillClimbing:
         Returns:
             State: The final end state of the model.
         """
-        # Begin logging info
-        self.current_state.write_line_to_summary("--------------------------")
-        self.current_state.write_line_to_summary("------Begin Hillclimb-----")
-
         iter_no = 0
         top_network_ct = 1
         
@@ -414,10 +365,6 @@ class HillClimbing:
                                        if leaderboard[net] == cur_max_val]
                             if old_nets:
                                 del leaderboard[old_nets[0]]
-                    
-                self.current_state.write_line_to_summary(
-                    f"ITER #{iter_no} LIKELIHOOD = {cur}"
-                )
             else:
                 self.kernel.report_outcome(False, delta=0.0)
                 if self.enhanced_stop:
@@ -426,9 +373,6 @@ class HillClimbing:
             iter_no += 1
         
         self.nets_2_scores = leaderboard
-        
-        self.current_state.write_line_to_summary("DONE. EXITED WITH 0 ERRORS")
-        self.current_state.write_line_to_summary("--------------------------")
 
         return self.current_state
 
@@ -474,156 +418,6 @@ class HillClimbing:
 
         return [mean, median, max_val, min_val]
 
-
-class MetropolisHastings:
-    """
-    A special case of Hill Climbing, in which moves are accepted even if the 
-    score is not an improvement, based on the Hastings Ratio.
-    """
-        
-    def __init__(self, 
-                 pkernel: ProposalKernel, 
-                 submodel: GTR = None, 
-                 data: Matrix | None = None, 
-                 model: Model | None = None,
-                 num_iter: int = 500,
-                 validate: Callable[[Model], bool] = network_invariants_routine) -> None:
-        """
-        Initialize a Metropolis Hastings search.
-
-        Args:
-            pkernel (ProposalKernel): A proposal kernel.
-            submodel (GTR, optional): A substitution model. Defaults to JC.
-            data (Matrix | None, optional): The data. Defaults to None.
-            model (Model | None, optional): A phylogenetic model. Defaults to None.
-            num_iter (int, optional): Number of iterations. Defaults to 500.
-            validate (Callable[[Model], bool]): Proposal-validity predicate
-                forwarded to :class:`State`.  Defaults to
-                ``network_invariants_routine``; the ``max_lvl`` search flag
-                composes this with a level guard via
-                :func:`phynetpy._search_flags.make_level_validator`.
-        Returns:
-            N/A  
-        """
-        if submodel is None:
-            submodel = JC()
-            
-        self.current_state = State(model, validate=validate)
-        
-        if model is None and data is not None:
-            self.current_state.bootstrap(data, submodel)
-        
-        self.data = data
-        self.submodel = submodel
-        self.kernel = pkernel
-        self.num_iter = num_iter
-
-    def run(self) -> State:
-        """
-        Run the Metropolis-Hastings algorithm.
-        
-        Args:
-            N/A
-        Returns: 
-            State: The end state.
-        """
-        self.current_state.write_line_to_summary("----------------------------")
-        self.current_state.write_line_to_summary("----Begin Metro-Hastings----")
-
-        iter_no = 0
-
-        while iter_no < self.num_iter:
-            # propose a new state
-            next_move = self.kernel.generate(self.current_state.current_model)
-            is_valid = self.current_state.generate_next(next_move)
-
-            # An invalid proposal is an automatic reject (it counts toward
-            # the rejection denominator); ``generate_next`` has already
-            # reverted the proposed model, so just move on.
-            if not is_valid:
-                self.kernel.report_outcome(False, delta=0.0)
-                self.current_state.write_line_to_summary(
-                    f"ITER #{iter_no} (invalid proposal, rejected)"
-                )
-                iter_no += 1
-                continue
-
-            cur = self.current_state.likelihood()
-            prop = self.current_state.proposed().likelihood()
-
-            # Metropolis-Hastings in log space:
-            #   log_alpha = (logP(B) - logP(A)) + log[ q(A|B) / q(B|A) ]
-            # accept iff log_alpha >= 0 or log(Unif(0,1)) < log_alpha.
-            # NOTE: the threshold must be ``log(U)``, not ``U`` -- the
-            # previous code compared a log-posterior delta directly to
-            # ``random.random()`` in (0, 1), which is always >= 0 and so
-            # rejected essentially every downhill move (a noisy hill
-            # climber, not a sampler).
-            log_alpha = (prop - cur) + next_move.log_hastings_ratio()
-            if log_alpha >= 0.0 or math.log(random.random()) < log_alpha:
-                self.current_state.commit(next_move)
-                self.kernel.report_outcome(True, delta=prop - cur)
-            else:
-                self.current_state.revert(next_move)
-                self.kernel.report_outcome(False, delta=prop - cur)
-
-            self.current_state.write_line_to_summary(
-                f"ITER #{iter_no} LIKELIHOOD = {cur}"
-            )
-            iter_no += 1
-
-        self.current_state.write_line_to_summary("DONE. EXITED WITH 0 ERRORS")
-        self.current_state.write_line_to_summary("--------------------------")
-
-        return self.current_state
-    
-    def run_many_different_start(self,
-                                 count: int, 
-                                 format_stats: bool = True) -> list[float]:
-        """
-        Runs the MH algorithm 'count' times.
-
-        Args: 
-            count (int): The number of times to run.
-            format_stats (bool): Flag to print stats.
-        Returns: 
-            list[float]: [mean, median, max, min]
-        """
-        assert(self.data is not None and self.submodel is not None)
-        
-        all_end_states: list[float] = []
-        
-        for _ in range(count):
-            self.current_state = State()
-            self.current_state.bootstrap(self.data, self.submodel)
-            end_state: State = self.run()
-            all_end_states.append(end_state.likelihood())
-
-        all_end_states.sort()
-        
-        length = len(all_end_states)
-
-        if length % 2 == 0:
-            median = 0.5 * (all_end_states[int(length / 2)] 
-                           + all_end_states[int(length / 2) - 1])
-        else:
-            median = all_end_states[int((length + 1) * 0.5) - 1]
-
-        mean = sum(all_end_states) / length
-        max_val = all_end_states[-1]
-        min_val = all_end_states[0]
-
-        if format_stats:
-            print("===============================================")
-            print(f"MH ran {count} times...")
-            print("===============================================")
-            print(f"Mean score: {mean}\n"
-                  f"Median score: {median}\n"
-                  f"Maximum score: {max_val}\n"
-                  f"Minimum score: {min_val}\n")
-            print("===============================================")
-
-        return [mean, median, max_val, min_val]
 
 
 class SimulatedAnnealing:
@@ -980,7 +774,6 @@ class SimulatedAnnealing:
                 delta = cur - proposed
 
                 was_accepted = False
-                was_uphill = False
                 if delta < 0:
                     state.commit(next_move)
                     accepted += 1
@@ -991,7 +784,6 @@ class SimulatedAnnealing:
                     uphill_accepted += 1
                     uphill_in_window += 1
                     was_accepted = True
-                    was_uphill = True
                 else:
                     state.revert(next_move)
 
@@ -1126,8 +918,6 @@ class SimulatedAnnealing:
         Returns:
             State holding the best network found across all restarts.
         """
-        from .ModelFactory import ModelFactory
-
         for restart in range(self.n_restarts):
             model = copy.deepcopy(self.init_model)
             state = State(model, validate=self.validate)

@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 
 from phynetpy.IO import read_nexus, read_newick
-from phynetpy.Infer_MP_Allop import InferMPAllop
+from phynetpy.infer import InferMPAllop
 
 
 def _project_root() -> Path:

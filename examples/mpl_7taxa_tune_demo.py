@@ -36,8 +36,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import phynetpy.IO as io
-from phynetpy.GeneTrees import GeneTrees
-from phynetpy.infer import MPL
+from phynetpy.criteria import PseudoLikelihood
+from phynetpy.data import GeneTrees
+from phynetpy.infer import infer, score
+from phynetpy.models import MSC
 
 
 _REPO = Path(__file__).resolve().parent.parent
@@ -77,13 +79,13 @@ SA_REHEAT_MAX_CONSECUTIVE = 4
 
 def load_gene_trees(path: Path) -> GeneTrees:
     """Load gene trees restricted to ``SPECIES_TO_ALLELES``."""
-    return io.read_newick_file(
+    networks = io.read_newick_file(
         path,
-        return_type="genetrees",
-        species_gene_mapping=SPECIES_TO_ALLELES,
+        return_type="networks",
         restrict_to_taxa=SPECIES_LABELS,
         min_leaves_after_restrict=3,
     )
+    return GeneTrees(list(networks), SPECIES_TO_ALLELES)
 
 
 def main() -> None:
@@ -123,14 +125,19 @@ def main() -> None:
     print(start_net.newick(), flush=True)
     print(flush=True)
 
-    print("MPL score of seed (before search)…", flush=True)
-    mpl = MPL(start_net, gene_trees, SPECIES_TO_ALLELES)
-    start_pl = mpl.score()
+    print("Pseudo-likelihood of seed (before search)…", flush=True)
+    start_pl = score(
+        start_net, gene_trees, model=MSC(), criterion=PseudoLikelihood(),
+    )
     print(f"  log pseudo-likelihood: {start_pl:.6f}", flush=True)
     print(flush=True)
 
-    print(f"MPL simulated annealing ({SEARCH_ITERATIONS:,} moves)…", flush=True)
-    best_log_pl = mpl.search(
+    print(f"Simulated annealing ({SEARCH_ITERATIONS:,} moves)…", flush=True)
+    result = infer(
+        gene_trees,
+        model=MSC(),
+        criterion=PseudoLikelihood(),
+        start=start_net,
         method="sa",
         num_iter=SEARCH_ITERATIONS,
         max_reticulations=2,
@@ -150,9 +157,9 @@ def main() -> None:
         reheat_max_consecutive=SA_REHEAT_MAX_CONSECUTIVE,
     )
 
-    print(f"\nBest log pseudo-likelihood: {best_log_pl:.6f}", flush=True)
+    print(f"\nBest log pseudo-likelihood: {result.score:.6f}", flush=True)
     print("\nBest network (Newick):", flush=True)
-    print(mpl.net.newick(), flush=True)
+    print(result.best.newick(), flush=True)
 
 
 if __name__ == "__main__":

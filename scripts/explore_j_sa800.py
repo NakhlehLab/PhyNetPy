@@ -7,12 +7,9 @@ warnings.filterwarnings("ignore")
 sys.setrecursionlimit(10000)
 
 from phynetpy.IO import read_newick
-from phynetpy.Infer_MP_Allop import (
-    Allop_MUL, MPAllopScorer, MPAllopComponent,
-    allele_map_set, partition_gene_trees,
-)
+from phynetpy.infer import MPAllopComponent
+from phynetpy._infer_mp_allop import allele_map_set, partition_gene_trees
 from phynetpy.ModelFactory import ModelFactory
-from phynetpy.ModelMove import SwitchParentage
 from phynetpy.MetropolisHastings import SimulatedAnnealing, Infer_MP_Allop_Kernel
 from phynetpy.State import State
 from phynetpy.GraphUtils import mu_distance, hardwired_cluster_distance

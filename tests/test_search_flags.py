@@ -180,7 +180,6 @@ class TestResolveMoveTypes:
 class TestLevelValidator:
 
     def test_none_returns_base_unchanged(self):
-        base = make_level_validator(None).__class__
         sentinel = lambda model: True  # noqa: E731
         assert make_level_validator(None, base=sentinel) is sentinel
 
@@ -261,7 +260,7 @@ class TestPseudoRouting:
 
     def test_infernetworkml_pseudo_matches_mpl(self):
         """``InferNetwork_ML.score(pseudo=True)`` == ``MPL.score`` (triplets)."""
-        from phynetpy.MPL import MPL
+        from phynetpy._mpl import MPL
         from phynetpy._infernetworkml import InferNetwork_ML
 
         mapping = _identity_map("A", "B", "C")
@@ -286,7 +285,7 @@ class TestPseudoRouting:
 
     def test_mcmc_gt_mh_pseudo_rejected(self):
         """pseudo is not a calibrated posterior -> rejected with method='mh'."""
-        from phynetpy.MCMC_GT import MCMC_GT
+        from phynetpy._mcmc_gt import MCMC_GT
 
         mapping = _identity_map("A", "B", "C")
         gts = GeneTrees(gene_tree_list=[Network.from_newick(
@@ -313,14 +312,14 @@ class TestSearchFlagsSmoke:
     ]
 
     def _mpl(self):
-        from phynetpy.MPL import MPL
+        from phynetpy._mpl import MPL
         gts = GeneTrees(
             gene_tree_list=[Network.from_newick(g) for g in self.GTS])
         gts.species_gene_mapping = self.MAP
         return MPL(Network.from_newick(self.ST), gts, self.MAP)
 
     def _mcmc(self):
-        from phynetpy.MCMC_GT import MCMC_GT
+        from phynetpy._mcmc_gt import MCMC_GT
         gts = GeneTrees(
             gene_tree_list=[Network.from_newick(g) for g in self.GTS])
         gts.species_gene_mapping = self.MAP

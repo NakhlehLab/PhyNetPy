@@ -17,17 +17,19 @@ import sys
 import re
 from pathlib import Path
 
-SETUP_PY = Path(__file__).parent / "setup.py"
+VERSION_FILE = Path(__file__).parent / "src" / "_version.py"
 TOKEN_FILE = Path(__file__).parent / ".pypi_token"
 DIST_DIR = Path(__file__).parent / "dist"
 
+VERSION_RE = r'(__version__\s*=\s*")(\d+\.\d+\.\d+)(")'
+
 
 def read_current_version() -> str:
-    text = SETUP_PY.read_text(encoding="utf-8")
-    match = re.search(r'version\s*=\s*"(\d+\.\d+\.\d+)"', text)
+    text = VERSION_FILE.read_text(encoding="utf-8")
+    match = re.search(VERSION_RE, text)
     if not match:
-        sys.exit("Could not find version string in setup.py")
-    return match.group(1)
+        sys.exit(f"Could not find __version__ in {VERSION_FILE}")
+    return match.group(2)
 
 
 def bump_version(current: str, bump_type: str) -> str:
@@ -43,13 +45,9 @@ def bump_version(current: str, bump_type: str) -> str:
 
 
 def write_version(new_version: str) -> None:
-    text = SETUP_PY.read_text(encoding="utf-8")
-    updated = re.sub(
-        r'(version\s*=\s*")(\d+\.\d+\.\d+)(")',
-        rf"\g<1>{new_version}\g<3>",
-        text,
-    )
-    SETUP_PY.write_text(updated, encoding="utf-8")
+    text = VERSION_FILE.read_text(encoding="utf-8")
+    updated = re.sub(VERSION_RE, rf"\g<1>{new_version}\g<3>", text)
+    VERSION_FILE.write_text(updated, encoding="utf-8")
 
 
 def run_tests() -> bool:

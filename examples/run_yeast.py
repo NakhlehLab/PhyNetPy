@@ -8,8 +8,9 @@
 ##############################################################################
 
 """
-Run MCMC_SEQ on a PhyloNet-format multilocus NEXUS file (e.g. the canonical
-yeast example ``tests/data/MCMCseq_example0.nex``).
+Bayesian co-estimation from a PhyloNet-format multilocus NEXUS file (e.g. the
+canonical yeast example ``tests/data/MCMCseq_example0.nex``), the analogue of
+PhyloNet's ``MCMC_SEQ``.
 
 This both (a) demonstrates that PhyNetPy ingests *genuine* PhyloNet MCMC_SEQ
 input and (b) gives a small, reusable parser for the multilocus NEXUS dialect:
@@ -32,7 +33,10 @@ import argparse
 import os
 import re
 
-from phynetpy.infer import MCMC_SEQ, MCMCSeqPriors, JC69
+from phynetpy.criteria import Bayesian
+from phynetpy.data import Alignment
+from phynetpy.infer import JC69, MCMCSeqPriors, infer
+from phynetpy.models import MSC
 
 
 def parse_multilocus_nexus(path: str):
@@ -110,23 +114,35 @@ def main() -> None:
     for i, lc in enumerate(loci):
         print(f"  locus {i}: {len(next(iter(lc.values())))} bp x {len(lc)} taxa")
 
-    sampler = MCMC_SEQ(
-        loci, mapping, model=JC69(), theta=args.theta,
-        priors=MCMCSeqPriors(max_reticulations=args.max_retic),
-    )
-    print(f"\nStarting logP : {sampler.score():.3f}")
-    print(f"Running MCMC_SEQ: {args.iters} iters "
+    # The substitution model belongs to the data (it describes how these
+    # sequences were generated); theta belongs to the model (it describes how
+    # the gene copies are related).
+    alignment = Alignment(loci, mapping, substitution_model=JC69())
+
+    print(f"\nRunning Bayesian co-estimation: {args.iters} iters "
           f"(burn-in {args.burnin}, thin {args.thin}) ...")
-    result = sampler.search(
-        num_iter=args.iters, burn_in=args.burnin, sample_freq=args.thin,
-        seed=args.seed, progress=True,
+    result = infer(
+        alignment,
+        model=MSC(theta=args.theta),
+        criterion=Bayesian(
+            prior=MCMCSeqPriors(max_reticulations=args.max_retic),
+            chain_length=args.iters,
+            burnin=args.burnin,
+            sample_freq=args.thin,
+            seed=args.seed,
+        ),
+        progress=True,
     )
 
+    # Everything InferenceResult does not define itself -- map_theta,
+    # acceptance_rate, summary(), write_log() -- falls through to the
+    # sampler's own result object, also reachable as ``result.raw``.
     print()
-    print(f"MAP network : {result.map_network.newick()}")
-    print(f"MAP logP    : {result.map_log_posterior:.3f}")
+    print(f"MAP network : {result.best.newick()}")
+    print(f"MAP logP    : {result.score:.3f}")
     print(f"MAP theta   : {result.map_theta:.6f}")
     print(f"acceptance  : {result.acceptance_rate:.3f}")
+    print(f"samples     : {len(result.posterior)}")
     print()
     print(result.summary())
 

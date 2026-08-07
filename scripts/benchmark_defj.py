@@ -51,8 +51,10 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import defj_common as dc  # noqa: E402
 
-from phynetpy.Infer_MP_Allop import (  # noqa: E402
-    MPAllopComponent, allele_map_set_ilp, partition_gene_trees,
+from phynetpy._infer_mp_allop import (  # noqa: E402
+    MPAllopComponent,
+    allele_map_set_ilp,
+    partition_gene_trees,
 )
 from phynetpy.IO import read_newick  # noqa: E402
 from phynetpy.ModelFactory import ModelFactory  # noqa: E402

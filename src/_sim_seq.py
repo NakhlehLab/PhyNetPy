@@ -46,8 +46,13 @@ per species), this module:
    site is propagated across every branch with that branch's transition matrix
    ``P(t) = exp(Qt)`` (vectorised across all sites at once).
 
+These are the primitives behind the public :func:`phynetpy.infer.simulate`
+verb, which wraps them and returns data-axis objects that feed straight back
+into :func:`phynetpy.infer.infer`.  Reach for this module directly only when
+you want a single gene tree or a bare ``{label: sequence}`` dict.
+
 The result is a :class:`SimulatedData` bundle that drops straight into
-:class:`phynetpy.infer.MCMC_SEQ` (``MCMC_SEQ(**data.to_mcmc_seq_kwargs())``),
+:class:`phynetpy._mcmc_seq.MCMC_SEQ` (``MCMC_SEQ(**data.to_mcmc_seq_kwargs())``),
 so you can check *recovery* (does the sampler find the true topology /
 divergence times?) and *calibration* (do the 95% HPD intervals cover the truth
 at the nominal rate?) against a known ground truth.
@@ -63,17 +68,17 @@ Design - [x]
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import numpy as np
 
 from .Network import Network, Node, Edge
+from .GraphUtils import _edge_between, _node_heights
 from ._seq_likelihood import (
     SubstitutionModel,
     JC69,
     DNA_STATES,
-    _node_height,
 )
 
 
@@ -94,7 +99,7 @@ class SimulatedData:
     """A simulated multilocus data set with its ground truth.
 
     The fields under "inputs to inference" are exactly what
-    :class:`phynetpy.infer.MCMC_SEQ` consumes; the "ground truth" fields are
+    :class:`phynetpy._mcmc_seq.MCMC_SEQ` consumes; the "ground truth" fields are
     what a recovery / calibration check compares the posterior against.
 
     Attributes:
@@ -137,22 +142,8 @@ class SimulatedData:
 
 
 # ======================================================================
-# Heights & reticulation inheritance probabilities
+# Reticulation inheritance probabilities
 # ======================================================================
-
-def _heights(net: Network) -> dict[Node, float]:
-    """Map every node of ``net`` to its ultrametric height above the present."""
-    cache: dict[Node, float] = {}
-    for v in net.V():
-        _node_height(net, v, cache)
-    return cache
-
-
-def _edge_between(net: Network, parent: Node, child: Node) -> Edge:
-    """The single directed edge ``parent -> child``."""
-    e = net.get_edge(parent, child)
-    return e[0] if isinstance(e, list) else e
-
 
 def _reticulation_parent_gammas(
     net: Network, retic: Node
@@ -300,7 +291,7 @@ def simulate_gene_tree(
         A rooted, ultrametric :class:`Network` (a tree) with branch lengths in
         substitution units and leaves labelled by the sampled alleles.
     """
-    heights = _heights(species_net)
+    heights = _node_heights(species_net)
     counter: list[int] = [0]
 
     def theta_above(child: Node) -> float:

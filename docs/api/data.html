@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>data - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; data
+                </div>
+                
+                <h1>data Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>Axis 1 -- what you observed: GeneTrees, Alignment, BiallelicMarkers. The input knows its own type, which is half of the dispatch key.</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Source:</dt>
+                        <dd>data.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#data">Data</a></li>
+                        <li><a href="#genetrees">GeneTrees</a></li>
+                        <li><a href="#alignment">Alignment</a></li>
+                        <li><a href="#biallelicmarkers">BiallelicMarkers</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">DataError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when a data container is malformed or cannot be loaded.</p>
+                    </div>
+                </div>
+
+                <h2 id="data">Data</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Data</span>(<span class="params">ABC</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Base class for every input type on the data axis. Subclasses declare *what kind of observation* the user has: :class:`~phynetpy.data.GeneTrees` (gene-tree estimates), :class:`~phynetpy.data.Alignment` (per-locus sequences), or :class:`~phynetpy.data.BiallelicMarkers` (SNPs). A criterion declares which of these it is defined on via ``Criterion.accepts_data``, and the registry keys engines on the concrete class. Every data type carries the species-to-allele mapping alongside the observations, because the mapping describes *the sample*, not the biology or the objective: which gene copies were sequenced from which species is a property of the data set. This is why neither verb takes a separate ``mapping`` argument.</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">taxa</span> <span class="keyword">-&gt;</span> set <span class="keyword">property</span> <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>The set of allele / sequence labels present in the data.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mapping</span> <span class="keyword">-&gt;</span> Optional[Dict[str, List[str]]] <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Explicit species -&gt; allele mapping, or ``None`` if unset.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">has_branch_lengths</span> <span class="keyword">-&gt;</span> bool <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Whether the data carries usable branch lengths. Only meaningful for :class:`~phynetpy.data.GeneTrees`; sequence and marker data have no branch lengths of their own, so the base implementation reports ``False``. Consulted by the registry when a criterion's ``use_branch_lengths`` policy is ``True``.</p>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">mapping: Optional[Dict[str, List[str]]] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialise the shared mapping slot.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mapping</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Species -&gt; list of allele / gene-copy labels.  ``None`` defers to :meth:`resolved_mapping`, which falls back to an identity mapping (each label is its own species).</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mapping</span>(<span class="params">value: Optional[Dict[str, List[str]]]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">resolved_mapping</span> <span class="keyword">-&gt;</span> Dict[str, List[str]]
+                            </div>
+                            <div class="function-body">
+                                <p>Return an explicit mapping, falling back to identity.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[str, list[str]]: Species -&gt; allele labels.  When no mapping was supplied, every label is treated as its own species, which is the right default for single-copy (one allele per species) data.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="genetrees">GeneTrees</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">GeneTrees</span>(<span class="params">Data, _GeneTreeCollection</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Gene-tree estimates: the data axis type for gene trees. Accepted by the MDC, likelihood, pseudo-likelihood, and Bayesian criteria -- gene trees are the only data type all four are defined on. Because this subclasses :class:`phynetpy.GeneTrees.GeneTrees`, every inherited utility (``build_majority_rule_consensus_tree``, ``most_frequent_gene_tree``, ``cluster_support``, ``rf_distance``, ``astral``, ``mp_allop_map``, ...) is available, and the object can be handed straight to the numerical engines, which expect that type. Attributes: trees: Set of gene trees, each a :class:`~phynetpy.Network.Network`. taxa_names: Union of all gene-copy (allele) labels.</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">taxa</span> <span class="keyword">-&gt;</span> set <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>The set of gene-copy (allele) labels across all trees.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mapping</span> <span class="keyword">-&gt;</span> Optional[Dict[str, List[str]]] <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Explicit species -&gt; allele mapping, or ``None`` if unset. Kept in step with the inherited ``species_gene_mapping`` so the numerical engines and the two verbs read the same value.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">has_branch_lengths</span> <span class="keyword">-&gt;</span> bool <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Whether these gene trees carry observed branch lengths. ``False`` means the trees are topologies only. Set at construction (from the source file's text, or from the trees' edges) rather than inferred later, because ``phynetpy.IO`` back-fills missing lengths with ``1``.</p>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">trees: Optional[List[Network]] = None, mapping: Optional[Dict[str, List[str]]] = None, naming_rule: Optional[Callable[..., Any]] = None, has_branch_lengths: Optional[bool] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Wrap a set of gene trees as a data-axis object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">trees</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The gene trees.  Each should be a rooted binary :class:`~phynetpy.Network.Network` with no reticulations.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mapping</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Species -&gt; list of allele labels.  Omit for single-copy data, where each label is its own species.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">naming_rule</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``f : str -&gt; str`` deriving a species key from an allele label; an alternative to an explicit *mapping* (e.g. :func:`phynetpy.GeneTrees.phynetpy_naming`).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">has_branch_lengths</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Override the branch-length flag.  ``None`` infers it from the trees' edges.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>DataError</code>: If *trees* is empty or contains a reticulate network.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mapping</span>(<span class="params">value: Optional[Dict[str, List[str]]]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">resolved_mapping</span> <span class="keyword">-&gt;</span> Dict[str, List[str]]
+                            </div>
+                            <div class="function-body">
+                                <p>Species -&gt; allele mapping, resolved through the naming rule. Defers to the inherited resolution chain: an explicit mapping, then the naming rule, then identity.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_file</span>(<span class="params">path: Union[str, os.PathLike], mapping: Optional[Dict[str, List[str]]] = None, naming_rule: Optional[Callable[..., Any]] = None, format: Optional[str] = None</span>) <span class="keyword">-&gt;</span> 'GeneTrees' <span class="keyword">@classmethod</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Load gene trees from a NEXUS or Newick file.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">path</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Path to the file.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mapping</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Species -&gt; list of allele labels.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">naming_rule</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``f : str -&gt; str`` deriving species from labels.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">format</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``&quot;nexus&quot;`` or ``&quot;newick&quot;``.  ``None`` infers from the file extension, defaulting to NEXUS.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> GeneTrees: The loaded collection, with ``has_branch_lengths`` determined from the file's text.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>DataError</code>: If the file cannot be read or holds no trees.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_newick</span>(<span class="params">strings: Union[str, Sequence[str]], mapping: Optional[Dict[str, List[str]]] = None, naming_rule: Optional[Callable[..., Any]] = None</span>) <span class="keyword">-&gt;</span> 'GeneTrees' <span class="keyword">@classmethod</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Build from one or more Newick strings.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">strings</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A single Newick string, or a sequence of them.  A single string containing several ``;``-terminated trees is split.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mapping</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Species -&gt; list of allele labels.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">naming_rule</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``f : str -&gt; str`` deriving species from labels.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> GeneTrees: The parsed collection.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="alignment">Alignment</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Alignment</span>(<span class="params">Data</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Multilocus nucleotide sequence alignments. One :class:`Alignment` holds *all* loci for the analysis; each locus is a separate alignment over the same allele labels. Accepted by the Bayesian criterion, which co-estimates the species network and the gene trees (Wen &amp; Nakhleh 2018). PhyNetPy will not estimate gene trees from an alignment, so the MDC and pseudo-likelihood criteria reject this type outright: those are defined over gene-tree topologies. Summarise the alignment externally and pass :class:`~phynetpy.data.GeneTrees` instead. The nucleotide substitution model lives here rather than on the model axis, because it describes how *these sequences* were generated, while the model axis describes how the gene copies are related. Attributes: loci: Per-locus alignments as ``{label: sequen...</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">taxa</span> <span class="keyword">-&gt;</span> set <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>The set of sequence labels across all loci.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">n_loci</span> <span class="keyword">-&gt;</span> int <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Number of loci.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">n_sites</span> <span class="keyword">-&gt;</span> int <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Total aligned site count summed across loci.</p>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">loci: Union[MSA, Sequence[Any]], mapping: Optional[Dict[str, List[str]]] = None, substitution_model: Optional[Any] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Wrap per-locus alignments as a data-axis object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">loci</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A single :class:`~phynetpy.MSA.MSA`, or a sequence of per-locus alignments (each an ``MSA`` or a ``{label: sequence}`` dict).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mapping</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Species -&gt; list of allele labels, where the allele labels are the alignment row names.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">substitution_model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A :class:`~phynetpy.infer.SubstitutionModel` (``JC69``, ``HKY85``, ``GTR``).  ``None`` selects ``JC69``.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>DataError</code>: If no loci are supplied.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_file</span>(<span class="params">path: Union[str, os.PathLike, Sequence[Union[str, os.PathLike]]], mapping: Optional[Dict[str, List[str]]] = None, format: Optional[str] = None, substitution_model: Optional[Any] = None</span>) <span class="keyword">-&gt;</span> 'Alignment' <span class="keyword">@classmethod</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Load one locus per file.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">path</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A single path, or a sequence of paths (one per locus).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mapping</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Species -&gt; list of allele labels.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">format</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``&quot;nexus&quot;``, ``&quot;fasta&quot;``, or ``&quot;vcf&quot;``.  ``None`` infers from each file's extension.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">substitution_model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>See :meth:`__init__`.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Alignment: The loaded alignments, one locus per file.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="biallelicmarkers">BiallelicMarkers</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">BiallelicMarkers</span>(<span class="params">Data</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Unlinked biallelic markers (SNPs). Sites are encoded as per-taxon counts of the &quot;red&quot; allele, so a row of a diploid data set reads ``0``/``1``/``2``. Accepted by the likelihood and Bayesian criteria (Bryant et al. 2012; Zhu et al. 2018). ``samples`` -- how many gene copies were sequenced per taxon -- belongs here rather than on the model axis: it describes the sampling effort, not the biology. The mutation rates ``u``/``v`` and the coalescent rate live on :class:`~phynetpy.models.MSC` instead, since those *are* the generative process. Attributes: alignment: The underlying :class:`~phynetpy.MSA.MSA`. samples: Taxon label -&gt; number of sampled gene copies.</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">taxa</span> <span class="keyword">-&gt;</span> set <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>The set of taxon labels in the marker matrix.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">n_sites</span> <span class="keyword">-&gt;</span> int <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Number of marker sites.</p>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">alignment: MSA, mapping: Optional[Dict[str, List[str]]] = None, samples: Optional[Dict[str, int]] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Wrap a biallelic marker matrix as a data-axis object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alignment</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The marker matrix, as an :class:`~phynetpy.MSA.MSA` whose sequences hold per-site red-allele counts.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mapping</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Species -&gt; list of taxon labels.  Usually the identity for marker data, where each row is its own taxon.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">samples</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Taxon label -&gt; sampled gene-copy count.  ``None`` assumes one sampled copy per taxon.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>DataError</code>: If *alignment* is not an ``MSA``.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_file</span>(<span class="params">path: Union[str, os.PathLike], mapping: Optional[Dict[str, List[str]]] = None, samples: Optional[Dict[str, int]] = None, format: Optional[str] = None</span>) <span class="keyword">-&gt;</span> 'BiallelicMarkers' <span class="keyword">@classmethod</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Load markers from a NEXUS or VCF file.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">path</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Path to the file.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">mapping</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Species -&gt; list of taxon labels.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">samples</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Taxon label -&gt; sampled gene-copy count.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">format</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``&quot;nexus&quot;`` or ``&quot;vcf&quot;``.  ``None`` infers from the extension.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> BiallelicMarkers: The loaded marker matrix.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html">criteria</a></li>
+                <li><a href="data.html" class="current">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html">models</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#data">Data</a></li>
+                <li><a href="#genetrees">GeneTrees</a></li>
+                <li><a href="#alignment">Alignment</a></li>
+                <li><a href="#biallelicmarkers">BiallelicMarkers</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

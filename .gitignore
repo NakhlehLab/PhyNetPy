@@ -1,9 +1,15 @@
+# macOS directory metadata
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 
-# C extensions
+# C extensions, and the C sources Cython generates from the .pyx files.
+# setup.py always cythonizes from .pyx, so the generated .c is never a build
+# input -- keeping it out of git avoids ~100k lines of churn per touch.
 *.so
+src/cython/*.c
 
 # Distribution / packaging
 bin/
@@ -76,6 +82,5 @@ tests/crosscheck/*.class
 # Cursor canvas artifacts (local, not part of the library)
 .canvas/
 
-# Generated tree/log output from demo_runs/ probe scripts
-demo_runs/*.trees
-demo_runs/*.log
+# Output written by examples/ when run from the repo root
+example_output.nex

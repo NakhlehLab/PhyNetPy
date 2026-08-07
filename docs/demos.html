@@ -35,16 +35,18 @@
         <p>Install PhyNetPy and import the public inference API.</p>
         <pre class="demo-shell"><code>pip install phynetpy
 
-python -c "from phynetpy.infer import MPL, MCMC_GT; print('PhyNetPy ready')"</code></pre>
+python -c "from phynetpy.infer import infer, score; print('PhyNetPy ready')"</code></pre>
       </article>
 
       <article class="card">
         <h2>Inference API Tour</h2>
         <p>
-          Create a notebook or script that walks through MPL, MCMC-GT, MP-Allop,
-          and biallelic marker workflows from <code>phynetpy.infer</code>.
+          Two verbs, <code>infer</code> and <code>score</code>, configured by
+          three arguments: the data you have, the model of the biology, and the
+          criterion you are optimising. Switching between the MPL, MCMC-GT,
+          MP-Allop, and biallelic-marker methods means changing one argument.
         </p>
-        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/src/docs/infer.html">Read inference API docs</a>
+        <a href="api/infer.html">Read inference API docs</a>
       </article>
 
       <article class="card">
@@ -54,7 +56,7 @@ python -c "from phynetpy.infer import MPL, MCMC_GT; print('PhyNetPy ready')"</co
           a small phylogenetic network, then visualize accepted and rejected
           moves.
         </p>
-        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/src/docs/NetworkMoves.html">Read NetworkMoves docs</a>
+        <a href="api/ModelMove.html">Read ModelMove docs</a>
       </article>
 
       <article class="card">
@@ -63,7 +65,7 @@ python -c "from phynetpy.infer import MPL, MCMC_GT; print('PhyNetPy ready')"</co
           Compare pure-Python and optional Cython scoring paths on synthetic
           networks and gene trees to show speedups available in local builds.
         </p>
-        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/src/docs/graph_core.html">Read graph core docs</a>
+        <a href="api/Network.html">Read Network docs</a>
       </article>
     </section>
 

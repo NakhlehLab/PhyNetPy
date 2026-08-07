@@ -37,7 +37,7 @@ of gene-tree topologies under the MSNC on a species network with branch
 lengths (in coalescent units) and inheritance probabilities -- is exactly the
 quantity computed by :class:`phynetpy._mcmc_gt._GTLikelihoodEngine`
 (the ancestral-configurations DP of Yu, Degnan & Nakhleh 2012).  The Bayesian
-:class:`~phynetpy.infer.MCMC_GT` method already drives that engine with an
+:class:`~phynetpy._mcmc_gt.MCMC_GT` method already drives that engine with an
 adaptive proposal kernel and incremental cache invalidation.  Maximum
 likelihood is then just MCMC_GT's objective *without the priors*
 (``posterior=False``) plus three ML-specific behaviours:
@@ -58,10 +58,19 @@ Everything else -- the move set, cap-aware reticulation proposals, and the
 fast DP -- is shared verbatim with MCMC_GT, so this module stays small and the
 two methods cannot drift apart numerically.
 
-Public surface (mirrors :class:`~phynetpy.infer.MPL` /
-:class:`~phynetpy.infer.MCMC_GT`)::
+This class is an implementation detail, not the public API.  Reach it through
+the ``(GeneTrees, MSC, Likelihood)`` cell of the inference matrix::
 
-    from phynetpy.infer import InferNetwork_ML
+    from phynetpy.criteria import Likelihood
+    from phynetpy.infer import infer
+
+    result = infer(gene_trees, criterion=Likelihood(), max_reticulations=1)
+    print(result.best, result.score)
+
+Its own surface (mirroring :class:`~phynetpy._mpl.MPL` /
+:class:`~phynetpy._mcmc_gt.MCMC_GT`) stays available for engine authors::
+
+    from phynetpy._infernetworkml import InferNetwork_ML
 
     inf = InferNetwork_ML(starting_net, gene_trees, mapping, max_reticulations=1)
     result = inf.search(num_runs=5, optimize_params=True)
@@ -75,16 +84,20 @@ Design - [x]
 from __future__ import annotations
 
 import copy
-import math
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import numpy as np
 
-from .Network import Network, Node
+from .Network import Network
 from .GeneTrees import GeneTrees
-from .GraphUtils import level as _network_level
+from .GraphUtils import (
+    count_reticulations,
+    level as _network_level,
+    network_clusters,
+    _leaf_labels_below,
+)
 from .ModelGraph import Model
 from . import IO as io
 
@@ -168,28 +181,8 @@ def _topology_signature(net: Network) -> frozenset:
     Returns:
         A hashable signature suitable for use as a dict key.
     """
-    # Memoised post-order leaf-descendant sets.
-    below: dict[Node, frozenset] = {}
-
-    def leaves_below(node: Node) -> frozenset:
-        cached = below.get(node)
-        if cached is not None:
-            return cached
-        out = net.out_edges(node)
-        if not out:
-            result = frozenset({node.label})
-        else:
-            acc: set = set()
-            for e in out:
-                acc |= leaves_below(e.dest)
-            result = frozenset(acc)
-        below[node] = result
-        return result
-
-    edges_sig = set()
-    for e in net.E():
-        edges_sig.add((leaves_below(e.src), leaves_below(e.dest)))
-    return frozenset(edges_sig)
+    below = _leaf_labels_below(net)
+    return frozenset((below[e.src], below[e.dest]) for e in net.E())
 
 
 # ======================================================================
@@ -385,6 +378,7 @@ class InferNetwork_ML:
         fix_st: Optional[bool] = None,
         max_lvl: Optional[int] = None,
         pseudo: bool = False,
+        backbone: Optional[Network] = None,
         seed: Any = None,
         n_workers: int = 1,
         progress: bool = False,
@@ -462,6 +456,11 @@ class InferNetwork_ML:
                 ``True`` the full MSNC scorer is swapped for the triplet
                 :class:`MPLScorer` (Yu & Nakhleh 2015); the same scorer is
                 used for the (final / per-topology) Brent optimisation.
+            backbone: Network the result must contain as a subgraph.  Drops
+                every move that could destroy existing structure and
+                enforces containment in the accept path.  Set by
+                ``infer(start=Start(net, mode=StartMode.AUGMENT))``; leave
+                ``None`` for an unconstrained search.
             seed: Seed for all RNGs (any value accepted by
                 :class:`numpy.random.SeedSequence`).
             n_workers: Worker processes for parallel gene-tree scoring.
@@ -525,7 +524,12 @@ class InferNetwork_ML:
                 posterior=False, n_workers=n_workers,
             )
 
-        move_types = resolve_move_types(opt_bl=opt_bl, fix_st=fix_st)
+        move_types = resolve_move_types(
+            opt_bl=opt_bl, fix_st=fix_st, augment_only=backbone is not None,
+        )
+        required_clusters = (
+            network_clusters(backbone) if backbone is not None else None
+        )
 
         # Leaderboard of distinct topologies, keyed by branch-length-free
         # signature -> (log_likelihood, deep-copied network).
@@ -587,6 +591,7 @@ class InferNetwork_ML:
                     num_networks=num_networks,
                     opt_kwargs=opt_kwargs,
                     max_lvl=max_lvl,
+                    required_clusters=required_clusters,
                 )
                 examined += run_examined
 
@@ -627,7 +632,7 @@ class InferNetwork_ML:
             result = InferNetworkMLResult(
                 best_network=best_net,
                 best_log_likelihood=best_score,
-                num_reticulations=self._count_reticulations(best_net),
+                num_reticulations=count_reticulations(best_net),
                 networks=[(n, s) for (s, n) in ranked[:max(1, num_networks)]],
                 num_networks_examined=examined,
                 num_runs=num_runs,
@@ -659,6 +664,7 @@ class InferNetwork_ML:
         opt_kwargs: dict[str, Any],
         max_lvl: Optional[int] = None,
         optimize_scope: str = "all",
+        required_clusters: Optional[set] = None,
     ) -> int:
         """Execute one hill-climbing run; update ``leaderboard`` in place.
 
@@ -680,6 +686,12 @@ class InferNetwork_ML:
             leaderboard: Shared distinct-topology leaderboard.
             num_networks: Size of the leaderboard to retain.
             opt_kwargs: Forwarded to :func:`optimize_network_parameters`.
+            max_lvl: Authoritative cap on network level.
+            optimize_scope: Which continuous parameters per-topology
+                optimisation touches.
+            required_clusters: Leaf-label clusters every accepted proposal
+                must still display (backbone containment).  ``None`` leaves
+                the climb unconstrained.
 
         Returns:
             Number of topologies examined in this run.
@@ -722,7 +734,12 @@ class InferNetwork_ML:
             # network level exceeds the cap, regardless of which move
             # produced it (covers reticulation relocation / endpoint moves
             # that raise level without changing the reticulation count).
-            if max_lvl is not None and _network_level(model.network) > max_lvl:
+            if (
+                max_lvl is not None and _network_level(model.network) > max_lvl
+            ) or (
+                required_clusters is not None
+                and not required_clusters <= network_clusters(model.network)
+            ):
                 try:
                     move.undo(model)
                 except Exception:
@@ -843,8 +860,3 @@ class InferNetwork_ML:
             worst = sorted(leaderboard.items(), key=lambda kv: kv[1][0])
             for sig_drop, _ in worst[: len(leaderboard) - cap]:
                 del leaderboard[sig_drop]
-
-    @staticmethod
-    def _count_reticulations(net: Network) -> int:
-        """Number of reticulation nodes in ``net``."""
-        return sum(1 for v in net.V() if v.is_reticulation())

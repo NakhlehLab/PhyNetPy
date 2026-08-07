@@ -2,8 +2,7 @@
 Test suite for the SNP Likelihood algorithm (phynetpy.BiMarkers).
 
 Includes:
-    - Correctness checks against known expected values (Charles Rabier tables)
-      for level-1 and level-2 networks.
+    - A smoke test that scores the packaged NEXUS fixtures.
     - Scalability / stress tests with simulated data at various taxa and site
       counts.
     - Edge-case tests (gamma = 0.5 reticulations).
@@ -21,7 +20,11 @@ import time
 import pytest
 from pathlib import Path
 
-from phynetpy.BiMarkers import SNP_LIKELIHOOD
+from phynetpy.criteria import Likelihood
+from phynetpy.data import BiallelicMarkers
+from phynetpy.infer import score
+from phynetpy.IO import read_nexus
+from phynetpy.models import MSC
 from phynetpy.SNPSimulator import simulate, random_network
 
 
@@ -40,108 +43,34 @@ _nexus_path = _TESTFILES_DIR / "paper_net.nex"
 _large_nexus_path = _TESTFILES_DIR / "paper_net_largeseq.nex"
 
 
+def _score_nexus(path, *, u, v, coal, samples, **search):
+    """Score the network in a NEXUS file against the SNP matrix beside it.
+
+    These fixtures keep the network and its marker matrix in one file, so
+    this splits them back onto the two arguments the ``score`` verb takes:
+    the network to evaluate, and the data to evaluate it against.
+    """
+    net = read_nexus(str(path))[0]
+    markers = BiallelicMarkers.from_file(str(path), samples=samples)
+    return score(
+        net, markers,
+        model=MSC(u=u, v=v, coal=coal),
+        criterion=Likelihood(),
+        **search,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Individual test routines (called by the class below)
 # ---------------------------------------------------------------------------
 
-def _snp_correctness_level1():
-    """Validate SNP likelihood against Charles Rabier's level-1 table.
-
-    Compares computed likelihoods for all (A, B, C) red-count groupings
-    against pre-computed expected values.
-    """
-    tbl = {
-        (0, 0, 0): 0.31581337186422315,
-        (0, 0, 1): 1.853660371657668e-3,
-        (0, 0, 2): 0.05677236283895234,
-        (0, 1, 0): 1.6755618678903335e-3,
-        (0, 1, 1): 1.0705941050619642e-5,
-        (0, 1, 2): 4.789800667080107e-4,
-        (0, 2, 0): 9.884301576368968e-4,
-        (0, 2, 1): 7.570444581342921e-6,
-        (0, 2, 2): 5.3322920321306e-4,
-        (0, 3, 0): 0.04027355605172049,
-        (0, 3, 1): 5.910438937463977e-4,
-        (0, 3, 2): 0.07852626659131974,
-        (1, 0, 0): 1.9618887485350735e-3,
-        (1, 0, 1): 1.21627077880799976e-5,
-        (1, 0, 2): 4.828155168689878e-4,
-        (1, 1, 0): 1.09890103033996982e-5,
-        (1, 1, 1): 9.099282927274783e-8,
-        (1, 1, 2): 7.300548379825278e-6,
-        (1, 2, 0): 7.30054837982544e-6,
-        (1, 2, 1): 9.099282927274914e-9,
-        (1, 2, 2): 1.098901030399711e-5,
-        (1, 3, 0): 4.821551686898895e-4,
-        (1, 3, 1): 1.2162707788079851e-5,
-        (1, 3, 2): 1.9618887485350622e-3,
-        (2, 0, 0): 0.0785262665913196,
-        (2, 0, 1): 5.910438937463979e-4,
-        (2, 0, 2): 0.040273556051720324,
-        (2, 1, 0): 5.332292032130451e-4,
-        (2, 1, 1): 7.5704445813427665e-6,
-        (2, 1, 2): 9.884301576368857e-4,
-        (2, 2, 0): 4.789800667080225e-4,
-        (2, 2, 1): 1.0719114102479618e-5,
-        (2, 2, 2): 1.6755618678903448e-3,
-        (2, 3, 0): 0.0567723862838952165,
-        (2, 3, 1): 1.8536603716576576548e-3,
-        (2, 3, 2): 0.31581337186422315,
-    }
-
-    for grouping, expected in tbl.items():
-        set_reds = {"A": grouping[0], "B": grouping[1], "C": grouping[2]}
-        result = SNP_LIKELIHOOD_DATA(
-            str(_nexus_path), set_reds, 1, 1, 0.005
-        )
-        if not 1 + 1e-10 > abs(result / expected) > 1 - 1e-10:
-            print(f"Expected: {expected}, but got: {result} for grouping: {grouping}")
-        else:
-            print(f"Expected: {expected}, and got: {result} for grouping: {grouping}")
-    return 1
-
-
-def _snp_correctness_level2():
-    """Validate SNP likelihood against Charles Rabier's level-2 table.
-
-    Placeholder — computed results are not yet wired in.
-    """
-    tbl = {
-        (0, 0, 0, 0): 0.420388330446373,
-        (0, 0, 0, 1): 2.1413391677020254e-3,
-        (0, 0, 0, 2): 1.1379876974211235e-3,
-        (0, 0, 0, 3): 0.018044391063547768,
-        (1, 0, 1, 1): 5.7431505391794586e-8,
-        (1, 1, 1, 1): 3.1907711650231237e-10,
-        (1, 2, 1, 1): 2.0749049388423288e-10,
-        (1, 3, 1, 1): 1.268527207088679e-8,
-        (1, 3, 2, 1): 2.0091067872430637e-8,
-        (1, 3, 3, 1): 3.277973419215861e-6,
-        (3, 3, 3, 3): 0.420388330646373,
-    }
-
-    for grouping, expected in tbl.items():
-        result: float = 0.0
-        if not 1 + 1e-10 > abs(result / expected) > 1 - 1e-10:
-            print(f"Expected: {expected}, but got: {result} for grouping: {grouping}")
-            return 0
-    return 1
-
-
 def _snp_likelihood_smoke():
-    """Smoke test: run SNP_LIKELIHOOD on both standard and large nexus files."""
-    result = SNP_LIKELIHOOD(
-        str(_large_nexus_path.absolute()),
-        u=1, v=1, coal=0.005,
-        samples={"A": 2, "B": 2, "C": 2},
-    )
-    print(result)
-    result = SNP_LIKELIHOOD(
-        str(_nexus_path.absolute()),
-        u=1, v=1, coal=0.005,
-        samples={"A": 2, "B": 2, "C": 2},
-    )
-    print(result)
+    """Smoke test: score both the standard and large nexus fixtures."""
+    for path in (_large_nexus_path, _nexus_path):
+        print(_score_nexus(
+            path.absolute(), u=1, v=1, coal=0.005,
+            samples={"A": 2, "B": 2, "C": 2},
+        ))
     return 1
 
 
@@ -149,8 +78,8 @@ def _snp_scalability_stress():
     """Scalability stress test.
 
     Generates random level-2 networks at 10, 25, and 50 taxa, simulates
-    SNP data at 1 000, 2 000, and 10 000 sites, runs SNP_LIKELIHOOD on
-    each combination, and reports timing.  This is NOT a pass/fail test.
+    SNP data at 1 000, 2 000, and 10 000 sites, scores each combination,
+    and reports timing.  This is NOT a pass/fail test.
     """
     os.makedirs(_STRESS_TEST_DIR, exist_ok=True)
 
@@ -191,7 +120,7 @@ def _snp_scalability_stress():
 
             try:
                 t0 = time.perf_counter()
-                log_lik = SNP_LIKELIHOOD(
+                log_lik = _score_nexus(
                     nex_file, u=u, v=v, coal=coal,
                     samples=samples, sequential=True,
                 )
@@ -236,7 +165,7 @@ def _snp_gamma_half():
     sim.write_nexus(nex_file)
 
     try:
-        result = SNP_LIKELIHOOD(
+        result = _score_nexus(
             nex_file, u=u, v=v, coal=coal,
             samples=samples, sequential=True,
         )

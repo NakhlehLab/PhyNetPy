@@ -72,7 +72,6 @@ snapshot so the caller can treat the outcome as a no-op.
 """
 
 from __future__ import annotations
-from collections import deque
 import math
 from abc import ABC, abstractmethod
 import numpy as np
@@ -81,6 +80,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 # Relative imports
 from .Network import Network, Edge, Node
 from . import _network_moves as _nm
+from .GraphUtils import count_reticulations, level as _network_level, _clone_net
 from .Logger import Logger
 
 if TYPE_CHECKING:
@@ -89,32 +89,6 @@ if TYPE_CHECKING:
 # Floor for branch lengths entering the SPR log-Jacobian, so a zero /
 # missing length never produces a ``log(0)`` in the Hastings ratio.
 _SPR_MIN_LEN: float = 1e-9
-
-
-def _clone_net(net: Network) -> Network:
-    """Structural snapshot of ``net`` for cheap whole-network rollback.
-
-    Topology-changing moves (:class:`SPR`, :class:`AddReticulation`,
-    :class:`RemoveReticulation`, :class:`FlipReticulation`,
-    :class:`SwitchParentage`, :class:`ChangeReticSource`,
-    :class:`RelocateReticulation`, :class:`ChangeReticDest`) snapshot the
-    network before mutating it in place so :meth:`Move.undo` can restore
-    it wholesale.  ``copy.deepcopy`` walks the entire object graph
-    reflectively -- nested attribute values, sequence data, and
-    back-references -- which profiling showed to dominate per-iteration
-    cost (the same bottleneck already fixed in :mod:`phynetpy._mcmc_seq`).
-
-    :meth:`Network.copy` instead builds fresh ``Node`` / ``Edge`` objects
-    directly in O(V+E), preserving topology, branch lengths, gammas, node
-    times, and reticulation flags -- everything the coalescent /
-    Felsenstein scorers read.  This is safe because no move (nor any
-    scorer) mutates a node's *attribute dictionary* in place: the per-node
-    state moves change (time, reticulation flag) and per-edge state
-    (length, gamma) are copied by value, so the snapshot stays pristine
-    across the execute -> undo window even though attribute dicts are
-    shared by reference.
-    """
-    return net.copy()[0]
 
 
 ############################
@@ -263,29 +237,6 @@ def insert_node_in_edge(edge: Edge, node: Node, net: Network) -> None:
     else:
         net.add_edges(Edge(node, b))
     
-def connect_nodes(src: Node, dest: Node, net: Network) -> None:
-    """
-    Given two nodes in a network, connect them and check whether or not a 
-    reticulation is created.
-
-    Args:
-        src (Node): The parent of the new edge
-        dest (Node): The child of the new edge
-        net (Network): Network for which to add the edge
-    Returns:
-        N/A
-    """
-    # Add the edge to the network
-    net.add_edges(Edge(src, dest))
-  
-    # Check if dest is now a reticulation
-    if net.in_degree(dest) > 1:
-        dest.set_is_reticulation(True)
-
-###########################
-#### MOVE PARENT CLASS ####
-###########################
-
 ##################
 #### MOVE API ####
 ##################
@@ -434,9 +385,6 @@ class Move(ABC):
         max_level = getattr(self, "_max_level", None)
         if max_level is None:
             return False
-        # Local import keeps the module-load graph acyclic (GraphUtils ->
-        # Network only; ModelMove is imported very early).
-        from .GraphUtils import level as _network_level
         net = model.network
         if net is None or _network_level(net) <= max_level:
             return False
@@ -565,8 +513,7 @@ class AddReticulation(Move):
 
         # Respect the per-move cap on reticulation count, if set.
         if self._max_retics is not None:
-            cur_retics = sum(1 for n in net.V() if n.is_reticulation())
-            if cur_retics >= self._max_retics:
+            if count_reticulations(net) >= self._max_retics:
                 return model
 
         self.undo_info = _clone_net(net)
@@ -575,7 +522,7 @@ class AddReticulation(Move):
         all_edges = net.E()
         # Pre-move quantities for the reversible-jump log-Hastings ratio.
         edge_count_pre = len(all_edges)
-        retic_count_pre = sum(1 for n in net.V() if n.is_reticulation())
+        retic_count_pre = count_reticulations(net)
         src_e = _rng_pick(rng, all_edges)
         if src_e is None:
             model.update_network()
@@ -690,7 +637,7 @@ class RemoveReticulation(Move):
             return model
 
         rng = model.rng
-        retic_count_pre = sum(1 for n in net.V() if n.is_reticulation())
+        retic_count_pre = count_reticulations(net)
         c: Node = _rng_pick(rng, retic_nodes)
         parents = net.get_parents(c)
         if len(parents) != 2:

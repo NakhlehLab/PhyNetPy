@@ -25,7 +25,7 @@ Post-analysis of MCMC chains: convergence diagnostics and interop with the
 standard phylogenetics tooling.
 
 This module is the reporting layer for PhyNetPy's Bayesian samplers
-(:class:`~phynetpy.infer.MCMC_SEQ`, :class:`~phynetpy.infer.MCMC_GT`).  It
+(:class:`~phynetpy._mcmc_seq.MCMC_SEQ`, :class:`~phynetpy._mcmc_gt.MCMC_GT`).  It
 provides two things:
 
 1. **Tracer interoperability.**  :func:`write_tracer_log` emits a

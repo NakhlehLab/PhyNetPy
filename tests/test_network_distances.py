@@ -21,6 +21,8 @@ Each metric is tested for:
     - Edge cases (single-leaf, tree-vs-network, mismatched leaf sets)
 """
 
+from __future__ import annotations
+
 import pytest
 from typing import Optional, Sequence, Tuple
 
@@ -34,8 +36,6 @@ from phynetpy.GraphUtils import (
     robinson_foulds_distance,
     average_path_distance,
     weighted_average_path_distance,
-    is_tree,
-    level,
     get_all_subtrees,
 )
 

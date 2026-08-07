@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>models - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+    
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; models
+                </div>
+                
+                <h1>models Module <span class="version-badge">v1.0.0</span></h1>
+                
+                <p>Axis 2 -- the generative biology: MSC (diploid, ILS only) and Allopolyploid (whole-genome duplication).</p>
+                
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Source:</dt>
+                        <dd>models.py</dd>
+                    </dl>
+                </div>
+                
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#model">Model</a></li>
+                        <li><a href="#msc">MSC</a></li>
+                        <li><a href="#allopolyploid">Allopolyploid</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">ModelSpecError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when a model is misconfigured for the data it is given.</p>
+                    </div>
+                </div>
+
+                <h2 id="model">Model</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Model</span>(<span class="params">ABC</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Base class for a generative biological process. A model says what produced the data and therefore how to read the inferred network: under :class:`~phynetpy.models.MSC` a reticulation is a hybridization or introgression event between diploid lineages, while under :class:`~phynetpy.models.Allopolyploid` it is a polyploid formation event and the network is interpreted through its multiple-labelled (MUL) tree. Models are declarative parameter carriers, not engines. They hold the process parameters (population mutation rate, mutation rates, subgenome assignment) and are handed to the engine the registry selects; the numerical work lives in the engines. .. note:: Unrelated to :class:`phynetpy.ModelGraph.Model`, which is the probabilistic graphical model a search mutates. See the :mod:`phynetpy.m...</p>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">validate</span>(<span class="params">data</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Check this model against the data it will be run on. Called by the registry after dispatch succeeds, so a model may assume the (data, model, criterion) triple is legal and only needs to police its own parameters. The default accepts everything.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The :class:`~phynetpy.data.Data` the run will consume.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ModelSpecError</code>: If the model cannot be applied to *data*.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="msc">MSC</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">MSC</span>(<span class="params">Model</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>The multispecies network coalescent: diploid lineages with ILS. The default model, and the one nearly every method in the field is built on. Gene copies coalesce within the branches of the species network at a rate set by the population mutation rate; at a reticulation, each lineage passes into one parent with probability given by that edge's inheritance probability (gamma). Incomplete lineage sorting therefore arises from the coalescent, and a reticulation means hybridization or introgression. The process parameters live here because they *are* the biology. The mutation rates ``u`` and ``v`` describe the biallelic transition model and are read only when scoring :class:`~phynetpy.data.BiallelicMarkers`; ``theta`` is the population mutation rate ``4*N*mu``. Attributes: theta: Population mut...</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">theta: Optional[float] = None, u: float = 1.0, v: float = 1.0, coal: float = 1.0, pop_sizes: Optional[Dict] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Configure the multispecies network coalescent.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">theta</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Population mutation rate ``4*N*mu``.  ``None`` defers to the engine (which samples it, for the Bayesian criterion).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">u</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Red-to-green mutation rate (biallelic markers only).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">v</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Green-to-red mutation rate (biallelic markers only).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">coal</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Coalescent rate constant (biallelic markers only).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">pop_sizes</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Per-branch population sizes, keyed by node.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ModelSpecError</code>: If any rate is non-positive.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="allopolyploid">Allopolyploid</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Allopolyploid</span>(<span class="params">Model</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Allopolyploidy: networks read through their MUL tree. Models polyploid taxa whose subgenomes descend from distinct diploid progenitors (Hejase et al.; MP-Allop / Polyphest). A reticulation is a polyploid formation event, and the network is scored by expanding it into a multiple-labelled (MUL) tree in which each subgenome of a polyploid appears as its own tip. Because subgenome assignment -- which gene copies belong to which subgenome of which taxon -- is a statement about the biology of the taxa, it lives on the model rather than on the data. When omitted, it is derived from the data's own mapping. Attributes: subgenome_map: Subgenome / species -&gt; list of gene-copy labels. ``None`` derives it from the data.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">subgenome_map: Optional[Dict[str, List[str]]] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Configure the allopolyploid process.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">subgenome_map</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Subgenome -&gt; list of gene-copy labels.  ``None`` derives the assignment from the data's mapping (or, failing</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">that</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>from :meth:`phynetpy.GeneTrees.GeneTrees.mp_allop_map`).</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">resolve_subgenome_map</span>(<span class="params">data</span>) <span class="keyword">-&gt;</span> Dict[str, List[str]]
+                            </div>
+                            <div class="function-body">
+                                <p>Return the subgenome assignment to use for *data*.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The :class:`~phynetpy.data.Data` being analysed.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> dict[str, list[str]]: Subgenome -&gt; gene-copy labels.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ModelSpecError</code>: If no assignment is available.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">validate</span>(<span class="params">data</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Check that a subgenome assignment can be resolved.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">data</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The data the run will consume.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ModelSpecError</code>: If no assignment is available.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">resolve_model</span>(<span class="params">spec: Union[Model, str, type, None]</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Coerce a model shortcut into a :class:`Model` instance. Lets the casual user write ``model=&quot;MSC&quot;`` and reserve the object form for when process parameters are actually needed.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">spec</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A :class:`Model` instance (returned unchanged), a :class:`Model` subclass (instantiated with defaults), a case-insensitive shortcut string, or ``None`` for the default (:class:`MSC`).</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: The resolved model.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ModelSpecError</code>: If *spec* is not a recognised model.</div>
+                            </div>
+                        </div>
+
+                
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+            
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelFactory.html">ModelFactory</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html">criteria</a></li>
+                <li><a href="data.html">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html" class="current">models</a></li>
+            </ul>
+            
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#model">Model</a></li>
+                <li><a href="#msc">MSC</a></li>
+                <li><a href="#allopolyploid">Allopolyploid</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

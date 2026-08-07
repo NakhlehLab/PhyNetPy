@@ -4,7 +4,12 @@ PhyNetPy Documentation Generator
 
 Parses all Python source files in src/ using the ast module and generates
 static HTML documentation matching the existing Sphinx-like template.
+
+Run it with the same interpreter the package is installed into: the facade
+pages read each module's ``__all__``, so ``phynetpy`` has to be importable.
 """
+
+from __future__ import annotations
 
 import ast
 import os
@@ -13,7 +18,9 @@ import textwrap
 from pathlib import Path
 
 SRC_DIR = Path(__file__).parent / "src"
-DOCS_DIR = SRC_DIR / "docs"
+# Generated API reference lives alongside the hand-written project site in
+# ``docs/`` -- not inside ``src/``, which is the shipped package.
+DOCS_DIR = Path(__file__).parent / "docs" / "api"
 
 # Module metadata: descriptions, categories, version overrides
 MODULE_META = {
@@ -29,20 +36,12 @@ MODULE_META = {
         "desc": "SNP (biallelic marker) likelihood computation for phylogenetic networks, with optional GPU acceleration.",
         "category": "Inference",
     },
-    "Executor": {
-        "desc": "Computation backend abstraction layer providing CPU (NumPy) and GPU (CuPy) array operations.",
-        "category": "Infrastructure",
-    },
     "GeneTrees": {
         "desc": "Gene tree container and analysis utilities including consensus tree construction and concordance factors.",
         "category": "Analysis",
     },
-    "graph_core": {
-        "desc": "Graph core data structures with automatic Cython acceleration for NodeSet and EdgeSet.",
-        "category": "Infrastructure",
-    },
     "GraphUtils": {
-        "desc": "Graph and network utility functions for topology analysis, manipulation, and ASCII rendering.",
+        "desc": "Network decomposition, distances, and structural edits: blobs, tree-of-blobs, cluster/mu/tripartition distances, reticulation-aware comparison, and ASCII rendering.",
         "category": "Analysis",
     },
     "GTR": {
@@ -62,15 +61,11 @@ MODULE_META = {
         "category": "Core Data Structures",
     },
     "MetropolisHastings": {
-        "desc": "Metropolis-Hastings MCMC and Hill Climbing search algorithms for phylogenetic inference.",
+        "desc": "Hill-climbing and simulated-annealing search drivers, plus the ProposalKernel interface.",
         "category": "Inference",
     },
-    "ModelFactory": {
-        "desc": "Component-based model building factory for constructing probabilistic phylogenetic models.",
-        "category": "Infrastructure",
-    },
     "ModelGraph": {
-        "desc": "Probabilistic graphical model for phylogenetics with typed model nodes and visitor pattern support.",
+        "desc": "The Model container pairing a network with its likelihood calculator, plus dirty-state tracking for incremental rescoring.",
         "category": "Infrastructure",
     },
     "ModelMove": {
@@ -86,24 +81,16 @@ MODULE_META = {
         "category": "Core Data Structures",
     },
     "Network": {
-        "desc": "Core phylogenetic network data structures: Node, Edge, and Network classes.",
+        "desc": "Core phylogenetic network data structures: Node, Edge, Branch, and Network classes.",
         "category": "Core Data Structures",
-    },
-    "NetworkMoves": {
-        "desc": "Network topology modification operations for MCMC search (add/remove hybrid, NNI, node height).",
-        "category": "Inference",
     },
     "Newick": {
         "desc": "Newick format label extraction and Nexus file generation utilities.",
         "category": "I/O",
     },
-    "Phylo": {
-        "desc": "Core Branch class for storing phylogenetic edge attributes (length, inheritance probability).",
-        "category": "Core Data Structures",
-    },
-    "PhyloNet": {
-        "desc": "PhyloNet Java wrapper for running external phylogenetic analysis tools.",
-        "category": "I/O",
+    "ReticulationComparison": {
+        "desc": "Reticulation-aware network comparison: tripartition matching, Nakhleh metric, and precision/recall over reticulations.",
+        "category": "Analysis",
     },
     "SNPSimulator": {
         "desc": "SNP data simulator for phylogenetic networks using a forward-in-time 2-state CTMC.",
@@ -113,28 +100,24 @@ MODULE_META = {
         "desc": "State management for MCMC accept/reject decisions with model validation.",
         "category": "Inference",
     },
-    "Strategy": {
-        "desc": "Strategy pattern interface for node-level computations dispatched during bottom-up traversal.",
-        "category": "Infrastructure",
-    },
-    "Sync": {
-        "desc": "Atomic model / network reconciliation context manager: topology moves inside a ``with Sync(model):`` block are auto-rolled back on error and reconciled on success.",
-        "category": "Infrastructure",
-    },
-    "Traversal": {
-        "desc": "Iterator-based graph traversal for model nodes supporting pre-order, post-order, and level-order.",
-        "category": "Infrastructure",
-    },
     "Validation": {
         "desc": "Comprehensive file format validation for phylogenetic data files (Newick, Nexus, FASTA, PHYLIP, etc.).",
         "category": "I/O",
     },
-    "Visitor": {
-        "desc": "Visitor pattern interface for ModelNode traversals with typed dispatch.",
-        "category": "Infrastructure",
-    },
     "infer": {
-        "desc": "Curated public inference surface: re-exports MCMC_GT, INFER_MP_ALLOP, MPL, and their entry points from the private implementation modules.",
+        "desc": "The public inference API: the verbs infer, score, and simulate, the InferenceResult they return, plus the registry, scorers, kernels, result types, and MCMC diagnostics around them.",
+        "category": "Inference",
+    },
+    "data": {
+        "desc": "Axis 1 -- what you observed: GeneTrees, Alignment, BiallelicMarkers. The input knows its own type, which is half of the dispatch key.",
+        "category": "Inference",
+    },
+    "models": {
+        "desc": "Axis 2 -- the generative biology: MSC (diploid, ILS only) and Allopolyploid (whole-genome duplication).",
+        "category": "Inference",
+    },
+    "criteria": {
+        "desc": "Axis 3 -- the statistical objective: MDC, Likelihood, PseudoLikelihood, and Bayesian, which wraps one of the likelihoods rather than sitting parallel to them.",
         "category": "Inference",
     },
 }
@@ -149,20 +132,24 @@ CATEGORY_ORDER = [
     "Infrastructure",
 ]
 
-SKIP_MODULES = {
-    "__init__",
-    # Underscore-prefixed implementation modules: surfaced via ``phynetpy.infer``
-    # and the deprecated shims below.
-    "_mcmc_gt",
-    "_mpl",
-    "_infer_mp_allop",
-    # Back-compat shims (22-line re-exports of the underscore implementations).
-    # Skipped to avoid empty doc pages; the real content lives in the
-    # documented public interfaces.
-    "MCMC_GT",
-    "MPL",
-    "Infer_MP_Allop",
-}
+# ``cython`` is a build artefact package holding compiled accelerators that
+# shadow pure-Python modules; it has no API of its own to document.
+SKIP_MODULES = {"__init__", "cython"}
+
+# Public modules whose surface is partly or wholly re-exported from private
+# implementation modules; see :func:`build_facade_info`.
+FACADE_MODULES = ["infer", "data", "models", "criteria"]
+
+
+def is_private_module(mod_name: str) -> bool:
+    """Whether ``mod_name`` is an implementation module, not public API.
+
+    Underscore-prefixed modules hold the implementations behind the public
+    facades.  They get no page of their own; the symbols each facade
+    re-exports are folded onto the facade's page instead (see
+    :func:`build_facade_info`).
+    """
+    return mod_name.startswith("_")
 
 
 def html_escape(text: str) -> str:
@@ -439,6 +426,76 @@ def extract_module_info(filepath: Path) -> dict:
     }
 
 
+def build_facade_info(
+    mod_name: str, facade_info: dict, private_infos: dict[str, dict],
+) -> dict:
+    """Fold the symbols a facade module re-exports onto its own page.
+
+    Four public modules are partly or wholly facades over private
+    implementation modules: ``infer`` (the two verbs plus every scorer, kernel,
+    and result type they reach) and the three axis subpackages ``data``,
+    ``models``, and ``criteria`` (whose classes live in private submodules).
+    Parsing those files alone yields a page that is missing most of the API,
+    because the real docstrings sit in modules that get no page.
+
+    This walks the module's ``__all__`` and copies each named class /
+    function / exception in from wherever it is defined, so each public module
+    documents its whole surface in one place.  Names the facade defines itself
+    take precedence over re-exported ones.
+
+    Args:
+        mod_name (str): The public module's name, e.g. ``"infer"``.
+        facade_info (dict): Parsed info for the facade (module docstring and
+                            header are kept as-is; anything it defines itself
+                            is preferred over a re-export of the same name).
+        private_infos (dict[str, dict]): Parsed info for each private module,
+                                         keyed by module name.
+    Returns:
+        dict: ``facade_info`` with ``classes``, ``functions``, and
+              ``exceptions`` resolved in ``__all__`` order.
+    """
+    import importlib
+
+    try:
+        module = importlib.import_module(f"phynetpy.{mod_name}")
+        exported = list(module.__all__)
+    except Exception as exc:  # pragma: no cover - docs build convenience
+        print(f"    WARNING: could not import phynetpy.{mod_name} ({exc});"
+              f" the {mod_name} page will be incomplete.")
+        return facade_info
+
+    # Name -> entry, for each kind.  The facade's own definitions go in first
+    # so ``setdefault`` leaves them in place: a name defined here is the one
+    # the reader wants, not a same-named symbol from an implementation module.
+    pools: dict[str, dict[str, dict]] = {
+        "classes": {}, "functions": {}, "exceptions": {},
+    }
+    for info in [facade_info, *private_infos.values()]:
+        for kind in pools:
+            for entry in info[kind]:
+                pools[kind].setdefault(entry["name"], entry)
+
+    resolved = {"classes": [], "functions": [], "exceptions": []}
+    missing = []
+    for name in exported:
+        for kind in ("exceptions", "classes", "functions"):
+            if name in pools[kind]:
+                resolved[kind].append(pools[kind][name])
+                break
+        else:
+            missing.append(name)
+
+    if missing:
+        # Names re-exported from public modules (e.g. BiMarkers) already have
+        # their own page, so they are expected here; report for visibility.
+        print(f"    {mod_name}: {len(missing)} name(s) documented on their own "
+              f"module page ({', '.join(missing)})")
+
+    facade_info = dict(facade_info)
+    facade_info.update(resolved)
+    return facade_info
+
+
 def _inherited_docstring(
     method_name: str,
     bases: list[str],
@@ -448,9 +505,9 @@ def _inherited_docstring(
     """Walk the same-module base-class chain and return the first non-empty
     docstring found for ``method_name``.
 
-    This lets concrete subclasses (e.g. ``CPUExecutor``, ``AddReticulation``)
+    This lets concrete subclasses (e.g. ``AddReticulation``, ``GTBayesEngine``)
     inherit method-level documentation from their abstract base classes
-    (``Executor``, ``Move``) without having to repeat every docstring.
+    (``Move``, ``Engine``) without having to repeat every docstring.
     """
     if seen is None:
         seen = set()
@@ -1018,23 +1075,54 @@ simulated_net = sim.generate_network()</code></pre>
 def main():
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
-    py_files = sorted(SRC_DIR.glob("*.py"))
     all_modules = []
     module_infos = {}
+    private_infos = {}
 
-    for pyfile in py_files:
-        mod_name = pyfile.stem
+    # Top-level modules, plus each subpackage's ``__init__.py`` as a module of
+    # its own name.  The three axis subpackages (data / models / criteria) are
+    # public API; their classes live in private files inside the package, which
+    # ``build_facade_info`` folds onto the package's page.
+    sources: list[tuple[str, Path]] = [
+        (f.stem, f) for f in sorted(SRC_DIR.glob("*.py"))
+    ]
+    for init in sorted(SRC_DIR.glob("*/__init__.py")):
+        sources.append((init.parent.name, init))
+        for member in sorted(init.parent.glob("*.py")):
+            if member.name != "__init__.py":
+                sources.append((f"{init.parent.name}.{member.stem}", member))
+
+    for mod_name, pyfile in sources:
         if mod_name in SKIP_MODULES:
             continue
 
-        print(f"  Parsing {mod_name}.py ...")
+        print(f"  Parsing {pyfile.relative_to(SRC_DIR)} ...")
         info = extract_module_info(pyfile)
         if info is None:
             print(f"    SKIPPED (syntax error)")
             continue
 
+        # A submodule of a subpackage is private if its own name is, so
+        # ``data._genetrees`` is parsed for docstrings but gets no page.
+        leaf = mod_name.rsplit(".", 1)[-1]
+        if is_private_module(leaf):
+            private_infos[mod_name] = info
+            continue
+
         all_modules.append(mod_name)
         module_infos[mod_name] = info
+
+    for facade in FACADE_MODULES:
+        if facade in module_infos:
+            module_infos[facade] = build_facade_info(
+                facade, module_infos[facade], private_infos
+            )
+
+    # Remove pages left over from modules that no longer exist.
+    for stale in sorted(DOCS_DIR.glob("*.html")):
+        if stale.stem not in all_modules and stale.stem != "index":
+            print(f"  Removing stale page {stale.name}")
+            stale.unlink()
 
     print(f"\nFound {len(all_modules)} modules. Generating HTML...\n")
 

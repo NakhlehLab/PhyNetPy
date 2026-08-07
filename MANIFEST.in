@@ -14,13 +14,15 @@ prune dist
 prune tests
 prune phynetpy.egg-info
 
-prune 1.1
-prune ABC
-prune Bayesian
 prune DEFJ
-prune DLLS
 prune Guides
 prune NexusFiles
+prune docs
+prune examples
+prune scripts
+prune paper
+prune paper_figures
+prune runs
 
 global-exclude *.pyc
 global-exclude __pycache__

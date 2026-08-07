@@ -41,14 +41,11 @@ from typing import Any
 import numpy as np
 
 from .Network import Network, Node, Edge, MUL, NetworkError
-from .IO import read_nexus
 from .BirthDeath import Yule
-from .GeneTrees import GeneTrees
 from .ModelGraph import Model
-from .ModelFactory import ModelFactory, ModelComponent
 from .MetropolisHastings import HillClimbing, Infer_MP_Allop_Kernel
 from .State import State
-from .NetworkMoves import add_hybrid
+from .GraphUtils import add_hybrid
 
 try:
     from pulp import (
@@ -115,32 +112,6 @@ class InferAllopError(Exception):
 #### HELPER FUNCTIONS ###
 #########################
 
-def _nodes_to_improve(net: Network,
-                      n: Node,
-                      nti: dict[Node, int],
-                      lti: dict[Node, int]) -> int:
-    """
-    Compute the maximum amount of ploidy that needs to be added for
-    each leaf and internal node. This number, for any node, is the minimum over
-    its set of child nodes.
-
-    Args:
-        net (Network): Network
-        n (Node): Node for which to compute the amount of ploidy needed
-        nti (dict[Node, int]): Map that accumulates results for each node.
-        lti (dict[Node, int]): Map that contains starter values for each leaf.
-
-    Returns:
-        int: The amount of ploidy needed for n
-    """
-    if net.out_degree(n) == 0:
-        nti[n] = lti[n]
-    else:
-        child_needs = [_nodes_to_improve(net, node, nti, lti)
-                       for node in net.get_children(n)]
-        nti[n] = min(child_needs)
-    return nti[n]
-            
 def _ploidy_dif(goal: dict[Node, int], cur: dict[Node, int]) -> bool:
     """
     Checks if cur has achieved goal ploidy.
@@ -835,33 +806,31 @@ class MPAllopScorer:
 #### MODEL BUILD ####
 #####################
 
-class MPAllopComponent(ModelComponent):
+def build_mp_allop_model(network: Network,
+                         gene_map: dict[str, list[str]],
+                         gene_trees: list[Network],
+                         rng: np.random.Generator) -> Model:
     """
-    Model Component that sets up the model for Infer MP Allop 2.0.
-    Registers the parsimony scorer on the model and attaches the network.
-    """
-    
-    def __init__(self,
-                 network: Network,
-                 gene_map: dict[str, list[str]],
-                 gene_trees: list[Network],
-                 rng: np.random.Generator) -> None:
-        super().__init__(set())
-        self.network = network
-        self.gene_map = gene_map
-        self.gene_trees = gene_trees
-        self.rng = rng
-    
-    def build(self, model: Model) -> None:
-        """
-        Attaches the MP allop component to the model.
+    Build the model for Infer MP Allop 2.0.
 
-        Args:
-            model (Model): A model, under construction.
-        """
-        model.network = self.network
-        scorer = MPAllopScorer(self.gene_map, self.gene_trees, self.rng)
-        model.set_likelihood_calculator(scorer)
+    Attaches the network and registers the parsimony scorer that the search
+    driver calls through :meth:`~phynetpy.ModelGraph.Model.likelihood`.
+
+    Args:
+        network (Network): A starting network.
+        gene_map (dict[str, list[str]]): A subgenome mapping.
+        gene_trees (list[Network]): A set of gene trees.
+        rng (np.random.Generator): random number generator.
+    Returns:
+        Model: The model, ready to search.
+    """
+    # ``rng`` seeds the scorer only.  Move sampling draws from the model's own
+    # RNG, which is left OS-seeded here, so a search is not reproducible from
+    # ``rng`` alone.
+    model = Model()
+    model.network = network
+    model.set_likelihood_calculator(MPAllopScorer(gene_map, gene_trees, rng))
+    return model
 
 
 class InferMPAllop:
@@ -901,9 +870,9 @@ class InferMPAllop:
         except NetworkError as exc:
             raise InferAllopError(str(exc)) from exc
 
-        mp_allop_comp = MPAllopComponent(network, gene_map, gene_trees, rng)
-        model_fac: ModelFactory = ModelFactory(mp_allop_comp)
-        self.mp_allop_model: Model = model_fac.build()
+        self.mp_allop_model: Model = build_mp_allop_model(
+            network, gene_map, gene_trees, rng
+        )
         self.iter_ct = iter_ct
         self.results: dict = {}
         
@@ -930,109 +899,45 @@ class InferMPAllop:
 #### METHODS ####
 #################
 
-def INFER_MP_ALLOP_BOOTSTRAP(start_network_file: str,
-                             gene_tree_file: str,
-                             subgenome_assign: dict[str, list[str]],
-                             iter_ct: int = 500,
-                             seed: int = None) -> dict[Network, float]:
+def allop_parsimony_score(network: Network,
+                          gene_trees: list[Network],
+                          subgenome_map: dict[str, list[str]],
+                          rng: np.random.Generator = None) -> int:
     """
-    Infer_MP_Allop_2.0, with a provided starting network.
-    
-    Given a set of gene trees, a subgenome assignment, and a starting network,
-    infer the network that minimizes the parsimony score.
+    Compute the allopolyploid parsimony score of a network.
+
+    The numerical core of the ``(GeneTrees, Allopolyploid, MDC)`` cell:
+    expands *network* into its multiple-labelled (MUL) tree and counts the
+    extra gene lineages needed to reconcile the gene trees with it.  Reached
+    from the public API as ``score(net, gene_trees,
+    model=Allopolyploid(...), criterion=MDC())``.
 
     Args:
-        start_network_file (str): A nexus file that contains a starting network
-        gene_tree_file (str): A nexus file that contains the gene trees
-        subgenome_assign (dict[str, list[str]]): A mapping from genomes to the
-                                                  set of genes in them.
-        iter_ct (int, optional): Number of iterations. Defaults to 500.
-        seed (int, optional): Random seed value. Defaults to None.
+        network (Network): The species network to score.
+        gene_trees (list[Network]): The gene trees to reconcile.
+        subgenome_map (dict[str, list[str]]): Subgenome-to-genes mapping.
+        rng (np.random.Generator, optional): RNG used when resolving allele
+                                             maps. Defaults to a fresh
+                                             generator.
 
     Returns:
-        dict[Network, float]: A map from Networks to their parsimony scores
+        int: The parsimony score (extra lineage count; lower is better).
+
+    Raises:
+        InferAllopError: If the subgenome map cannot label the MUL tips of
+                         *network*.
     """
-    rng = np.random.default_rng(seed if seed is not None else
-                                 np.random.randint(0, 10000))
-    
-    gene_tree_list: list[Network] = read_nexus(gene_tree_file)
-    start_net = read_nexus(start_network_file)[0]
+    rng = rng if rng is not None else np.random.default_rng()
 
-    mp_model = InferMPAllop(start_net,
-                            subgenome_assign,
-                            gene_tree_list,
-                            iter_ct,
-                            rng=rng)
-    
-    mp_model.run()
-    return mp_model.results
-
-def INFER_MP_ALLOP(gene_tree_file: str,
-                   subgenome_assign: dict[str, list[str]] = None,
-                   iter_ct: int = 500,
-                   seed: int = None) -> dict[Network, float]:
-    """
-    Infer_MP_Allop_2.0.
-    
-    Given a set of gene trees, and a subgenome assignment, infer the network
-    that minimizes the parsimony score.
-
-    Args:
-        gene_tree_file (str): A nexus file containing the gene trees
-        subgenome_assign (dict[str, list[str]]): a map from genomes to genes
-        iter_ct (int, optional): Number of iterations. Defaults to 500.
-        seed (int, optional): Random seed value. Defaults to None.
-
-    Returns:
-        dict[Network, float]: a mapping from Networks to their parsimony scores.
-    """
-    rng = np.random.default_rng(seed if seed is not None else
-                                 np.random.randint(0, 10000))
-    
-    gene_tree_list: list[Network] = read_nexus(gene_tree_file)
-    
-    if subgenome_assign is None:
-        gts = GeneTrees(gene_tree_list)
-        subgenome_assign = gts.mp_allop_map()
-    
-    start_net = partition_gene_trees(subgenome_assign, rng=rng)
-    
-    mp_model = InferMPAllop(start_net,
-                            subgenome_assign,
-                            gene_tree_list,
-                            iter_ct,
-                            rng=rng)
-    mp_model.run()
-    return mp_model.results
-
-def ALLOP_SCORE(net_filename: str,
-                gene_trees_filename: str,
-                subgenome_map: dict[str, list[str]]) -> int: 
-    """
-    Given a network, a set of gene trees, and a subgenome mapping, compute
-    the parsimony score over all the gene trees.
-
-    Args:
-        net_filename (str): Network nexus file
-        gene_trees_filename (str): Gene trees nexus file
-        subgenome_map (dict[str, list[str]]): subgenome-to-genes mapping
-
-    Returns:
-        int: parsimony score
-    """
-    rng = np.random.default_rng()
-    
     T = Allop_MUL(subgenome_map, rng)
     try:
-        T.to_mul(read_nexus(net_filename)[0])
+        T.to_mul(network)
     except NetworkError as exc:
         raise InferAllopError(str(exc)) from exc
-   
-    gene_trees = read_nexus(gene_trees_filename)
-    
+
     for gene_tree in gene_trees:
         allele_funcs = allele_map_set_ilp(gene_tree, subgenome_map)
         gene_tree.put_item("allele maps", allele_funcs)
         gene_tree.put_item("leaf descendants", gene_tree.leaf_descendants_all())
-    
+
     return T.score(gene_trees)

@@ -15,7 +15,8 @@ This module is the catch-all for graph-theoretic operations on
 * topology summaries (network level, blob/biconnected-component
   decomposition, tree-child / tree-based predicates);
 * enumeration of displayed trees and subnetworks
-  (``get_all_subtrees``, ``displayed_trees``);
+  (``get_all_subtrees``, ``subnet_given_leaves``,
+  ``induced_subnetwork_by_taxa``);
 * distance metrics on networks
   (mu-distance, hardwired / softwired / Robinson--Foulds /
   tripartition / displayed-tree / average-path / weighted-APD);
@@ -44,129 +45,147 @@ from __future__ import annotations
 ##
 ##############################################################################
 
-from .Network import *
+from .Network import Network, Node, Edge, NetworkError
 from collections import Counter, deque
 from itertools import product as _product
-from typing import Dict, List, Tuple, Set, Union
-import numpy as np
+from typing import Dict, Set, Union
 import heapq
+import warnings
 
-def _retic_edge_choice(retic_map : dict[Node, list[Edge]], 
-                      funcs : list[dict[Node, Edge]]) -> list[dict[Node, Edge]]:
-    """
-    Recursive helper function that generates all combinations of hybrid edges
-    to remove from a network to create an underlying tree structure.
-
-    Args:
-        retic_map (dict[Node, list[Edge]]): dictionary of reticulation nodes to 
-                                            their hybrid in-edges
-        funcs (list[dict[Node, Edge]]): list of dictionaries that map reticulation
-                                        nodes to their chosen hybrid in-edges   
-    Returns:
-        list[dict[Node, Edge]]: list of dictionaries that map reticulation nodes
-                                to their chosen hybrid in-edges
-    """
-    if retic_map != {}:
-        node = list(retic_map.keys())[0]
-        hybrid_edges = retic_map[node]
-       
-        for index in range(len(funcs) // 2):
-            funcs[index][node] = hybrid_edges[0]
-        for index in range(len(funcs) // 2, len(funcs)):
-            funcs[index][node] = hybrid_edges[1]
-         
-        del retic_map[node]
-        
-        _retic_edge_choice(retic_map, funcs)
-        
-    return funcs
+#: Public surface of this module.  Declared explicitly so that
+#: ``from .GraphUtils import *`` exports only these helpers and not the
+#: ``Network`` names re-imported above.  The reticulation-comparison metrics
+#: appended at the bottom of this file are listed here too.
+__all__ = [
+    # Structural edits
+    "add_hybrid",
+    # Topology extraction / sub-structures
+    "subnet_given_leaves",
+    "induced_subnetwork_by_taxa",
+    "get_all_subtrees",
+    "get_all_clusters",
+    "network_clusters",
+    "dominant_tree",
+    "count_displayed_trees",
+    # Decomposition
+    "blobs",
+    "tree_of_blobs",
+    "bridges_and_articulations",
+    # Descriptive properties
+    "level",
+    "is_tree",
+    "count_reticulations",
+    "is_isomorphic",
+    # Distances / dissimilarities
+    "hardwired_cluster_distance",
+    "softwired_cluster_distance",
+    "displayed_tree_distance",
+    "robinson_foulds_distance",
+    "tripartition_distance",
+    "mu_distance",
+    "pairwise_leaf_distance",
+    "average_path_distance",
+    "weighted_average_path_distance",
+    # Reticulation-aware comparison (re-exported from ReticulationComparison)
+    "JACCARD",
+    "SYMMETRIC",
+    "ReticulationTripartition",
+    "NetworkComparison",
+    "reticulation_tripartitions",
+    "set_distance",
+    "tripartition_dissimilarity",
+    "nakhleh_metric",
+    "reticulation_dissimilarity",
+    "reticulation_precision_recall",
+    "combined_dissimilarity",
+    "compare_networks",
+    # Rendering
+    "ascii",
+]
 
 def get_all_clusters(net : Network,
-                     node : Union[Node, None] = None, 
                      include_trivial : bool = False)\
                      -> set[frozenset[Node]]:
     """
-    Compile a list of clusters that make up this graph.
+    Compile the set of clusters that make up this network.
     Ie: for a graph ((A, B)C, D); , set of all clusters is {(A,B), (A,B,C)}.
     
-    Can optionally allow the trivial leaf clusters in the set as desired.
+    A cluster is the set of leaves below some non-root node. Clusters of
+    size 1 can optionally be included.
+
+    Note that clusters are sets of :class:`~phynetpy.Network.Node` objects
+    belonging to *this* network, so they cannot be compared across networks;
+    use :func:`network_clusters` for that.
 
     Args:
         net (Network): the network to operate on
-        node (Node): For any user call, this should be the root. 
-                     For internal calls, it is the starting point for search.
         include_trivial (bool): If set to True, includes clusters of size 1. 
                                 Defaults to False.
 
     Returns:
-        set: A set of all clusters in this graph. Each cluster is represented 
-             as a set of either names or nodes.
+        set: A set of all clusters in this graph, each a frozenset of Nodes.
     """
-    if node is None:
-        node = net.root()
-    
-    cluster_set : set[frozenset[Node]] = set()
-    graph_leaves = net.get_leaves()
-    children = net.get_children(node)
-    
-    # Each leaf_descendant set of a child is a cluster, 
-    # so long as it is not trivial
-    for child in children:
-        if child not in graph_leaves:
-            #Get potential cluster
-            leaf_descendant_set = net.leaf_descendants(child)
-            
-            #Check for size 
-            if len(leaf_descendant_set) > 1: 
-                cluster_set.add(frozenset(leaf_descendant_set))
-            
-            #Recurse over the next subtree
-            cluster_set = cluster_set.union(get_all_clusters(net, child))
-    
+    root = net.root()
+
+    # leaf_descendants_all memoizes over the DAG, so a subnetwork shared by
+    # several reticulation parents is walked once rather than once per path.
+    cluster_set = {frozenset(below)
+                   for node, below in net.leaf_descendants_all().items()
+                   if node is not root and len(below) > 1}
+
     if include_trivial:
-        for leaf in graph_leaves:
-            cluster_set.add(frozenset([leaf]))
-        
+        cluster_set |= {frozenset([leaf]) for leaf in net.get_leaves()}
+
     return cluster_set
 
-def merge_networks(left : Network, right : Network) -> Network:
+def _induced_subnetwork(net : Network, targets : set[Node]) -> Network:
     """
-    Combine two networks into a single
-    network object by making the roots of each network
-    the children of a new root node.
+    Copy the part of 'net' at or below MRCA(targets) that leads to a target.
+
+    Shared core of :func:`subnet_given_leaves` and
+    :func:`induced_subnetwork_by_taxa`; the caller decides which
+    :meth:`Network.clean` passes to run on the result.
+
+    Each retained node is enqueued exactly once. A reticulation reachable
+    from two retained parents would otherwise have its whole subtree walked
+    once per parent, and since Edge equality is by identity, every edge below
+    it would be copied twice into a spurious bubble.
 
     Args:
-        left (Network): Left subnetwork
-        right (Network): Right subnetwork
-
+        net (Network): A network object.
+        targets (set[Node]): The leaves the subnetwork must retain.
     Returns:
-        Network: The resulting network object, containing copies of the nodes
-                 and edges of the original networks.
+        Network: An uncleaned copy of the induced subnetwork.
     """
-    merger = Network()
-    
-    left_copy, oldnew_left = left.copy()
-    right_copy, oldnew_right = right.copy()
-    
-    # Add all nodes and edges from left_copy and right_copy to merger first
-    merger.add_nodes(left_copy.V())
-    for edge in left_copy.E():
-        merger.add_edges(edge)
-    merger.add_nodes(right_copy.V())
-    for edge in right_copy.E():
-        merger.add_edges(edge)
-    
-    # Create a new root node with a unique id in this merger
-    new_root = merger.add_uid_node()
-    
-    # Add left and right roots as children of the new root
-    left_root = oldnew_left[left.root()]
-    right_root = oldnew_right[right.root()]
-    
-    merger.add_edges(Edge(new_root, left_root))
-    merger.add_edges(Edge(new_root, right_root))
-    
-    return merger
+    sub_root = net.mrca(targets)
+    root_copy = sub_root.copy()
+
+    sub : Network = Network()
+    sub.add_nodes(root_copy)
+    old_new : dict[Node, Node] = {sub_root : root_copy}
+    q : deque[Node] = deque([sub_root])
+
+    while q:
+        cur = q.popleft()
+
+        for child in net.get_children(cur):
+            # ``leaf_descendants`` of a leaf is the leaf itself, so this also
+            # covers the case of `child` being a target.
+            if not net.leaf_descendants(child) & targets:
+                continue
+
+            if child not in old_new:
+                old_new[child] = child.copy()
+                sub.add_nodes(old_new[child])
+                q.append(child)
+
+            old_edge = net.get_edge(cur, child)
+            new_edge = Edge(old_new[cur], old_new[child])
+            new_edge.set_gamma(old_edge.get_gamma())
+            new_edge.set_length(old_edge.get_length())
+            sub.add_edges(new_edge)
+
+    return sub
 
 def subnet_given_leaves(net : Network, leaf_set : list[Node]) -> Network:
     """
@@ -180,40 +199,62 @@ def subnet_given_leaves(net : Network, leaf_set : list[Node]) -> Network:
     Returns:
         Network: A new Network object with node and edge copies of the original.
     """
-    subnet : Network = Network()
-    target_set : set[Node] = set(leaf_set)
-    
-    sub_root = net.mrca(set(leaf_set))
-    new_sub_root = sub_root.copy()
-    subnet.add_nodes(new_sub_root)
-    old_new_map = {sub_root : new_sub_root}
-    q = deque([sub_root])
-    
-    while len(q) != 0:
-        cur = q.popleft()
-    
-        for child in net.get_children(cur):
-            if child not in target_set \
-               and len(net.leaf_descendants(child).intersection(target_set)) == 0:
-                continue
-            
-            if child not in old_new_map:
-                new_child = child.copy()
-                old_new_map[child] = new_child
-                subnet.add_nodes(new_child)
-                q.appendleft(child)
-            
-            old_edge = net.get_edge(cur, child)
-            new_edge = Edge(old_new_map[cur], old_new_map[child])
-            new_edge.set_gamma(old_edge.get_gamma())
-            new_edge.set_length(old_edge.get_length())
-            subnet.add_edges(new_edge)
-    
-    if len(list(subnet.V())) > 1:
+    subnet = _induced_subnetwork(net, set(leaf_set))
+
+    if len(subnet.V()) > 1:
         subnet.clean()
-    
+
     return subnet
     
+def _displayed_trees_with_probs(net : Network) -> list[tuple[Network, float]]:
+    """
+    Enumerate every displayed tree together with its probability.
+
+    A displayed tree is obtained by keeping exactly one in-edge at each
+    reticulation; its probability is the product of the gammas of the kept
+    edges. When gamma is unset for an edge, a uniform 1/k weight is assumed
+    (k = in-degree of the reticulation node).
+
+    Reticulations and their in-edges are both sorted by label so that the
+    enumeration order is deterministic across runs.
+
+    Args:
+        net (Network): A phylogenetic network.
+    Returns:
+        list[tuple[Network, float]]: (tree copy, probability) pairs.
+    """
+    retics = sorted(
+        (node for node in net.V() if node.is_reticulation()),
+        key=lambda n: n.label,
+    )
+    if not retics:
+        copy, _ = net.copy()
+        return [(copy, 1.0)]
+
+    retic_in_edges = [
+        sorted(list(net.in_edges(node)), key=lambda e: e.src.label)
+        for node in retics
+    ]
+
+    results : list[tuple[Network, float]] = []
+    for combo in _product(*retic_in_edges):
+        tree, old_new = net.copy()
+        prob = 1.0
+        for retic_node, kept_edge in zip(retics, combo):
+            gamma = kept_edge.get_gamma()
+            if gamma is not None and gamma > 0:
+                prob *= gamma
+            else:
+                k = len(net.in_edges(retic_node))
+                prob *= 1.0 / k if k > 0 else 1.0
+            for e in net.in_edges(retic_node):
+                if e is not kept_edge:
+                    tree.remove_edge([old_new[e.src], old_new[e.dest]])
+        tree.clean()
+        results.append((tree, prob))
+
+    return results
+
 def get_all_subtrees(net : Network) -> list[Network]:
     """
     Generate all possible trees that can be derived from the given network by
@@ -226,32 +267,7 @@ def get_all_subtrees(net : Network) -> list[Network]:
         list[Network]: A list of network objects, each representing a tree that
                        is derived from the original network.
     """
-    retics = sorted(
-        (node for node in net.V() if node.is_reticulation()),
-        key=lambda n: n.label,
-    )
-    if not retics:
-        copy, _ = net.copy()
-        return [copy]
-
-    retic_in_edges = [
-        sorted(list(net.in_edges(node)), key=lambda e: e.src.label)
-        for node in retics
-    ]
-
-    trees: list[Network] = []
-    for combo in _product(*retic_in_edges):
-        preop, old_new = net.copy()
-        for retic_node, kept_edge in zip(retics, combo):
-            for e in list(net.in_edges(retic_node)):
-                if e is not kept_edge:
-                    src_new = old_new[e.src]
-                    dst_new = old_new[e.dest]
-                    preop.remove_edge([src_new, dst_new])
-        preop.clean()
-        trees.append(preop)
-
-    return trees
+    return [tree for tree, _ in _displayed_trees_with_probs(net)]
 
 def dominant_tree(net : Network) -> Network:
     """
@@ -307,249 +323,139 @@ def count_reticulations(net: Network) -> int:
     """
     return sum(1 for n in net.V() if n.is_reticulation())
 
-def validate_binary(net: Network,
-                    require_tree_nodes: bool = True,
-                    require_retic_nodes: bool = True
-                    ) -> tuple[bool, dict[str, list[Node]]]:
+def add_hybrid(net : Network,
+               source : Edge,
+               destination : Edge,
+               t_src : float = None,
+               t_dest : float = None) -> None:
     """
-    Validate standard binary constraints.
+    Add a hybrid (reticulation) edge between two existing edges, raising the
+    network level by one.
 
-    - Tree/internal nodes: indegree=1 (except root with 0), outdegree=2
-    - Reticulation nodes: indegree=2, outdegree=1
-    - Leaves: outdegree=0
+    This is a structural edit, not a Metropolis-Hastings proposal: it mutates
+    ``net`` in place and reports no Hastings ratio. Samplers should use the
+    :class:`~.ModelMove.AddReticulation` move instead, which carries the
+    reversible-jump proposal math.
+
+    How it works (normal case, ``source != destination``)::
+
+        BEFORE                        AFTER
+        a           x                a           x
+        |           |                |           |
+        |           |                n1 -------> n2   (new hybrid edge)
+        |           |                |           |
+        b           y                b           y
+
+    Two fresh internal nodes (n1, n2) are inserted by splitting the ``source``
+    and ``destination`` edges respectively. n2 is flagged as a reticulation
+    node, and a directed edge n1 -> n2 is added.
+
+    When ``source`` and ``destination`` are the *same* edge, two parallel edges
+    with equal inheritance probabilities (gamma = 0.5) are created between two
+    new internal nodes, modeling a whole-genome duplication ("bubble") event.
+
+    Args:
+        net (Network): The network to modify in place.
+        source (Edge): The edge that will donate the new outgoing lineage.
+        destination (Edge): The edge that will receive the incoming hybrid
+                            lineage.
+        t_src (float, optional): Divergence time for the new source-side node.
+                                 Defaults to None.
+        t_dest (float, optional): Divergence time for the new reticulation
+                                  node. Defaults to None.
+    Returns:
+        N/A
+    """
+    if source == destination:
+        # --- Bubble / genome-duplication special case ---
+        warnings.warn("Source and destination edges are the same. Bubble edge "
+                      "will be created.")
+        
+        n1 : Node = source.src   # existing parent (top of the original edge)
+        n2 : Node = source.dest  # existing child  (bottom of the original edge)
+        n3 : Node = net.add_uid_node()  # new upper internal node
+        n4 : Node = net.add_uid_node()  # new lower internal node
+        
+        if t_src is not None:
+            n3.set_time(t_src)
+        if t_dest is not None:
+            n4.set_time(t_dest)
+        
+        # Replace the single edge with a diamond/bubble: n1 -> n3 => n4 -> n2
+        net.remove_edge(source)
+        
+        # Two parallel edges between n3 and n4, each carrying half the
+        # inheritance probability. Tags 'left'/'right' let downstream code
+        # distinguish the two copies.
+        bubble_right : Edge = Edge(n3, n4, gamma = .5, tag = 'right')
+        bubble_left : Edge = Edge(n3, n4, gamma = .5, tag = 'left')
+        top_to_n3 : Edge = Edge(n1, n3)
+        n4_to_bot : Edge = Edge(n4, n2)
+        
+        net.add_edges([bubble_right, bubble_left, top_to_n3, n4_to_bot])
+    else:
+        # --- Standard hybrid-edge insertion ---
+        a : Node = source.src        # parent of source edge
+        b : Node = source.dest       # child  of source edge
+        x : Node = destination.src   # parent of destination edge
+        y : Node = destination.dest  # child  of destination edge
+        
+        n1 : Node = net.add_uid_node()  # splits the source edge
+        n2 : Node = net.add_uid_node()  # splits the destination edge
+        n2.set_is_reticulation(True)    # mark as reticulation / hybrid node
+        
+        if t_src is not None:
+            n1.set_time(t_src)
+        if t_dest is not None:
+            n2.set_time(t_dest)
+        
+        # Remove the two original edges that are being subdivided
+        net.remove_edge(source)
+        net.remove_edge(destination)
+        
+        # Wire up: a->n1->b, x->n2->y, and the new hybrid edge n1->n2
+        net.add_edges([Edge(a, n1),
+                       Edge(n1, b),
+                       Edge(x, n2),
+                       Edge(n2, y),
+                       Edge(n1, n2)])
+
+def _valid_network_degrees(net : Network) -> bool:
+    """
+    Check the degree invariants a rooted phylogenetic network must satisfy.
+
+    Unlike :func:`validate_binary`, this tolerates polytomies (internal
+    out-degree >= 2 rather than exactly 2), insists on a *single* root, and
+    reports one boolean instead of a violation map.  Acyclicity is not
+    checked here -- callers pair this with :meth:`Network.is_acyclic`.
 
     Args:
         net (Network): A network object.
-        require_tree_nodes (bool): Enforce tree node constraints.
-        require_retic_nodes (bool): Enforce retic node constraints.
 
     Returns:
-        tuple[bool, dict[str, list[Node]]]: (is_valid, violations)
+        bool: True when there is exactly one root (in-degree 0, out-degree
+              >= 2), every leaf has in-degree 1, every reticulation has
+              in-degree 2 and out-degree 1, and every other internal node
+              has in-degree 1 and out-degree >= 2.
     """
-    violations: dict[str, list[Node]] = {
-        "tree_in": [],
-        "tree_out": [],
-        "retic_in": [],
-        "retic_out": [],
-        "leaf_in": [],
-        "root_out": [],
-    }
-
-    roots = set(net.roots())
-    leaves = set(net.get_leaves())
-
+    root_count = 0
     for node in net.V():
         indeg = net.in_degree(node)
         outdeg = net.out_degree(node)
-        if node.is_reticulation():
-            if require_retic_nodes:
-                if indeg != 2:
-                    violations["retic_in"].append(node)
-                if outdeg != 1:
-                    violations["retic_out"].append(node)
+        if indeg == 0:
+            root_count += 1
+            if outdeg < 2:
+                return False
+        elif outdeg == 0:
+            if indeg != 1:
+                return False
+        elif node.is_reticulation():
+            if indeg != 2 or outdeg != 1:
+                return False
         else:
-            if node in leaves:
-                if outdeg != 0:
-                    violations["tree_out"].append(node)
-                if indeg < 1:
-                    violations["leaf_in"].append(node)
-            elif node in roots:
-                if require_tree_nodes and outdeg == 0:
-                    violations["root_out"].append(node)
-            else:
-                if require_tree_nodes:
-                    if indeg != 1:
-                        violations["tree_in"].append(node)
-                    if outdeg != 2:
-                        violations["tree_out"].append(node)
-
-    is_valid = all(len(v) == 0 for v in violations.values())
-    return is_valid, violations
-
-def detect_bubbles(net: Network) -> list[tuple[Edge, Edge]]:
-    """
-    Detect bubble structures as parallel directed edges (same (src, dest)).
-
-    Args:
-        net (Network): A network object.
-
-    Returns:
-        list[tuple[Edge, Edge]]: List of edge pairs representing bubbles.
-    """
-    pair_map: Dict[tuple[Node, Node], list[Edge]] = {}
-    for e in net.E():
-        pair = (e.src, e.dest)
-        if pair not in pair_map:
-            pair_map[pair] = [e]
-        else:
-            pair_map[pair].append(e)
-
-    bubbles: list[tuple[Edge, Edge]] = []
-    for edges in pair_map.values():
-        if len(edges) == 2:
-            bubbles.append((edges[0], edges[1]))
-    return bubbles
-
-def sample_displayed_tree(net: Network,
-                          rng: Union[np.random.Generator, None] = None) -> Network:
-    """
-    Sample one displayed tree by selecting, for each reticulation, a single
-    incoming edge with probability proportional to its inheritance probability.
-
-    Args:
-        net (Network): A network object.
-        rng (Union[np.random.Generator, None]): Optional RNG; defaults to new generator.
-
-    Returns:
-        Network: A cleaned, displayed tree copy of the input network.
-    """
-    if rng is None:
-        rng = np.random.default_rng()
-
-    tree_copy, old_new = net.copy()
-
-    # Iterate reticulation nodes in the copy
-    for node in [n for n in tree_copy.V() if n.is_reticulation()]:
-        in_edges = list(tree_copy.in_edges(node))
-        if len(in_edges) <= 1:
-            continue
-        gammas = np.array([e.get_gamma() for e in in_edges], dtype=float)
-        # Normalize, handle all-zero by uniform
-        if gammas.sum() <= 0:
-            probs = np.ones(len(in_edges)) / len(in_edges)
-        else:
-            probs = gammas / gammas.sum()
-        keep_index = int(rng.choice(len(in_edges), p=probs.tolist()))
-        # Remove all others
-        for idx, e in enumerate(in_edges):
-            if idx != keep_index:
-                tree_copy.remove_edge(e)
-
-    tree_copy.clean()
-    return tree_copy
-
-def _copy_edge_attributes(src_edge: Edge, dest_edge: Edge) -> None:
-    """Copy gamma, weight, length, and tag from *src_edge* to *dest_edge*."""
-    dest_edge.set_gamma(src_edge.get_gamma())
-    dest_edge.set_weight(src_edge.get_weight())
-    dest_edge.set_length(src_edge.get_length())
-    dest_edge.set_tag(src_edge.get_tag())
-
-
-def contract_edge(net: Network, edge: Edge, keep: str = "parent") -> None:
-    """
-    Contract an internal edge by merging its endpoints.
-
-    Args:
-        net (Network): Network to modify in place.
-        edge (Edge): The edge (u->v) to contract.
-        keep (str): Which endpoint to keep as the merged node: "parent" keeps u,
-                    "child" keeps v.
-
-    Raises:
-        NetworkError: On invalid keep value.
-    """
-    if keep not in ("parent", "child"):
-        raise NetworkError("keep must be one of ['parent','child']")
-
-    keep_node = edge.src if keep == "parent" else edge.dest
-    drop_node = edge.dest if keep == "parent" else edge.src
-
-    existing_pairs: set[tuple[int, int]] = {(id(e.src), id(e.dest)) for e in net.E()}
-
-    for e in list(net.in_edges(drop_node)):
-        if e.src is keep_node:
-            net.remove_edge(e)
-            continue
-        if (id(e.src), id(keep_node)) not in existing_pairs:
-            new_e = Edge(e.src, keep_node)
-            _copy_edge_attributes(e, new_e)
-            net.add_edges(new_e)
-            existing_pairs.add((id(e.src), id(keep_node)))
-        net.remove_edge(e)
-
-    for e in list(net.out_edges(drop_node)):
-        if e.dest is keep_node:
-            net.remove_edge(e)
-            continue
-        if (id(keep_node), id(e.dest)) not in existing_pairs:
-            new_e = Edge(keep_node, e.dest)
-            _copy_edge_attributes(e, new_e)
-            net.add_edges(new_e)
-            existing_pairs.add((id(keep_node), id(e.dest)))
-        net.remove_edge(e)
-
-    if edge in net.E():
-        net.remove_edge(edge)
-    net.remove_nodes(drop_node)
-
-def reroot(net: Network, new_root: Node) -> Network:
-    """
-    Return a copy of the network re-rooted at `new_root` by orienting edges
-    away from the new root using undirected BFS levels.
-
-    This preserves node/edge attributes; reticulation indegrees may change
-    depending on topology.
-
-    Args:
-        net (Network): A network object.
-        new_root (Node): Node in `net` to be the new root.
-
-    Raises:
-        NetworkError: If `new_root` is not a node in the network.
-
-    Returns:
-        Network: Re-rooted copy.
-    """
-    if new_root not in net.V():
-        raise NetworkError("new_root must be a node in the network")
-
-    # Build undirected adjacency for BFS levels
-    adj: Dict[Node, list[Node]] = {n: [] for n in net.V()}
-    for e in net.E():
-        adj[e.src].append(e.dest)
-        adj[e.dest].append(e.src)
-
-    # Distances from new_root
-    dist: Dict[Node, int] = {n: -1 for n in net.V()}
-    q: deque[Node] = deque()
-    dist[new_root] = 0
-    q.append(new_root)
-    while q:
-        cur = q.popleft()
-        for nei in adj[cur]:
-            if dist[nei] == -1:
-                dist[nei] = dist[cur] + 1
-                q.append(nei)
-
-    # Copy nodes
-    new_net = Network()
-    old_new: Dict[Node, Node] = {}
-    for n in net.V():
-        cpy = n.copy()
-        new_net.add_nodes(cpy)
-        old_new[n] = cpy
-
-    # Orient edges from lower dist to higher dist (ties keep original)
-    for e in net.E():
-        a = e.src
-        b = e.dest
-        if dist[a] < dist[b] or (dist[a] == dist[b] and a == new_root):
-            src, dst = a, b
-        elif dist[b] < dist[a] or (dist[a] == dist[b] and b == new_root):
-            src, dst = b, a
-        else:
-            # Tie: keep original
-            src, dst = a, b
-        ne = Edge(old_new[src], old_new[dst])
-        ne.set_gamma(e.get_gamma())
-        ne.set_weight(e.get_weight())
-        ne.set_length(e.get_length())
-        ne.set_tag(e.get_tag())
-        new_net.add_edges(ne)
-
-    new_net.clean([True, False, False])
-    return new_net
+            if indeg != 1 or outdeg < 2:
+                return False
+    return root_count == 1
 
 def pairwise_leaf_distance(net: Network,
                            use_branch_lengths: bool = True
@@ -601,6 +507,32 @@ def pairwise_leaf_distance(net: Network,
 
     return name_dist
 
+def _undirected_adjacency(net : Network) -> Dict[Node, list[Node]]:
+    """
+    Build neighbour lists for the undirected view of a directed network.
+
+    Parallel edges collapse to a single neighbour entry, so that a bubble does
+    not read as a cycle to the Tarjan traversals that consume this.
+
+    Args:
+        net (Network): A network object.
+    Returns:
+        Dict[Node, list[Node]]: Each node mapped to its distinct neighbours,
+                                in first-encountered order.
+    """
+    adj : Dict[Node, list[Node]] = {n: [] for n in net.V()}
+    seen : Dict[Node, Set[Node]] = {n: set() for n in net.V()}
+
+    for e in net.E():
+        if e.dest not in seen[e.src]:
+            seen[e.src].add(e.dest)
+            adj[e.src].append(e.dest)
+        if e.src not in seen[e.dest]:
+            seen[e.dest].add(e.src)
+            adj[e.dest].append(e.src)
+
+    return adj
+
 def bridges_and_articulations(net: Network) -> tuple[list[tuple[str, str]], list[str]]:
     """
     Compute bridges and articulation points on the underlying undirected graph
@@ -614,13 +546,7 @@ def bridges_and_articulations(net: Network) -> tuple[list[tuple[str, str]], list
             A pair (bridges, articulations) where bridges are (u, v) tuples
             with u < v by node label, and articulations are node labels.
     """
-    # Build an undirected adjacency list from the directed edge set.
-    adj: Dict[Node, list[Node]] = {n: [] for n in net.V()}
-    for e in net.E():
-        if e.dest not in adj[e.src]:
-            adj[e.src].append(e.dest)
-        if e.src not in adj[e.dest]:
-            adj[e.dest].append(e.src)
+    adj = _undirected_adjacency(net)
 
     # Tarjan's algorithm state:
     #   disc[u]   – discovery time of node u
@@ -672,59 +598,6 @@ def bridges_and_articulations(net: Network) -> tuple[list[tuple[str, str]], list
 
     return list(sorted(bridges)), list(sorted(arts))
 
-def transitive_reduction(net: Network) -> Network:
-    """
-    Compute the transitive reduction of an acyclic network: remove edges (u,v)
-    for which an alternate directed path u -> ... -> v exists.
-
-    Args:
-        net (Network): Input network (must be acyclic).
-
-    Raises:
-        NetworkError: If the network contains a directed cycle.
-
-    Returns:
-        Network: A reduced network with identical reachability.
-    """
-    if not net.is_acyclic():
-        raise NetworkError("transitive_reduction requires an acyclic network")
-
-    reduced, _ = net.copy()
-
-    # For each edge, test reachability with the edge removed
-    to_remove: list[Edge] = []
-
-    for e in list(reduced.E()):
-        src = e.src
-        dst = e.dest
-        # Temporarily remove e
-        reduced.remove_edge(e)
-        # BFS from src to see if dst is reachable
-        q: deque[Node] = deque([src])
-        seen: Set[Node] = {src}
-        reachable = False
-        while q and not reachable:
-            cur = q.popleft()
-            for out_e in reduced.out_edges(cur):
-                v = out_e.dest
-                if v in seen:
-                    continue
-                if v == dst:
-                    reachable = True
-                    break
-                seen.add(v)
-                q.append(v)
-        if reachable:
-            to_remove.append(e)
-        # Add the edge back for the next test
-        reduced.add_edges(e)
-
-    for e in to_remove:
-        if e in reduced.E():
-            reduced.remove_edge(e)
-
-    return reduced
-
 def blobs(net: Network) -> list[set[Node]]:
     """
     Return the biconnected components ("blobs") of the underlying undirected graph.
@@ -737,13 +610,7 @@ def blobs(net: Network) -> list[set[Node]]:
                          biconnected component in the undirected view of the
                          network.
     """
-    # Build undirected adjacency list from directed edges
-    adj: Dict[Node, list[Node]] = {n: [] for n in net.V()}
-    for e in net.E():
-        if e.dest not in adj[e.src]:
-            adj[e.src].append(e.dest)
-        if e.src not in adj[e.dest]:
-            adj[e.dest].append(e.src)
+    adj = _undirected_adjacency(net)
 
     # Tarjan's biconnected-component algorithm.
     # An edge stack tracks the DFS-tree and back edges belonging to the
@@ -893,174 +760,103 @@ def is_tree(net: Network) -> bool:
     """
     return count_reticulations(net) == 0
 
-def validate_times_and_lengths(net: Network, tol: float = 1e-5) -> tuple[bool, list[str]]:
+def _edge_between(net : Network, parent : Node, child : Node) -> Edge:
     """
-    Validate node times and branch lengths consistency across the network.
+    The single directed edge ``parent -> child``.
 
-    For each edge (parent u -> child v), verify:
-    - child_time - parent_time ≈ edge.length within tolerance.
-    - child_time >= parent_time (monotonicity).
+    ``Network.get_edge`` returns either an ``Edge`` or a list of them
+    (bubbles put two edges on the same node pair); this normalises both
+    shapes to one edge.
 
     Args:
         net (Network): A network object.
-        tol (float): Allowed absolute tolerance for length mismatch.
+        parent (Node): Source of the edge.
+        child (Node): Destination of the edge.
 
     Returns:
-        tuple[bool, list[str]]: (is_valid, diagnostics) where diagnostics is a
-                                 list of messages describing any violations or
-                                 missing values encountered.
+        Edge: The edge running from parent to child.
     """
-    msgs: list[str] = []
-    ok = True
-    for e in net.E():
-        try:
-            pt = e.src.get_time()
-            ct = e.dest.get_time()
-            el = e.get_length()
-            if ct < pt - tol:
-                ok = False
-                msgs.append(f"Time monotonicity violated on {e.src.label}->{e.dest.label}: {pt} > {ct}")
-            if abs((ct - pt) - el) > tol:
-                ok = False
-                msgs.append(f"Length mismatch on {e.src.label}->{e.dest.label}: len={el} vs dt={ct-pt}")
-        except Exception:
-            # Missing times; note and continue
-            msgs.append(f"Missing times on {e.src.label}->{e.dest.label}; skipped length check")
-    return ok, msgs
+    edges = net.get_edge(parent, child)
+    return edges[0] if isinstance(edges, list) else edges
 
-def ancestors_descendants(net: Network) -> tuple[dict[Node, set[Node]], dict[Node, set[Node]]]:
+def _node_height(net : Network,
+                 node : Node,
+                 cache : dict[Node, float]) -> float:
     """
-    Compute the ancestor and descendant sets for each node in a network.
+    Ultrametric height above the present, from child branch lengths.
+
+    Derived from child branch lengths by a memoised post-order recursion
+    rather than read from ``Node.get_time()``, so it is correct even when
+    explicit node times were never populated. Leaves are height 0, and a
+    missing branch length counts as 0.
 
     Args:
-        net (Network): A network object.
+        net (Network): The tree or network 'node' belongs to.
+        node (Node): Node whose height is requested.
+        cache (dict[Node, float]): Memo of already-computed heights, mutated
+                                   in place.
 
     Returns:
-        tuple[dict[Node, set[Node]], dict[Node, set[Node]]]:
-            A pair (ancestors, descendants) where:
-            - ancestors[n] is the set of all nodes with a directed path to n.
-            - descendants[n] is the set of all nodes reachable from n.
+        float: The node's height, in the branch lengths' own units.
     """
-    ancestors: dict[Node, set[Node]] = {n: set() for n in net.V()}
-    descendants: dict[Node, set[Node]] = {n: set() for n in net.V()}
+    cached = cache.get(node)
+    if cached is not None:
+        return cached
+    children = net.get_children(node)
+    if not children:
+        cache[node] = 0.0
+        return 0.0
+    best = 0.0
+    for child in children:
+        length = _edge_between(net, node, child).get_length()
+        if length is None:
+            length = 0.0
+        best = max(best, _node_height(net, child, cache) + float(length))
+    cache[node] = best
+    return best
 
-    # Descendants via forward BFS per node
-    for n in net.V():
-        q: deque[Node] = deque([n])
-        seen: set[Node] = set([n])
-        while q:
-            cur = q.popleft()
-            for e in net.out_edges(cur):
-                v = e.dest
-                if v not in seen:
-                    seen.add(v)
-                    q.append(v)
-                    descendants[n].add(v)
-
-    # Ancestors via reverse BFS per node
-    for n in net.V():
-        q: deque[Node] = deque([n])
-        seen: set[Node] = set([n])
-        while q:
-            cur = q.popleft()
-            for e in net.in_edges(cur):
-                u = e.src
-                if u not in seen:
-                    seen.add(u)
-                    q.append(u)
-                    ancestors[n].add(u)
-
-    return ancestors, descendants
-
-def topological_order(net: Network) -> list[Node]:
+def _node_heights(net : Network) -> dict[Node, float]:
     """
-    Compute a topological order of nodes in an acyclic network.
-
-    Delegates to :pymeth:`Network.topological_order`.
-
-    Args:
-        net (Network): A network object.
-
-    Raises:
-        NetworkError: If the network contains a directed cycle.
-
-    Returns:
-        list[Node]: Nodes in topological order from roots to leaves.
-    """
-    return net.topological_order()
-
-def break_cycles(net: Network, strategy: str = "greedy") -> Network:
-    """
-    Produce an acyclic copy by removing a small set of cycle-forming edges.
-
-    Strategy 'greedy' removes the first encountered back edge per DFS pass
-    until the graph is acyclic. This is not guaranteed minimal but is fast
-    and effective for cleaning up accidental cycles.
-
-    Args:
-        net (Network): A network object.
-        strategy (str): Currently only 'greedy' is supported.
-
-    Raises:
-        NetworkError: If an unsupported strategy is specified.
-
-    Returns:
-        Network: An acyclic copy of the input network.
-    """
-    if strategy != "greedy":
-        raise NetworkError("Unsupported strategy; use 'greedy'")
-
-    ac, _ = net.copy()
-
-    def find_back_edge() -> Edge | None:
-        state: Dict[Node, int] = {n: 0 for n in ac.V()}  # 0=unseen,1=visiting,2=done
-        parent_edge: Dict[Node, Edge | None] = {n: None for n in ac.V()}
-        def dfs(u: Node) -> Edge | None:
-            state[u] = 1
-            for e in ac.out_edges(u):
-                v = e.dest
-                if state[v] == 0:
-                    parent_edge[v] = e
-                    be = dfs(v)
-                    if be is not None:
-                        return be
-                elif state[v] == 1:
-                    return e
-            state[u] = 2
-            return None
-        for n in ac.V():
-            if state[n] == 0:
-                be = dfs(n)
-                if be is not None:
-                    return be
-        return None
-
-    while not ac.is_acyclic():
-        be = find_back_edge()
-        if be is None:
-            break
-        ac.remove_edge(be)
-    return ac
-
-def reticulation_parent_pairs(net: Network) -> dict[Node, list[Edge]]:
-    """
-    Map each reticulation node to its inbound edges, sorted by gamma.
+    Map every node of a network to its height above the present.
 
     Args:
         net (Network): A network object.
 
     Returns:
-        dict[Node, list[Edge]]: A mapping from each reticulation node to the list
-                                 of inbound edges sorted by decreasing inheritance
-                                 probability (gamma).
+        dict[Node, float]: Height of every node, in branch-length units.
     """
-    mapping: dict[Node, list[Edge]] = {}
-    for n in net.V():
-        if n.is_reticulation():
-            ies = list(net.in_edges(n))
-            ies.sort(key=lambda e: e.get_gamma(), reverse=True)
-            mapping[n] = ies
-    return mapping
+    cache : dict[Node, float] = {}
+    for node in net.V():
+        _node_height(net, node, cache)
+    return cache
+
+def _clone_net(net : Network) -> Network:
+    """
+    Fast structural clone of a network, for cheap whole-network rollback.
+
+    Topology-changing moves and samplers snapshot a network before mutating
+    it in place so the mutation can be undone wholesale.
+    :func:`copy.deepcopy` walks the entire object graph reflectively --
+    nested attribute values, sequence data, and back-references -- which
+    profiling showed to dominate per-iteration cost.
+    :meth:`Network.copy` instead builds fresh ``Node`` / ``Edge`` objects
+    directly in O(V+E), preserving topology, branch lengths, gammas, node
+    times, and reticulation flags: everything the coalescent / Felsenstein
+    scorers read.
+
+    Node attribute dictionaries are shared with the source by reference,
+    which is safe because no move or scorer mutates them in place -- the
+    per-node state moves change (time, reticulation flag) and per-edge state
+    (length, gamma) are copied by value, and ultrametric heights live in
+    external ``dict[Node, float]`` maps.
+
+    Args:
+        net (Network): A network object.
+
+    Returns:
+        Network: A structural copy of 'net'.
+    """
+    return net.copy()[0]
 
 def induced_subnetwork_by_taxa(net: Network, taxa: list[str]) -> Network:
     """
@@ -1081,171 +877,20 @@ def induced_subnetwork_by_taxa(net: Network, taxa: list[str]) -> Network:
     Returns:
         Network: The induced subnetwork as a new Network object.
     """
-    # Resolve leaf nodes by name
-    leaf_nodes: list[Node] = []
+    targets : set[Node] = set()
     for name in taxa:
         node = net.has_node_named(name)
         if node is None:
             raise NetworkError(f"Leaf '{name}' not found in network")
-        leaf_nodes.append(node)
+        targets.add(node)
 
-    target_set: set[Node] = set(leaf_nodes)
-    mrca_node = net.mrca(set(taxa))
+    sub = _induced_subnetwork(net, targets)
 
-    # Decide which child branches to include by checking if they lead to target leaves
-    def contains_target_descendant(x: Node) -> bool:
-        desc = net.leaf_descendants(x)
-        return len(desc.intersection(target_set)) > 0
-
-    # Build subnetwork by copying nodes/edges along retained branches
-    sub = Network()
-    old_new: dict[Node, Node] = {}
-    root_copy = mrca_node.copy()
-    sub.add_nodes(root_copy)
-    old_new[mrca_node] = root_copy
-
-    q: deque[Node] = deque([mrca_node])
-    while q:
-        cur = q.popleft()
-        for child in net.get_children(cur):
-            if not contains_target_descendant(child):
-                continue
-            if child not in old_new:
-                child_copy = child.copy()
-                sub.add_nodes(child_copy)
-                old_new[child] = child_copy
-            e = net.get_edge(cur, child)
-            ne = Edge(old_new[cur], old_new[child])
-            ne.set_gamma(e.get_gamma())
-            ne.set_length(e.get_length())
-            sub.add_edges(ne)
-            q.append(child)
-
-    # Clean to remove spurious degree-1 chains, etc.
+    # Consolidate the degree-1 chains left behind by the pruned branches, but
+    # keep any spurious root edge: callers compare these against each other
+    # and rely on the induced root staying put.
     sub.clean([False, False, True])
     return sub
-
-def extract_topology(newick_str: str) -> str:  
-    """
-    Extract the topology from a newick string by removing branch lengths,
-    inheritance probabilities, and other metadata.
-    
-    This function handles PhyloNet-style newick strings that may contain:
-    - Branch lengths after single colons (:)
-    - Inheritance probabilities after double colons (::) 
-    - Additional metadata after triple colons (:::)
-    - Comments in square brackets [...]
-    
-    Args:
-        newick_str (str): A newick string potentially with PhyloNet extensions
-        
-    Returns:
-        str: A cleaned newick string showing only the topology
-        
-    Examples:
-        >>> extract_topology("(A:0.1,B:0.2)C:0.3;")
-        '(A,B)C;'
-        
-        >>> extract_topology("((A:1.0,B:2.0)#H1:3.0::0.4,C:4.0)D;")
-        '((A,B)#H1,C)D;'
-        
-        >>> extract_topology("(A:1.0[&comment],B:2.0)C;")
-        '(A,B)C;'
-    """
-    if not newick_str:
-        return ""
-    
-    result = []
-    i = 0
-    in_comment = False
-    
-    while i < len(newick_str):
-        char = newick_str[i]
-        
-        # Handle comments in square brackets
-        if char == '[':
-            in_comment = True
-            i += 1
-            continue
-        elif char == ']':
-            in_comment = False
-            i += 1
-            continue
-        elif in_comment:
-            i += 1
-            continue
-        
-        # Handle colons - skip everything until next topology character
-        if char == ':':
-            # Count consecutive colons (for ::, :::)
-            colon_count = 0
-            while i < len(newick_str) and newick_str[i] == ':':
-                colon_count += 1
-                i += 1
-            
-            # Skip the value after the colon(s)
-            # Values end at: comma, closing paren, opening paren, semicolon, or bracket
-            while i < len(newick_str):
-                if newick_str[i] in ',();[':
-                    break
-                i += 1
-            continue
-        
-        # Keep topology-relevant characters
-        if char in '(),;':
-            result.append(char)
-            i += 1
-        # Keep node labels (including reticulation markers like #H1)
-        elif char not in ' \t\n\r':
-            # Collect the full label
-            label_chars = []
-            while i < len(newick_str):
-                if newick_str[i] in '(),:;[':
-                    break
-                if newick_str[i] not in ' \t\n\r':
-                    label_chars.append(newick_str[i])
-                i += 1
-            
-            if label_chars:
-                result.append(''.join(label_chars))
-        else:
-            # Skip whitespace
-            i += 1
-    
-    return ''.join(result)
-
-def extract_topology_from_file(filename: str, output_filename: str = None) -> list[str]:
-    """
-    Extract topology from all newick strings in a file.
-    
-    Args:
-        filename (str): Path to file containing newick strings.
-        output_filename (str, optional): Path to save cleaned newick strings.
-            If None, results are only returned without writing to disk.
-
-    Raises:
-        FileNotFoundError: If `filename` does not exist.
-        IOError: If reading or writing the file fails.
-        
-    Returns:
-        list[str]: List of topology-only newick strings.
-    """
-    cleaned_newicks = []
-    
-    with open(filename, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#'):  # Skip empty lines and comments
-                cleaned = extract_topology(line)
-                if cleaned:
-                    cleaned_newicks.append(cleaned)
-    
-    if output_filename:
-        with open(output_filename, 'w') as f:
-            for newick in cleaned_newicks:
-                f.write(newick + '\n')
-    
-    return cleaned_newicks
 
 def is_isomorphic(net1 : Network, net2 : Network) -> bool:
     """
@@ -1327,16 +972,49 @@ def _hardwired_clusters_by_label(
         The set of hardwired clusters (each a frozenset of leaf labels).
     """
     clusters: set[frozenset[str]] = set()
-    leaf_nodes = set(net.get_leaves())
 
-    for node in net.V():
-        if node in leaf_nodes and not include_trivial:
-            continue
-        desc = net.leaf_descendants(node)
-        if len(desc) > 1 or (include_trivial and len(desc) >= 1):
-            clusters.add(frozenset(n.label for n in desc))
+    for labels in _leaf_labels_below(net).values():
+        if len(labels) > 1 or (include_trivial and len(labels) == 1):
+            clusters.add(labels)
 
     return clusters
+
+def _leaf_labels_below(net : Network) -> dict[Node, frozenset[str]]:
+    """
+    Map every node of a network to the leaf *labels* below it.
+
+    The label-valued form of :meth:`Network.leaf_descendants_all`, which
+    returns :class:`~phynetpy.Network.Node` objects belonging to one
+    particular graph and so cannot be compared across networks.
+
+    Args:
+        net (Network): A network object.
+
+    Returns:
+        dict[Node, frozenset[str]]: Hardwired cluster of every node
+                                    reachable from the root.
+    """
+    return {node : frozenset(leaf.label for leaf in desc)
+            for node, desc in net.leaf_descendants_all().items()}
+
+def network_clusters(net: Network) -> set[frozenset[str]]:
+    """
+    The set of non-trivial leaf-label clusters induced by a network's nodes.
+
+    Label-based rather than node-based, so clusters are comparable *across*
+    networks -- which :func:`get_all_clusters` is not, since it returns sets
+    of :class:`~phynetpy.Network.Node` objects belonging to one graph.
+
+    Args:
+        net (Network): The network to summarise.
+
+    Returns:
+        set[frozenset[str]]: One frozenset of leaf labels per non-trivial
+                             cluster: size 2 or more, excluding the full
+                             leaf set.
+    """
+    leaf_count = len(net.get_leaves())
+    return {c for c in _hardwired_clusters_by_label(net) if len(c) < leaf_count}
 
 
 def _softwired_clusters_by_label(
@@ -1494,6 +1172,35 @@ def _displayed_tree_topology_set(
 
 # ── Network Distance Metrics ──────────────────────────────────────────
 
+def _symmetric_difference_distance(
+    s1: set,
+    s2: set,
+    normalize: bool
+) -> Union[int, float]:
+    """
+    Size of the symmetric difference of two feature sets.
+
+    Shared tail of the cluster, tripartition, and displayed-tree metrics:
+    each builds a set of structural features per network and then differs
+    only in how that set is built.
+
+    Args:
+        s1: Feature set of the first network.
+        s2: Feature set of the second network.
+        normalize: Divide by |s1 | s2| to get a value in [0, 1].
+
+    Returns:
+        The distance (int, or float when normalized).
+    """
+    sym_diff = len(s1.symmetric_difference(s2))
+
+    if normalize:
+        union_size = len(s1 | s2)
+        return sym_diff / union_size if union_size > 0 else 0.0
+
+    return sym_diff
+
+
 def hardwired_cluster_distance(
     net1: Network,
     net2: Network,
@@ -1525,15 +1232,11 @@ def hardwired_cluster_distance(
     Returns:
         The hardwired cluster distance (int, or float when normalized).
     """
-    hc1 = _hardwired_clusters_by_label(net1)
-    hc2 = _hardwired_clusters_by_label(net2)
-    sym_diff = len(hc1.symmetric_difference(hc2))
-
-    if normalize:
-        union_size = len(hc1 | hc2)
-        return sym_diff / union_size if union_size > 0 else 0.0
-
-    return sym_diff
+    return _symmetric_difference_distance(
+        _hardwired_clusters_by_label(net1),
+        _hardwired_clusters_by_label(net2),
+        normalize,
+    )
 
 
 def softwired_cluster_distance(
@@ -1571,15 +1274,11 @@ def softwired_cluster_distance(
     Returns:
         The softwired cluster distance (int, or float when normalized).
     """
-    sc1 = _softwired_clusters_by_label(net1)
-    sc2 = _softwired_clusters_by_label(net2)
-    sym_diff = len(sc1.symmetric_difference(sc2))
-
-    if normalize:
-        union_size = len(sc1 | sc2)
-        return sym_diff / union_size if union_size > 0 else 0.0
-
-    return sym_diff
+    return _symmetric_difference_distance(
+        _softwired_clusters_by_label(net1),
+        _softwired_clusters_by_label(net2),
+        normalize,
+    )
 
 
 def mu_distance(net1: Network, net2: Network) -> int:
@@ -1676,15 +1375,9 @@ def tripartition_distance(
     Returns:
         The tripartition distance (int, or float when normalized).
     """
-    t1 = _tripartitions(net1)
-    t2 = _tripartitions(net2)
-    sym_diff = len(t1.symmetric_difference(t2))
-
-    if normalize:
-        union_size = len(t1 | t2)
-        return sym_diff / union_size if union_size > 0 else 0.0
-
-    return sym_diff
+    return _symmetric_difference_distance(
+        _tripartitions(net1), _tripartitions(net2), normalize
+    )
 
 
 def displayed_tree_distance(
@@ -1716,15 +1409,11 @@ def displayed_tree_distance(
     Returns:
         The displayed-tree distance (int, or float when normalized).
     """
-    dt1 = _displayed_tree_topology_set(net1)
-    dt2 = _displayed_tree_topology_set(net2)
-    sym_diff = len(dt1.symmetric_difference(dt2))
-
-    if normalize:
-        union_size = len(dt1 | dt2)
-        return sym_diff / union_size if union_size > 0 else 0.0
-
-    return sym_diff
+    return _symmetric_difference_distance(
+        _displayed_tree_topology_set(net1),
+        _displayed_tree_topology_set(net2),
+        normalize,
+    )
 
 
 def robinson_foulds_distance(
@@ -1789,56 +1478,6 @@ def robinson_foulds_distance(
 
 
 # ── Branch-Length-Aware Distance Helpers ───────────────────────────────
-
-def _displayed_trees_with_probs(
-    net: Network
-) -> list[tuple[Network, float]]:
-    """
-    Enumerate every displayed tree together with its probability.
-
-    The probability of a displayed tree is the product of gamma values
-    of the reticulation edges that were *kept*.  When gamma is unset
-    for an edge, a uniform 1/k weight is assumed (k = in-degree of the
-    reticulation node).
-
-    Args:
-        net: A phylogenetic network.
-
-    Returns:
-        List of (tree_copy, probability) pairs.
-    """
-    retics = sorted(
-        (node for node in net.V() if node.is_reticulation()),
-        key=lambda n: n.label,
-    )
-    if not retics:
-        copy, _ = net.copy()
-        return [(copy, 1.0)]
-
-    retic_in_edges = [
-        sorted(list(net.in_edges(node)), key=lambda e: e.src.label)
-        for node in retics
-    ]
-
-    results: list[tuple[Network, float]] = []
-    for combo in _product(*retic_in_edges):
-        preop, old_new = net.copy()
-        prob = 1.0
-        for retic_node, kept_edge in zip(retics, combo):
-            gamma = kept_edge.get_gamma()
-            if gamma is not None and gamma > 0:
-                prob *= gamma
-            else:
-                k = len(list(net.in_edges(retic_node)))
-                prob *= 1.0 / k if k > 0 else 1.0
-            for e in list(net.in_edges(retic_node)):
-                if e is not kept_edge:
-                    preop.remove_edge([old_new[e.src], old_new[e.dest]])
-        preop.clean()
-        results.append((preop, prob))
-
-    return results
-
 
 def _average_pairwise_matrix(
     net: Network,
@@ -2192,91 +1831,24 @@ def ascii(net: Network, show_edge_lengths: bool = False) -> str:
     return '\n'.join(lines)
 
 
-def ascii_extended(net: Network) -> str:
-    """
-    Prints a more detailed vertical ASCII art depiction of the Network
-    with extended connecting lines between levels for wide trees.
-
-    Args:
-        net (Network): A Network
-
-    Returns:
-        str: The ASCII art representation of the network
-    """
-    layout = _ascii_prepare_layout(net)
-    if isinstance(layout, str):
-        return layout
-    root, node_depth, max_depth, ordered_leaves, node_x, _ = layout
-
-    max_label_len = max(len(n.label) if n.label else 1 for n in net.V())
-    spacing = max(4, max_label_len + 2)
-    total_width = int(len(ordered_leaves) * spacing) + spacing
-    nodes_by_depth = _ascii_group_by_depth(node_depth, node_x)
-
-    def _center(node: Node) -> int:
-        return int(node_x[node] * spacing) + spacing // 2
-
-    lines: list[str] = []
-    for depth in range(max_depth + 1):
-        if depth not in nodes_by_depth:
-            continue
-        nodes_at_depth = nodes_by_depth[depth]
-
-        label_line = [' '] * total_width
-        node_positions: dict[Node, int] = {}
-        for node in nodes_at_depth:
-            x_pos = _center(node)
-            label = node.label if node.label else "?"
-            start = max(0, min(x_pos - len(label) // 2, total_width - len(label)))
-            node_positions[node] = x_pos
-            for i, ch in enumerate(label):
-                if start + i < total_width:
-                    label_line[start + i] = ch
-        lines.append(''.join(label_line).rstrip())
-
-        if depth < max_depth:
-            branch_line = [' '] * total_width
-            extend_line = [' '] * total_width
-            for node in nodes_at_depth:
-                children = net.get_children(node)
-                if len(children) == 0:
-                    continue
-                parent_pos = node_positions.get(node, _center(node))
-                child_positions = sorted(
-                    [(_center(c), c) for c in children], key=lambda t: t[0]
-                )
-                leftmost = child_positions[0][0]
-                rightmost = child_positions[-1][0]
-
-                if leftmost < parent_pos:
-                    if 0 <= parent_pos - 1 < total_width:
-                        branch_line[parent_pos - 1] = '/'
-                    if leftmost < parent_pos - 2:
-                        for x in range(leftmost, parent_pos - 1):
-                            if 0 <= x < total_width:
-                                extend_line[x] = '_'
-                        if 0 <= leftmost < total_width:
-                            extend_line[leftmost] = '/'
-
-                if rightmost > parent_pos:
-                    if 0 <= parent_pos + 1 < total_width:
-                        branch_line[parent_pos + 1] = '\\'
-                    if rightmost > parent_pos + 2:
-                        for x in range(parent_pos + 2, rightmost + 1):
-                            if 0 <= x < total_width:
-                                extend_line[x] = '_'
-                        if 0 <= rightmost < total_width:
-                            extend_line[rightmost] = '\\'
-
-                for cx, _ in child_positions:
-                    if cx == parent_pos and 0 <= parent_pos < total_width:
-                        branch_line[parent_pos] = '|'
-
-            line1_str = ''.join(branch_line).rstrip()
-            line2_str = ''.join(extend_line).rstrip()
-            if line1_str.strip():
-                lines.append(line1_str)
-            if line2_str.strip():
-                lines.append(line2_str)
-
-    return '\n'.join(lines)
+# ── Reticulation-Aware Comparison (re-export) ──────────────────────────
+#
+# The tripartition-matching reticulation dissimilarity lives in its own
+# module (:mod:`~.ReticulationComparison`) but is surfaced here alongside the
+# other network distance metrics for discoverability.  The import is placed at
+# the bottom of this file, and ``ReticulationComparison`` imports the induced
+# sub-network helper lazily, so there is no circular import at load time.
+from .ReticulationComparison import (  # noqa: E402
+    JACCARD,
+    SYMMETRIC,
+    ReticulationTripartition,
+    NetworkComparison,
+    reticulation_tripartitions,
+    set_distance,
+    tripartition_dissimilarity,
+    nakhleh_metric,
+    reticulation_dissimilarity,
+    reticulation_precision_recall,
+    combined_dissimilarity,
+    compare_networks,
+)

@@ -27,7 +27,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from phynetpy.GeneTrees import GeneTrees
 from phynetpy.GraphUtils import dominant_tree, induced_subnetwork_by_taxa
 from phynetpy.IO import convert_newick
-from phynetpy.MPL import MPL, format_mpl_reference_comparison
+from phynetpy._mpl import MPL
+from phynetpy.infer import format_mpl_reference_comparison
 from phynetpy.Network import Network
 
 

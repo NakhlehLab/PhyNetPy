@@ -21,7 +21,7 @@ import pytest
 import tracemalloc
 import time
 from typing import List, Tuple
-from phynetpy.Network import Network, Node, Edge, NodeSet
+from phynetpy.Network import Network, Node, Edge
 
 
 def build_large_network(num_leaves: int = 1000) -> Tuple[Network, List[Node]]:

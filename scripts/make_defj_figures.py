@@ -28,7 +28,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-import numpy as np
 import pandas as pd
 import seaborn as sns
 import ptitprince as pt
@@ -182,7 +181,6 @@ def _raincloud(
     don't overlap.
     """
     palette = _method_palette(hue_order)
-    n_methods = len(hue_order)
     # ptitprince width and offset bookkeeping
     width_viol = 0.35
     # draw raincloud with dodge

@@ -39,7 +39,9 @@ from phynetpy._seq_likelihood import (
     FelsensteinCalculator,
     gene_tree_msnc_log_density,
 )
-from phynetpy.infer import MCMC_SEQ, MCMCSeqPriors
+from phynetpy.infer import MCMCSeqPriors
+from phynetpy._mcmc_seq import MCMC_SEQ
+from phynetpy.GraphUtils import network_clusters
 from phynetpy import _msnc_density as msnc
 
 expm = pytest.importorskip("scipy.linalg").expm
@@ -231,9 +233,11 @@ class TestDriver:
         assert math.isfinite(res.map_log_posterior)
         assert 0.0 < res.acceptance_rate <= 1.0
         assert len(res.samples) > 0
-        # The strong (A,B) signal should make A and B sisters in the MAP tree.
-        nwk = res.map_network.newick()
-        assert ("(B,A)" in nwk or "(A,B)" in nwk)
+        # The strong (A,B) signal should make A and B sisters in the MAP
+        # network.  Assert the cluster, not the newick text: when A or B ends
+        # up under a reticulation the pair is still a clade but renders as
+        # "(B,(A)#H0)" rather than "(A,B)".
+        assert frozenset({"A", "B"}) in network_clusters(res.map_network)
 
     def test_multilocus_start_embeds_validly(self):
         # Regression: independently-built starting species/gene trees used to

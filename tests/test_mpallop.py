@@ -1,12 +1,13 @@
 """
-Test suite for the Maximum Parsimony Allopolyploidy inference module
-(phynetpy.Infer_MP_Allop).
+Test suite for the Maximum Parsimony Allopolyploidy inference module, which
+backs the ``(GeneTrees, Allopolyploid, MDC)`` cell of the inference matrix
+(``infer(gts, model=Allopolyploid(...), criterion=MDC())``).
 
 Self-contained tests that generate data programmatically -- no external files
 needed.  Includes:
 
     - Unit tests for AlleleMap, Allop_MUL scoring, helper functions.
-    - Component-level tests for MPAllopScorer, MPAllopComponent, InferMPAllop.
+    - Component-level tests for MPAllopScorer, build_mp_allop_model, InferMPAllop.
     - Full inference benchmarks with runtime statistics across different
       network sizes, reticulation levels, and gene-tree counts.
 
@@ -16,38 +17,37 @@ Copyright 2025 Mark Kessler, Luay Nakhleh. All rights reserved.
 from __future__ import annotations
 
 import copy
-import sys
-import textwrap
 import time
-from collections import defaultdict
 from typing import Any
 
 import numpy as np
 import pytest
 
-pytest.importorskip("phynetpy.Infer_MP_Allop", reason="Infer_MP_Allop not importable")
+pytest.importorskip("phynetpy._infer_mp_allop",
+                    reason="MP-Allop implementation not importable")
 
 from phynetpy.BirthDeath import Yule
 from phynetpy.IO import read_newick
-from phynetpy.Infer_MP_Allop import (
+from phynetpy.infer import (
     AlleleMap,
     Allop_MUL,
     InferMPAllop,
-    InferAllopError,
-    MPAllopComponent,
     MPAllopScorer,
+)
+from phynetpy._infer_mp_allop import (
+    InferAllopError,
     allele_map_set,
     allele_map_set_ilp,
+    build_mp_allop_model,
     cluster_as_name_set,
     clusters_contains,
     generate_tree_from_clusters,
     partition_gene_trees,
     random_object,
 )
-from phynetpy.ModelFactory import ModelFactory
 from phynetpy.ModelGraph import Model
-from phynetpy.Network import Network, Node, Edge, NetworkError
-from phynetpy.NetworkMoves import add_hybrid
+from phynetpy.Network import Network, Node, NetworkError
+from phynetpy.GraphUtils import add_hybrid
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +415,7 @@ class TestAllopMULScoring:
 
 
 # ---------------------------------------------------------------------------
-# Component tests -- MPAllopScorer / MPAllopComponent
+# Component tests -- MPAllopScorer / build_mp_allop_model
 # ---------------------------------------------------------------------------
 
 class TestMPAllopScorer:
@@ -442,7 +442,7 @@ class TestMPAllopScorer:
         assert scorer(model) == float("-inf")
 
 
-class TestMPAllopComponent:
+class TestBuildMPAllopModel:
 
     def test_build_sets_network_and_scorer(self, rng: np.random.Generator) -> None:
         taxa = ["A", "B", "C"]
@@ -451,9 +451,7 @@ class TestMPAllopComponent:
         gt = read_newick("((A_a,B_a),C_a);")
         _prepare_gene_trees([gt], gene_map)
 
-        comp = MPAllopComponent(net, gene_map, [gt], rng)
-        factory = ModelFactory(comp)
-        model = factory.build()
+        model = build_mp_allop_model(net, gene_map, [gt], rng)
 
         assert model.network is not None
         score = model.likelihood()

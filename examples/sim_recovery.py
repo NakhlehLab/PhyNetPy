@@ -12,20 +12,23 @@
 ##############################################################################
 
 """
-End-to-end MCMC_SEQ recovery / calibration harness on *known-truth* data.
+End-to-end Bayesian recovery / calibration harness on *known-truth* data.
 
-Because the data are generated under the very model MCMC_SEQ assumes
-(multispecies network coalescent + a nucleotide substitution model -- see
-:mod:`phynetpy._sim_seq`), this is a fair test: we know the true species
-network, the true population mutation rate ``theta``, and the true gene trees,
-so we can ask whether the sampler *recovers* them and whether its credible
-intervals are *calibrated*.
+Because the data are generated under the very model the sampler assumes
+(multispecies network coalescent + a nucleotide substitution model), this is a
+fair test: we know the true species network, the true population mutation rate
+``theta``, and the true gene trees, so we can ask whether the sampler
+*recovers* them and whether its credible intervals are *calibrated*.
+
+The whole harness is ``simulate`` composed with ``infer``, which is the point
+of putting the biology on its own axis: the type ``simulate`` returns is the
+type ``infer`` takes, so a recovery check needs no glue code.
 
 What it does
 ------------
 1. Simulates ``--loci`` independent alignments on a chosen true species network
    (a 1-reticulation network by default, or a plain tree with ``--tree``).
-2. Runs MCMC_SEQ from its own UPGMA starting point.
+2. Runs Bayesian inference from the sampler's own UPGMA starting point.
 3. Reports recovery: the MAP network, whether each true clade was recovered,
    the posterior mean / 95% HPD of ``theta`` vs the truth, and the posterior on
    the reticulation count.
@@ -47,15 +50,15 @@ import argparse
 import os
 
 from phynetpy.Network import Network
-from phynetpy.GeneTrees import GeneTrees
+from phynetpy.criteria import Bayesian, Likelihood
 from phynetpy.infer import (
-    MCMC_SEQ,
-    MCMCSeqPriors,
-    MCMC_GT,
-    MCMC_GTPriors,
     JC69,
-    simulate_multilocus,
+    MCMCSeqPriors,
+    MCMC_GTPriors,
+    infer,
+    simulate,
 )
+from phynetpy.models import MSC
 
 
 # True networks (ultrametric, substitution units).  The reticulate one is a
@@ -124,44 +127,68 @@ def _theta_posterior(result):
     return p.mean, p.lower_hpd, p.upper_hpd, p.ess
 
 
+def _simulate_alignment(args, seed: int):
+    """Simulate one multilocus alignment on the true network."""
+    true_net = Network.from_newick(TRUE_TREE if args.tree else TRUE_NETWORK)
+    mapping = {sp: [sp] for sp in ("A", "B", "C", "D")}
+    return simulate(
+        MSC(theta=args.theta),
+        true_net,
+        n=args.loci,
+        data="alignment",
+        mapping=mapping,
+        seq_length=args.sites,
+        substitution_model=JC69(),
+        seed=seed,
+    )
+
+
+def _bayesian(args, seed: int) -> Bayesian:
+    """The Bayesian criterion for a sequence run."""
+    return Bayesian(
+        objective=Likelihood(),
+        prior=MCMCSeqPriors(max_reticulations=0 if args.tree else 4),
+        chain_length=args.iters,
+        burnin=args.burnin,
+        sample_freq=args.thin,
+        seed=seed,
+    )
+
+
 def run_single(args) -> None:
-    """Simulate one data set, run MCMC_SEQ, and report recovery."""
+    """Simulate one data set, sample the posterior, and report recovery."""
     true_newick = TRUE_TREE if args.tree else TRUE_NETWORK
     true_net = Network.from_newick(true_newick)
-    mapping = {sp: [sp] for sp in ("A", "B", "C", "D")}
 
     print(f"True network : {true_newick}")
     print(f"True theta    : {args.theta}")
     print(f"Simulating {args.loci} loci x {args.sites} bp (seed={args.seed}) ...")
-    data = simulate_multilocus(
-        true_net, mapping, n_loci=args.loci, seq_length=args.sites,
-        theta=args.theta, model=JC69(), seed=args.seed,
-    )
+    alignment = _simulate_alignment(args, args.seed)
 
-    priors = MCMCSeqPriors(max_reticulations=0 if args.tree else 4)
-    sampler = MCMC_SEQ(**data.to_mcmc_seq_kwargs(), priors=priors)
-    print(f"Starting logP : {sampler.score():.3f}")
     print(
-        f"Running MCMC_SEQ: {args.iters} iters "
+        f"Running Bayesian co-estimation: {args.iters} iters "
         f"(burn-in {args.burnin}, thin {args.thin}) ..."
     )
-    result = sampler.search(
-        num_iter=args.iters, burn_in=args.burnin, sample_freq=args.thin,
-        seed=args.seed, progress=True,
+    result = infer(
+        alignment,
+        model=MSC(theta=args.theta),
+        criterion=_bayesian(args, args.seed),
+        progress=True,
     )
+    map_network = result.best
 
     print()
-    print(f"MAP network   : {result.map_network.newick()}")
-    print(f"MAP logP      : {result.map_log_posterior:.3f}")
+    print(f"MAP network   : {map_network.newick()}")
+    print(f"MAP logP      : {result.score:.3f}")
     print(f"MAP theta     : {result.map_theta:.6f}  (true {args.theta})")
     for clade in TRUE_CLADES:
-        ok = "RECOVERED" if _has_clade(result.map_network, clade) else "missed"
+        ok = "RECOVERED" if _has_clade(map_network, clade) else "missed"
         print(f"  clade {sorted(clade)}: {ok}")
 
-    full = _topology_recovered(result.map_network, true_net)
+    full = _topology_recovered(map_network, true_net)
     print(f"  full topology : {'RECOVERED' if full else 'missed'}")
     if not args.tree:
-        g_map = _map_reticulation_gamma(result.map_network)
+        g_map = _map_reticulation_gamma(map_network)
         g_true = _map_reticulation_gamma(true_net)
         if g_map is not None and g_true is not None:
             print(
@@ -186,43 +213,51 @@ def run_single(args) -> None:
 
 
 def run_single_gt(args) -> None:
-    """Simulate, then drive the GENE-TREE (MCMC_GT) stack and report recovery.
+    """Simulate, then infer from GENE TREES rather than sequences.
 
-    The same coalescent simulator produces both alignments and the true gene
-    trees; the gene-tree sampler infers the species network directly from the
-    simulated gene-tree topologies (no sequences).  This exercises the GT
-    branch of the unified move machinery: the reversible-jump add/remove
-    reticulation pair and the corrected parameter moves.
+    Only the data axis changes: the same coalescent simulator produces the
+    gene trees directly, and the same ``infer`` call takes them.  This
+    exercises the gene-tree branch of the unified move machinery -- the
+    reversible-jump add/remove reticulation pair and the corrected parameter
+    moves -- without any sequence likelihood in the loop.
     """
     true_newick = TRUE_TREE if args.tree else TRUE_NETWORK
     true_net = Network.from_newick(true_newick)
     mapping = {sp: [sp] for sp in ("A", "B", "C", "D")}
 
     print(f"True network : {true_newick}")
-    print(f"Simulating {args.loci} loci (seed={args.seed}) for GT inference ...")
-    data = simulate_multilocus(
-        true_net, mapping, n_loci=args.loci, seq_length=args.sites,
-        theta=args.theta, model=JC69(), seed=args.seed,
+    print(f"Simulating {args.loci} gene trees (seed={args.seed}) ...")
+    gene_trees = simulate(
+        MSC(theta=args.theta),
+        true_net,
+        n=args.loci,
+        data="gene_trees",
+        mapping=mapping,
+        seed=args.seed,
     )
 
-    genetrees = GeneTrees(
-        gene_tree_list=list(data.gene_trees), species_gene_mapping=mapping
-    )
-    max_retics = 0 if args.tree else 4
-    mcmc = MCMC_GT.from_consensus(genetrees, mapping, priors=MCMC_GTPriors())
     print(
-        f"Running MCMC_GT (mh): {args.iters} iters "
+        f"Running Bayesian inference from gene trees: {args.iters} iters "
         f"(burn-in {args.burnin}, thin {args.thin}) ..."
     )
-    result = mcmc.search(
-        method="mh", num_iter=args.iters, burn_in=args.burnin,
-        thin=args.thin, max_reticulations=max_retics, seed=args.seed,
+    result = infer(
+        gene_trees,
+        model=MSC(theta=args.theta),
+        criterion=Bayesian(
+            objective=Likelihood(),
+            prior=MCMC_GTPriors(),
+            chain_length=args.iters,
+            burnin=args.burnin,
+            sample_freq=args.thin,
+            seed=args.seed,
+        ),
+        max_reticulations=0 if args.tree else 4,
     )
 
-    map_net = result.best_network
+    map_net = result.best
     print()
     print(f"MAP network   : {map_net.newick()}")
-    print(f"MAP logP      : {result.best_log_posterior:.3f}")
+    print(f"MAP logP      : {result.score:.3f}")
     print(f"acceptance    : {result.num_accepted}/{result.num_iter} "
           f"= {result.num_accepted / max(1, result.num_iter):.3f}")
     for clade in TRUE_CLADES:
@@ -248,31 +283,22 @@ def run_single_gt(args) -> None:
 
 def run_calibration(args) -> None:
     """Repeat simulate->infer across replicates; report theta HPD coverage."""
-    true_newick = TRUE_TREE if args.tree else TRUE_NETWORK
-    true_net = Network.from_newick(true_newick)
-    mapping = {sp: [sp] for sp in ("A", "B", "C", "D")}
-    priors = MCMCSeqPriors(max_reticulations=0 if args.tree else 4)
-
     covered = 0
     clade_hits = {frozenset(c): 0 for c in TRUE_CLADES}
     print(f"Calibration: {args.replicates} replicates "
           f"({args.loci} loci x {args.sites} bp, theta={args.theta})")
     for rep in range(args.replicates):
         seed = args.seed + rep
-        data = simulate_multilocus(
-            true_net, mapping, n_loci=args.loci, seq_length=args.sites,
-            theta=args.theta, model=JC69(), seed=seed,
-        )
-        sampler = MCMC_SEQ(**data.to_mcmc_seq_kwargs(), priors=priors)
-        result = sampler.search(
-            num_iter=args.iters, burn_in=args.burnin, sample_freq=args.thin,
-            seed=seed,
+        result = infer(
+            _simulate_alignment(args, seed),
+            model=MSC(theta=args.theta),
+            criterion=_bayesian(args, seed),
         )
         _, lo, hi, _ = _theta_posterior(result)
         hit = lo <= args.theta <= hi
         covered += int(hit)
         for c in TRUE_CLADES:
-            if _has_clade(result.map_network, c):
+            if _has_clade(result.best, c):
                 clade_hits[frozenset(c)] += 1
         print(f"  rep {rep:>2}: theta HPD=[{lo:.5f},{hi:.5f}] covers={hit}")
 
@@ -289,8 +315,8 @@ def main() -> None:
     ap.add_argument("--tree", action="store_true",
                     help="use the true species TREE instead of the network")
     ap.add_argument("--gt", action="store_true",
-                    help="drive the gene-tree (MCMC_GT) stack instead of "
-                         "MCMC_SEQ (infers from simulated gene-tree topologies)")
+                    help="infer from simulated gene trees instead of "
+                         "simulated sequences")
     ap.add_argument("--loci", type=int, default=10)
     ap.add_argument("--sites", type=int, default=400)
     ap.add_argument("--theta", type=float, default=0.02)

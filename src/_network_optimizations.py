@@ -29,7 +29,7 @@ from __future__ import annotations
 import math
 from collections import deque
 from itertools import combinations
-from typing import TYPE_CHECKING, Any, Callable, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Set, Tuple
 
 import networkx as nx
 
@@ -687,45 +687,6 @@ def rooted_triplet_distance(net: "Network", other: "Network") -> float:
     triplets_self = get_rooted_triplets(net)
     triplets_other = get_rooted_triplets(other)
     return triplet_distance(triplets_self, triplets_other)
-
-
-def compare_network(net: "Network", other: "Network", measure: str) -> float:
-    """Compare two network topologies via PhyloNet's ``Cmpnets`` command.
-
-    ``measure`` is one of
-    ``[tree|tri|cluster|luay|rnbs|apd|normapd|wapd|normwapd]``.
-    """
-    import tempfile
-    from .Newick import NexusTemplate
-    from .PhyloNet import run
-
-    temp = tempfile.NamedTemporaryFile(suffix='.nex')
-    temp_dir = tempfile.TemporaryDirectory()
-
-    nex_file = NexusTemplate()
-    nex_file.add(net.newick())
-    nex_file.add(other.newick())
-
-    flag = measure.strip().lower()
-    if flag in ["tree", "tri", "cluster"]:
-        ret_type = "avg"
-    elif flag == "luay":
-        ret_type = "dist"
-    elif flag in ["rnbs", "apd", "normapd", "wapd", "normwapd"]:
-        ret_type = "dissim"
-    else:
-        raise NetworkError(
-            f"Unrecognized compare network option: {flag}. Please select from "
-            "[tree|tri|cluster|luay|rnbs|apd|normapd|wapd|normwapd]")
-
-    nex_file.add_phylonet_cmd(f"Cmpnets net1 net2 -m {flag}")
-    nex_file.generate(temp_dir.name, temp.name)
-
-    location = temp_dir.name + "/" + temp.name
-    return_stream = run(location)
-    print(return_stream)
-
-    return 0.0
 
 
 # =============================================================================

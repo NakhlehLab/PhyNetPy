@@ -7,9 +7,9 @@ Usage (from repo root):
 import copy
 import time
 
-from phynetpy.MPL import MPL, MPLKernel
+from phynetpy.infer import MPLKernel
+from phynetpy._mpl import MPL
 from phynetpy.IO import read_newick_file
-from phynetpy.MetropolisHastings import HillClimbing
 from phynetpy.ModelGraph import Model
 from phynetpy.State import State
 
@@ -35,7 +35,7 @@ def build_starting_mpl(seed: int = SEED) -> MPL:
 def run_instrumented_search(label: str, mpl: MPL,
                             kernel: MPLKernel) -> float:
     """Run HC manually so we can log weights at intervals."""
-    from phynetpy.MPL import MPLScorer
+    from phynetpy.infer import MPLScorer
 
     print(f"\n{'='*60}")
     print(f"  {label}")

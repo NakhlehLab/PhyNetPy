@@ -21,7 +21,7 @@
 Author : Mark Kessler
 First Included in Version : 0.5.0
 
-Likelihood foundation for :class:`phynetpy.infer.MCMC_SEQ`.
+Likelihood foundation for :class:`phynetpy._mcmc_seq.MCMC_SEQ`.
 
 This module implements -- bit-for-bit against PhyloNet's ``MCMC_SEQ``
 (Wen & Nakhleh 2018, *Systematic Biology* 67(3):439-457, "Coestimating
@@ -75,13 +75,14 @@ Design - [x]
 from __future__ import annotations
 
 import math
-from typing import Optional, Sequence
+from typing import Sequence
 
 import numpy as np
 
 from .Network import Network, Node
 
-from ._msnc_density import gene_tree_msnc_log_density
+# Re-exported: one MSNC density implementation, shared with the MCMC_GT stack.
+from ._msnc_density import gene_tree_msnc_log_density  # noqa: F401
 
 
 __all__ = [
@@ -301,47 +302,6 @@ class GTR(SubstitutionModel):
             rates: Six exchangeabilities ``AC,AG,AT,CG,CT,GT``.
         """
         super().__init__(pi, rates)
-
-
-# ======================================================================
-# Gene-tree helpers (timed, ultrametric)
-# ======================================================================
-
-def _node_height(net: Network, node: Node, cache: dict[Node, float]) -> float:
-    """Height (time above the present) of ``node`` in a timed tree/network.
-
-    Prefers an explicit ``Node.get_time()`` when one has been set
-    (``!= 0`` for an internal node), otherwise derives an ultrametric height
-    from child branch lengths via a memoised post-order recursion.  Leaves are
-    height 0.
-
-    Args:
-        net: The tree or network ``node`` belongs to.
-        node: Node whose height is requested.
-        cache: Memo of already-computed heights (mutated).
-
-    Returns:
-        The node's height in substitution units.
-    """
-    cached = cache.get(node)
-    if cached is not None:
-        return cached
-    children = net.get_children(node)
-    if not children:
-        cache[node] = 0.0
-        return 0.0
-    # Derive from the first child + its branch length (ultrametric assumption);
-    # this is robust even when explicit node times were never populated.
-    best = 0.0
-    for child in children:
-        edges = net.get_edge(node, child)
-        edge = edges[0] if isinstance(edges, list) else edges
-        length = edge.get_length()
-        if length is None:
-            length = 0.0
-        best = max(best, _node_height(net, child, cache) + float(length))
-    cache[node] = best
-    return best
 
 
 # ======================================================================

@@ -5,9 +5,8 @@ Runs each move type many times on a test network and categorizes failures.
 
 import copy
 import random
-import traceback
 
-from phynetpy.MPL import MPL
+from phynetpy._mpl import MPL
 from phynetpy.IO import read_newick_file
 from phynetpy.ModelGraph import Model
 from phynetpy.ModelMove import (
@@ -15,7 +14,7 @@ from phynetpy.ModelMove import (
     SPR, ChangeNodeHeight, ChangeReticSource, ChangeReticDest,
     ChangeInheritanceProb,
 )
-from phynetpy.MPL import MPLScorer
+from phynetpy.infer import MPLScorer
 
 GT_FILE = "tests/testfiles/subgeneset_3_ret1.txt"
 TAXA = ["t14", "t15", "t49", "t68", "t69", "t72", "t75", "t91", "t114", "t133"]

@@ -138,24 +138,25 @@ from __future__ import annotations
 
 import copy
 import math
-import os
 import pickle
-import random as _py_random
 import time
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
-from functools import lru_cache
-from itertools import product as _iter_product
 from typing import Any, Callable, Iterable, Optional, Sequence
 
 import numpy as np
 
-from .Network import Network, Node, Edge
+from .Network import Network, Node
 from .GeneTrees import GeneTrees
 from . import IO as io
 from . import _network_moves as _nm
-from .GraphUtils import level as _network_level
+from .GraphUtils import (
+    count_reticulations,
+    level as _network_level,
+    network_clusters,
+    _valid_network_degrees,
+)
 from .ModelGraph import Model
 from ._chain_analysis import (
     ChainSummary,
@@ -166,7 +167,6 @@ from ._chain_analysis import (
 from .MetropolisHastings import (
     ProposalKernel,
     HillClimbing,
-    MetropolisHastings,
     SimulatedAnnealing,
 )
 from .ModelMove import (
@@ -183,7 +183,8 @@ from .ModelMove import (
 )
 from ._optimize import optimize_network_parameters
 from ._search_flags import (
-    resolve_move_types, make_level_validator, resolve_search_preset,
+    resolve_move_types, make_level_validator, make_containment_validator,
+    resolve_search_preset,
 )
 
 from ._msnc_density import (
@@ -193,11 +194,6 @@ from ._msnc_density import (
     _NetworkIndex,
     _msnc_log_prob_network_int,
     _msc_log_prob_tree_int,
-    _apply_branch_coalescent_int,
-    _combine_configs_int,
-    _logsumexp,
-    _popcount,
-    _bits,
 )
 
 
@@ -290,7 +286,7 @@ class MCMCGTResult:
             "likelihood": [s.log_likelihood for s in self.samples],
             "prior": [s.log_posterior - s.log_likelihood for s in self.samples],
             "reticulationCount": [
-                float(sum(1 for v in s.network.V() if v.is_reticulation()))
+                float(count_reticulations(s.network))
                 for s in self.samples
             ],
         }
@@ -1104,227 +1100,6 @@ def _safe_add(a: float | None, b: float | None) -> float | None:
     return float(a) + float(b)
 
 
-
-
-def _msc_log_prob_tree(
-    dt: _DisplayedTree,
-    gene_tree: Network,
-    species_of: dict[str, str],
-    engine: _GTLikelihoodEngine,
-) -> float:
-    """Compute ``log P(gene_tree | dt)`` via a partition-DP on ``dt``.
-
-    Standard Rannala-Yang MSC evaluation:
-
-      1. Initialise each leaf of ``dt`` with the set of gene-tree
-         leaves mapped to its species (may be empty when the gene
-         tree doesn't cover every species).
-      2. Post-order ``dt``.  At each non-root internal node combine
-         the "top-of-edge" lineage configurations coming in from its
-         children (disjoint union; probabilities multiply).  At each
-         edge entering the current node from a child, convolve the
-         child's lineage configuration against the Kingman coalescent
-         transition for the edge length, enumerating every valid
-         coarsening of the active lineages via sibling-pair merges
-         in the gene tree.
-      3. Above the root of ``dt``, apply an infinite-length branch
-         to force the remaining lineages to coalesce down to one.
-
-    Args:
-        dt: Displayed tree (already contracted).
-        gene_tree: Gene tree to score.
-        species_of: Gene-copy label -> species label.
-        engine: Backing :class:`_GTLikelihoodEngine` (for ``_gij``).
-
-    Returns:
-        Log probability; clamped at ``_LOG_FLOOR`` if the gene tree
-        has no valid embedding in this displayed tree (e.g. species
-        coverage mismatch).
-    """
-    # Build gene-tree parent/child maps once per call.
-    g_children: dict[Any, tuple[Any, Any]] = {}
-    g_parent: dict[Any, Any] = {}
-    g_root: Any | None = None
-    g_leaves: list[Any] = []
-    for node in gene_tree.V():
-        kids = gene_tree.get_children(node)
-        if not kids:
-            g_leaves.append(node)
-            continue
-        if len(kids) != 2:
-            # Non-binary gene tree (polytomy) -- flatten to "either
-            # child order" by picking the first two; higher-order
-            # polytomies reduce to a lower bound under the MSC.  A
-            # better approach is to expand every binary resolution;
-            # we flag this as a small-polytomy approximation.
-            kids = kids[:2]
-        g_children[node] = (kids[0], kids[1])
-        for c in kids:
-            g_parent[c] = node
-    if gene_tree.roots():
-        g_root = gene_tree.root()
-
-    # Build leaf-config at each species leaf of the displayed tree.
-    configs_at: dict[Any, dict[frozenset, float]] = {}
-    for leaf in dt.leaves:
-        species = dt.leaf_species.get(leaf)
-        gene_nodes = frozenset(
-            g for g in g_leaves
-            if species_of.get(g.label) == species
-        )
-        configs_at[leaf] = {gene_nodes: 0.0}
-
-    # Walk the displayed tree in post-order.  For each internal node
-    # whose children have finished, merge children configs and apply
-    # the coalescent transition on each incoming edge.
-    for node in dt.post_order:
-        if node in configs_at:
-            continue
-        kids = dt.children.get(node, [])
-        if not kids:
-            configs_at[node] = {frozenset(): 0.0}
-            continue
-        # 1. Apply per-child-edge coalescent transition into each child's
-        #    config so we have "top-of-edge" distributions.
-        child_top: list[dict[frozenset, float]] = []
-        for child in kids:
-            t = dt.edge_length.get((node, child))
-            child_top.append(
-                _apply_branch_coalescent(
-                    configs_at[child],
-                    t,
-                    g_children,
-                    g_parent,
-                    engine,
-                )
-            )
-        # 2. Combine child top-of-edge configs by disjoint union
-        #    (independent subtrees, products of probabilities).
-        merged = child_top[0]
-        for nxt in child_top[1:]:
-            merged = _combine_configs(merged, nxt)
-        configs_at[node] = merged
-
-    # Above the root, apply an infinite-length branch (g_{n,1}(inf)=1)
-    # forcing a collapse to a single lineage at the gene-tree root.
-    root_config = configs_at.get(dt.root, {})
-    top_config = _apply_branch_coalescent(
-        root_config,
-        None,
-        g_children,
-        g_parent,
-        engine,
-    )
-    if g_root is None:
-        # No gene tree -> trivial.
-        return 0.0
-    target = frozenset([g_root])
-    best = top_config.get(target, None)
-    if best is None:
-        # Aggregate across all configs that collapsed to the single
-        # root -- there should be only one, but be defensive.
-        acc: list[float] = []
-        for cfg, lp in top_config.items():
-            if len(cfg) == 1 and g_root in cfg:
-                acc.append(lp)
-        if not acc:
-            return _LOG_FLOOR
-        return _logsumexp(acc)
-    return best
-
-
-def _apply_branch_coalescent(
-    config_in: dict[frozenset, float],
-    length: float | None,
-    g_children: dict[Any, tuple[Any, Any]],
-    g_parent: dict[Any, Any],
-    engine: _GTLikelihoodEngine,
-) -> dict[frozenset, float]:
-    """Convolve a bottom-of-edge distribution against branch coalescent.
-
-    Runs, for every entry ``(config_in, log_prob_in)``, all reachable
-    branch coarsenings and accumulates log-space probability into
-    ``out[config_out]`` via log-sum-exp.  The Kingman coalescent
-    transition probability used here is:
-
-        P(C_out | C_in, t) = g_{n,m}(t) * |L(F)| / prod_{i=1..k} C(n-i+1, 2)
-
-    where ``n = |C_in|``, ``m = |C_out|``, ``k = n - m``, ``F`` is the
-    forest of gene-tree internal nodes picked up by the coarsening,
-    and ``|L(F)|`` is the number of linear extensions (time orderings)
-    of ``F`` under gene-tree ancestry.
-
-    Args:
-        config_in: Dict from incoming-lineage frozenset to log prob.
-        length: Branch length in coalescent units (``None`` =
-            infinite, i.e. force full collapse to one lineage).
-        g_children / g_parent: Gene-tree adjacency maps.
-        engine: Backing engine (memoised ``_gij``).
-
-    Returns:
-        Dict from outgoing-lineage frozenset to log prob.  Entries
-        whose accumulated log prob falls to ``-inf`` are dropped.
-    """
-    out: dict[frozenset, list[float]] = {}
-    for cfg_in, lp_in in config_in.items():
-        n = len(cfg_in)
-        coarsenings = _enum_coarsenings(cfg_in, g_children, g_parent)
-        for cfg_out, merges in coarsenings:
-            m = len(cfg_out)
-            k = n - m
-            gij = engine._gij(length, n, m)
-            if gij <= 0.0:
-                continue
-            log_branch = math.log(gij)
-            if k > 0:
-                # Denominator: product of C(n-i+1, 2) for i in 1..k
-                denom = 1.0
-                for i in range(1, k + 1):
-                    denom *= math.comb(n - i + 1, 2)
-                le = _linear_extensions(list(merges), g_children)
-                log_branch += math.log(le) - math.log(denom)
-            log_total = lp_in + log_branch
-            out.setdefault(cfg_out, []).append(log_total)
-    # Collapse list-per-key via log-sum-exp.
-    result: dict[frozenset, float] = {}
-    for cfg, terms in out.items():
-        result[cfg] = _logsumexp(terms)
-    return result
-
-
-def _combine_configs(
-    left: dict[frozenset, float],
-    right: dict[frozenset, float],
-) -> dict[frozenset, float]:
-    """Outer-product combine of two child-edge distributions.
-
-    At a species-tree internal node, lineages from independent child
-    subtrees are disjoint, so their combined distribution is the
-    outer product (union of configs, sum of log probs) of the
-    top-of-edge distributions coming in from each child.
-
-    Duplicate resulting configs (possible when two gene-tree leaves
-    live in different species children but share the same internal
-    g-ancestry -- this happens for single-species gene subtrees that
-    got split across a species-tree bipartition) are merged via
-    log-sum-exp to avoid double-counting.
-    """
-    out: dict[frozenset, list[float]] = {}
-    for cfg_l, lp_l in left.items():
-        for cfg_r, lp_r in right.items():
-            if cfg_l & cfg_r:
-                # Overlapping lineage labels -> independence assumption
-                # violated; skip.  (Shouldn't happen if mappings are
-                # well-formed.)
-                continue
-            union = cfg_l | cfg_r
-            out.setdefault(union, []).append(lp_l + lp_r)
-    result: dict[frozenset, float] = {}
-    for cfg, terms in out.items():
-        result[cfg] = _logsumexp(terms)
-    return result
-
-
 # ======================================================================
 # (D) Scorer
 # ======================================================================
@@ -1485,7 +1260,6 @@ class _ScoreManyPool:
             ranges.append((cursor, cursor + size))
             cursor += size
         self._ranges: tuple[tuple[int, int], ...] = tuple(ranges)
-        self._slice_sizes: tuple[int, ...] = tuple(hi - lo for lo, hi in ranges)
 
         # Pickle the gene trees once; ``ProcessPoolExecutor`` ships
         # the pickled bytes to every worker through the initializer.
@@ -1512,11 +1286,6 @@ class _ScoreManyPool:
     def n_workers(self) -> int:
         """Number of worker processes in the pool."""
         return self._n_workers
-
-    @property
-    def slice_sizes(self) -> tuple[int, ...]:
-        """Per-worker gene-tree slice sizes.  Useful for debug prints."""
-        return self._slice_sizes
 
     def score(self, network: Network) -> float:
         """Score every gene tree in parallel and return the total.
@@ -2061,7 +1830,7 @@ class MCMCGTKernel(ProposalKernel):
         """True when the current network already holds ``max_reticulations``."""
         if self._max_retics is None or network is None:
             return False
-        return sum(1 for n in network.V() if n.is_reticulation()) >= self._max_retics
+        return count_reticulations(network) >= self._max_retics
 
     def _active_moves_and_base(
         self, network: Optional[Network] = None,
@@ -2559,6 +2328,7 @@ class MCMC_GT:
         fix_st: Optional[bool] = None,
         max_lvl: Optional[int] = None,
         pseudo: bool = False,
+        backbone: Optional[Network] = None,
         seed: Any = None,
         n_workers: int = 1,
         **kwargs: Any,
@@ -2605,6 +2375,11 @@ class MCMC_GT:
                 for the ``hc`` / ``sa`` optimisation drivers; combining
                 it with ``mh`` posterior sampling is not a calibrated
                 Bayesian target and raises ``ValueError``.
+            backbone: Network the result must contain as a subgraph.  Drops
+                every move that could destroy existing structure and
+                enforces containment in the accept path.  Set by
+                ``infer(start=Start(net, mode=StartMode.AUGMENT))``; leave
+                ``None`` for an unconstrained search.
             seed: Seed for the chain's RNGs.  Accepts any value
                 :class:`np.random.SeedSequence` accepts (including
                 another :class:`SeedSequence`).
@@ -2688,15 +2463,22 @@ class MCMC_GT:
         if kernel is None:
             kernel = MCMCGTKernel(
                 max_reticulations=max_reticulations,
-                move_types=resolve_move_types(opt_bl=opt_bl, fix_st=fix_st),
+                move_types=resolve_move_types(
+                    opt_bl=opt_bl, fix_st=fix_st,
+                    augment_only=backbone is not None,
+                ),
                 max_level=max_lvl,
                 rng=np.random.default_rng(kernel_ss),
             )
         elif getattr(kernel, "rng", None) is None:
             kernel.rng = np.random.default_rng(kernel_ss)
 
-        # Authoritative level guard for the State-based drivers.
-        validate = make_level_validator(max_lvl)
+        # Authoritative level guard for the State-based drivers, plus the
+        # backbone-containment guard when the result must include a given
+        # network.
+        validate = make_level_validator(
+            max_lvl, base=make_containment_validator(backbone),
+        )
 
         # Dispatch.  ``finally`` guarantees pool teardown even on
         # mid-chain exceptions; otherwise an exception in the MH loop
@@ -2713,6 +2495,7 @@ class MCMC_GT:
                     thin=thin,
                     driver_seed=driver_seed,
                     max_lvl=max_lvl,
+                    backbone=backbone,
                 )
             elif method == "hc":
                 searcher = HillClimbing(
@@ -2786,6 +2569,7 @@ class MCMC_GT:
         thin: int,
         driver_seed: int,
         max_lvl: Optional[int] = None,
+        backbone: Optional[Network] = None,
     ) -> MCMCGTResult:
         """Run a Metropolis-Hastings chain with burn-in and thinning.
 
@@ -2807,10 +2591,16 @@ class MCMC_GT:
             thin: Sample every ``thin``-th post-burn-in iteration.
             driver_seed: Seed for the accept/reject Uniform(0, 1)
                 generator.
+            max_lvl: Authoritative cap on network level.
+            backbone: Network every accepted state must contain as a
+                subgraph.  ``None`` leaves the chain unconstrained.
 
         Returns:
             Populated :class:`MCMCGTResult`.
         """
+        required_clusters = (
+            network_clusters(backbone) if backbone is not None else None
+        )
         # Avoid importing State here to keep the MCMC_GT module free
         # of any State coupling; we use Model directly and manage the
         # accept/reject loop inline.  This is identical semantics to
@@ -2821,7 +2611,6 @@ class MCMC_GT:
         cur_score = float(scorer(model))
         best_score = cur_score
         best_network = copy.deepcopy(model.network)
-        best_log_lik = scorer.last_log_likelihood or cur_score
         samples: list[MCMCSample] = []
         num_accepted = 0
 
@@ -2853,9 +2642,17 @@ class MCMC_GT:
                 # guard is authoritative here: it catches every move that
                 # raises network level (including reticulation relocation /
                 # endpoint moves), not just additions.
-                if not _is_valid_network(model.network) or (
-                    max_lvl is not None
-                    and _network_level(model.network) > max_lvl
+                if (
+                    not _is_valid_network(model.network)
+                    or (
+                        max_lvl is not None
+                        and _network_level(model.network) > max_lvl
+                    )
+                    or (
+                        required_clusters is not None
+                        and not required_clusters
+                        <= network_clusters(model.network)
+                    )
                 ):
                     move.undo(model)
                     kernel.report_outcome(False, delta=0.0)
@@ -2890,7 +2687,6 @@ class MCMC_GT:
                 if prop_score > best_score:
                     best_score = prop_score
                     best_network = copy.deepcopy(model.network)
-                    best_log_lik = scorer.last_log_likelihood or prop_score
             else:
                 try:
                     move.undo(model)
@@ -2941,26 +2737,7 @@ def _is_valid_network(net: Network) -> bool:
     of the Metropolis-Hastings rejection step (preserving detailed
     balance) rather than letting the scorer floor them to ``-inf``.
     """
-    if net is None:
-        return False
-    root_count = 0
-    for n in net.V():
-        ind = net.in_degree(n)
-        outd = net.out_degree(n)
-        if ind == 0:
-            root_count += 1
-            if outd < 2:
-                return False
-        elif outd == 0:
-            if ind != 1:
-                return False
-        elif n.is_reticulation():
-            if ind != 2 or outd != 1:
-                return False
-        else:
-            if ind != 1 or outd < 2:
-                return False
-    if root_count != 1:
+    if net is None or not _valid_network_degrees(net):
         return False
     try:
         return net.is_acyclic()

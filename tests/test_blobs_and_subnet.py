@@ -14,7 +14,7 @@ Integration tests verify consistency between the different decompositions.
 """
 
 import pytest
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Sequence, Set, Tuple
 
 from phynetpy.Network import Network, Node, Edge
 from phynetpy.GraphUtils import (
@@ -41,7 +41,7 @@ def _edge(src: str, dest: str, gamma: Optional[float] = None) -> EdgeSpec:
 def _build_network(
     node_labels: Sequence[str],
     edge_specs: Sequence[EdgeSpec],
-    retic_labels: set[str] | None = None,
+    retic_labels: Optional[Set[str]] = None,
 ) -> Network:
     net = Network()
     retic_set = set(retic_labels or [])
@@ -489,6 +489,32 @@ class TestInducedSubnetworkByTaxa:
         sub_leaves = _leaf_labels(sub)
         assert "A" in sub_leaves
         assert "C" in sub_leaves
+
+    def test_shared_reticulation_subtree_is_copied_once(self):
+        """
+        A reticulation reachable from two retained parents must not have its
+        subtree copied once per parent.
+
+        Edge equality is by identity, so a second traversal would deposit a
+        duplicate Edge under the same (src, dest) key, turning every branch
+        below the reticulation into a spurious bubble.
+        """
+        net = _build_network(
+            ["Root", "I1", "I2", "K", "A", "B", "C", "D"],
+            [
+                _edge("Root", "I1"), _edge("Root", "I2"),
+                _edge("I1", "A"), _edge("I2", "D"),
+                _edge("I1", "H", 0.6), _edge("I2", "H", 0.4),
+                _edge("H", "K"), _edge("K", "B"), _edge("K", "C"),
+            ],
+            retic_labels={"H"},
+        )
+        sub = induced_subnetwork_by_taxa(net, ["A", "B", "C", "D"])
+
+        endpoints = [(e.src.label, e.dest.label) for e in sub.E()]
+        assert len(endpoints) == len(set(endpoints)), \
+            f"duplicated edges in induced subnetwork: {endpoints}"
+        assert len(sub.E()) == len(net.E())
 
 
 # ===================================================================

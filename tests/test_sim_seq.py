@@ -29,15 +29,19 @@ import numpy as np
 import pytest
 
 from phynetpy.Network import Network
-from phynetpy._seq_likelihood import _node_height, JC69, HKY85, GTR
+from phynetpy.GraphUtils import _node_height
+from phynetpy._seq_likelihood import JC69, HKY85
 from phynetpy.infer import (
     SimulatedData,
     simulate_gene_tree,
     simulate_sequences,
     simulate_multilocus,
-    MCMC_SEQ,
     MCMCSeqPriors,
 )
+# The sampler class is an implementation detail behind
+# ``infer(Alignment(...), criterion=Bayesian())``; these tests drive it
+# directly to check the recovery properties of the simulator.
+from phynetpy._mcmc_seq import MCMC_SEQ
 
 
 def _descendant_leaves(net: Network, node) -> frozenset:

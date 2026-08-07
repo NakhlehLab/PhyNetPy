@@ -13,12 +13,11 @@ Taxa (single-allele, identity mapping):
 from __future__ import annotations
 
 import os
-import math
 import time
 
 from phynetpy.Network import Network
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL import MPL
+from phynetpy._mpl import MPL
 from phynetpy.IO import convert_newick
 
 TESTFILES = os.path.join(os.path.dirname(__file__), "testfiles")

@@ -1,5 +1,6 @@
 """
-Sanity test suite for :mod:`phynetpy.MCMC_GT`.
+Sanity test suite for :class:`phynetpy._mcmc_gt.MCMC_GT`, the engine behind
+``infer(gts, criterion=Bayesian())``.
 
 Three correctness slices covering the load-bearing pieces of the new
 MSNC likelihood engine + caching plumbing:
@@ -34,13 +35,11 @@ import pytest
 
 from phynetpy.Network import Network, Node, Edge
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL import MPL
+from phynetpy._mpl import MPL
 from phynetpy.ModelGraph import Model
 from phynetpy.ModelMove import ChangeNodeHeight
-from phynetpy.MCMC_GT import (
-    MCMCGTScorer,
-    _GTLikelihoodEngine,
-)
+from phynetpy.infer import MCMCGTScorer
+from phynetpy._mcmc_gt import _GTLikelihoodEngine
 
 
 # ═══════════════════════════════════════════════════════════════════════

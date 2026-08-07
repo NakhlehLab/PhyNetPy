@@ -115,12 +115,24 @@ from .Network import Network, Node
 from .GeneTrees import GeneTrees
 from . import IO as io
 from .ModelGraph import Model
+from .GraphUtils import count_reticulations, _hardwired_clusters_by_label
 from .MetropolisHastings import ProposalKernel, HillClimbing, SimulatedAnnealing
-from .ModelMove import *
+from .ModelMove import (
+    Move,
+    SPR,
+    ChangeNodeHeight,
+    ChangeInheritanceProb,
+    AddReticulation,
+    RemoveReticulation,
+    FlipReticulation,
+    ChangeReticSource,
+    ChangeReticDest,
+    RelocateReticulation,
+)
 from ._optimize import optimize_network_parameters
 from ._search_flags import (
-    resolve_move_types, make_level_validator, CONTINUOUS_MOVES,
-    resolve_search_preset,
+    resolve_move_types, make_level_validator, make_containment_validator,
+    CONTINUOUS_MOVES, resolve_search_preset,
 )
  
 # log(p) for zero-probability triplet outcomes is replaced by this
@@ -230,62 +242,6 @@ class SpeciesNetworkTripletResult:
 # don't participate in the scoring path.
 # ======================================================================
 
-def _subtree_leaf_labels(
-    net: Network,
-    node: Node,
-    visited: set[Node] | None = None,
-) -> set[str]:
-    """Return the set of leaf labels reachable from ``node`` via child edges.
-
-    Used for comparison reports (clade overlap, reticulation-subtree
-    footprints).  Not used on the scoring hot path.
-
-    Args:
-        net: Network containing ``node``.
-        node: Starting node.
-        visited: Internal visited set (pass ``None`` when calling).
-
-    Returns:
-        Set of leaf labels under ``node`` (inclusive of ``node`` if
-        ``node`` itself is a leaf).
-    """
-    if visited is None:
-        visited = set()
-    if node in visited:
-        return set()
-    visited.add(node)
-    if net.out_degree(node) == 0:
-        return {node.label}
-    out: set[str] = set()
-    for c in net.get_children(node):
-        out |= _subtree_leaf_labels(net, c, visited)
-    return out
-
-
-def _nontrivial_clades(net: Network) -> set[frozenset[str]]:
-    """Return the set of non-trivial clades induced by internal nodes.
-
-    A "clade" here is simply the frozenset of leaf labels below an
-    internal node.  Trivial singleton clades (leaves) are excluded.
-    Used for the clade-overlap section of the comparison report.
-
-    Args:
-        net: Network to inspect.
-
-    Returns:
-        Set of leaf-label frozensets, one per internal node with at
-        least two descendant leaves.
-    """
-    clades: set[frozenset[str]] = set()
-    for node in net.V():
-        if net.out_degree(node) == 0:
-            continue
-        leaves = _subtree_leaf_labels(net, node)
-        if len(leaves) > 1:
-            clades.add(frozenset(leaves))
-    return clades
-
-
 def format_mpl_reference_comparison(
     found: Network,
     reference: Network,
@@ -341,7 +297,7 @@ def format_mpl_reference_comparison(
         retics = [n for n in net.V() if net.in_degree(n) > 1]
         lines.append(f"{label} reticulations: {len(retics)}")
         for r in retics:
-            sub = sorted(_subtree_leaf_labels(net, r))
+            sub = sorted(n.label for n in net.leaf_descendants(r))
             pars = [p.label for p in net.get_parents(r)]
             lines.append(f"  {r.label}: parents={pars}, subtree_leaves={sub}")
 
@@ -349,8 +305,8 @@ def format_mpl_reference_comparison(
     _retic_lines(reference, "Reference")
     lines.append("")
 
-    cf = _nontrivial_clades(found)
-    cr = _nontrivial_clades(reference)
+    cf = _hardwired_clusters_by_label(found)
+    cr = _hardwired_clusters_by_label(reference)
     shared = cf & cr
     only_f = cf - cr
     only_r = cr - cf
@@ -1613,7 +1569,6 @@ def _extract_topology_for_cython(engine: _TripleDPEngine) -> dict:
     for i, node in enumerate(nodes):
         children = engine._node_children[node]
         for j, child in enumerate(children[:_CY_MAX_CHILDREN]):
-            child_idx = node_to_idx[child]
             child_parents = engine._node_parents[child]
             for k, p in enumerate(child_parents[:_CY_MAX_PARENTS]):
                 if node_to_idx[p] == i:
@@ -2300,8 +2255,7 @@ class MPLKernel(ProposalKernel):
         """True when the current network already holds ``max_reticulations``."""
         if self._max_retics is None or network is None:
             return False
-        current = sum(1 for n in network.V() if n.is_reticulation())
-        return current >= self._max_retics
+        return count_reticulations(network) >= self._max_retics
 
     def _active_moves_and_base(
         self, network: Network | None = None,
@@ -2744,15 +2698,6 @@ class MPLKernel(ProposalKernel):
         )
         return "\n".join(lines)
 
-    @property
-    def phase(self) -> str:
-        """Current search phase name."""
-        return self._phase
-
-    @property
-    def phase_switches(self) -> int:
-        """Total number of phase transitions so far."""
-        return self._phase_switches
 
 
 # ======================================================================
@@ -2924,6 +2869,7 @@ class MPL:
         fix_st: bool | None = None,
         max_lvl: int | None = None,
         pseudo: bool = True,
+        backbone: Network | None = None,
         optimize_params: bool | None = None,
         optimize_scope: str | None = None,
         optimize_band: float = 5.0,
@@ -2988,6 +2934,11 @@ class MPL:
                 ``True``; passing ``False`` emits a warning and is
                 ignored (use ``MCMC_GT`` / ``InferNetwork_ML`` for full
                 likelihood).
+            backbone: Network the result must contain as a subgraph.  Drops
+                every move that could destroy existing structure and
+                enforces containment in the accept path.  Set by
+                ``infer(start=Start(net, mode=StartMode.AUGMENT))``; leave
+                ``None`` for an unconstrained search.
             optimize_params: When ``True`` (Hill-Climbing only), refine a
                 proposal's continuous parameters with a Brent coordinate
                 ascent *before* the accept/reject decision, so each
@@ -3116,7 +3067,10 @@ class MPL:
         # ----------------------------------------------------------------
         if kernel is None:
             kernel = MPLKernel(
-                move_types=resolve_move_types(opt_bl=opt_bl, fix_st=fix_st),
+                move_types=resolve_move_types(
+                    opt_bl=opt_bl, fix_st=fix_st,
+                    augment_only=backbone is not None,
+                ),
                 max_reticulations=max_reticulations,
                 max_level=max_lvl,
                 rng=np.random.default_rng(kernel_ss),
@@ -3127,9 +3081,13 @@ class MPL:
         # ----------------------------------------------------------------
         # Dispatch to the chosen search driver.  The level validator is
         # the authoritative ``max_lvl`` guard: it level-checks every
-        # accepted proposal regardless of which move produced it.
+        # accepted proposal regardless of which move produced it.  When a
+        # backbone is required, containment is enforced in the same place
+        # and for the same reason.
         # ----------------------------------------------------------------
-        validate = make_level_validator(max_lvl)
+        validate = make_level_validator(
+            max_lvl, base=make_containment_validator(backbone),
+        )
 
         # ----------------------------------------------------------------
         # Per-topology continuous-parameter optimisation (levers 1 + 2).

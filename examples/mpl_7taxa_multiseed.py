@@ -19,8 +19,10 @@ import time
 from pathlib import Path
 
 import phynetpy.IO as io
-from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL import MPL
+from phynetpy.criteria import PseudoLikelihood
+from phynetpy.data import GeneTrees
+from phynetpy.infer import infer
+from phynetpy.models import MSC
 
 
 _REPO = Path(__file__).resolve().parent.parent
@@ -52,13 +54,13 @@ SA_PROGRESS_EVERY = 2000  # quieter per-run output; we print a summary below
 
 
 def load_gene_trees() -> GeneTrees:
-    return io.read_newick_file(
+    networks = io.read_newick_file(
         GENE_TREES_FILE,
-        return_type="genetrees",
-        species_gene_mapping=SPECIES_TO_ALLELES,
+        return_type="networks",
         restrict_to_taxa=SPECIES_LABELS,
         min_leaves_after_restrict=3,
     )
+    return GeneTrees(list(networks), SPECIES_TO_ALLELES)
 
 
 def load_or_build_seed(gene_trees: GeneTrees):
@@ -74,9 +76,12 @@ def load_or_build_seed(gene_trees: GeneTrees):
 
 def run_one_seed(seed: int, gene_trees: GeneTrees):
     start_net = load_or_build_seed(gene_trees)
-    mpl = MPL(start_net, gene_trees, SPECIES_TO_ALLELES)
     t0 = time.time()
-    best_log_pl = mpl.search(
+    result = infer(
+        gene_trees,
+        model=MSC(),
+        criterion=PseudoLikelihood(),
+        start=start_net,
         method="sa",
         num_iter=SEARCH_ITERATIONS,
         max_reticulations=2,
@@ -96,7 +101,7 @@ def run_one_seed(seed: int, gene_trees: GeneTrees):
         reheat_max_consecutive=SA_REHEAT_MAX_CONSECUTIVE,
     )
     elapsed = time.time() - t0
-    return best_log_pl, mpl.net.newick(), elapsed
+    return result.score, result.best.newick(), elapsed
 
 
 def main() -> None:
@@ -107,20 +112,20 @@ def main() -> None:
     results = []
     for i, seed in enumerate(SEEDS, 1):
         print(f"=== Run {i}/{len(SEEDS)}: seed={seed} ===", flush=True)
-        score, newick, elapsed = run_one_seed(seed, gene_trees)
+        best_pl, newick, elapsed = run_one_seed(seed, gene_trees)
         print(
-            f"  final log-PL: {score:.4f}   ({elapsed:.1f}s)",
+            f"  final log-PL: {best_pl:.4f}   ({elapsed:.1f}s)",
             flush=True,
         )
         print(f"  newick: {newick}\n", flush=True)
-        results.append((seed, score, newick, elapsed))
+        results.append((seed, best_pl, newick, elapsed))
 
     print("=" * 70)
     print("Summary across seeds")
     print("=" * 70)
     print(f"{'seed':>8} {'log-PL':>16} {'elapsed(s)':>12}")
-    for seed, score, _nwk, elapsed in results:
-        print(f"{seed:>8} {score:>16.4f} {elapsed:>12.1f}")
+    for seed, best_pl, _nwk, elapsed in results:
+        print(f"{seed:>8} {best_pl:>16.4f} {elapsed:>12.1f}")
 
     scores = [r[1] for r in results]
     best, worst = max(scores), min(scores)

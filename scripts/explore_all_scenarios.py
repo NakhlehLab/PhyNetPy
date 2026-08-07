@@ -5,7 +5,6 @@ with ground truth species networks for all four scenarios.
 
 import copy
 import os
-import sys
 import time
 import warnings
 import numpy as np
@@ -13,10 +12,8 @@ import numpy as np
 warnings.filterwarnings("ignore")
 
 from phynetpy.IO import read_newick
-from phynetpy.Infer_MP_Allop import (
-    Allop_MUL, MPAllopScorer, MPAllopComponent,
-    allele_map_set, partition_gene_trees,
-)
+from phynetpy.infer import MPAllopComponent
+from phynetpy._infer_mp_allop import allele_map_set, partition_gene_trees
 from phynetpy.ModelFactory import ModelFactory
 from phynetpy.ModelMove import SwitchParentage
 from phynetpy.MetropolisHastings import (

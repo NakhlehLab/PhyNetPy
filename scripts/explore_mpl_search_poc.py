@@ -11,13 +11,10 @@ import sys, os, copy, math, time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from phynetpy.Network import Network, Node, Edge
-from phynetpy.GeneTrees import GeneTrees
+from phynetpy.Network import Network
 from phynetpy.IO import read_newick_file
-from phynetpy.MPL import (
-    MPL, MPLScorer, MPLKernel, _TripleDPEngine,
-    compute_gene_tree_triplets,
-)
+from phynetpy._mpl import MPL
+from phynetpy.infer import MPLScorer, MPLKernel
 from phynetpy.ModelGraph import Model
 from phynetpy.ModelMove import (
     AddReticulation, RemoveReticulation, FlipReticulation,

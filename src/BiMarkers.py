@@ -10,22 +10,31 @@ BiMarkers -- biallelic SNP (single-nucleotide polymorphism) likelihood
 under the multispecies network coalescent for phylogenetic networks.
 
 This module implements the SNAPP-style two-state continuous-time Markov
-chain likelihood (Bryant et al. 2012) generalised to reticulate
-topologies.  It provides:
+chain likelihood (Bryant et al. 2012) generalised to reticulate topologies
+(Zhu et al. 2018, `PLOS Comput Biol e1005932
+<https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005932>`_).
 
-* :class:`SNP_LIKELIHOOD` and :class:`SNP_LIKELIHOOD_DATA` -- the public
-  scoring functions for biallelic site patterns on a species network.
-* :class:`MCMC_BIMARKERS` -- a Metropolis-Hastings search driver wired to
-  the SNP likelihood, mirroring the API of the other ``MCMC_*`` entry
-  points.
-* A NumPy reference implementation suitable for small/medium networks.
-  An optional CUDA-accelerated implementation lives in
-  ``MCMC_BiMarkers_CUDA`` and is auto-wired by ``phynetpy/__init__.py``
-  when ``cupy``/``numba`` are importable.
+This is an implementation module.  Users reach it through the two verbs
+with :class:`~phynetpy.data.BiallelicMarkers` data::
 
-Docs   - [ ]
-Tests  - [ ]
-Design - [ ]
+    score(net, markers, criterion=Likelihood())   # the SNP likelihood
+    infer(markers, criterion=Bayesian())          # MH over network space
+
+It provides:
+
+* :func:`_snp_log_likelihood` -- the log likelihood of a species network
+  given an in-memory marker matrix; the numerical core of the
+  ``(BiallelicMarkers, MSC, Likelihood)`` cell.
+* :func:`_snp_mcmc` -- a Metropolis-Hastings search driver wired to that
+  likelihood; the core of the ``(BiallelicMarkers, MSC, Bayesian)`` cell.
+* :class:`SNPScorer` -- the ``Callable[[Model], float]`` adapter both use.
+* A NumPy implementation that offloads the site loop to the GPU via
+  ``cupy`` when both the hardware and that package are present, and runs
+  on the CPU otherwise.
+
+Docs   - [x]
+Tests  - [x]
+Design - [x]
 """
 
 from __future__ import annotations
@@ -49,79 +58,32 @@ from __future__ import annotations
 import copy
 import math
 from collections import deque
-from math import sqrt, comb, pow
+from math import comb
 import time
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Optional
 import numpy as np
 from scipy.linalg import expm, null_space
 from dataclasses import dataclass
 
-# CUDA imports - with graceful fallback
-# Numba CUDA requires CUDA Toolkit 12.x (tested with CUDA 12.2)
-# Both Numba and CuPy are used for GPU acceleration
+# CuPy import - with graceful fallback to the pure NumPy CPU path.
 
-CUPY_AVAILABLE = False
 CUPY_RUNTIME_OK = False
-NUMBA_CUDA_AVAILABLE = False
 
 try:
     import cupy as cp
-    # Check if CuPy can actually access a GPU
-    CUPY_AVAILABLE = cp.cuda.is_available()
-    if CUPY_AVAILABLE:
-        # Verify CuPy can actually run operations (CUDA version compatibility check)
-        # Use cp.random which requires kernel compilation - this catches CUDA DLL mismatches
+    if cp.cuda.is_available():
+        # Seeing a device is not enough: a CUDA version mismatch only
+        # surfaces once a kernel is compiled, so run one real operation
+        # (``cp.random`` needs compilation) before trusting the GPU path.
         try:
             _test = cp.random.rand(10, dtype=cp.float64)
             _ = cp.sum(_test)
             del _test
             CUPY_RUNTIME_OK = True
-        except (RuntimeError, Exception) as e:
-            # CuPy may detect GPU but fail at runtime due to CUDA version mismatch
-            # Common error: missing nvrtc64_XXX_0.dll for wrong CUDA toolkit version
-            CUPY_RUNTIME_OK = False
+        except Exception:
+            pass
 except ImportError:
     cp = None
-
-try:
-    from numba import cuda, float64, int32, int64
-    # Check if numba CUDA is actually available (requires compatible toolkit)
-    NUMBA_CUDA_AVAILABLE = cuda.is_available()
-except ImportError:
-    # Create mock decorators for when numba CUDA is not available
-    class MockCuda:
-        @staticmethod
-        def is_available():
-            return False
-        @staticmethod
-        def jit(*args, **kwargs):
-            def decorator(func):
-                return func
-            return decorator
-        @staticmethod
-        def to_device(arr):
-            return arr
-        @staticmethod
-        def device_array(*args, **kwargs):
-            return np.zeros(args[0])
-        @staticmethod
-        def select_device(n):
-            pass
-        @staticmethod
-        def grid(n):
-            return 0
-        class atomic:
-            @staticmethod
-            def add(*args):
-                pass
-    cuda = MockCuda()
-    float64 = float
-    int32 = int
-    int64 = int
-
-# Combined availability: CuPy for array ops, numba for custom kernels
-# Use CUPY_RUNTIME_OK for actual operations, CUPY_AVAILABLE just means import worked
-CUDA_IMPORTS_AVAILABLE = CUPY_RUNTIME_OK or NUMBA_CUDA_AVAILABLE
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -182,45 +144,40 @@ def _detect_gpu() -> GPUSpecs:
 GPU_SPECS = _detect_gpu()
 
 # Relative imports
-from .MSA import MSA, DataSequence
-from .BirthDeath import CBDP
-from .IO import read_nexus
-from .Alphabet import Alphabet
-from .Matrix import Matrix
-# from .ModelGraph import (
-#     Model, ModelNode, CalculationNode, Parameter, Accumulator, ExtantSpecies
-# )
-from .ModelFactory import *
-from .Network import *
-from .MetropolisHastings import MetropolisHastings, ProposalKernel
-from .Visitor import *
-from .Strategy import *
-from .Executor import *
-from .Traversal import *
-from .ModelGraph import *
-from .GraphUtils import level as network_level
+from .MSA import MSA
+from .Network import Network, Node, Edge, Branch
+from .ModelGraph import Model
+from ._snp_model import (
+    SNPModel,
+    ModelNode,
+    InternalNode,
+    LeafNode,
+    ReticulationNode,
+    RootNode,
+    RootAggregatorNode,
+    build_snp_model,
+    postorder,
+)
+from .GraphUtils import level as network_level, network_clusters
 
+if TYPE_CHECKING:
+    # Imported lazily at call sites to keep the MCMC stack out of the
+    # import path of the likelihood-only entry points.
+    from ._mcmc_gt import MCMC_GTPriors
 
-"""
-SOURCES:
+#: Public surface of this module.  Everything else here (Q-matrix builders,
+#: sparse split/merge tensors, VPI bookkeeping, GPU shims) is internal to the
+#: biallelic-marker likelihood and is not part of the PhyNetPy API.
+#:
+#: The user-facing entry points are ``infer`` and ``score`` with
+#: :class:`~phynetpy.data.BiallelicMarkers` data; the engines in
+#: :mod:`phynetpy._engines` call ``_snp_mcmc`` and ``_snp_log_likelihood``
+#: here directly.
+__all__ = [
+    "SNPScorer",
+    "SNPResourceError",
+]
 
-(1): 
-https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005932
-
-CUDA Implementation Notes:
-- Rules 0-4 are implemented as CUDA kernels for parallel execution
-- Site-level parallelism is exploited (each site computed independently)
-- Combinatorial loops are parallelized across GPU threads
-- Matrix operations use CuPy for GPU-accelerated linear algebra
-"""
-
-# Global flag to toggle CUDA acceleration
-global use_cuda
-use_cuda = True
-
-# CUDA device configuration
-THREADS_PER_BLOCK = 256
-MAX_BLOCKS = 65535
 
 def n_to_index(n : int) -> int:
     """
@@ -247,27 +204,6 @@ def n_to_index(n : int) -> int:
         int: starting index for that block of n values
     """
     return int(n * (n + 1) / 2)
-
-def index_to_nr(index : int) -> list[int]:
-    """
-    Takes an index from the linear vector and turns it into an (n,r) pair
-
-    i.e 0 -> [0,0], 6 -> [3,0]
-
-    Args:
-        index (int): the index
-
-    Returns:
-        list[int]: a 2-tuple (n,r)
-    """
-    # Largest n with n(n+1)/2 <= index.
-    n = int((-1 + sqrt(1 + 8 * index)) / 2)
-    # Guard against floating-point round-down at exact block boundaries.
-    while n_to_index(n + 1) <= index:
-        n += 1
-    r = index - n_to_index(n)
-
-    return [n, r]
 
 def nr_to_index(n : int, r : int) -> int:
     """
@@ -353,84 +289,6 @@ def _root_stationary(Q: np.ndarray, m: int) -> np.ndarray:
     pi = np.zeros(d)
     pi[1:d] = x
     return pi
-
-def build_split_tensor(m: int, gamma: float) -> np.ndarray:
-    """
-    Build the split coefficient tensor S for a reticulation node
-    with max lineages m and inheritance probability gamma.
-
-    S[i, j, k] = C(n, n_b) * gamma^{n_b} * (1-gamma)^{n_d}
-
-    where i ↔ (n, r), j ↔ (n_b, r_b), k ↔ (n_d, r_d)
-    and n = n_b + n_d, r = r_b + r_d (zero otherwise).
-
-    This is Rule 3 of the biallelic-network recursion (Zhu et al. 2018, PLOS
-    Comp Biol e1005932; Rabier et al. 2021): the ``n`` lineages entering the
-    hybrid partition into ``n_b`` inheriting from the branch-b parent and
-    ``n_d = n - n_b`` from branch-d, with the ``C(n, n_b)`` ways of choosing
-    which lineages go where and probability ``gamma^{n_b} (1-gamma)^{n_d}``.
-    The coefficient does **not** depend on the red split ``(r_b, r_d)`` beyond
-    the constraint ``r_b + r_d = r`` -- the hypergeometric merge (Rules 2/4)
-    supplies the red-allele combinatorics, so applying it here too would double
-    count.  The boundary cases ``n_b = 0`` / ``n_b = n`` (all lineages inherit
-    from a single parent, leaving the other branch empty) MUST be included;
-    dropping them is what makes a tree-only engine lose probability on
-    networks.  ``n = 0`` is the empty state and splits to two empty states.
-
-    Shape: [dim(m), dim(m), dim(m)]
-    """
-    d = state_dim(m)
-    S = np.zeros((d, d, d))
-
-    for n in range(0, m + 1):
-        for r in range(n + 1):
-            i = nr_to_index(n, r)
-            for nb in range(0, n + 1):
-                nd = n - nb
-                for rb in range(max(0, r - nd), min(r, nb) + 1):
-                    rd = r - rb
-
-                    j = nr_to_index(nb, rb)
-                    k = nr_to_index(nd, rd)
-
-                    S[i, j, k] = (comb(n, nb)
-                                  * (gamma ** nb) * ((1 - gamma) ** nd))
-
-    return S
-
-def build_merge_tensor(mx: int, my: int) -> np.ndarray:
-    """
-    Build the merge coefficient tensor M for combining two interfaces
-    with max lineages mx and my.
-
-    M[i, j, k] = C(rz, rx) * C(nz-rz, nx-rx) / C(nz, nx)
-    
-    where i ↔ (nx, rx), j ↔ (ny, ry), k ↔ (nz, rz)
-    and nz = nx + ny, rz = rx + ry (zero otherwise).
-
-    Used by both Rule 2 (disjoint merge) and Rule 4 (overlapping merge).
-
-    Shape: [dim(mx), dim(my), dim(mx + my)]
-    """
-    mz = mx + my
-    M = np.zeros((state_dim(mx), state_dim(my), state_dim(mz)))
-
-    for nx in range(0, mx + 1):
-        for rx in range(nx + 1):
-            i = nr_to_index(nx, rx)
-            for ny in range(0, my + 1):
-                for ry in range(ny + 1):
-                    j = nr_to_index(ny, ry)
-                    
-                    nz = nx + ny
-                    rz = rx + ry
-                    k = nr_to_index(nz, rz)
-
-                    M[i, j, k] = (comb(rz, rx) * comb(nz - rz, nx - rx) 
-                                  / comb(nz, nx))
-
-    return M
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SPARSE COEFFICIENT REPRESENTATIONS
@@ -525,8 +383,23 @@ def build_sparse_merge(mx: int, my: int) -> SparseMerge:
 
 def build_sparse_split(m: int, gamma: float) -> SparseSplit:
     """
-    Build sparse COO split tensor.
-    
+    Build sparse COO split tensor: ``S[i, j, k]`` where ``i`` is ``(n, r)``,
+    ``j`` is ``(n_b, r_b)``, ``k`` is ``(n_d, r_d)``, and the coefficient is
+    ``C(n, n_b) * gamma^{n_b} * (1-gamma)^{n_d}``.
+
+    This is Rule 3 of the biallelic-network recursion (Zhu et al. 2018, PLOS
+    Comp Biol e1005932; Rabier et al. 2021): the ``n`` lineages entering the
+    hybrid partition into ``n_b`` inheriting from the branch-b parent and
+    ``n_d = n - n_b`` from branch-d, with the ``C(n, n_b)`` ways of choosing
+    which lineages go where and probability ``gamma^{n_b} (1-gamma)^{n_d}``.
+    The coefficient does **not** depend on the red split ``(r_b, r_d)`` beyond
+    the constraint ``r_b + r_d = r`` -- the hypergeometric merge (Rules 2/4)
+    supplies the red-allele combinatorics, so applying it here too would double
+    count.  The boundary cases ``n_b = 0`` / ``n_b = n`` (all lineages inherit
+    from a single parent, leaving the other branch empty) MUST be included;
+    dropping them is what makes a tree-only engine lose probability on
+    networks.  ``n = 0`` is the empty state and splits to two empty states.
+
     Args:
         m: Max lineages at the node being split.
         gamma: Inheritance probability for the left parent branch.
@@ -665,7 +538,7 @@ def deduplicate_vpis(vpis: list[NodeVPI]) -> list[NodeVPI]:
     return unique
 
 
-def _compute_max_lineages(model: Model, samples: dict[str, int]) -> int:
+def _compute_max_lineages(model: SNPModel, samples: dict[str, int]) -> int:
     """
     Pre-compute the maximum possible lineage count at any node in the model,
     accounting for lineage duplication at reticulation nodes.
@@ -684,7 +557,7 @@ def _compute_max_lineages(model: Model, samples: dict[str, int]) -> int:
     """
     max_lin_at : dict = {}
     
-    for node in Traversal(model.get_root(), TraversalOrder.POST_ORDER):
+    for node in postorder(model.root):
         ntype = node.get_node_type()
         if ntype == "leaf":
             max_lin_at[node] = samples.get(node.get_name(), 1)
@@ -702,7 +575,7 @@ def _compute_max_lineages(model: Model, samples: dict[str, int]) -> int:
     return max(max_lin_at.values())
 
 
-def _compute_network_level(model: Model) -> int:
+def _compute_network_level(model: SNPModel) -> int:
     """
     Compute the level of the phylogenetic network from the model graph.
     
@@ -724,7 +597,7 @@ def _compute_network_level(model: Model) -> int:
     return len(model.nodetypes.get("reticulation", []))
 
 
-def _estimate_peak_vpi_memory(model: Model, samples: dict[str, int], 
+def _estimate_peak_vpi_memory(model: SNPModel, samples: dict[str, int], 
                                n_sites: int) -> tuple[int, list[int]]:
     """
     Estimate the peak VPI tensor memory (in bytes) before running the algorithm.
@@ -745,8 +618,6 @@ def _estimate_peak_vpi_memory(model: Model, samples: dict[str, int],
         Tuple of (peak_bytes, peak_shape) where peak_shape is the tensor
         shape that would cause the peak memory allocation.
     """
-    from collections import deque
-    
     # Track open interface dimensions per VPI, using the same logic
     # as the visitor: track (interfaces, max_lineages) per node
     vpi_dims : dict = {}   # ModelNode -> list[int] (max_lineages per interface)
@@ -757,7 +628,7 @@ def _estimate_peak_vpi_memory(model: Model, samples: dict[str, int],
     
     id_counter = 0
     
-    for node in Traversal(model.get_root(), TraversalOrder.POST_ORDER):
+    for node in postorder(model.root):
         ntype = node.get_node_type()
         
         if ntype == "leaf":
@@ -842,7 +713,7 @@ GPU_THRESHOLD = {
 GPU_VRAM_SAFETY_FACTOR = 0.80
 
 
-def _compute_batch_size(model: Model, samples: dict[str, int],
+def _compute_batch_size(model: SNPModel, samples: dict[str, int],
                         n_sites: int, use_gpu: bool) -> int:
     """
     Determine the optimal site batch size that fits in available memory.
@@ -905,75 +776,6 @@ def _compute_batch_size(model: Model, samples: dict[str, int],
     return min(max_batch, n_sites)
 
 
-def _check_feasibility(model: Model, samples: dict[str, int],
-                        n_sites: int, use_gpu: bool) -> None:
-    """
-    Pre-flight check: verify that even a single-site VPI tensor fits in memory.
-    
-    With site batching, we no longer need the full n_sites to fit at once.
-    This check only ensures that the per-site overhead is feasible. The 
-    actual batch size is determined by _compute_batch_size().
-    
-    Args:
-        model: The built SNP model.
-        samples: Dict mapping leaf names to their sample counts.
-        n_sites: Number of alignment sites (used only for diagnostics).
-        use_gpu: Whether GPU will be used for this computation.
-    
-    Raises:
-        SNPResourceError: If even a single site exceeds available resources.
-    """
-    # Check with 1 site — if that doesn't fit, nothing will
-    peak_bytes_1, peak_shape_1 = _estimate_peak_vpi_memory(model, samples, 1)
-    level = _compute_network_level(model)
-    n_taxa = len(model.nodetypes.get("leaf", []))
-    max_n = _compute_max_lineages(model, samples)
-    
-    shape_str = " × ".join(str(s) for s in peak_shape_1)
-    per_site_mb = peak_bytes_1 / (1024 * 1024)
-    
-    if use_gpu:
-        gpu = GPU_SPECS
-        if not gpu.available:
-            raise SNPResourceError(
-                f"GPU computation required for {n_taxa} taxa at level-{level}, "
-                f"but no GPU was detected. Install CuPy with a compatible "
-                f"CUDA toolkit, or reduce the problem size."
-            )
-        
-        usable_vram = gpu.vram_bytes * GPU_VRAM_SAFETY_FACTOR
-        # Need at least ~3x per-site for working memory
-        if peak_bytes_1 * 3 > usable_vram:
-            raise SNPResourceError(
-                f"Even a single site exceeds GPU memory.\n"
-                f"  Network: {n_taxa} taxa, level-{level}, "
-                f"max_lineages={max_n}\n"
-                f"  Per-site VPI tensor: ({shape_str}) = "
-                f"{per_site_mb:.1f} MB\n"
-                f"  GPU: {gpu.name} with {gpu.vram_gb:.1f} GB VRAM\n"
-                f"  This network topology is too complex for this GPU."
-            )
-    else:
-        try:
-            import psutil
-            available_ram = psutil.virtual_memory().available
-        except ImportError:
-            available_ram = 16 * (1024 ** 3)
-        
-        # Need at least ~3x per-site for working memory
-        if peak_bytes_1 * 3 > available_ram * 0.5:
-            ram_gb = available_ram / (1024 ** 3)
-            raise SNPResourceError(
-                f"Even a single site exceeds available system RAM.\n"
-                f"  Network: {n_taxa} taxa, level-{level}, "
-                f"max_lineages={max_n}\n"
-                f"  Per-site VPI tensor: ({shape_str}) = "
-                f"{per_site_mb:.1f} MB\n"
-                f"  Available RAM: ~{ram_gb:.1f} GB\n"
-                f"  This network topology is too complex for CPU computation."
-            )
-
-
 #####################
 # Method Signatures #
 #####################
@@ -988,7 +790,7 @@ def _snp_starting_tree(taxa: list[str], delta: float = 0.02) -> Network:
     point; the topology / branch-length / gamma moves explore from there.
     A caterpillar with strictly increasing internal-node heights guarantees
     a well-formed rooted binary tree whose leaf labels match the alignment
-    (so :class:`~phynetpy.ModelFactory.MSAComponent` can bind each sequence
+    (so :func:`~phynetpy._snp_model.build_snp_model` can bind each sequence
     to a leaf).
 
     Args:
@@ -1082,33 +884,37 @@ class SNPScorer:
         return ll
 
 
-def MCMC_BIMARKERS(filename: str,
-                   u: float = 1.0,
-                   v: float = 1.0,
-                   coal: float = 1.0,
-                   *,
-                   num_iter: int = 50000,
-                   burn_in: int = 10000,
-                   sample_freq: int = 100,
-                   seed: Optional[int] = None,
-                   samples: Optional[dict[str, int]] = None,
-                   max_reticulations: int = 4,
-                   max_level: Optional[int] = None,
-                   priors: "MCMC_GTPriors | None" = None,
-                   start_net: Optional[Network] = None) -> dict[Network, float]:
-    """Infer a phylogenetic network from biallelic SNP data via MCMC.
+def _snp_mcmc(aln: MSA,
+              u: float = 1.0,
+              v: float = 1.0,
+              coal: float = 1.0,
+              *,
+              num_iter: int = 50000,
+              burn_in: int = 10000,
+              sample_freq: int = 100,
+              seed: Optional[int] = None,
+              samples: Optional[dict[str, int]] = None,
+              max_reticulations: int = 4,
+              max_level: Optional[int] = None,
+              priors: "MCMC_GTPriors | None" = None,
+              start_net: Optional[Network] = None,
+              backbone: Optional[Network] = None,
+              ) -> dict[Network, float]:
+    """Sample networks from biallelic SNP data via Metropolis-Hastings.
 
-    Runs a rigorous Metropolis-Hastings chain over network space with the
-    Bryant et al. (2012) biallelic-marker likelihood as the data term and a
-    :class:`~phynetpy._mcmc_gt.MCMC_GTPriors` network prior.  Proposals come
-    from the shared :class:`~phynetpy._mcmc_gt.MCMCGTKernel` (SPR,
-    ChangeNodeHeight, gamma tuning, and the full add/remove/relocate/flip
-    reticulation suite), so acceptance uses the correct
-    ``log_posterior_delta + log_hastings_ratio`` test and the adaptive
-    kernel is frozen at the end of burn-in to preserve detailed balance.
+    The numerical core behind ``infer(BiallelicMarkers(...),
+    criterion=Bayesian())``.  Runs a rigorous MH chain over network space
+    with the Bryant et al. (2012) biallelic-marker likelihood as the data
+    term and a :class:`~phynetpy._mcmc_gt.MCMC_GTPriors` network prior.
+    Proposals come from the shared
+    :class:`~phynetpy._mcmc_gt.MCMCGTKernel` (SPR, ChangeNodeHeight, gamma
+    tuning, and the full add/remove/relocate/flip reticulation suite), so
+    acceptance uses the correct ``log_posterior_delta +
+    log_hastings_ratio`` test and the adaptive kernel is frozen at the end
+    of burn-in to preserve detailed balance.
 
     Args:
-        filename: Path to a NEXUS file containing biallelic SNP data.
+        aln: In-memory biallelic marker matrix (per-site red-allele counts).
         u: Red->green mutation rate.  Defaults to 1.0.
         v: Green->red mutation rate.  Defaults to 1.0.
         coal: Coalescent rate constant (theta).  Defaults to 1.0.
@@ -1129,16 +935,18 @@ def MCMC_BIMARKERS(filename: str,
         start_net: Optional starting network (must be labelled with the
             alignment taxa).  When ``None`` an ultrametric caterpillar tree
             is built automatically.
+        backbone: Network every accepted state must contain as a subgraph
+            (``StartMode.AUGMENT``).  ``None`` leaves the chain
+            unconstrained.
 
     Returns:
         dict[Network, float]: A single-entry mapping from the maximum a
         posteriori network to its log-posterior score.
     """
-    from ._mcmc_gt import (MCMC_GTPriors, MCMCGTKernel, log_prior_network,
-                           _is_valid_network)
+    from ._mcmc_gt import MCMC_GTPriors, MCMCGTKernel, _is_valid_network
+    from ._search_flags import resolve_move_types
 
-    # ── Parse data + taxa ────────────────────────────────────────────────
-    aln = MSA(filename)
+    # ── Taxa + sampling effort ───────────────────────────────────────────
     taxa = [rec.get_name() for rec in aln.get_records()]
     if samples is None:
         samples = {name: 1 for name in taxa}
@@ -1165,7 +973,11 @@ def MCMC_BIMARKERS(filename: str,
     kernel = MCMCGTKernel(
         max_reticulations=max_reticulations,
         max_level=max_level,
+        move_types=resolve_move_types(augment_only=backbone is not None),
         rng=kernel_rng,
+    )
+    required_clusters = (
+        network_clusters(backbone) if backbone is not None else None
     )
 
     # ── Metropolis-Hastings loop (mirrors MCMC_GT._run_mh semantics) ─────
@@ -1188,9 +1000,17 @@ def MCMC_BIMARKERS(filename: str,
             # Reject structurally invalid / over-level proposals up front so
             # they count as rejections (preserving detailed balance) instead
             # of being silently floored by the scorer.
-            if not _is_valid_network(model.network) or (
-                max_level is not None
-                and network_level(model.network) > max_level
+            if (
+                not _is_valid_network(model.network)
+                or (
+                    max_level is not None
+                    and network_level(model.network) > max_level
+                )
+                or (
+                    required_clusters is not None
+                    and not required_clusters
+                    <= network_clusters(model.network)
+                )
             ):
                 move.undo(model)
                 kernel.report_outcome(False, delta=0.0)
@@ -1222,62 +1042,6 @@ def MCMC_BIMARKERS(filename: str,
 
     return {best_network: best_score}
 
-def SNP_LIKELIHOOD(filename : str,
-                   u : float,
-                   v : float, 
-                   coal : float,
-                   samples : dict[str, int],
-                   max_workers: int = 8,
-                   sequential: bool = True,
-                   executor: Executor = None) -> float:
-    """
-    Given a set of taxa with SNP data and a phylogenetic network, calculate the 
-    likelihood of the network given the data using the SNP likelihood algorithm.
-    
-    Automatically selects CPU or GPU execution based on network complexity:
-      - Level-0 (tree):    always CPU
-      - Level-1 (1 retic): GPU when taxa > 20
-      - Level-2 (2 retics): GPU when taxa > 12
-    
-    Before starting computation, a pre-flight feasibility check predicts
-    peak memory usage and raises SNPResourceError if the computation would 
-    exceed GPU VRAM or system RAM.
-
-    Args:
-        filename (str): string path destination of a nexus file that 
-                        contains SNP data and a network
-        u (float): Parameter for the probability of an allele changing 
-                   from red to green.
-        v (float): Parameter for the probability of an allele changing 
-                   from green to red.
-        coal (float): Parameter for the rate of coalescence.
-        samples (dict[str, int]): Mapping from taxon names to sample counts.
-        max_workers (int, optional): The number of workers to use for parallel 
-                                     computation. Only used if sequential is False.
-                                     Defaults to 8.
-        sequential (bool, optional): Whether to use sequential computation. 
-                                     Defaults to True.
-        executor (Executor, optional): The executor to use. If None, one is 
-                                    auto-selected based on network complexity.
-                                    Defaults to None.
-    Returns:
-        float: The log likelihood (a negative number) of the network.
-    
-    Raises:
-        SNPResourceError: If the computation would exceed available hardware
-                          resources (GPU VRAM or system RAM).
-    """
-    
-    net = read_nexus(filename)[0]
-    aln = MSA(filename)
-
-    return _snp_log_likelihood(
-        net, aln, u, v, coal, samples,
-        max_workers=max_workers, sequential=sequential, executor=executor,
-        verbose=True,
-    )
-
-
 def _snp_log_likelihood(net: Network,
                         aln: MSA,
                         u: float,
@@ -1287,13 +1051,12 @@ def _snp_log_likelihood(net: Network,
                         *,
                         max_workers: int = 8,
                         sequential: bool = True,
-                        executor: "Executor | None" = None,
                         verbose: bool = False) -> float:
     """Biallelic-marker log-likelihood of ``net`` given an in-memory alignment.
 
-    This is the shared numerical core behind both the file-based
-    :func:`SNP_LIKELIHOOD` and the in-memory :class:`SNPScorer` used by
-    :func:`MCMC_BIMARKERS`.  It builds the SNP model graph from ``net`` and
+    The shared numerical core behind ``score(net, BiallelicMarkers(...),
+    criterion=Likelihood())`` and the :class:`SNPScorer` that drives
+    :func:`_snp_mcmc`.  It builds the SNP model graph from ``net`` and
     ``aln``, sizes the Bryant Q matrix for the true maximum lineage count
     (accounting for reticulation lineage duplication), auto-routes to the GPU
     when the network is large enough, batches over sites when the peak VPI
@@ -1306,9 +1069,8 @@ def _snp_log_likelihood(net: Network,
         v: Green->red mutation rate.
         coal: Coalescent rate constant (theta).
         samples: Map taxon label -> number of sampled gene copies.
-        max_workers: Worker count for the (optional) parallel executor.
-        sequential: Reserved for the parallel executor path.
-        executor: Optional pre-built executor.
+        max_workers: Worker count for the (optional) parallel site loop.
+        sequential: Reserved for the parallel site loop.
         verbose: When ``True`` print the per-call diagnostics (device, peak
             tensor, timing).  MCMC leaves this ``False`` to avoid per-iteration
             spam.
@@ -1317,7 +1079,7 @@ def _snp_log_likelihood(net: Network,
         The total log-likelihood (a negative float; ``-inf`` if a site has
         zero probability under ``net``).
     """
-    snp_model = _build_snp_model(net, aln)
+    snp_model = build_snp_model(net, aln)
 
     # ── Analyze network complexity ──────────────────────────────────────
     level = _compute_network_level(snp_model)
@@ -1354,7 +1116,7 @@ def _snp_log_likelihood(net: Network,
         )
         peak_mb = peak_bytes / (1024 * 1024)
         device_str = f"GPU ({GPU_SPECS.name})" if use_gpu else "CPU"
-        print(f"SNP_LIKELIHOOD: {n_taxa} taxa, level-{level}, "
+        print(f"SNP likelihood: {n_taxa} taxa, level-{level}, "
               f"max_lineages={max_n}, {n_sites} sites")
         batch_info = (f" ({n_batches} batches of {batch_size})"
                       if n_batches > 1 else "")
@@ -1375,7 +1137,7 @@ def _snp_log_likelihood(net: Network,
                                site_slice=site_slice,
                                use_gpu=use_gpu)
         visitor = SNPModelVisitor(strategy)
-        for node in Traversal(snp_model.get_root(), TraversalOrder.POST_ORDER):
+        for node in postorder(snp_model.root):
             visitor.visit(node)
         return strategy.L
 
@@ -1404,45 +1166,6 @@ def _snp_log_likelihood(net: Network,
 
     return total_log_lik
 
-
-##################
-# Model Building #
-##################
-
-def build_model(filename : str,
-                net : Network) -> Model:
-    """
-    Build a SNP model from a data file and network.
-    """
-    return _build_snp_model(net, MSA(filename))
-
-
-def _build_snp_model(net: Network, aln: MSA) -> Model:
-    """Build a SNP model graph from an in-memory network and alignment.
-
-    Split out from :func:`build_model` so the MCMC scorer can reuse a single
-    parsed :class:`~phynetpy.MSA.MSA` across every proposed network instead of
-    re-reading the NEXUS file on every iteration.
-
-    Args:
-        net: The species network.
-        aln: The parsed biallelic alignment.
-
-    Returns:
-        A built :class:`~phynetpy.ModelGraph.Model` with the SNP root
-        aggregator attached.
-    """
-    network = NetworkComponent(net=net)
-    msa = MSAComponent({NetworkComponent}, aln)
-
-    model = ModelFactory(network, msa).build()
-
-    snp_root = RootAggregatorNode()
-    model.root = snp_root
-    net_root : RootNode = model.nodetypes["root"][0]
-    net_root.join(snp_root)
-
-    return model
 
 #########################
 ### Transition Matrix ###
@@ -1629,9 +1352,9 @@ class BiMarkersTransition:
         """
         return self.Q
 
-class SNPStrategy(Strategy):
+class SNPStrategy:
     """
-    Visitor for the SNP model.
+    Per-node partial-likelihood computation for the SNP model.
     
     Supports both CPU (NumPy) and GPU (CuPy) execution. When use_gpu=True,
     all tensor operations run on the GPU via CuPy's drop-in NumPy API.
@@ -2153,9 +1876,10 @@ class SNPStrategy(Strategy):
         n.vpi = NodeVPI(self.L, [], [], np.zeros(0))
         self.cache[n] = (False, n.vpi)
         
-class SNPModelVisitor(Visitor):
+class SNPModelVisitor:
     """
-    Visitor for the SNP model.
+    Drives a :class:`SNPStrategy` over the SNP model graph, threading each
+    node's partial-likelihood result up to its parent.
     """
     def __init__(self, strategy: SNPStrategy) -> None:
         self.strategy : SNPStrategy = strategy

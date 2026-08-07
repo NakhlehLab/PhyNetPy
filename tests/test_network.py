@@ -19,6 +19,8 @@ Each test builder constructs a small network topology from scratch so
 that tests are self-contained and deterministic.
 """
 
+import gc
+
 import pytest
 from typing import Iterable, Optional, Sequence, Tuple
 
@@ -26,11 +28,9 @@ from phynetpy.Network import (
     Network,
     Node,
     Edge,
-    UEdge,
     EdgeSet,
     NodeSet,
     NetworkError,
-    EdgeError,
 )
 from phynetpy.GraphUtils import is_tree, level
 
@@ -303,6 +303,16 @@ class TestNode:
         n.set_attributes({"y": 2})
         assert n.attribute_value("y") == 2
 
+    def test_attributes_are_not_shared_between_nodes(self):
+        """
+        Nodes built without an explicit attribute map must not alias one
+        dictionary, or writing an attribute on one node would surface it on
+        every other node in every network.
+        """
+        a, b = Node("A"), Node("B")
+        a.add_attribute("only_on_a", 123)
+        assert b.get_attributes() == {}
+
     def test_copy(self):
         """copy() should produce an independent node with the same label."""
         original = Node("A", is_reticulation=True)
@@ -314,12 +324,17 @@ class TestNode:
         assert clone.get_time() == pytest.approx(5.0)
         assert clone is not original
 
+    def test_copy_does_not_share_attributes(self):
+        """A copy's attribute map must be independent of the original's."""
+        original = Node("A", attr={"shared": 1})
+        clone = original.copy()
+        clone.add_attribute("only_on_clone", 2)
+
+        assert original.get_attributes() == {"shared": 1}
+
     def test_equality_and_hash(self):
-        """Two distinct Node objects with the same label should not compare
-        equal by default (identity-based equality)."""
+        """Node equality is identity-based, and hashes are stable."""
         n1 = Node("A")
-        n2 = Node("A")
-        # Node equality is identity-based
         assert n1 == n1
         # Hash should be stable
         assert hash(n1) == hash(n1)
@@ -1559,13 +1574,11 @@ class TestEdgeSet:
         es.add(e)
         assert e in es.get_set()
 
-    def test_undirected_rejects_directed(self):
-        """An undirected EdgeSet should reject Edge (directed) objects."""
-        es = EdgeSet(directed=False)
-        a, b = Node("A"), Node("B")
-        e = Edge(a, b)
+    def test_rejects_non_edge(self):
+        """EdgeSet holds only Edge objects; anything else is a TypeError."""
+        es = EdgeSet()
         with pytest.raises(TypeError):
-            es.add(e)
+            es.add(Node("A"))
 
 
 # ===================================================================
@@ -1599,7 +1612,7 @@ class TestNodeSet:
 
     def test_degree_tracking(self):
         """After processing an edge, in_deg/out_deg should update."""
-        ns = NodeSet(directed=True)
+        ns = NodeSet()
         a, b = Node("A"), Node("B")
         ns.add(a, b)
         e = Edge(a, b)
@@ -1609,7 +1622,7 @@ class TestNodeSet:
 
     def test_process_removal(self):
         """process(edge, removal=True) should decrement degrees."""
-        ns = NodeSet(directed=True)
+        ns = NodeSet()
         a, b = Node("A"), Node("B")
         ns.add(a, b)
         e = Edge(a, b)
@@ -1617,3 +1630,34 @@ class TestNodeSet:
         ns.process(e, removal=True)
         assert ns.out_deg(a) == 0
         assert ns.in_deg(b) == 0
+
+    def test_add_accepts_lists(self):
+        """add() should flatten lists as well as take loose arguments."""
+        ns = NodeSet()
+        a, b, c = Node("A"), Node("B"), Node("C")
+        ns.add([a, b], c)
+        assert {a, b, c} == ns.get_set()
+
+    def test_edge_lookups_do_not_leak_absent_nodes(self):
+        """
+        Querying the edges of a node that is not in V must not retain it.
+
+        The in/out maps are defaultdicts, so a naive lookup would insert an
+        empty set keyed on every transient node ever queried. Over a long
+        MCMC chain those phantom keys bloat each deepcopy of the network.
+        """
+        def entries_held(node_set):
+            """Total number of keys across the NodeSet's internal dicts."""
+            return sum(len(ref) for ref in gc.get_referents(node_set)
+                       if isinstance(ref, dict))
+
+        ns = NodeSet()
+        ns.add(Node("resident"))
+        before = entries_held(ns)
+
+        for i in range(500):
+            ghost = Node(f"ghost{i}")
+            assert ns.in_edges(ghost) == set()
+            assert ns.out_edges(ghost) == set()
+
+        assert entries_held(ns) == before, "absent nodes leaked into the maps"

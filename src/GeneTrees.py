@@ -34,11 +34,11 @@ import tempfile
 import subprocess
 import warnings
 from io import StringIO
-from typing import Any, Callable, Dict, FrozenSet, List, Literal, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, FrozenSet, List, Literal, Optional, Set, Tuple
 
 from Bio import Phylo
 
-from .Network import *
+from .Network import Network, Node, Edge
 from .GraphUtils import get_all_clusters
 
 #########################
@@ -87,13 +87,6 @@ def phynetpy_naming(taxa_name: str) -> str:
     else:
         raise GeneTreeError("Error Applying PhyNetPy Naming Rule: \
                              3rd position is not an a-z character")
-
-def external_naming(taxa_name: str) -> str:
-    """
-    TODO: Examine the need for this function and remove if not needed.
-    """
-    return taxa_name.split("_")[0]
-    
 
 
 ####################
@@ -563,7 +556,6 @@ class GeneTrees:
             if len(subtaxa) == 1:
                 label = next(iter(subtaxa))
                 if label not in name_to_node:
-                    from .Network import Node  # local import to avoid cycles
                     n = Node(label)
                     net.add_nodes(n)
                     name_to_node[label] = n
@@ -582,7 +574,6 @@ class GeneTrees:
             for x in subtaxa.difference(covered):
                 maximal.append({x})
 
-            from .Network import Node
             parent = Node(f"Internal_{len(net.V())}")
             net.add_nodes(parent)
             for block in maximal:
@@ -590,7 +581,7 @@ class GeneTrees:
                 net.add_edges(Edge(parent, child))
             return parent
 
-        root = build(set(taxa))
+        build(set(taxa))
         # Clean spurious degree-1 chains
         net.clean([False, False, True])
         return net
@@ -751,7 +742,7 @@ class GeneTrees:
         # Create nodes top-down
         roots = [tree.root]
         for cl in roots:
-            parent_node = ensure_node(cl, None)
+            ensure_node(cl, None)
             # BFS children
             q = [cl]
             while q:

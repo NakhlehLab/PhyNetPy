@@ -22,9 +22,11 @@ import copy
 from pathlib import Path
 
 import phynetpy.IO as io
-from phynetpy.GeneTrees import GeneTrees
 from phynetpy.ModelSelection import reticulation_sweep
-from phynetpy.MPL import MPL
+from phynetpy.criteria import PseudoLikelihood
+from phynetpy.data import GeneTrees
+from phynetpy.infer import infer
+from phynetpy.models import MSC
 
 
 _REPO = Path(__file__).resolve().parent.parent
@@ -68,13 +70,13 @@ SA_PROGRESS_EVERY = 0  # quiet; the sweep driver prints summaries
 
 
 def load_gene_trees() -> GeneTrees:
-    return io.read_newick_file(
+    networks = io.read_newick_file(
         GENE_TREES_FILE,
-        return_type="genetrees",
-        species_gene_mapping=SPECIES_TO_ALLELES,
+        return_type="networks",
         restrict_to_taxa=SPECIES_LABELS,
         min_leaves_after_restrict=3,
     )
+    return GeneTrees(list(networks), SPECIES_TO_ALLELES)
 
 
 def load_or_build_seed(gene_trees: GeneTrees):
@@ -97,10 +99,12 @@ def main() -> None:
     seed_template = load_or_build_seed(gene_trees)
 
     def run_k(k: int, seed: int) -> float:
-        """Run one MPL SA search with max_reticulations=k."""
-        start_net = copy.deepcopy(seed_template)
-        mpl = MPL(start_net, gene_trees, SPECIES_TO_ALLELES)
-        return mpl.search(
+        """Run one pseudo-likelihood SA search with max_reticulations=k."""
+        return infer(
+            gene_trees,
+            model=MSC(),
+            criterion=PseudoLikelihood(),
+            start=copy.deepcopy(seed_template),
             method="sa",
             num_iter=SEARCH_ITERATIONS,
             max_reticulations=k,
@@ -118,7 +122,7 @@ def main() -> None:
             reheat_on_no_uphill=SA_REHEAT_ON_NO_UPHILL,
             reheat_cap_mult=SA_REHEAT_CAP_MULT,
             reheat_max_consecutive=SA_REHEAT_MAX_CONSECUTIVE,
-        )
+        ).score
 
     print(
         f"\nSweeping k in {list(K_VALUES)} × seeds {list(SEEDS)} "

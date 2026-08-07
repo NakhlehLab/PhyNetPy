@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 import numpy as np
 
 from .Network import Network, Node
+from .GraphUtils import _node_height
+
+if TYPE_CHECKING:
+    # ``_mcmc_gt`` imports this module, so the displayed-tree record it
+    # owns can only be named in annotations.
+    from . import _mcmc_gt
 
 try:
     from .cython.gt_msc_cy import (
@@ -117,27 +123,6 @@ class MSCBranchKernel:
         val = _LOG_FLOOR if denom <= 0 else math.log(denom)
         self._log_denom_cache[key] = val
         return val
-
-
-def _node_height(net: Network, node: Node, cache: dict[Node, float]) -> float:
-    """Ultrametric height above the present from child branch lengths."""
-    cached = cache.get(node)
-    if cached is not None:
-        return cached
-    children = net.get_children(node)
-    if not children:
-        cache[node] = 0.0
-        return 0.0
-    best = 0.0
-    for child in children:
-        edges = net.get_edge(node, child)
-        edge = edges[0] if isinstance(edges, list) else edges
-        length = edge.get_length()
-        if length is None:
-            length = 0.0
-        best = max(best, _node_height(net, child, cache) + float(length))
-    cache[node] = best
-    return best
 
 
 def _gene_coalescence_events(
@@ -920,7 +905,7 @@ def _safe_add(a: float | None, b: float | None) -> float | None:
 
 
 def _msc_log_prob_tree_int(
-    dt: "_DisplayedTree",
+    dt: "_mcmc_gt._DisplayedTree",
     gti: "_GeneTreeIndex",
     engine: "MSCBranchKernel",
 ) -> float:
@@ -1204,7 +1189,6 @@ def _msnc_log_prob_network_int(
 
     apply_branch = _apply_branch_coalescent_int
     log_floor = _LOG_FLOOR
-    log_gij = engine._log_gij  # noqa: F841 (referenced for caching warm-up)
 
     # Frontier: empty tuple at log-prob 0.
     frontier: dict[tuple[tuple[int, int], ...], float] = {(): 0.0}

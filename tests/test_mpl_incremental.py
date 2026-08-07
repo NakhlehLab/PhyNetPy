@@ -21,7 +21,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from phynetpy.Network import Network
 from phynetpy.GeneTrees import GeneTrees
-from phynetpy.MPL import MPL, MPLScorer, _HAS_CYTHON_MPL
+from phynetpy.infer import MPLScorer
+from phynetpy._mpl import MPL
+from phynetpy._mpl import _HAS_CYTHON_MPL
 from phynetpy.ModelGraph import Model
 from phynetpy.IO import convert_newick
 

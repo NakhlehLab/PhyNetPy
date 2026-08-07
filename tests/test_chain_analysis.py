@@ -34,8 +34,6 @@ from phynetpy._chain_analysis import (
     hpd_interval,
     read_tracer_log,
     standard_error_of_mean,
-    summarize,
-    summarize_traces,
     write_tracer_log,
     write_trees_nexus,
 )
