@@ -483,6 +483,7 @@ def pairwise_leaf_distance(net: Network,
     name_dist: dict[tuple[str, str], float] = {}
 
     def dijkstra(start: Node) -> Dict[Node, float]:
+        """Shortest-path distance from ``start`` to every node in the undirected graph."""
         dist: Dict[Node, float] = {n: float("inf") for n in net.V()}
         dist[start] = 0.0
         heap: list[tuple[float, Node]] = [(0.0, start)]
@@ -561,6 +562,7 @@ def bridges_and_articulations(net: Network) -> tuple[list[tuple[str, str]], list
     arts: Set[str] = set()
 
     def dfs(u: Node) -> None:
+        """Tarjan DFS from ``u``, recording bridges and articulation points."""
         nonlocal time
         visited.add(u)
         disc[u] = time
@@ -625,6 +627,7 @@ def blobs(net: Network) -> list[set[Node]]:
     components: list[set[Node]] = []
 
     def push_edge(u: Node, v: Node) -> None:
+        """Record edge ``(u, v)`` as belonging to the current DFS component."""
         edge_stack.append((u, v))
 
     def pop_component(until: tuple[Node, Node]) -> set[Node]:
@@ -639,6 +642,7 @@ def blobs(net: Network) -> list[set[Node]]:
         return comp_nodes
 
     def dfs(u: Node) -> None:
+        """Tarjan biconnected-component DFS from ``u``, popping completed blobs."""
         nonlocal time
         disc[u] = time
         low[u] = time

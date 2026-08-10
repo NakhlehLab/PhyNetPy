@@ -11,29 +11,29 @@
         <h1>PhyNetPy Documentation</h1>
         <p>Library for the Development and Use of Phylogenetic Network Methods</p>
     </div>
-    
+
     <div class="document">
         <div class="documentwrapper">
             <div class="body">
                 <h1>PhyNetPy API Reference</h1>
-                
-                <p>Welcome to the PhyNetPy documentation. PhyNetPy is a comprehensive Python library 
-                for phylogenetic network analysis, providing tools for network construction, manipulation, 
+
+                <p>Welcome to the PhyNetPy documentation. PhyNetPy is a comprehensive Python library
+                for phylogenetic network analysis, providing tools for network construction, manipulation,
                 simulation, and inference.</p>
-                
+
                 <div class="module-info">
                     <dl>
                         <dt>Version:</dt>
-                        <dd>0.4.0</dd>
+                        <dd>0.6.0</dd>
                         <dt>Authors:</dt>
                         <dd>Mark Kessler, Luay Nakhleh</dd>
                         <dt>Copyright:</dt>
                         <dd>2025</dd>
                     </dl>
                 </div>
-                
+
                 <h2>Module Index</h2>
-                
+
                 <table class="module-index">
                     <thead>
                         <tr>
@@ -87,12 +87,8 @@
                             <td>Hill-climbing and simulated-annealing search drivers, plus the ProposalKernel interface.</td>
                         </tr>
                         <tr>
-                            <td><a href="ModelFactory.html">ModelFactory</a></td>
-                            <td>Component-based model building factory for constructing probabilistic phylogenetic models.</td>
-                        </tr>
-                        <tr>
                             <td><a href="ModelGraph.html">ModelGraph</a></td>
-                            <td>Probabilistic graphical model for phylogenetics with typed model nodes and visitor pattern support.</td>
+                            <td>The Model container pairing a network with its likelihood calculator, plus dirty-state tracking for incremental rescoring.</td>
                         </tr>
                         <tr>
                             <td><a href="ModelMove.html">ModelMove</a></td>
@@ -103,16 +99,16 @@
                             <td>Information-criterion-based reticulation-count selection (AIC, BIC, AICc) and reticulation sweep helpers.</td>
                         </tr>
                         <tr>
-                            <td><a href="ModelTraversal.html">ModelTraversal</a></td>
-                            <td>Model-graph traversal orders plus the Visitor and Strategy dispatch interfaces for per-node computation.</td>
-                        </tr>
-                        <tr>
                             <td><a href="Network.html">Network</a></td>
                             <td>Core phylogenetic network data structures: Node, Edge, Branch, and Network classes.</td>
                         </tr>
                         <tr>
                             <td><a href="Newick.html">Newick</a></td>
                             <td>Newick format label extraction and Nexus file generation utilities.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="PopulationGenetics.html">PopulationGenetics</a></td>
+                            <td>Validated population allele-count data and pulse-admixture graph semantics.</td>
                         </tr>
                         <tr>
                             <td><a href="ReticulationComparison.html">ReticulationComparison</a></td>
@@ -148,41 +144,32 @@
                         </tr>
                     </tbody>
                 </table>
-                
+
                 <h2>Getting Started</h2>
-                
+
                 <h3>Installation</h3>
                 <pre><code>pip install phynetpy</code></pre>
-                
-                <h3>Quick Example</h3>
-                <pre><code>from PhyNetPy import Network, Node, Edge
-from PhyNetPy import read_nexus, read_newick
 
-# Parse a network from a Nexus file
-networks = read_nexus("my_network.nex")
-network = networks[0]
+                <h3>Quick Example</h3>
+                <pre><code>from phynetpy import read_newick
+
+# Parse a network from a Newick string
+network = read_newick("((A:0.1,B:0.2):0.3,C:0.4);")[0]
 
 # Access network properties
 print(f"Number of nodes: {len(network.V())}")
 print(f"Number of edges: {len(network.E())}")
-print(f"Leaves: {[leaf.label for leaf in network.get_leaves()]}")
+print(f"Leaves: {[leaf.label for leaf in network.get_leaves()]}")</code></pre>
 
-# Parse from a Newick string
-net = read_newick("((A:0.1,B:0.2):0.3,C:0.4);")
-
-# Simulate a network
-from PhyNetPy import CBDP
-sim = CBDP(gamma=1.0, mu=0.5, n=10)
-simulated_net = sim.generate_network()</code></pre>
-                
                 <h2>Module Categories</h2>
-                
+
                 <h3>Core Data Structures</h3>
                 <ul class="method-list">
                     <li><a href="Alphabet.html">Alphabet</a> - Character-to-state mapping for biological sequence data (DNA, RNA, Protein, Codon, SNP).</li>
                     <li><a href="MSA.html">MSA</a> - Multiple Sequence Alignment parsing, storage, grouping, and distance computation.</li>
                     <li><a href="Matrix.html">Matrix</a> - Data matrix storage and reduction for sequence alignments with unique site pattern compression.</li>
                     <li><a href="Network.html">Network</a> - Core phylogenetic network data structures: Node, Edge, Branch, and Network classes.</li>
+                    <li><a href="PopulationGenetics.html">PopulationGenetics</a> - Validated population allele-count data and pulse-admixture graph semantics.</li>
                 </ul>
                 <h3>Models</h3>
                 <ul class="method-list">
@@ -220,23 +207,21 @@ simulated_net = sim.generate_network()</code></pre>
                 <h3>Infrastructure</h3>
                 <ul class="method-list">
                     <li><a href="Logger.html">Logger</a> - Simple debug logger for internal model move compatibility.</li>
-                    <li><a href="ModelFactory.html">ModelFactory</a> - Component-based model building factory for constructing probabilistic phylogenetic models.</li>
-                    <li><a href="ModelGraph.html">ModelGraph</a> - Probabilistic graphical model for phylogenetics with typed model nodes and visitor pattern support.</li>
-                    <li><a href="ModelTraversal.html">ModelTraversal</a> - Model-graph traversal orders plus the Visitor and Strategy dispatch interfaces for per-node computation.</li>
+                    <li><a href="ModelGraph.html">ModelGraph</a> - The Model container pairing a network with its likelihood calculator, plus dirty-state tracking for incremental rescoring.</li>
                 </ul>
-                
+
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
                 </div>
             </div>
         </div>
-        
+
         <div class="sphinxsidebar">
             <h3>Navigation</h3>
             <ul>
                 <li><a href="index.html" class="current">Home</a></li>
             </ul>
-            
+
             <h3>Modules</h3>
             <ul>
                 <li><a href="Alphabet.html">Alphabet</a></li>
@@ -250,13 +235,12 @@ simulated_net = sim.generate_network()</code></pre>
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
-                <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
                 <li><a href="ModelSelection.html">ModelSelection</a></li>
-                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
                 <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>

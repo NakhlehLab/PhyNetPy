@@ -58,7 +58,7 @@ from phynetpy.infer import (
     infer,
     simulate,
 )
-from phynetpy.models import MSC
+from phynetpy.models import BranchLengthUnit, MSC
 
 
 # True networks (ultrametric, substitution units).  The reticulate one is a
@@ -70,6 +70,15 @@ TRUE_NETWORK = (
     "(#H1:0.04[&gamma=0.35],D:0.11)DR:0.02)R;"
 )
 TRUE_CLADES = [{"A", "B"}, {"A", "B", "C"}]
+
+
+def _true_net(newick: str) -> Network:
+    """Parse a simulation network in expected substitutions per site."""
+
+    return Network.from_newick(
+        newick,
+        branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+    )
 
 
 def _descendant_leaves(net: Network, node) -> frozenset:
@@ -129,7 +138,7 @@ def _theta_posterior(result):
 
 def _simulate_alignment(args, seed: int):
     """Simulate one multilocus alignment on the true network."""
-    true_net = Network.from_newick(TRUE_TREE if args.tree else TRUE_NETWORK)
+    true_net = _true_net(TRUE_TREE if args.tree else TRUE_NETWORK)
     mapping = {sp: [sp] for sp in ("A", "B", "C", "D")}
     return simulate(
         MSC(theta=args.theta),
@@ -158,7 +167,7 @@ def _bayesian(args, seed: int) -> Bayesian:
 def run_single(args) -> None:
     """Simulate one data set, sample the posterior, and report recovery."""
     true_newick = TRUE_TREE if args.tree else TRUE_NETWORK
-    true_net = Network.from_newick(true_newick)
+    true_net = _true_net(true_newick)
 
     print(f"True network : {true_newick}")
     print(f"True theta    : {args.theta}")
@@ -222,7 +231,7 @@ def run_single_gt(args) -> None:
     moves -- without any sequence likelihood in the loop.
     """
     true_newick = TRUE_TREE if args.tree else TRUE_NETWORK
-    true_net = Network.from_newick(true_newick)
+    true_net = _true_net(true_newick)
     mapping = {sp: [sp] for sp in ("A", "B", "C", "D")}
 
     print(f"True network : {true_newick}")

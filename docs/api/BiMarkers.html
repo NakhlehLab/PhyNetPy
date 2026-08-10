@@ -11,18 +11,18 @@
         <h1>PhyNetPy Documentation</h1>
         <p>Library for the Development and Use of Phylogenetic Network Methods</p>
     </div>
-    
+
     <div class="document">
         <div class="documentwrapper">
             <div class="body">
                 <div class="breadcrumb">
                     <a href="index.html">Home</a> &raquo; BiMarkers
                 </div>
-                
+
                 <h1>BiMarkers Module <span class="version-badge">v1.0.0</span></h1>
-                
+
                 <p>SNP (biallelic marker) likelihood computation for phylogenetic networks, with optional GPU acceleration.</p>
-                
+
                 <div class="module-info">
                     <dl>
                         <dt>Author:</dt>
@@ -33,7 +33,7 @@
                         <dd>BiMarkers.py</dd>
                     </dl>
                 </div>
-                
+
                 <div class="toc">
                     <h4>Contents</h4>
                     <ul>
@@ -64,6 +64,12 @@
                 <div class="constant-def">
                     <span class="constant-name">GPU_VRAM_SAFETY_FACTOR</span> = 0.8
                 </div>
+                <div class="constant-def">
+                    <span class="constant-name">VPI_WORKSPACE_MULTIPLIER</span> = 3
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">GPU_MAX_SITE_BATCH</span> = 1000
+                </div>
 
                 <h2 id="exceptions">Exceptions</h2>
                 <div class="class-def exception-def">
@@ -86,6 +92,9 @@
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">vram_gb</span> <span class="keyword">-&gt;</span> float <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>VRAM capacity in gigabytes (converted from :attr:`vram_bytes`).</p>
                             </div>
                         </div>
                         <h4>Methods</h4>
@@ -137,7 +146,52 @@
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">aln: MSA, u: float, v: float, coal: float, samples: dict[str, int], priors: 'MCMC_GTPriors', posterior: bool = True</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">__init__</span>(<span class="params">aln: MSA, u: float, v: float, theta: float, samples: dict[str, int], priors: 'MCMC_GTPriors', posterior: bool = True</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``SNPScorer``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">aln</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Biallelic-marker alignment shared across every call.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">u</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Mutation rate red-to-green (1-&gt;0).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">v</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Mutation rate green-to-red (0-&gt;1).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">theta</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Population mutation rate ``4*N*mu``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">samples</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Per-taxon sample counts (number of alleles observed).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">priors</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Network-prior hyperparameters used when ``posterior`` is ``True``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">posterior</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>When ``True``, add the network prior to the likelihood so calls return a log-posterior; when ``False``, return the log-likelihood alone.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -149,11 +203,11 @@
                         <span class="keyword">class</span> <span class="name">BiMarkersTransition</span>
                     </div>
                     <div class="class-body">
-                        <p>Class that encodes the probabilities of transitioning from one (n,r) pair to another under a Biallelic model. Includes method for efficiently computing e^Qt Inputs: 1) n-- the total number of samples in the species tree 2) u-- the probability of going from the red allele to the green one 3) v-- the probability of going from the green allele to the red one 4) coal-- the coalescent rate constant, theta Assumption: Matrix indexes start with n=1, r=0, so Q[0][0] is Q(1,0);(1,0) Q Matrix is given by Equation 15 from: David Bryant, Remco Bouckaert, Joseph Felsenstein, Noah A. Rosenberg, Arindam RoyChoudhury, Inferring Species Trees Directly from Biallelic Genetic Markers: Bypassing Gene Trees in a Full Coalescent Analysis, Molecular Biology and Evolution, Volume 29, Issue 8, August 2012, Pages 1...</p>
+                        <p>Class that encodes the probabilities of transitioning from one (n,r) pair to another under a Biallelic model. Includes method for efficiently computing e^Qt Inputs: 1) n-- the total number of samples in the species tree 2) u-- the probability of going from the red allele to the green one 3) v-- the probability of going from the green allele to the red one 4) theta-- population mutation rate ``4*N*mu`` Assumption: Matrix indexes start with n=1, r=0, so Q[0][0] is Q(1,0);(1,0) Q Matrix is given by Equation 15 from: David Bryant, Remco Bouckaert, Joseph Felsenstein, Noah A. Rosenberg, Arindam RoyChoudhury, Inferring Species Trees Directly from Biallelic Genetic Markers: Bypassing Gene Trees in a Full Coalescent Analysis, Molecular Biology and Evolution, Volume 29, Issue 8, August 2012, Pages ...</p>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">n: int, u: float, v: float, coal: float</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">__init__</span>(<span class="params">n: int, u: float, v: float, theta: float</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
                                 <p>Initialize the Q matrix</p>
@@ -171,17 +225,17 @@
                                     <tr>
                                         <td><span class="param-name">u</span></td>
                                         <td><span class="param-type">float</span></td>
-                                        <td>probability of a lineage going from red to green</td>
+                                        <td>Mutation rate from red to green.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">v</span></td>
                                         <td><span class="param-type">float</span></td>
-                                        <td>probability of a lineage going from green to red</td>
+                                        <td>Mutation rate from green to red.</td>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">coal</span></td>
+                                        <td><span class="param-name">theta</span></td>
                                         <td><span class="param-type">float</span></td>
-                                        <td>coal rate, theta.</td>
+                                        <td>Population mutation rate ``4*N*mu``.</td>
                                     </tr>
                                 </table>
                             </div>
@@ -232,14 +286,69 @@
                 <h2 id="snpstrategy">SNPStrategy</h2>
                 <div class="class-def">
                     <div class="class-header">
-                        <span class="keyword">class</span> <span class="name">SNPStrategy</span>(<span class="params">Strategy</span>)
+                        <span class="keyword">class</span> <span class="name">SNPStrategy</span>
                     </div>
                     <div class="class-body">
-                        <p>Visitor for the SNP model. Supports both CPU (NumPy) and GPU (CuPy) execution. When use_gpu=True, all tensor operations run on the GPU via CuPy's drop-in NumPy API.</p>
+                        <p>Per-node partial-likelihood computation for the SNP model. Supports both CPU (NumPy) and GPU (CuPy) execution. When use_gpu=True, all tensor operations run on the GPU via CuPy's drop-in NumPy API.</p>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">q: BiMarkersTransition, u: float, v: float, coal: float, sites: int, max_samples: int, site_slice: tuple[int, int] | None = None, use_gpu: bool = False</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">__init__</span>(<span class="params">q: BiMarkersTransition, u: float, v: float, theta: float, sites: int, max_samples: int, site_slice: tuple[int, int] | None = None, use_gpu: bool = False, branch_thetas: Optional[dict] = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``SNPStrategy``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">q</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Transition-rate model for the 0/1 substitution process.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">u</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Mutation rate red-to-green (1-&gt;0).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">v</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Mutation rate green-to-red (0-&gt;1).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">theta</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Default population mutation rate ``4*N*mu``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sites</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Total number of sites in the alignment.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_samples</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Maximum per-taxon sample count, used to size the per-node partial-likelihood vectors.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">site_slice</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional ``(start, stop)`` restricting computation to a contiguous subrange of sites (for chunked/parallel evaluation). ``None`` uses all ``sites``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">use_gpu</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>When ``True``, run tensor operations on the GPU via CuPy instead of NumPy.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_thetas</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Fixed branch-specific population mutation rates.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <h4>Methods</h4>
@@ -289,14 +398,29 @@
                 <h2 id="snpmodelvisitor">SNPModelVisitor</h2>
                 <div class="class-def">
                     <div class="class-header">
-                        <span class="keyword">class</span> <span class="name">SNPModelVisitor</span>(<span class="params">Visitor</span>)
+                        <span class="keyword">class</span> <span class="name">SNPModelVisitor</span>
                     </div>
                     <div class="class-body">
-                        <p>Visitor for the SNP model.</p>
+                        <p>Drives a :class:`SNPStrategy` over the SNP model graph, threading each node's partial-likelihood result up to its parent.</p>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">__init__</span>(<span class="params">strategy: SNPStrategy</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new visitor driving ``strategy`` over the model graph.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">strategy</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Per-node partial-likelihood strategy to invoke at each visited node.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <h4>Methods</h4>
@@ -304,25 +428,40 @@
                             <div class="function-header">
                                 <span class="name">visit_leaf</span>(<span class="params">n: LeafNode</span>) <span class="keyword">-&gt;</span> None
                             </div>
+                            <div class="function-body">
+                                <p>Compute and record the leaf partial likelihood for ``n``.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">visit_internal</span>(<span class="params">n: InternalNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Combine both children's partials at internal node ``n`` and record the result.</p>
                             </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">visit_reticulation</span>(<span class="params">n: ReticulationNode</span>) <span class="keyword">-&gt;</span> None
                             </div>
+                            <div class="function-body">
+                                <p>Split the child partial across both parent interfaces of reticulation ``n``.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">visit_root</span>(<span class="params">n: RootNode</span>) <span class="keyword">-&gt;</span> None
                             </div>
+                            <div class="function-body">
+                                <p>Combine both children's partials at the root ``n`` and record the result.</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">visit_aggregator</span>(<span class="params">n: RootAggregatorNode</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Fold the child partial into the final log-likelihood at aggregator ``n``.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -330,7 +469,7 @@
                                 <span class="name">visit</span>(<span class="params">n: ModelNode</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Visit a node.</p>
+                                <p>Dispatch to the correct visit method based on node type.</p>
                             </div>
                         </div>
                     </div>
@@ -497,28 +636,20 @@
                                 <div class="returns"><span class="returns-label">Returns:</span> list[NodeVPI]: De-duplicated list in original order.</div>
                             </div>
                         </div>
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">build_model</span>(<span class="params">filename: str, net: Network</span>) <span class="keyword">-&gt;</span> Model
-                            </div>
-                            <div class="function-body">
-                                <p>Build a SNP model from a data file and network.</p>
-                            </div>
-                        </div>
 
-                
+
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
                 </div>
             </div>
         </div>
-        
+
         <div class="sphinxsidebar">
             <h3>Navigation</h3>
             <ul>
                 <li><a href="index.html">Home</a></li>
             </ul>
-            
+
             <h3>Modules</h3>
             <ul>
                 <li><a href="Alphabet.html">Alphabet</a></li>
@@ -532,13 +663,12 @@
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
-                <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
                 <li><a href="ModelSelection.html">ModelSelection</a></li>
-                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
                 <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
@@ -548,7 +678,7 @@
                 <li><a href="infer.html">infer</a></li>
                 <li><a href="models.html">models</a></li>
             </ul>
-            
+
             <h3>This Page</h3>
             <ul>
                 <li><a href="#constants">Constants</a></li>

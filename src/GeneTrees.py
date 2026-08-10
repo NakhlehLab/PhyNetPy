@@ -161,6 +161,7 @@ class GeneTrees:
 
     @species_gene_mapping.setter
     def species_gene_mapping(self, value: Optional[Dict[str, List[str]]]) -> None:
+        """Set the explicit species-to-gene mapping (``None`` to clear it)."""
         self._species_gene_mapping = value
 
     def _resolve_mapping(self) -> Dict[str, List[str]]:
@@ -414,6 +415,7 @@ class GeneTrees:
                 continue
             # Project clusters to common taxa by intersecting
             def project_clusters(net: Network) -> Set[FrozenSet[str]]:
+                """Rooted clusters of ``net``, restricted to the shared taxon set."""
                 return set(
                     frozenset(n.label for n in c if n.label in common)
                     for c in get_all_clusters(net, include_trivial=False)
@@ -493,6 +495,7 @@ class GeneTrees:
 
         # Topology signature: frozenset of rooted cluster-labels.
         def signature(tree: Network) -> FrozenSet[FrozenSet[str]]:
+            """Topology signature of ``tree``: its set of rooted clusters."""
             clusters = get_all_clusters(tree, include_trivial=include_trivial)
             return frozenset(
                 frozenset(n.label for n in clus) for clus in clusters
@@ -533,6 +536,12 @@ class GeneTrees:
 
         selected: List[FrozenSet[str]] = []
         def compatible(a: FrozenSet[str], b: FrozenSet[str]) -> bool:
+            """True if clusters ``a`` and ``b`` can coexist in one tree.
+
+            Two rooted clusters are compatible when one is a subset of the
+            other, or they are disjoint; overlapping-but-incomparable
+            clusters cannot both appear in a single tree.
+            """
             # Clusters a,b are compatible if one subset of the other or disjoint
             return a.issubset(b) or b.issubset(a) or a.isdisjoint(b)
 
@@ -553,6 +562,7 @@ class GeneTrees:
         name_to_node: Dict[str, Any] = {}
 
         def build(subtaxa: Set[str]) -> Any:
+            """Recursively build the subtree spanning ``subtaxa`` and return its root."""
             if len(subtaxa) == 1:
                 label = next(iter(subtaxa))
                 if label not in name_to_node:
@@ -609,6 +619,7 @@ class GeneTrees:
         results: Dict[Tuple[str, str], float] = {}
 
         def cluster_key(labels: Set[str]) -> Tuple[str, str]:
+            """Short, order-independent key for a cluster: its min/max labels."""
             # produce a short key from the smallest and largest label
             if len(labels) == 0:
                 return ("", "")
@@ -725,6 +736,7 @@ class GeneTrees:
         created: Dict[Any, Any] = {}
 
         def ensure_node(clade, parent_node: Optional[Any]) -> Any:
+            """Get or create the ``Node`` for ``clade``, setting its time from ``parent_node``."""
             if clade in created:
                 return created[clade]
             name = clade.name if clade.name is not None else f"Internal_{len(created)}"
@@ -794,12 +806,15 @@ class GeneTrees:
         }
 
         def lca_of_species(names: Set[str]) -> Any:
+            """Most recent common ancestor of ``names`` in ``species_tree``."""
             return species_tree.mrca(set(names))
 
         def is_descendant(u: Any, v: Any) -> bool:
+            """True if ``v`` lies in the subtree rooted at ``u`` in ``species_tree``."""
             return v in species_tree.get_subtree_at(u)
 
         def distance_down(anc: Any, desc: Any) -> int:
+            """Number of edges from ``anc`` down to ``desc`` in ``species_tree``."""
             if anc == desc:
                 return 0
             from collections import deque
@@ -834,6 +849,7 @@ class GeneTrees:
             mapped: Dict[Any, Any] = {}
 
             def map_node(n: Any) -> Any:
+                """LCA-map gene-tree node ``n`` onto its species-tree node."""
                 if n in mapped:
                     return mapped[n]
                 if n in leaf_to_species:
@@ -842,6 +858,7 @@ class GeneTrees:
                     return sp_node
                 desc_species: Set[str] = set()
                 def collect_species(x: Any) -> None:
+                    """Accumulate into ``desc_species`` the species under gene-tree node ``x``."""
                     if x in leaf_to_species:
                         desc_species.add(leaf_to_species[x])
                     else:

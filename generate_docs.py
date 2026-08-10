@@ -18,9 +18,19 @@ import textwrap
 from pathlib import Path
 
 SRC_DIR = Path(__file__).parent / "src"
+VERSION_FILE = SRC_DIR / "_version.py"
 # Generated API reference lives alongside the hand-written project site in
 # ``docs/`` -- not inside ``src/``, which is the shipped package.
 DOCS_DIR = Path(__file__).parent / "docs" / "api"
+
+_version_match = re.search(
+    r'^__version__\s*=\s*"([^"]+)"',
+    VERSION_FILE.read_text(encoding="utf-8"),
+    re.MULTILINE,
+)
+if _version_match is None:
+    raise RuntimeError(f"Could not read package version from {VERSION_FILE}")
+PACKAGE_VERSION = _version_match.group(1)
 
 # Module metadata: descriptions, categories, version overrides
 MODULE_META = {
@@ -87,6 +97,10 @@ MODULE_META = {
     "Newick": {
         "desc": "Newick format label extraction and Nexus file generation utilities.",
         "category": "I/O",
+    },
+    "PopulationGenetics": {
+        "desc": "Validated population allele-count data and pulse-admixture graph semantics.",
+        "category": "Core Data Structures",
     },
     "ReticulationComparison": {
         "desc": "Reticulation-aware network comparison: tripartition matching, Nakhleh metric, and precision/recall over reticulations.",
@@ -159,6 +173,11 @@ def html_escape(text: str) -> str:
         .replace(">", "&gt;")
         .replace('"', "&quot;")
     )
+
+
+def normalize_generated_html(html: str) -> str:
+    """Return generated HTML with stable LF endings and no trailing spaces."""
+    return "\n".join(line.rstrip() for line in html.splitlines()) + "\n"
 
 
 def parse_module_header(source: str) -> dict:
@@ -997,7 +1016,7 @@ def generate_index_page(all_modules: list[str]) -> str:
                 <div class="module-info">
                     <dl>
                         <dt>Version:</dt>
-                        <dd>0.4.0</dd>
+                        <dd>{PACKAGE_VERSION}</dd>
                         <dt>Authors:</dt>
                         <dd>Mark Kessler, Luay Nakhleh</dd>
                         <dt>Copyright:</dt>
@@ -1025,25 +1044,15 @@ def generate_index_page(all_modules: list[str]) -> str:
                 <pre><code>pip install phynetpy</code></pre>
                 
                 <h3>Quick Example</h3>
-                <pre><code>from PhyNetPy import Network, Node, Edge
-from PhyNetPy import read_nexus, read_newick
+                <pre><code>from phynetpy import read_newick
 
-# Parse a network from a Nexus file
-networks = read_nexus("my_network.nex")
-network = networks[0]
+# Parse a network from a Newick string
+network = read_newick("((A:0.1,B:0.2):0.3,C:0.4);")[0]
 
 # Access network properties
 print(f"Number of nodes: {{len(network.V())}}")
 print(f"Number of edges: {{len(network.E())}}")
-print(f"Leaves: {{[leaf.label for leaf in network.get_leaves()]}}")
-
-# Parse from a Newick string
-net = read_newick("((A:0.1,B:0.2):0.3,C:0.4);")
-
-# Simulate a network
-from PhyNetPy import CBDP
-sim = CBDP(gamma=1.0, mu=0.5, n=10)
-simulated_net = sim.generate_network()</code></pre>
+print(f"Leaves: {{[leaf.label for leaf in network.get_leaves()]}}")</code></pre>
                 
                 <h2>Module Categories</h2>
                 
@@ -1127,7 +1136,9 @@ def main():
     print(f"\nFound {len(all_modules)} modules. Generating HTML...\n")
 
     for mod_name, info in module_infos.items():
-        html = generate_module_page(mod_name, info, all_modules)
+        html = normalize_generated_html(
+            generate_module_page(mod_name, info, all_modules)
+        )
         out_path = DOCS_DIR / f"{mod_name}.html"
         out_path.write_text(html, encoding="utf-8")
         n_classes = len(info["classes"])
@@ -1136,7 +1147,7 @@ def main():
         print(f"  {mod_name}.html  ({n_classes} classes, {n_funcs} functions, {n_exc} exceptions)")
 
     # Generate index
-    index_html = generate_index_page(all_modules)
+    index_html = normalize_generated_html(generate_index_page(all_modules))
     (DOCS_DIR / "index.html").write_text(index_html, encoding="utf-8")
     print(f"\n  index.html (module index)")
 

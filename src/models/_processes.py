@@ -20,7 +20,10 @@ Design - [x]
 from __future__ import annotations
 
 from abc import ABC
-from typing import Dict, List, Optional
+import math
+from typing import Dict, List, Mapping, Optional
+
+from .._units import BranchThetaKey, validate_branch_thetas
 
 
 class ModelSpecError(Exception):
@@ -78,19 +81,17 @@ class MSC(Model):
     reticulation means hybridization or introgression.
 
     The process parameters live here because they *are* the biology.  The
-    mutation rates ``u`` and ``v`` describe the biallelic transition model
-    and are read only when scoring
-    :class:`~phynetpy.data.BiallelicMarkers`; ``theta`` is the population
-    mutation rate ``4*N*mu``.
+    mutation rates ``u`` and ``v`` describe the biallelic transition model.
+    ``theta`` is the population mutation rate ``4*N*mu`` for every MSC data
+    type. Fixed branch-specific values may override it through
+    ``branch_thetas``.
 
     Attributes:
         theta: Population mutation rate.  ``None`` lets the engine pick its
             own default (the prior mean, when sampling it).
         u: Red-to-green mutation rate for biallelic markers.
         v: Green-to-red mutation rate for biallelic markers.
-        coal: Coalescent rate constant used by the marker likelihood.
-        pop_sizes: Optional per-branch population sizes; ``None`` uses a
-            single rate across the network.
+        branch_thetas: Optional fixed per-population ``theta`` overrides.
     """
 
     def __init__(
@@ -99,8 +100,7 @@ class MSC(Model):
         *,
         u: float = 1.0,
         v: float = 1.0,
-        coal: float = 1.0,
-        pop_sizes: Optional[Dict] = None,
+        branch_thetas: Optional[Mapping[BranchThetaKey, float]] = None,
     ) -> None:
         """Configure the multispecies network coalescent.
 
@@ -109,23 +109,36 @@ class MSC(Model):
                 the engine (which samples it, for the Bayesian criterion).
             u: Red-to-green mutation rate (biallelic markers only).
             v: Green-to-red mutation rate (biallelic markers only).
-            coal: Coalescent rate constant (biallelic markers only).
-            pop_sizes: Per-branch population sizes, keyed by node.
+            branch_thetas: Fixed per-population values. Stable
+                ``(parent_label, child_label)`` keys identify edges; a child
+                label identifies the branch above that node. Use
+                ``("__root__", root_label)`` for the ancestral population.
 
         Raises:
             ModelSpecError: If any rate is non-positive.
         """
-        if theta is not None and theta <= 0.0:
-            raise ModelSpecError(f"theta must be positive; got {theta}.")
-        for label, value in (("u", u), ("v", v), ("coal", coal)):
-            if value <= 0.0:
-                raise ModelSpecError(f"{label} must be positive; got {value}.")
+        for label, value in (("theta", theta), ("u", u), ("v", v)):
+            if value is None:
+                continue
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ModelSpecError(
+                    f"{label} must be numeric; got {value!r}."
+                ) from exc
+            if not math.isfinite(numeric) or numeric <= 0.0:
+                raise ModelSpecError(
+                    f"{label} must be finite and positive; got {value}."
+                )
+        try:
+            validate_branch_thetas(branch_thetas)
+        except ValueError as exc:
+            raise ModelSpecError(str(exc)) from exc
 
         self.theta = theta
         self.u = u
         self.v = v
-        self.coal = coal
-        self.pop_sizes = pop_sizes
+        self.branch_thetas = dict(branch_thetas) if branch_thetas else None
 
     def __repr__(self) -> str:
         theta = "auto" if self.theta is None else f"{self.theta:g}"

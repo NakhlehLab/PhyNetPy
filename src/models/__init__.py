@@ -45,12 +45,18 @@ from __future__ import annotations
 from typing import Union
 
 from ._processes import MSC, Allopolyploid, Model, ModelSpecError
+from .._units import (
+    BranchLengthUnit,
+    convert_network_branch_lengths,
+)
 
 __all__ = [
     "Model",
     "ModelSpecError",
     "MSC",
     "Allopolyploid",
+    "BranchLengthUnit",
+    "convert_network_branch_lengths",
     "resolve_model",
 ]
 

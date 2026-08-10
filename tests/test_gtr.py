@@ -541,11 +541,14 @@ class TestInputHandling:
 
     def test_frequencies_with_float_rounding_accepted(self) -> None:
         """
-        ``[0.4, 0.3, 0.2, 0.1]`` sums to 0.9999999999999999 in IEEE-754, so an
-        exact ``== 1`` test would reject a perfectly ordinary input.
+        Ordinary decimal frequencies are not exactly representable in binary,
+        so validation must use a tolerance rather than exact component values.
+
+        Python 3.14 uses compensated summation and may round this particular
+        total to exactly 1.0; acceptance, not an interpreter-specific
+        intermediate sum, is the behavior under test.
         """
         freqs = [0.4, 0.3, 0.2, 0.1]
-        assert sum(freqs) != 1.0            # guards the premise of this test
         HKY(freqs, 4.0)
         F81(freqs)
         TN93(freqs, 4.0, 5.0)

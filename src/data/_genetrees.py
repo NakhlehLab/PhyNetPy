@@ -188,6 +188,7 @@ class GeneTrees(Data, _GeneTreeCollection):
 
     @mapping.setter
     def mapping(self, value: Optional[Dict[str, List[str]]]) -> None:
+        """Set the explicit species -> allele mapping, keeping it in step with ``species_gene_mapping``."""
         self._mapping = value
         self._species_gene_mapping = value
 

@@ -11,18 +11,18 @@
         <h1>PhyNetPy Documentation</h1>
         <p>Library for the Development and Use of Phylogenetic Network Methods</p>
     </div>
-    
+
     <div class="document">
         <div class="documentwrapper">
             <div class="body">
                 <div class="breadcrumb">
                     <a href="index.html">Home</a> &raquo; infer
                 </div>
-                
+
                 <h1>infer Module <span class="version-badge">v0.6.0</span></h1>
-                
+
                 <p>The public inference API: the verbs infer, score, and simulate, the InferenceResult they return, plus the registry, scorers, kernels, result types, and MCMC diagnostics around them.</p>
-                
+
                 <div class="module-info">
                     <dl>
                         <dt>Author:</dt>
@@ -31,7 +31,7 @@
                         <dd>infer.py</dd>
                     </dl>
                 </div>
-                
+
                 <div class="toc">
                     <h4>Contents</h4>
                     <ul>
@@ -45,6 +45,7 @@
                         <li><a href="#model">Model</a></li>
                         <li><a href="#msc">MSC</a></li>
                         <li><a href="#allopolyploid">Allopolyploid</a></li>
+                        <li><a href="#branchlengthunit">BranchLengthUnit</a></li>
                         <li><a href="#criterion">Criterion</a></li>
                         <li><a href="#mdc">MDC</a></li>
                         <li><a href="#likelihood">Likelihood</a></li>
@@ -73,7 +74,6 @@
                         <li><a href="#mcmcseqkernel">MCMCSeqKernel</a></li>
                         <li><a href="#felsensteincalculator">FelsensteinCalculator</a></li>
                         <li><a href="#infermpallop">InferMPAllop</a></li>
-                        <li><a href="#mpallopcomponent">MPAllopComponent</a></li>
                         <li><a href="#mpallopscorer">MPAllopScorer</a></li>
                         <li><a href="#allop_mul">Allop_MUL</a></li>
                         <li><a href="#allelemap">AlleleMap</a></li>
@@ -187,6 +187,9 @@
                             <div class="function-header">
                                 <span class="name">mapping</span>(<span class="params">value: Optional[Dict[str, List[str]]]</span>) <span class="keyword">-&gt;</span> None
                             </div>
+                            <div class="function-body">
+                                <p>Set the explicit species -&gt; allele mapping (``None`` to clear it).</p>
+                            </div>
                         </div>
                         <div class="function-def">
                             <div class="function-header">
@@ -273,6 +276,9 @@
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">mapping</span>(<span class="params">value: Optional[Dict[str, List[str]]]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set the explicit species -&gt; allele mapping, keeping it in step with ``species_gene_mapping``.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -612,11 +618,11 @@
                         <span class="keyword">class</span> <span class="name">MSC</span>(<span class="params">Model</span>)
                     </div>
                     <div class="class-body">
-                        <p>The multispecies network coalescent: diploid lineages with ILS. The default model, and the one nearly every method in the field is built on. Gene copies coalesce within the branches of the species network at a rate set by the population mutation rate; at a reticulation, each lineage passes into one parent with probability given by that edge's inheritance probability (gamma). Incomplete lineage sorting therefore arises from the coalescent, and a reticulation means hybridization or introgression. The process parameters live here because they *are* the biology. The mutation rates ``u`` and ``v`` describe the biallelic transition model and are read only when scoring :class:`~phynetpy.data.BiallelicMarkers`; ``theta`` is the population mutation rate ``4*N*mu``. Attributes: theta: Population mut...</p>
+                        <p>The multispecies network coalescent: diploid lineages with ILS. The default model, and the one nearly every method in the field is built on. Gene copies coalesce within the branches of the species network at a rate set by the population mutation rate; at a reticulation, each lineage passes into one parent with probability given by that edge's inheritance probability (gamma). Incomplete lineage sorting therefore arises from the coalescent, and a reticulation means hybridization or introgression. The process parameters live here because they *are* the biology. The mutation rates ``u`` and ``v`` describe the biallelic transition model. ``theta`` is the population mutation rate ``4*N*mu`` for every MSC data type. Fixed branch-specific values may override it through ``branch_thetas``. Attribute...</p>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">theta: Optional[float] = None, u: float = 1.0, v: float = 1.0, coal: float = 1.0, pop_sizes: Optional[Dict] = None</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">__init__</span>(<span class="params">theta: Optional[float] = None, u: float = 1.0, v: float = 1.0, branch_thetas: Optional[Mapping[BranchThetaKey, float]] = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
                                 <p>Configure the multispecies network coalescent.</p>
@@ -642,14 +648,9 @@
                                         <td>Green-to-red mutation rate (biallelic markers only).</td>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">coal</span></td>
+                                        <td><span class="param-name">branch_thetas</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Coalescent rate constant (biallelic markers only).</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">pop_sizes</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>Per-branch population sizes, keyed by node.</td>
+                                        <td>Fixed per-population values. Stable ``(parent_label, child_label)`` keys identify edges; a child label identifies the branch above that node. Use ``(&quot;__root__&quot;, root_label)`` for the ancestral population.</td>
                                     </tr>
                                 </table>
                                 <div class="raises"><span class="raises-label">Raises:</span> <code>ModelSpecError</code>: If any rate is non-positive.</div>
@@ -746,6 +747,16 @@
                                 <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <h2 id="branchlengthunit">BranchLengthUnit</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">BranchLengthUnit</span>(<span class="params">str, Enum</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Units carried by every biologically interpreted network. ``SUBSTITUTIONS_PER_SITE`` is required by sequence, marker, and timed-MSC calculations. ``COALESCENT_2N`` supports topology/coalescent workflows. ``UNSPECIFIED`` is safe for graph operations but rejected by biological calculations until the network is explicitly tagged or converted.</p>
                     </div>
                 </div>
 
@@ -2228,43 +2239,6 @@
                     </div>
                 </div>
 
-                <h2 id="mpallopcomponent">MPAllopComponent</h2>
-                <div class="class-def">
-                    <div class="class-header">
-                        <span class="keyword">class</span> <span class="name">MPAllopComponent</span>(<span class="params">ModelComponent</span>)
-                    </div>
-                    <div class="class-body">
-                        <p>Model Component that sets up the model for Infer MP Allop 2.0. Registers the parsimony scorer on the model and attaches the network.</p>
-                        <h4>Constructor</h4>
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">network: Network, gene_map: dict[str, list[str]], gene_trees: list[Network], rng: np.random.Generator</span>) <span class="keyword">-&gt;</span> None
-                            </div>
-                        </div>
-                        <h4>Methods</h4>
-                        <div class="function-def">
-                            <div class="function-header">
-                                <span class="name">build</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
-                            </div>
-                            <div class="function-body">
-                                <p>Attaches the MP allop component to the model.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type">Model</span></td>
-                                        <td>A model, under construction.</td>
-                                    </tr>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <h2 id="mpallopscorer">MPAllopScorer</h2>
                 <div class="class-def">
                     <div class="class-header">
@@ -2276,6 +2250,36 @@
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">__init__</span>(<span class="params">gene_map: dict[str, list[str]], gene_trees: list[Network], rng: np.random.Generator</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``MPAllopScorer``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gene_map</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Subgenome mapping from species to their gene-copy</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">labels</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>forwarded to the internal :class:`Allop_MUL`.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gene_trees</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Gene trees to reconcile against each candidate network's multiple-labelled tree.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rng</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Random generator used when resolving allele-map ties.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -2474,6 +2478,9 @@
                             <div class="function-header">
                                 <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
                             </div>
+                            <div class="function-body">
+                                <p>Create an empty ``AlleleMap`` with no leaves mapped yet.</p>
+                            </div>
                         </div>
                         <h4>Methods</h4>
                         <div class="function-def">
@@ -2511,7 +2518,7 @@
                         <span class="keyword">class</span> <span class="name">SimulatedData</span>
                     </div>
                     <div class="class-body">
-                        <p>A simulated multilocus data set with its ground truth. The fields under &quot;inputs to inference&quot; are exactly what :class:`phynetpy._mcmc_seq.MCMC_SEQ` consumes; the &quot;ground truth&quot; fields are what a recovery / calibration check compares the posterior against. Attributes: loci: Per-locus alignments (allele label -&gt; aligned sequence string). mapping: Species label -&gt; list of allele (gene-copy) labels sampled. species_of: Allele label -&gt; species label (inverse of ``mapping``). gene_trees: The *true* simulated gene tree for each locus. true_network: The species network the data were generated on. true_theta: The population mutation rate used. model: The substitution model used. seq_length: Number of sites simulated per locus.</p>
+                        <p>A simulated multilocus data set with its ground truth. The fields under &quot;inputs to inference&quot; are exactly what :class:`phynetpy._mcmc_seq.MCMC_SEQ` consumes; the &quot;ground truth&quot; fields are what a recovery / calibration check compares the posterior against. Attributes: loci: Per-locus alignments (allele label -&gt; aligned sequence string). mapping: Species label -&gt; list of allele (gene-copy) labels sampled. species_of: Allele label -&gt; species label (inverse of ``mapping``). gene_trees: The *true* simulated gene tree for each locus. true_network: The species network the data were generated on. true_theta: The population mutation rate used. true_branch_thetas: Fixed branch-specific population rates used. model: The substitution model used. seq_length: Number of sites...</p>
                         <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
@@ -2519,7 +2526,7 @@
                             </div>
                             <div class="function-body">
                                 <p>Keyword arguments to construct an :class:`MCMC_SEQ` on this data.</p>
-                                <div class="returns"><span class="returns-label">Returns:</span> ``{&quot;loci&quot;, &quot;mapping&quot;, &quot;model&quot;, &quot;theta&quot;}`` -- spreadable directly, e.g. ``MCMC_SEQ(**data.to_mcmc_seq_kwargs())``.  The true network and gene trees are deliberately *not* passed (let the sampler start from its own UPGMA guess so recovery is a fair test).</div>
+                                <div class="returns"><span class="returns-label">Returns:</span> Constructor keywords for ``MCMC_SEQ``. The true network and gene trees are deliberately *not* passed so recovery starts from an independent UPGMA guess.</div>
                             </div>
                         </div>
                     </div>
@@ -2698,12 +2705,12 @@
                                     <tr>
                                         <td><span class="param-name">model</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>The generative process (:class:`~phynetpy.models.MSC`).  A string shortcut such as ``&quot;MSC&quot;`` is accepted; ``None`` defaults to ``MSC()``.  Process parameters are read off the model: ``theta`` for coalescent simulation, ``u``/``v``/``coal`` for markers.</td>
+                                        <td>The generative process (:class:`~phynetpy.models.MSC`).  A string shortcut such as ``&quot;MSC&quot;`` is accepted; ``None`` defaults to ``MSC()``.  Process parameters are read off the model: ``theta``/``branch_thetas`` for the coalescent and ``u``/``v`` for markers.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">network</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>The species network to simulate along.  Needs branch lengths on every edge and inheritance probabilities on reticulation in-edges.  ``None`` draws a species *tree* under a pure-birth process instead, which requires *taxa*.</td>
+                                        <td>The species network to simulate along.  Needs branch lengths tagged as ``SUBSTITUTIONS_PER_SITE`` and inheritance probabilities on reticulation in-edges. ``None`` draws a species *tree* under a pure-birth process instead, which requires *taxa*.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">n</span></td>
@@ -2738,11 +2745,19 @@
                                     <tr>
                                         <td><span class="param-name">birth_rate</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Speciation rate for that pure-birth (Yule) process. **params: Extra arguments forwarded to the underlying simulator (``pop_sizes``, ``substitution_model``, ``samples``, ...).</td>
+                                        <td>Speciation rate for that pure-birth (Yule) process. **params: Extra arguments forwarded to the underlying simulator (``substitution_model``, ``samples``, ...).</td>
                                     </tr>
                                 </table>
                                 <div class="returns"><span class="returns-label">Returns:</span> Data: A :class:`~phynetpy.data.GeneTrees`, :class:`~phynetpy.data.Alignment`, or :class:`~phynetpy.data.BiallelicMarkers`, carrying *mapping*, so the result feeds directly into :func:`~phynetpy.infer.infer` and :func:`~phynetpy.infer.score`.  The generating network is attached as ``.true_network`` so a recovery check needs nothing else.</div>
                                 <div class="raises"><span class="raises-label">Raises:</span> <code>TypeError</code>: If neither *network* nor *taxa* is given., <code>ValueError</code>: If *data* is not a recognised kind, *n* is not positive, or the species-tree parameters are inconsistent., <code>NotImplementedError</code>: If the model has no simulator for this data kind. Examples: A recovery check -- simulate under a known network, then try to get it back:: sim = simulate(MSC(theta=0.02), true_net, n=50, mapping=mapping) result = infer(sim, criterion=PseudoLikelihood()) A null check on a species tree PhyNetPy drew itself:: sim = simulate(MSC(), taxa=6, n=200) result = infer(sim, criterion=PseudoLikelihood()) compare_networks(result.best, sim.true_network)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">convert_network_branch_lengths</span>(<span class="params">network: 'Network', target: BranchLengthUnit | str, theta: float, branch_thetas: Optional[Mapping[BranchThetaKey, float]] = None</span>) <span class="keyword">-&gt;</span> 'Network'
+                            </div>
+                            <div class="function-body">
+                                <p>Return a structural copy with branch lengths converted explicitly. Conversion follows ``t_coal = 2*t_sub/theta_branch``. The source unit is read from ``network`` and must already be explicit. Node-time annotations are copied unchanged; biological calculations derive timing from edges.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -3134,7 +3149,7 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">gene_tree_msnc_log_density</span>(<span class="params">gene_tree: Network, species_net: Network, species_of: dict[str, str], theta: float = 0.02, pop_sizes: Optional[dict] = None</span>) <span class="keyword">-&gt;</span> float
+                                <span class="name">gene_tree_msnc_log_density</span>(<span class="params">gene_tree: Network, species_net: Network, species_of: dict[str, str], theta: float = 0.02, branch_thetas: Optional[dict[BranchThetaKey, float]] = None</span>) <span class="keyword">-&gt;</span> float
                             </div>
                             <div class="function-body">
                                 <p>Log timed MSNC density log P(g | Psi) via joint-edge AC DP.</p>
@@ -3179,7 +3194,7 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">simulate_gene_tree</span>(<span class="params">species_net: Network, alleles_per_species: dict[str, list[str]], theta: float, rng: np.random.Generator, pop_sizes: Optional[dict[Node, float]] = None</span>) <span class="keyword">-&gt;</span> Network
+                                <span class="name">simulate_gene_tree</span>(<span class="params">species_net: Network, alleles_per_species: dict[str, list[str]], theta: float, rng: np.random.Generator, branch_thetas: Optional[dict[BranchThetaKey, float]] = None</span>) <span class="keyword">-&gt;</span> Network
                             </div>
                             <div class="function-body">
                                 <p>Simulate one gene tree under the multispecies network coalescent. Performs a backward-in-time, height-ordered sweep of ``species_net``. Sampled alleles enter at the leaves (height 0); lineages coalesce within each branch (:func:`_coalesce_within`); at a reticulation node each surviving lineage independently ascends one of the two parent edges with probability ``gamma`` / ``1 - gamma``; at the root the remaining lineages coalesce to a single MRCA.</p>
@@ -3202,7 +3217,7 @@
                                     <tr>
                                         <td><span class="param-name">theta</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Constant population mutation rate (used for every branch unless ``pop_sizes`` overrides it).</td>
+                                        <td>Constant population mutation rate (used for every branch unless ``branch_thetas`` overrides it).</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">rng</span></td>
@@ -3210,9 +3225,9 @@
                                         <td>Random generator.</td>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">pop_sizes</span></td>
+                                        <td><span class="param-name">branch_thetas</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Optional per-branch ``theta`` keyed by the *child* node of the branch (the branch *above* that node), mirroring the density's ``pop_sizes`` argument.</td>
+                                        <td>Optional fixed per-population ``theta`` values.</td>
                                     </tr>
                                 </table>
                                 <div class="returns"><span class="returns-label">Returns:</span> A rooted, ultrametric: class:`Network` (a tree) with branch lengths in substitution units and leaves labelled by the sampled alleles.</div>
@@ -3256,7 +3271,7 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">simulate_multilocus</span>(<span class="params">species_net: Network, mapping: dict[str, list[str]], n_loci: int, seq_length: int, theta: float = 0.02, model: Optional[SubstitutionModel] = None, pop_sizes: Optional[dict[Node, float]] = None, seed: Any = None</span>) <span class="keyword">-&gt;</span> SimulatedData
+                                <span class="name">simulate_multilocus</span>(<span class="params">species_net: Network, mapping: dict[str, list[str]], n_loci: int, seq_length: int, theta: float = 0.02, model: Optional[SubstitutionModel] = None, branch_thetas: Optional[dict[Any, float]] = None, seed: Any = None</span>) <span class="keyword">-&gt;</span> SimulatedData
                             </div>
                             <div class="function-body">
                                 <p>Simulate a full multilocus data set on a known species network. For each of ``n_loci`` independent loci a gene tree is drawn under the MSNC (:func:`simulate_gene_tree`) and an alignment is evolved down it (:func:`simulate_sequences`).</p>
@@ -3289,7 +3304,7 @@
                                     <tr>
                                         <td><span class="param-name">theta</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Population mutation rate (constant across branches unless ``pop_sizes`` is given).</td>
+                                        <td>Population mutation rate (constant across branches unless ``branch_thetas`` is given).</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">model</span></td>
@@ -3297,9 +3312,9 @@
                                         <td>Substitution model (default :class:`JC69`).</td>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">pop_sizes</span></td>
+                                        <td><span class="param-name">branch_thetas</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Optional per-branch ``theta`` keyed by child node.</td>
+                                        <td>Optional fixed per-population ``theta`` values.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">seed</span></td>
@@ -3568,19 +3583,19 @@
                             </div>
                         </div>
 
-                
+
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
                 </div>
             </div>
         </div>
-        
+
         <div class="sphinxsidebar">
             <h3>Navigation</h3>
             <ul>
                 <li><a href="index.html">Home</a></li>
             </ul>
-            
+
             <h3>Modules</h3>
             <ul>
                 <li><a href="Alphabet.html">Alphabet</a></li>
@@ -3594,13 +3609,12 @@
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
-                <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
                 <li><a href="ModelSelection.html">ModelSelection</a></li>
-                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
                 <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
@@ -3610,7 +3624,7 @@
                 <li><a href="infer.html" class="current">infer</a></li>
                 <li><a href="models.html">models</a></li>
             </ul>
-            
+
             <h3>This Page</h3>
             <ul>
                 <li><a href="#inferenceresult">InferenceResult</a></li>
@@ -3623,6 +3637,7 @@
                 <li><a href="#model">Model</a></li>
                 <li><a href="#msc">MSC</a></li>
                 <li><a href="#allopolyploid">Allopolyploid</a></li>
+                <li><a href="#branchlengthunit">BranchLengthUnit</a></li>
                 <li><a href="#criterion">Criterion</a></li>
                 <li><a href="#mdc">MDC</a></li>
                 <li><a href="#likelihood">Likelihood</a></li>
@@ -3651,7 +3666,6 @@
                 <li><a href="#mcmcseqkernel">MCMCSeqKernel</a></li>
                 <li><a href="#felsensteincalculator">FelsensteinCalculator</a></li>
                 <li><a href="#infermpallop">InferMPAllop</a></li>
-                <li><a href="#mpallopcomponent">MPAllopComponent</a></li>
                 <li><a href="#mpallopscorer">MPAllopScorer</a></li>
                 <li><a href="#allop_mul">Allop_MUL</a></li>
                 <li><a href="#allelemap">AlleleMap</a></li>

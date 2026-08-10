@@ -6,7 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "phynetpy"
 description = "A library and framework for Phylogenetics research, data analytics, network inference, and network tooling."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Mark Kessler", email = "mak17@rice.edu" }]
 # Annotations across the package use PEP 604 unions (``X | None``) under
 # ``from __future__ import annotations``, and PEP 585 builtin generics
@@ -26,12 +27,12 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
     "numpy>=1.19.0",

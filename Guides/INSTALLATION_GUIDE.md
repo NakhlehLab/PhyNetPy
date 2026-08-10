@@ -18,8 +18,14 @@ You should now see (.venv) in your terminal prompt.
 Once the virtual environment is active:
     pip install --upgrade pip
     pip install phynetpy
+
+PhyNetPy 0.6.0 supports Python 3.9 through 3.14 and requires compiled Cython
+extensions. `pip` uses a platform wheel when one is published. Installing from
+an sdist or source checkout requires a working C compiler (MSVC Build Tools on
+Windows, Xcode Command Line Tools on macOS, or GCC/Clang on Linux).
+
 Verify installation:
-    python -c "from phynetpy import Network; print('PhyNetPy installed successfully!')"
+    python -c "import phynetpy; print(phynetpy.__version__)"
 ## VS Code Setup
 1. Open the Project Folder
 Open VS Code → File → Open Folder… → select your project folder.
@@ -61,7 +67,11 @@ pip install phynetpy
 
 ## Example Usage
 After installing:
-from phynetpy import Network
+    from phynetpy import read_newick
+    from phynetpy.criteria import PseudoLikelihood
+    from phynetpy.data import GeneTrees
+    from phynetpy.infer import infer
 
-net = Network()
-print(net)
+    gene_trees = GeneTrees.from_newick(["((A,B),C);"])
+    result = infer(gene_trees, criterion=PseudoLikelihood())
+    print(result.best)

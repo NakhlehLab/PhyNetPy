@@ -3109,6 +3109,7 @@ class MPL:
                 )
             else:
                 def optimize_proposal(opt_m: Model) -> float:
+                    """Optimise ``opt_m``'s continuous parameters in place and return its score."""
                     return optimize_network_parameters(
                         opt_m, scorer, self.mapping, scope=optimize_scope,
                     )
@@ -3116,6 +3117,7 @@ class MPL:
                 def should_optimize(
                     opt_m: Model, raw_proposed: float, current: float, move,
                 ) -> bool:
+                    """Gate: only optimise reticulation-bearing topology proposals near the incumbent."""
                     # Only re-optimise after a *topology* move (matching
                     # PhyloNet's per-round behaviour); pure continuous moves
                     # already explored their parameter, so re-optimising the

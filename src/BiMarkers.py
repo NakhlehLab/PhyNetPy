@@ -58,6 +58,7 @@ from __future__ import annotations
 import copy
 import math
 from collections import deque
+from functools import lru_cache
 from math import comb
 import time
 from typing import TYPE_CHECKING, Optional
@@ -101,6 +102,7 @@ class GPUSpecs:
     
     @property
     def vram_gb(self) -> float:
+        """VRAM capacity in gigabytes (converted from :attr:`vram_bytes`)."""
         return self.vram_bytes / (1024 ** 3)
     
     def __repr__(self) -> str:
@@ -146,6 +148,11 @@ GPU_SPECS = _detect_gpu()
 # Relative imports
 from .MSA import MSA
 from .Network import Network, Node, Edge, Branch
+from ._units import (
+    BranchLengthUnit,
+    require_branch_length_unit,
+    resolve_branch_theta,
+)
 from .ModelGraph import Model
 from ._snp_model import (
     SNPModel,
@@ -707,10 +714,13 @@ GPU_THRESHOLD = {
     3: 8,             # Level-3: GPU after 8 taxa (if ever supported)
 }
 
-# Safety margin: require this fraction of VRAM to be available
-# (i.e., peak tensor < 80% of VRAM to leave room for merge/split tensors, 
-# Q matrix, etc.)
+# Only use this fraction of currently free VRAM. The VPI peak estimator tracks
+# the largest persistent tensor; a 3x allowance covers its input/output
+# workspaces. GPU batches are additionally capped because small estimated VPIs
+# can still create large scatter temporaries at high site counts.
 GPU_VRAM_SAFETY_FACTOR = 0.80
+VPI_WORKSPACE_MULTIPLIER = 3
+GPU_MAX_SITE_BATCH = 1_000
 
 
 def _compute_batch_size(model: SNPModel, samples: dict[str, int],
@@ -743,7 +753,8 @@ def _compute_batch_size(model: SNPModel, samples: dict[str, int],
     
     # Determine available memory
     if use_gpu and GPU_SPECS.available:
-        available = int(GPU_SPECS.vram_bytes * GPU_VRAM_SAFETY_FACTOR)
+        free_bytes = cp.cuda.Device(0).mem_info[0]
+        available = int(free_bytes * GPU_VRAM_SAFETY_FACTOR)
     else:
         try:
             import psutil
@@ -751,15 +762,13 @@ def _compute_batch_size(model: SNPModel, samples: dict[str, int],
         except ImportError:
             available = 8 * (1024 ** 3)  # conservative 8 GB
     
-    # We need memory for at least 2 tensors at once (old + new during a rule)
-    # plus the Q/P matrices, so use a factor of 3x
-    memory_per_site = per_site_bytes * 3
+    # Sparse contractions retain inputs, an output, and transition workspaces.
+    memory_per_site = per_site_bytes * VPI_WORKSPACE_MULTIPLIER
     
     if memory_per_site == 0:
         return n_sites
     
-    max_batch = max(1, available // memory_per_site)
-    
+    max_batch = available // memory_per_site
     if max_batch < 1:
         level = _compute_network_level(model)
         n_taxa = len(model.nodetypes.get("leaf", []))
@@ -773,6 +782,8 @@ def _compute_batch_size(model: SNPModel, samples: dict[str, int],
             f"  This network topology is too complex for available hardware."
         )
     
+    if use_gpu:
+        max_batch = min(max_batch, GPU_MAX_SITE_BATCH)
     return min(max_batch, n_sites)
 
 
@@ -806,7 +817,9 @@ def _snp_starting_tree(taxa: list[str], delta: float = 0.02) -> Network:
     if n < 2:
         raise ValueError("need at least 2 taxa to build a starting tree")
 
-    net = Network()
+    net = Network(
+        branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE
+    )
     leaves = {t: Node(t) for t in taxa}
     internals = [Node(f"I{k}") for k in range(n - 1)]
     net.add_nodes(*leaves.values())
@@ -847,15 +860,29 @@ class SNPScorer:
                  aln: MSA,
                  u: float,
                  v: float,
-                 coal: float,
+                 theta: float,
                  samples: dict[str, int],
                  priors: "MCMC_GTPriors",
                  *,
                  posterior: bool = True) -> None:
+        """Create a new ``SNPScorer``.
+
+        Args:
+            aln: Biallelic-marker alignment shared across every call.
+            u: Mutation rate red-to-green (1->0).
+            v: Mutation rate green-to-red (0->1).
+            theta: Population mutation rate ``4*N*mu``.
+            samples: Per-taxon sample counts (number of alleles observed).
+            priors: Network-prior hyperparameters used when ``posterior``
+                is ``True``.
+            posterior: When ``True``, add the network prior to the
+                likelihood so calls return a log-posterior; when
+                ``False``, return the log-likelihood alone.
+        """
         self.aln = aln
         self.u = u
         self.v = v
-        self.coal = coal
+        self.theta = theta
         self.samples = samples
         self.priors = priors
         self.posterior = posterior
@@ -866,7 +893,7 @@ class SNPScorer:
         net = model.network
         try:
             ll = _snp_log_likelihood(
-                net, self.aln, self.u, self.v, self.coal, self.samples,
+                net, self.aln, self.u, self.v, self.theta, self.samples,
                 verbose=False,
             )
         except Exception:
@@ -887,7 +914,7 @@ class SNPScorer:
 def _snp_mcmc(aln: MSA,
               u: float = 1.0,
               v: float = 1.0,
-              coal: float = 1.0,
+              theta: float = 0.02,
               *,
               num_iter: int = 50000,
               burn_in: int = 10000,
@@ -917,7 +944,7 @@ def _snp_mcmc(aln: MSA,
         aln: In-memory biallelic marker matrix (per-site red-allele counts).
         u: Red->green mutation rate.  Defaults to 1.0.
         v: Green->red mutation rate.  Defaults to 1.0.
-        coal: Coalescent rate constant (theta).  Defaults to 1.0.
+        theta: Population mutation rate ``4*N*mu``. Defaults to 0.02.
         num_iter: Total proposed moves.  Defaults to 50000.
         burn_in: Iterations discarded before sampling (and before the
             adaptive kernel freezes).  Defaults to 10000.
@@ -963,11 +990,16 @@ def _snp_mcmc(aln: MSA,
     # ── Starting model ───────────────────────────────────────────────────
     if start_net is None:
         start_net = _snp_starting_tree(taxa)
+    require_branch_length_unit(
+        start_net,
+        BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+        context="biallelic-marker MCMC",
+    )
 
     model = Model(rng=np.random.default_rng(root_ss.spawn(1)[0]))
     model.network = start_net
 
-    scorer = SNPScorer(aln, u, v, coal, samples, priors, posterior=True)
+    scorer = SNPScorer(aln, u, v, theta, samples, priors, posterior=True)
     model.set_likelihood_calculator(scorer)
 
     kernel = MCMCGTKernel(
@@ -1046,9 +1078,10 @@ def _snp_log_likelihood(net: Network,
                         aln: MSA,
                         u: float,
                         v: float,
-                        coal: float,
+                        theta: float,
                         samples: dict[str, int],
                         *,
+                        branch_thetas: Optional[dict] = None,
                         max_workers: int = 8,
                         sequential: bool = True,
                         verbose: bool = False) -> float:
@@ -1067,7 +1100,8 @@ def _snp_log_likelihood(net: Network,
         aln: The biallelic alignment (leaf red-allele counts per site).
         u: Red->green mutation rate.
         v: Green->red mutation rate.
-        coal: Coalescent rate constant (theta).
+        theta: Population mutation rate ``4*N*mu``.
+        branch_thetas: Fixed per-population theta overrides.
         samples: Map taxon label -> number of sampled gene copies.
         max_workers: Worker count for the (optional) parallel site loop.
         sequential: Reserved for the parallel site loop.
@@ -1079,6 +1113,11 @@ def _snp_log_likelihood(net: Network,
         The total log-likelihood (a negative float; ``-inf`` if a site has
         zero probability under ``net``).
     """
+    require_branch_length_unit(
+        net,
+        BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+        context="biallelic-marker likelihood",
+    )
     snp_model = build_snp_model(net, aln)
 
     # ── Analyze network complexity ──────────────────────────────────────
@@ -1125,7 +1164,13 @@ def _snp_log_likelihood(net: Network,
               f"({peak_mb:.1f} MB){batch_info}")
 
     # ── Build shared objects ────────────────────────────────────────────
-    q = _get_transition(max_n, u, v, coal)
+    root = net.root()
+    root_theta = resolve_branch_theta(
+        theta,
+        branch_thetas,
+        root,
+    )
+    q = _get_transition(max_n, u, v, root_theta)
 
     for leaf in snp_model.nodetypes["leaf"]:
         assert(type(leaf) is LeafNode)
@@ -1133,13 +1178,46 @@ def _snp_log_likelihood(net: Network,
 
     def _run_batch(site_slice: tuple[int, int] | None) -> float:
         """Run one site batch and return its log-likelihood contribution."""
-        strategy = SNPStrategy(q, u, v, coal, n_sites, max_n,
+        strategy = SNPStrategy(q, u, v, theta, n_sites, max_n,
                                site_slice=site_slice,
-                               use_gpu=use_gpu)
+                               use_gpu=use_gpu,
+                               branch_thetas=branch_thetas)
         visitor = SNPModelVisitor(strategy)
-        for node in postorder(snp_model.root):
-            visitor.visit(node)
-        return strategy.L
+        try:
+            for node in postorder(snp_model.root):
+                visitor.visit(node)
+            return strategy.L
+        except Exception as exc:
+            if (
+                use_gpu
+                and cp is not None
+                and isinstance(exc, cp.cuda.memory.OutOfMemoryError)
+            ):
+                raise SNPResourceError(
+                    "GPU memory was exhausted while evaluating a marker "
+                    f"batch of {n_sites if site_slice is None else site_slice[1] - site_slice[0]} "
+                    "sites. Reduce the site batch or use hardware with more "
+                    "free VRAM."
+                ) from exc
+            raise
+        finally:
+            # Model nodes and strategy caches otherwise retain every batch's
+            # device tensors until the full likelihood call returns. Release
+            # those references before asking CuPy to return unused blocks.
+            visitor.vpis.clear()
+            strategy.cache.clear()
+            for nodes in snp_model.nodetypes.values():
+                for node in nodes:
+                    node.vpi = None
+            if use_gpu and cp is not None:
+                try:
+                    cp.cuda.Stream.null.synchronize()
+                    cp.get_default_memory_pool().free_all_blocks()
+                    cp.get_default_pinned_memory_pool().free_all_blocks()
+                except Exception:
+                    # A CUDA OOM can leave cleanup calls failing too; preserve
+                    # the actionable SNPResourceError raised above.
+                    pass
 
     # ── Execute ─────────────────────────────────────────────────────────
     start_t = time.perf_counter()
@@ -1171,11 +1249,9 @@ def _snp_log_likelihood(net: Network,
 ### Transition Matrix ###
 #########################
 
-_TRANSITION_CACHE: "dict[tuple[int, float, float, float], BiMarkersTransition]" = {}
-
-
-def _get_transition(n: int, u: float, v: float, coal: float) -> "BiMarkersTransition":
-    """Return a cached :class:`BiMarkersTransition` for ``(n, u, v, coal)``.
+@lru_cache(maxsize=128)
+def _get_transition(n: int, u: float, v: float, theta: float) -> "BiMarkersTransition":
+    """Return a cached :class:`BiMarkersTransition` for ``(n, u, v, theta)``.
 
     The Q matrix and its (lazily-built) eigendecomposition depend only on the
     rate parameters and the state-space size, all of which are constant for a
@@ -1186,12 +1262,7 @@ def _get_transition(n: int, u: float, v: float, coal: float) -> "BiMarkersTransi
     matmuls, instead of rebuilding Q and re-running Padé from scratch each
     iteration.
     """
-    key = (n, u, v, coal)
-    cached = _TRANSITION_CACHE.get(key)
-    if cached is None:
-        cached = BiMarkersTransition(n, u, v, coal)
-        _TRANSITION_CACHE[key] = cached
-    return cached
+    return BiMarkersTransition(n, u, v, theta)
 
 
 class BiMarkersTransition:
@@ -1205,7 +1276,7 @@ class BiMarkersTransition:
     1) n-- the total number of samples in the species tree
     2) u-- the probability of going from the red allele to the green one
     3) v-- the probability of going from the green allele to the red one
-    4) coal-- the coalescent rate constant, theta
+    4) theta-- population mutation rate ``4*N*mu``
 
     Assumption: Matrix indexes start with n=1, r=0, so Q[0][0] is Q(1,0);(1,0)
 
@@ -1218,15 +1289,15 @@ class BiMarkersTransition:
     Pages 1917–1932, https://doi.org/10.1093/molbev/mss086
     """
 
-    def __init__(self, n : int, u : float, v : float, coal : float) -> None:
+    def __init__(self, n : int, u : float, v : float, theta : float) -> None:
         """
         Initialize the Q matrix
 
         Args:
             n (int): sample count
-            u (float): probability of a lineage going from red to green
-            v (float): probability of a lineage going from green to red
-            coal (float): coal rate, theta.
+            u (float): Mutation rate from red to green.
+            v (float): Mutation rate from green to red.
+            theta (float): Population mutation rate ``4*N*mu``.
         Returns:
             N/A
         """
@@ -1235,7 +1306,7 @@ class BiMarkersTransition:
         self.n = n 
         self.u = u
         self.v = v
-        self.coal = coal
+        self.theta = theta
 
         # Lazily-built spectral decomposition Q = V diag(w) V^{-1}, used to
         # evaluate e^{Qt} for arbitrary t as V diag(e^{wt}) V^{-1} in two
@@ -1268,7 +1339,7 @@ class BiMarkersTransition:
                 #### EQ 15 ####
                 
                 # THE DIAGONAL. always calculated
-                self.Q[n_r][n_r] = - (n_prime * (n_prime - 1) / coal) \
+                self.Q[n_r][n_r] = - (n_prime * (n_prime - 1) / theta) \
                                        - (v * (n_prime - r_prime)) \
                                        - (r_prime * u)
 
@@ -1276,7 +1347,7 @@ class BiMarkersTransition:
                 # (and the second, if n isn't 1).
                 if 0 < r_prime <= n_prime:
                     if n_prime > 1:
-                        self.Q[n_r][nm_rm] = (r_prime - 1) * n_prime / coal
+                        self.Q[n_r][nm_rm] = (r_prime - 1) * n_prime / theta
                     self.Q[n_r][n_rm] = (n_prime - r_prime + 1) * v
 
                 # These equations only make sense if r is strictly less than n 
@@ -1284,7 +1355,7 @@ class BiMarkersTransition:
                 if 0 <= r_prime < n_prime:
                     if n_prime > 1:
                         self.Q[n_r][nm_r] = (n_prime - 1 - r_prime) \
-                                            * n_prime / coal
+                                            * n_prime / theta
                     self.Q[n_r][n_rp] = (r_prime + 1) * u
 
     def _build_eig(self) -> None:
@@ -1359,14 +1430,33 @@ class SNPStrategy:
     Supports both CPU (NumPy) and GPU (CuPy) execution. When use_gpu=True,
     all tensor operations run on the GPU via CuPy's drop-in NumPy API.
     """
-    def __init__(self, q : BiMarkersTransition, u : float, v : float, 
-                 coal : float, sites : int, max_samples : int,
+    def __init__(self, q : BiMarkersTransition, u : float, v : float,
+                 theta : float, sites : int, max_samples : int,
                  site_slice: tuple[int, int] | None = None,
-                 use_gpu: bool = False) -> None:
+                 use_gpu: bool = False,
+                 branch_thetas: Optional[dict] = None) -> None:
+        """Create a new ``SNPStrategy``.
+
+        Args:
+            q: Transition-rate model for the 0/1 substitution process.
+            u: Mutation rate red-to-green (1->0).
+            v: Mutation rate green-to-red (0->1).
+            theta: Default population mutation rate ``4*N*mu``.
+            sites: Total number of sites in the alignment.
+            max_samples: Maximum per-taxon sample count, used to size the
+                per-node partial-likelihood vectors.
+            site_slice: Optional ``(start, stop)`` restricting computation
+                to a contiguous subrange of sites (for chunked/parallel
+                evaluation). ``None`` uses all ``sites``.
+            use_gpu: When ``True``, run tensor operations on the GPU via
+                CuPy instead of NumPy.
+            branch_thetas: Fixed branch-specific population mutation rates.
+        """
         self.q : BiMarkersTransition = q
         self.u : float = u
         self.v : float = v
-        self.coal : float = coal
+        self.theta : float = theta
+        self.branch_thetas = branch_thetas
         self.total_sites : int = sites
         self.site_slice : tuple[int, int] | None = site_slice
         self.sites : int = (site_slice[1] - site_slice[0]) if site_slice else sites
@@ -1507,7 +1597,15 @@ class SNPStrategy:
         
         return F, common_log
     
-    def _rule1(self, F, branch_len: float, d: int):
+    def _rule1(
+        self,
+        F,
+        branch_len: float,
+        d: int,
+        *,
+        child_name: str,
+        parent_name: str,
+    ):
         """
         Given vpi tensor F, with interface α, and branch length t, and max lineages m_α, 
         compute the vpi tensor F_top at the top of the branch.
@@ -1515,7 +1613,14 @@ class SNPStrategy:
         P(t) is computed on CPU (small matrix, scipy.linalg.expm) and transferred
         to GPU if needed. The matmul F @ P_sub runs on the tensor's device.
         """
-        P_full = self.q.expt(branch_len)   # always NumPy (CPU)
+        branch_theta = resolve_branch_theta(
+            self.theta,
+            self.branch_thetas,
+            child_name,
+            parent=parent_name,
+        )
+        q = _get_transition(self.q.n, self.u, self.v, branch_theta)
+        P_full = q.expt(branch_len)   # always NumPy (CPU)
         P_sub = P_full[:d, :d]
         if self.use_gpu:
             P_sub = self.xp.asarray(P_sub)  # transfer to GPU
@@ -1685,7 +1790,13 @@ class SNPStrategy:
         
         # log_scale shape matches F.shape[:-1] = (sites,)
         log_scale = xp.zeros(self.sites, dtype=xp.float64)
-        F = self._rule1(F, n.branch().length, state_dim(n.samples))
+        F = self._rule1(
+            F,
+            n.branch().length,
+            state_dim(n.samples),
+            child_name=n.get_name(),
+            parent_name=n.branch().parent_id,
+        )
         F, log_scale = self._rescale(F, log_scale)
         
         n.vpi = NodeVPI(F, [f"{n.get_name()}_top"], [n.samples], log_scale)
@@ -1729,7 +1840,13 @@ class SNPStrategy:
         
         # Rescale result (log_scale starts per-site, grows with F's dims)
         F, log_scale = self._rescale(F, log_scale)
-        F = self._rule1(F, n.branch().length, state_dim(max_lin[-1]))
+        F = self._rule1(
+            F,
+            n.branch().length,
+            state_dim(max_lin[-1]),
+            child_name=n.get_name(),
+            parent_name=n.branch().parent_id,
+        )
         F, log_scale = self._rescale(F, log_scale)
            
         n.vpi = NodeVPI(F, interfaces, max_lin, log_scale)
@@ -1769,12 +1886,24 @@ class SNPStrategy:
         
         # Apply transition on branch 0's axis (axis -2)
         F = xp.moveaxis(F, -2, -1)
-        F = self._rule1(F, branches[0].length, state_dim(m))
+        F = self._rule1(
+            F,
+            branches[0].length,
+            state_dim(m),
+            child_name=n.get_name(),
+            parent_name=branches[0].parent_id,
+        )
         F, log_scale = self._rescale_global(F, log_scale)
         
         # Apply transition on branch 1's axis (now at -2, move to -1)
         F = xp.moveaxis(F, -1, -2)
-        F = self._rule1(F, branches[1].length, state_dim(m))
+        F = self._rule1(
+            F,
+            branches[1].length,
+            state_dim(m),
+            child_name=n.get_name(),
+            parent_name=branches[1].parent_id,
+        )
         F, log_scale = self._rescale_global(F, log_scale)
         
         # Final per-vector rescale for downstream merge/split compatibility
@@ -1882,13 +2011,21 @@ class SNPModelVisitor:
     node's partial-likelihood result up to its parent.
     """
     def __init__(self, strategy: SNPStrategy) -> None:
+        """Create a new visitor driving ``strategy`` over the model graph.
+
+        Args:
+            strategy: Per-node partial-likelihood strategy to invoke at
+                each visited node.
+        """
         self.strategy : SNPStrategy = strategy
         self.vpis : list[NodeVPI] = []
             
     def visit_leaf(self, n: LeafNode) -> None:
+        """Compute and record the leaf partial likelihood for ``n``."""
         self.vpis.append(self.strategy.compute_at_leaf(n))
         
     def visit_internal(self, n: InternalNode) -> None:
+        """Combine both children's partials at internal node ``n`` and record the result."""
         child_vpis : list[NodeVPI]= [
             self._get_vpi_for(n, child.get_name(), retic=(child.get_node_type() == "reticulation"))
             for child in n.get_model_children()
@@ -1902,11 +2039,13 @@ class SNPModelVisitor:
             self.vpis.append(self.strategy.compute_at_internal(n, unique_vpis[0], unique_vpis[1]))
         
     def visit_reticulation(self, n: ReticulationNode) -> None:
+        """Split the child partial across both parent interfaces of reticulation ``n``."""
         child_vpi : NodeVPI = [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()][0]
         self._remove(child_vpi)
         self.vpis.append(self.strategy.compute_at_reticulation(n, child_vpi))
         
     def visit_root(self, n: RootNode) -> None:
+        """Combine both children's partials at the root ``n`` and record the result."""
         child_vpis : list[NodeVPI]= [
             self._get_vpi_for(n, child.get_name(), retic=(child.get_node_type() == "reticulation"))
             for child in n.get_model_children()
@@ -1920,14 +2059,12 @@ class SNPModelVisitor:
             self.vpis.append(self.strategy.compute_at_root(n, unique_vpis[0], unique_vpis[1]))
         
     def visit_aggregator(self, n: RootAggregatorNode) -> None:
+        """Fold the child partial into the final log-likelihood at aggregator ``n``."""
         child_vpi : NodeVPI = [self._get_vpi_for(n, child.get_name()) for child in n.get_model_children()][0]
         self.strategy.compute_at_aggregator(n, child_vpi)
         
     
     def visit(self, n: ModelNode) -> None:
-        """
-        Visit a node.
-        """
         """Dispatch to the correct visit method based on node type."""
         dispatch = {
             "leaf": self.visit_leaf,
@@ -1958,6 +2095,7 @@ class SNPModelVisitor:
             return iface.startswith(label + "_") or iface == label
         
         def get() -> tuple[int, NodeVPI]:
+            """Find the ``(interface_index, vpi)`` pair matching ``node_label``."""
             if retic:
                 # Reticulation interfaces have the form: {retic_name}_{parent_name}_top
                 # We need to find the exact interface for THIS parent
@@ -1974,6 +2112,7 @@ class SNPModelVisitor:
             return None
         
         def move_to_end(v : NodeVPI, index : int) -> None:
+            """Move the interface at ``index`` to the last axis of ``v``'s tensor, in place."""
             if index == len(v.interfaces) - 1:
                 return  # Already at the end, nothing to do
             

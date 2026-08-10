@@ -41,6 +41,7 @@ import sys
 from pathlib import Path
 
 from phynetpy.Network import Network
+from phynetpy.models import BranchLengthUnit
 from phynetpy._seq_likelihood import (
     JC69,
     GTR,
@@ -289,6 +290,8 @@ def python_values(case: dict) -> dict[str, float]:
     vals: dict[str, float] = {}
     sp_net = Network.from_newick(phylonet_to_phynetpy(case["net"]))
     gt = Network.from_newick(case["gt"])
+    sp_net.set_branch_length_unit(BranchLengthUnit.SUBSTITUTIONS_PER_SITE)
+    gt.set_branch_length_unit(BranchLengthUnit.SUBSTITUTIONS_PER_SITE)
     if case.get("map"):
         species_of = {al: sp for sp, alleles in case["map"].items() for al in alleles}
     else:
@@ -298,6 +301,7 @@ def python_values(case: dict) -> dict[str, float]:
     )
     if case.get("seqs"):
         gt_f = Network.from_newick(case["gt"])
+        gt_f.set_branch_length_unit(BranchLengthUnit.SUBSTITUTIONS_PER_SITE)
         calc = FelsensteinCalculator(case["seqs"])
         vals["FELSEN"] = calc.log_likelihood(gt_f, _model_for(case))
     return vals

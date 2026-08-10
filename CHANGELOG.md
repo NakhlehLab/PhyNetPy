@@ -8,6 +8,55 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.6.0] -- 2026-08-10
+
+### Added -- branch-length units and heterogeneous populations
+
+- Every biologically interpreted network can now carry an explicit
+  `BranchLengthUnit`: substitutions per site, coalescent units, or unspecified.
+  `convert_network_branch_lengths` performs explicit conversions using
+  `theta = 4*N*mu`; inference and simulation reject ambiguous units instead of
+  silently mixing scales.
+- `MSC(theta=..., branch_thetas=...)` supports fixed population-specific theta
+  values for simulation and fixed-network scoring. Topology-changing sequence
+  and marker MCMC deliberately reject heterogeneous theta until their proposal
+  kernels can update it coherently.
+- New `PopulationData` and `AdmixtureGraph` containers provide validated
+  population-by-site allele counts and pulse-admixture network semantics.
+
+### Changed -- marker simulation and population parameters
+
+- Biallelic-marker simulation now samples an independent MSNC genealogy at
+  every site and evolves the two-state CTMC down that genealogy. This replaces
+  the old forward approximation, so fixed seeds do not reproduce pre-0.6.0
+  marker data.
+- The population parameter is consistently named `theta`; the former `coal`
+  keyword on `MSC`, marker simulation, and marker scoring is removed.
+- `Edge.copy()` preserves edge tags, keeping copied networks structurally
+  equivalent when tagged edges are present.
+
+### Fixed -- GPU marker-likelihood memory bounds
+
+- Site batching now uses currently free VRAM, accounts for transient sparse
+  contraction workspaces, and releases device tensors between batches. CUDA
+  allocation failures are reported as `SNPResourceError` instead of leaving the
+  CuPy memory pool exhausted for every subsequent score.
+- The default slow release gate uses a reproducible hardware-independent stress
+  grid. Set `PHYNETPY_EXTREME_SNP_STRESS=1` to enable the 50-taxon/10,000-site
+  hardware benchmark.
+
+### Migration notes
+
+- Tag input networks with
+  `BranchLengthUnit.COALESCENT_2N` for gene-tree topology workflows or
+  `BranchLengthUnit.SUBSTITUTIONS_PER_SITE` for timed sequence and marker
+  workflows.
+- Replace `MSC(coal=x)` and marker `coal=x` arguments with `theta=x`.
+- Import inference through `phynetpy.infer`; the legacy command modules removed
+  in this release are no longer compatibility shims.
+
 ### Removed -- **BREAKING**: the component/visitor model-building layer
 
 The probabilistic-graphical-model scaffolding around `Model` has been removed.

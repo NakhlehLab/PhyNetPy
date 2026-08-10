@@ -55,9 +55,11 @@ from phynetpy.infer import (
 )
 from phynetpy.models import (
     Allopolyploid,
+    BranchLengthUnit,
     MSC,
     Model,
     ModelSpecError,
+    convert_network_branch_lengths,
     resolve_model,
 )
 from phynetpy.GraphUtils import network_clusters
@@ -101,7 +103,19 @@ def gts_topologies() -> GeneTrees:
 @pytest.fixture
 def seed_net(gts: GeneTrees):
     """Majority-rule consensus of the gene trees, as a starting network."""
-    return gts.build_majority_rule_consensus_tree()
+    net = gts.build_majority_rule_consensus_tree()
+    net.set_branch_length_unit(BranchLengthUnit.COALESCENT_2N)
+    return net
+
+
+def _as_substitution_net(network, theta: float = 0.02):
+    """Copy a coalescent-unit fixture onto the timed-MSC scale."""
+
+    return convert_network_branch_lengths(
+        network,
+        BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+        theta=theta,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +241,10 @@ class TestModelAxis:
             MSC(theta=0.0)
         with pytest.raises(ModelSpecError):
             MSC(u=-1.0)
+        with pytest.raises(ModelSpecError):
+            MSC(theta=float("nan"))
+        with pytest.raises(ModelSpecError, match="keys"):
+            MSC(branch_thetas={object(): 0.02})
 
     def test_subgenome_map_resolves_from_data(self, gts):
         gts.mapping = {"AB": ["A", "B"], "C": ["C"], "D": ["D"]}
@@ -265,7 +283,6 @@ class TestCriterionAxis:
     def test_accepts_data_encodes_what_is_defined(self):
         # Parsimony over an alignment is not unimplemented, it is undefined.
         assert MDC.accepts_data == (GeneTrees,)
-        assert Alignment not in Likelihood.accepts_data or True
         assert Alignment in Likelihood.accepts_data
         assert Alignment not in PseudoLikelihood.accepts_data
 
@@ -545,9 +562,35 @@ class TestStart:
 
 class TestSimulate:
 
+    @pytest.mark.parametrize(
+        "kind", ["gene_trees", "alignment", "markers"]
+    )
+    @pytest.mark.parametrize(
+        "unit",
+        [
+            BranchLengthUnit.UNSPECIFIED,
+            BranchLengthUnit.COALESCENT_2N,
+        ],
+    )
+    def test_requires_substitution_units(self, seed_net, kind, unit):
+        network, _ = seed_net.copy()
+        network.set_branch_length_unit(unit)
+        with pytest.raises(ValueError, match="requires|branch-length units"):
+            simulate(MSC(theta=0.02), network, n=1, data=kind, seed=3)
+
+    def test_branch_thetas_belong_on_model(self, seed_net):
+        with pytest.raises(TypeError, match=r"MSC\(branch_thetas"):
+            simulate(
+                MSC(theta=0.02),
+                _as_substitution_net(seed_net),
+                n=1,
+                branch_thetas={"A": 0.01},
+            )
+
     def test_gene_trees_round_trip_into_the_verbs(self, seed_net):
         mapping = {"A": ["A"], "B": ["B"], "C": ["C"], "D": ["D"]}
-        sim = simulate(MSC(theta=0.02), seed_net, n=6, data="gene_trees",
+        sim_net = _as_substitution_net(seed_net)
+        sim = simulate(MSC(theta=0.02), sim_net, n=6, data="gene_trees",
                        mapping=mapping, seed=3)
 
         assert isinstance(sim, GeneTrees)
@@ -562,22 +605,27 @@ class TestSimulate:
 
     def test_alignment(self, seed_net):
         mapping = {"A": ["A"], "B": ["B"], "C": ["C"], "D": ["D"]}
-        sim = simulate(MSC(theta=0.02), seed_net, n=2, data="alignment",
+        sim = simulate(MSC(theta=0.02), _as_substitution_net(seed_net),
+                       n=2, data="alignment",
                        mapping=mapping, seq_length=40, seed=3)
         assert isinstance(sim, Alignment)
         assert sim.n_loci == 2
         assert sim.n_sites == 80
 
     def test_markers(self, seed_net):
-        sim = simulate(MSC(), seed_net, n=25, data="markers", seed=3)
+        sim = simulate(
+            MSC(), _as_substitution_net(seed_net), n=25,
+            data="markers", seed=3,
+        )
         assert isinstance(sim, BiallelicMarkers)
         assert sim.n_sites == 25
 
     def test_truth_is_attached_for_recovery_checks(self, seed_net):
         for kind in ("gene_trees", "alignment", "markers"):
-            sim = simulate(MSC(theta=0.02), seed_net, n=3, data=kind,
+            truth = _as_substitution_net(seed_net)
+            sim = simulate(MSC(theta=0.02), truth, n=3, data=kind,
                            seq_length=20, seed=3)
-            assert sim.true_network is seed_net
+            assert sim.true_network is truth
 
     def test_simulate_draws_its_own_species_tree(self):
         sim = simulate(MSC(theta=0.02), taxa=5, n=4, seed=11)
@@ -590,7 +638,14 @@ class TestSimulate:
         # Alleles are named after the drawn tips, so the result is scoreable
         # without the caller having to learn the generated labels.
         assert sim.taxa == {leaf.label for leaf in truth.get_leaves()}
-        assert isinstance(score(truth, sim, criterion=PseudoLikelihood()), float)
+        scoring_net = convert_network_branch_lengths(
+            truth,
+            BranchLengthUnit.COALESCENT_2N,
+            theta=0.02,
+        )
+        assert isinstance(
+            score(scoring_net, sim, criterion=PseudoLikelihood()), float
+        )
 
     def test_species_tree_honours_supplied_labels(self):
         sim = simulate(MSC(), taxa=["A", "B", "C", "D"], n=3, seed=5)

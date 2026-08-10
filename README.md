@@ -4,7 +4,7 @@ PhyNetPy is a Python library for phylogenetic network inference and analysis. It
 provides improved implementations of methods from PhyloNet, plus a framework for
 building new Bayesian and simulation-based methods.
 
-Current version: **v0.5.0** (see [CHANGELOG.md](CHANGELOG.md) for history).
+Current version: **v0.6.0** (see [CHANGELOG.md](CHANGELOG.md) for history).
 
 ## Install
 
@@ -12,10 +12,12 @@ Current version: **v0.5.0** (see [CHANGELOG.md](CHANGELOG.md) for history).
 pip install phynetpy
 ```
 
-Optional Cython accelerators (pure Python is the fully functional fallback):
+PhyNetPy's graph core and likelihood kernels are compiled with Cython. Standard
+installation uses a published wheel when one is available; installing from the
+source distribution requires a C compiler:
 
 ```bash
-pip install 'phynetpy[fast]'
+pip install .
 ```
 
 See [`Guides/INSTALLATION_GUIDE.md`](Guides/INSTALLATION_GUIDE.md) for virtual
@@ -98,7 +100,7 @@ objective.
 | `src/data/`, `src/models/`, `src/criteria/` | The three axes those verbs dispatch on. |
 | `src/_registry.py`, `src/_engines.py` | The validity matrix and one adapter per implemented cell. |
 | `src/_*.py` | Method implementations. Private; reach them through `phynetpy.infer`. |
-| `src/cython/` | Optional Cython accelerators, each shadowing a pure-Python fallback. |
+| `src/cython/` | Required compiled graph core and likelihood/scoring kernels. |
 | `examples/` | Runnable end-to-end workflows. |
 | `tests/` | Test suite (`pytest`; `-m "not slow"` skips long MCMC recovery runs). |
 | `docs/` | Project site, plus the generated API reference in `docs/api/`. |
@@ -142,7 +144,7 @@ recovered = infer(sim, criterion=PseudoLikelihood())
 ```bash
 python -m pytest -m "not slow"   # test suite
 python generate_docs.py          # regenerate docs/api/
-python deploy.py --dry-run patch # version bump + build, no upload
+python deploy.py --dry-run --no-bump # test + build 0.6.0, no upload
 ```
 
 The version lives in `src/_version.py` and is the single source of truth;

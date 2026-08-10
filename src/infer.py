@@ -87,7 +87,14 @@ from .criteria import (
     resolve_criterion,
 )
 from .data import Alignment, BiallelicMarkers, Data, GeneTrees
-from .models import Allopolyploid, MSC, Model, resolve_model
+from .models import (
+    Allopolyploid,
+    BranchLengthUnit,
+    MSC,
+    Model,
+    convert_network_branch_lengths,
+    resolve_model,
+)
 from .Network import Network
 
 # ── Configuration objects the axes take as parameters ─────────────────
@@ -177,6 +184,8 @@ __all__ = [
     "Model",
     "MSC",
     "Allopolyploid",
+    "BranchLengthUnit",
+    "convert_network_branch_lengths",
     "Criterion",
     "MDC",
     "Likelihood",

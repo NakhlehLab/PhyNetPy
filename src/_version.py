@@ -8,4 +8,4 @@ can parse it without importing the package.
 ``deploy.py`` rewrites the literal below when bumping a release.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"

@@ -72,6 +72,12 @@ class ValidationError(Exception):
     Base exception for validation errors.
     """
     def __init__(self, message: str = "Validation error occurred") -> None:
+        """Create a ``ValidationError`` with a custom message.
+
+        Args:
+            message (str, optional): Error message. Defaults to
+                "Validation error occurred".
+        """
         self.message = message
         super().__init__(self.message)
 
@@ -522,6 +528,7 @@ class NewickValidator(BaseValidator):
     _dependency_msg = "BioPython required for Newick validation"
     
     def __init__(self):
+        """Create a ``NewickValidator`` for ``.nwk``/``.newick``/``.tre``/``.tree`` files."""
         super().__init__()
         self.supported_extensions = {'.nwk', '.newick', '.tre', '.tree'}
         
@@ -633,6 +640,7 @@ class NexusValidator(BaseValidator):
     _dependency_msg = "python-nexus required for Nexus validation"
     
     def __init__(self):
+        """Create a ``NexusValidator`` for ``.nex``/``.nexus`` files."""
         super().__init__()
         self.supported_extensions = {'.nex', '.nexus'}
         
@@ -1006,6 +1014,7 @@ class FastaValidator(BaseValidator):
     _dependency_msg = "BioPython required for FASTA validation"
     
     def __init__(self):
+        """Create a ``FastaValidator`` for ``.fasta``/``.fas``/``.fa`` (and related) files."""
         super().__init__()
         self.supported_extensions = {'.fasta', '.fas', '.fa', '.fna', '.ffn', '.faa'}
         
@@ -1084,6 +1093,7 @@ class PhylipValidator(BaseValidator):
     _dependency_msg = "BioPython required for PHYLIP validation"
     
     def __init__(self):
+        """Create a ``PhylipValidator`` for ``.phy``/``.phylip`` files."""
         super().__init__()
         self.supported_extensions = {'.phy', '.phylip'}
         
@@ -1142,6 +1152,7 @@ class ClustalValidator(BaseValidator):
     _dependency_msg = "BioPython required for Clustal validation"
     
     def __init__(self):
+        """Create a ``ClustalValidator`` for ``.aln``/``.clustal`` files."""
         super().__init__()
         self.supported_extensions = {'.aln', '.clustal'}
         
@@ -1189,6 +1200,7 @@ class XMLValidator(BaseValidator):
     _dependency_msg = "XML parsing not available"
     
     def __init__(self):
+        """Create an ``XMLValidator`` for ``.xml`` files."""
         super().__init__()
         self.supported_extensions = {'.xml'}
         
@@ -1237,6 +1249,7 @@ class GenBankValidator(BaseValidator):
     _dependency_msg = "BioPython required for GenBank validation"
     
     def __init__(self):
+        """Create a ``GenBankValidator`` for ``.gb``/``.gbk``/``.genbank`` files."""
         super().__init__()
         self.supported_extensions = {'.gb', '.gbk', '.genbank'}
         

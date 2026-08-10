@@ -59,6 +59,7 @@ class SNPModel:
     """
 
     def __init__(self) -> None:
+        """Create an empty ``SNPModel`` with no network or nodes bound yet."""
         self.network: Optional[Network] = None
         self.root: Optional[ModelNode] = None
         self.nodetypes: dict[str, list[ModelNode]] = {
@@ -79,6 +80,7 @@ class ModelNode(ABC):
     """
 
     def __init__(self) -> None:
+        """Create a new ``ModelNode`` with no children yet."""
         self.children: list[ModelNode] = []
 
     def add_child(self, model_node: ModelNode) -> None:

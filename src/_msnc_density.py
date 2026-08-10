@@ -14,6 +14,14 @@ import numpy as np
 
 from .Network import Network, Node
 from .GraphUtils import _node_height
+from ._units import (
+    _positive_theta,
+    BranchLengthUnit,
+    BranchThetaKey,
+    require_branch_length_unit,
+    resolve_branch_theta,
+    validate_branch_thetas,
+)
 
 if TYPE_CHECKING:
     # ``_mcmc_gt`` imports this module, so the displayed-tree record it
@@ -56,6 +64,12 @@ class MSCBranchKernel:
     """Kingman branch-coalescent kernel with explicit theta (4 N mu)."""
 
     def __init__(self, theta: float = 2.0) -> None:
+        """Create a new ``MSCBranchKernel``.
+
+        Args:
+            theta (float, optional): Population mutation rate (4 N mu).
+                Defaults to 2.0.
+        """
         self.theta = float(theta)
         self._log_gij_cache: dict[tuple, float] = {}
         self._log_denom_cache: dict[tuple[int, int], float] = {}
@@ -202,6 +216,7 @@ def _msnc_log_density_timed(
     events: list[tuple[float, int, int, int]],
     sp_heights: list[float],
     theta: float,
+    branch_thetas: Optional[dict[BranchThetaKey, float]] = None,
 ) -> float:
     """Joint-edge AC DP with timed (event-based) branch coalescent factors."""
     if gti.root_bit < 0 or not gti.leaves:
@@ -211,8 +226,33 @@ def _msnc_log_density_timed(
 
     # C-typed timed frontier DP (bit-for-bit identical to the Python
     # loop below; see ``network_dp_timed_cy`` in gt_msc_cy.pyx).
-    if _CYTHON_TIMED_DP and gti.n_total <= _CY_MAX_BITS:
+    if (
+        not branch_thetas
+        and _CYTHON_TIMED_DP
+        and gti.n_total <= _CY_MAX_BITS
+    ):
         return _network_dp_timed_cy(net_idx, gti, events, sp_heights, theta)
+
+    def edge_theta(edge_id: int) -> float:
+        """Resolve theta on an indexed parent-to-child species edge."""
+
+        parent_id = net_idx.edge_src[edge_id]
+        child_id = net_idx.edge_dst[edge_id]
+        return resolve_branch_theta(
+            theta,
+            branch_thetas,
+            net_idx._node_objs[child_id],
+            parent=net_idx._node_objs[parent_id],
+        )
+
+    def root_theta(node_id: int) -> float:
+        """Resolve theta in the infinite population above the root."""
+
+        return resolve_branch_theta(
+            theta,
+            branch_thetas,
+            net_idx._node_objs[node_id],
+        )
 
     species_to_bits: dict[str, int] = {}
     for leaf_bit in gti.leaves:
@@ -256,7 +296,11 @@ def _msnc_log_density_timed(
 
             if not up_es:
                 out = apply_branch(
-                    {mask_at_v: 0.0}, sp_heights[v], None, theta, events
+                    {mask_at_v: 0.0},
+                    sp_heights[v],
+                    None,
+                    root_theta(v),
+                    events,
                 )
                 for top_mask, top_lp in out.items():
                     new_key = _frontier_insert(new_key_base, (-1, top_mask))
@@ -286,10 +330,18 @@ def _msnc_log_density_timed(
                     parent1 = net_idx.edge_src[e1]
                     parent2 = net_idx.edge_src[e2]
                     out1 = apply_branch(
-                        {S: 0.0}, tau_low, sp_heights[parent1], theta, events
+                        {S: 0.0},
+                        tau_low,
+                        sp_heights[parent1],
+                        edge_theta(e1),
+                        events,
                     )
                     out2 = apply_branch(
-                        {as_mask: 0.0}, tau_low, sp_heights[parent2], theta, events
+                        {as_mask: 0.0},
+                        tau_low,
+                        sp_heights[parent2],
+                        edge_theta(e2),
+                        events,
                     )
                     for top1, lp1 in out1.items():
                         for top2, lp2 in out2.items():
@@ -311,7 +363,7 @@ def _msnc_log_density_timed(
                 {mask_at_v: 0.0},
                 sp_heights[v],
                 sp_heights[parent_id],
-                theta,
+                edge_theta(e_up),
                 events,
             )
             for top_mask, top_lp in out.items():
@@ -416,6 +468,7 @@ def msnc_log_density_prebuilt(
     gti: "_GeneTreeIndex",
     events: list[tuple[float, int, int, int]],
     theta: float,
+    branch_thetas: Optional[dict[BranchThetaKey, float]] = None,
 ) -> float:
     """Timed MSNC density from pre-built indices (hot MCMC_SEQ entry point).
 
@@ -425,7 +478,14 @@ def msnc_log_density_prebuilt(
     """
     if sp_heights is None or net_idx.n_nodes == 0 or net_idx.root < 0:
         return float("-inf")
-    score = _msnc_log_density_timed(net_idx, gti, events, sp_heights, theta)
+    score = _msnc_log_density_timed(
+        net_idx,
+        gti,
+        events,
+        sp_heights,
+        theta,
+        branch_thetas,
+    )
     if score <= _LOG_FLOOR + 1:
         return float("-inf")
     return float(score)
@@ -437,18 +497,33 @@ def gene_tree_msnc_log_density(
     species_of: dict[str, str],
     *,
     theta: float = 0.02,
-    pop_sizes: Optional[dict] = None,
+    branch_thetas: Optional[dict[BranchThetaKey, float]] = None,
 ) -> float:
     """Log timed MSNC density log P(g | Psi) via joint-edge AC DP."""
-    if pop_sizes is not None:
-        raise NotImplementedError(
-            "per-branch pop_sizes not yet supported in shared MSNC DP"
-        )
+    _positive_theta(theta, "default theta")
+    validate_branch_thetas(branch_thetas)
+    require_branch_length_unit(
+        species_net,
+        BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+        context="timed MSNC density",
+    )
+    require_branch_length_unit(
+        gene_tree,
+        BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+        context="timed MSNC density",
+    )
     net_idx, sp_heights = build_network_msnc_index(species_net)
     if sp_heights is None:
         return float("-inf")
     gti, events = build_gene_tree_msnc_index(gene_tree, species_of)
-    return msnc_log_density_prebuilt(net_idx, sp_heights, gti, events, theta)
+    return msnc_log_density_prebuilt(
+        net_idx,
+        sp_heights,
+        gti,
+        events,
+        theta,
+        branch_thetas,
+    )
 
 
 __all__ = [

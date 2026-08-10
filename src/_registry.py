@@ -158,6 +158,7 @@ def register(
     key = (data_cls, model_cls, criterion_cls)
 
     def deco(engine_cls: Type[Engine]) -> Type[Engine]:
+        """Register ``engine_cls`` under ``key`` and return it unchanged."""
         if key in _ENGINES:
             raise ValueError(
                 f"({data_cls.__name__}, {model_cls.__name__}, "

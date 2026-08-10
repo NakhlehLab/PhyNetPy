@@ -11,18 +11,18 @@
         <h1>PhyNetPy Documentation</h1>
         <p>Library for the Development and Use of Phylogenetic Network Methods</p>
     </div>
-    
+
     <div class="document">
         <div class="documentwrapper">
             <div class="body">
                 <div class="breadcrumb">
                     <a href="index.html">Home</a> &raquo; models
                 </div>
-                
+
                 <h1>models Module <span class="version-badge">v1.0.0</span></h1>
-                
+
                 <p>Axis 2 -- the generative biology: MSC (diploid, ILS only) and Allopolyploid (whole-genome duplication).</p>
-                
+
                 <div class="module-info">
                     <dl>
                         <dt>Author:</dt>
@@ -31,7 +31,7 @@
                         <dd>models.py</dd>
                     </dl>
                 </div>
-                
+
                 <div class="toc">
                     <h4>Contents</h4>
                     <ul>
@@ -39,6 +39,7 @@
                         <li><a href="#model">Model</a></li>
                         <li><a href="#msc">MSC</a></li>
                         <li><a href="#allopolyploid">Allopolyploid</a></li>
+                        <li><a href="#branchlengthunit">BranchLengthUnit</a></li>
                         <li><a href="#functions">Module Functions</a></li>
                     </ul>
                 </div>
@@ -96,11 +97,11 @@
                         <span class="keyword">class</span> <span class="name">MSC</span>(<span class="params">Model</span>)
                     </div>
                     <div class="class-body">
-                        <p>The multispecies network coalescent: diploid lineages with ILS. The default model, and the one nearly every method in the field is built on. Gene copies coalesce within the branches of the species network at a rate set by the population mutation rate; at a reticulation, each lineage passes into one parent with probability given by that edge's inheritance probability (gamma). Incomplete lineage sorting therefore arises from the coalescent, and a reticulation means hybridization or introgression. The process parameters live here because they *are* the biology. The mutation rates ``u`` and ``v`` describe the biallelic transition model and are read only when scoring :class:`~phynetpy.data.BiallelicMarkers`; ``theta`` is the population mutation rate ``4*N*mu``. Attributes: theta: Population mut...</p>
+                        <p>The multispecies network coalescent: diploid lineages with ILS. The default model, and the one nearly every method in the field is built on. Gene copies coalesce within the branches of the species network at a rate set by the population mutation rate; at a reticulation, each lineage passes into one parent with probability given by that edge's inheritance probability (gamma). Incomplete lineage sorting therefore arises from the coalescent, and a reticulation means hybridization or introgression. The process parameters live here because they *are* the biology. The mutation rates ``u`` and ``v`` describe the biallelic transition model. ``theta`` is the population mutation rate ``4*N*mu`` for every MSC data type. Fixed branch-specific values may override it through ``branch_thetas``. Attribute...</p>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">__init__</span>(<span class="params">theta: Optional[float] = None, u: float = 1.0, v: float = 1.0, coal: float = 1.0, pop_sizes: Optional[Dict] = None</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">__init__</span>(<span class="params">theta: Optional[float] = None, u: float = 1.0, v: float = 1.0, branch_thetas: Optional[Mapping[BranchThetaKey, float]] = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
                                 <p>Configure the multispecies network coalescent.</p>
@@ -126,14 +127,9 @@
                                         <td>Green-to-red mutation rate (biallelic markers only).</td>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">coal</span></td>
+                                        <td><span class="param-name">branch_thetas</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Coalescent rate constant (biallelic markers only).</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">pop_sizes</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>Per-branch population sizes, keyed by node.</td>
+                                        <td>Fixed per-population values. Stable ``(parent_label, child_label)`` keys identify edges; a child label identifies the branch above that node. Use ``(&quot;__root__&quot;, root_label)`` for the ancestral population.</td>
                                     </tr>
                                 </table>
                                 <div class="raises"><span class="raises-label">Raises:</span> <code>ModelSpecError</code>: If any rate is non-positive.</div>
@@ -233,7 +229,25 @@
                     </div>
                 </div>
 
+                <h2 id="branchlengthunit">BranchLengthUnit</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">BranchLengthUnit</span>(<span class="params">str, Enum</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Units carried by every biologically interpreted network. ``SUBSTITUTIONS_PER_SITE`` is required by sequence, marker, and timed-MSC calculations. ``COALESCENT_2N`` supports topology/coalescent workflows. ``UNSPECIFIED`` is safe for graph operations but rejected by biological calculations until the network is explicitly tagged or converted.</p>
+                    </div>
+                </div>
+
                 <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">convert_network_branch_lengths</span>(<span class="params">network: 'Network', target: BranchLengthUnit | str, theta: float, branch_thetas: Optional[Mapping[BranchThetaKey, float]] = None</span>) <span class="keyword">-&gt;</span> 'Network'
+                            </div>
+                            <div class="function-body">
+                                <p>Return a structural copy with branch lengths converted explicitly. Conversion follows ``t_coal = 2*t_sub/theta_branch``. The source unit is read from ``network`` and must already be explicit. Node-time annotations are copied unchanged; biological calculations derive timing from edges.</p>
+                            </div>
+                        </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">resolve_model</span>(<span class="params">spec: Union[Model, str, type, None]</span>) <span class="keyword">-&gt;</span> Model
@@ -257,19 +271,19 @@
                             </div>
                         </div>
 
-                
+
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
                 </div>
             </div>
         </div>
-        
+
         <div class="sphinxsidebar">
             <h3>Navigation</h3>
             <ul>
                 <li><a href="index.html">Home</a></li>
             </ul>
-            
+
             <h3>Modules</h3>
             <ul>
                 <li><a href="Alphabet.html">Alphabet</a></li>
@@ -283,13 +297,12 @@
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
-                <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
                 <li><a href="ModelSelection.html">ModelSelection</a></li>
-                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
                 <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
@@ -299,13 +312,14 @@
                 <li><a href="infer.html">infer</a></li>
                 <li><a href="models.html" class="current">models</a></li>
             </ul>
-            
+
             <h3>This Page</h3>
             <ul>
                 <li><a href="#exceptions">Exceptions</a></li>
                 <li><a href="#model">Model</a></li>
                 <li><a href="#msc">MSC</a></li>
                 <li><a href="#allopolyploid">Allopolyploid</a></li>
+                <li><a href="#branchlengthunit">BranchLengthUnit</a></li>
                 <li><a href="#functions">Module Functions</a></li>
             </ul>
         </div>

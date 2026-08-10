@@ -24,10 +24,10 @@ First Included in Version : 1.1.0
 
 SNP Data Simulator for Phylogenetic Networks.
 
-Simulates biallelic (SNP) data over a phylogenetic network using a 
-forward-in-time 2-state continuous-time Markov chain (CTMC) along branches.
-Useful for generating test datasets of arbitrary size for likelihood 
-computation validation, stress testing, and GPU executor benchmarking.
+Simulates biallelic (SNP) data by drawing one exact MSNC genealogy per
+unlinked site and evolving a stationary 2-state continuous-time Markov chain
+down it. This includes ILS, reticulation routing, and multiple samples per
+species under the same model used by the Bryant marker likelihood.
 
 Usage:
     from PhyNetPy.SNPSimulator import simulate, random_network
@@ -42,18 +42,22 @@ Usage:
     sim.write_nexus("stress_test_50taxa.nex")
 
 Docs   - [x]
-Tests  - [ ]
+Tests  - [x]
 Design - [x]
 """
 
 from __future__ import annotations
 
-import numpy as np
 from collections import deque
 from dataclasses import dataclass
+import operator
+
+import numpy as np
 
 from .Network import Network, Node, Edge
 from .BirthDeath import Yule
+from ._sim_markers import simulate_biallelic_markers
+from ._units import BranchLengthUnit, BranchThetaKey
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -71,10 +75,10 @@ class SimulatedSNPData:
                                       red allele counts per site.
         n_taxa (int): Number of leaf taxa.
         n_sites (int): Number of simulated SNP sites.
-        samples (dict[str, int]): Number of sampled individuals per taxon.
+        samples (dict[str, int]): Number of sampled gene copies per taxon.
         u (float): Mutation rate from red to green allele.
         v (float): Mutation rate from green to red allele.
-        coal (float): Coalescent rate parameter (theta).
+        theta (float): Population mutation rate ``4*N*mu``.
         seed (int): Random seed used for simulation.
     """
     network: Network
@@ -84,8 +88,8 @@ class SimulatedSNPData:
     samples: dict[str, int]
     u: float
     v: float
-    coal: float
-    seed: int
+    theta: float
+    seed: int | None
 
     def taxa_names(self) -> list[str]:
         """Return sorted list of taxon names."""
@@ -98,7 +102,7 @@ class SimulatedSNPData:
 
         The output file contains:
             - TAXA block with taxon labels
-            - DATA block with SNP site patterns (0/1 per site for samples=1)
+            - DATA block with one hexadecimal red-allele count per site
             - TREES block with the network in extended newick format 
               (including branch lengths and gamma annotations)
 
@@ -109,6 +113,17 @@ class SimulatedSNPData:
         """
         taxa = self.taxa_names()
         nwk = _network_to_rich_newick(self.network)
+        if any(len(counts) != self.n_sites for counts in self.data.values()):
+            raise ValueError("every taxon must have exactly n_sites counts.")
+        if any(
+            count < 0 or count > 15
+            for counts in self.data.values()
+            for count in counts
+        ):
+            raise ValueError(
+                "NEXUS SNP rows encode counts as one hexadecimal character, "
+                "so every red count must be in 0..15."
+            )
 
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write("#NEXUS\n\n")
@@ -125,7 +140,8 @@ class SimulatedSNPData:
             f.write("  Format datatype=snp missing=? gap=- matchchar=.;\n")
             f.write("  Matrix\n")
             for taxon in taxa:
-                seq = ''.join(str(x) for x in self.data[taxon])
+                counts = self.data[taxon]
+                seq = "".join(format(count, "X") for count in counts)
                 f.write(f"    {taxon} {seq}\n")
             f.write("  ;\nEND;\n\n")
 
@@ -227,7 +243,9 @@ def _rebuild_with_names(yule_net: Network) -> Network:
         Network: A new Network with the same topology and branch lengths 
                  but with clean node names.
     """
-    net = Network()
+    net = Network(
+        branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE
+    )
     old_root = yule_net.root()
     
     # Build a name mapping
@@ -434,36 +452,30 @@ def simulate(
     samples: dict[str, int] | None = None,
     u: float = 1.0,
     v: float = 1.0,
-    coal: float = 0.005,
+    theta: float = 0.02,
+    branch_thetas: dict[BranchThetaKey, float] | None = None,
     seed: int | None = None
 ) -> SimulatedSNPData:
     """
     Simulate SNP (biallelic marker) data over a phylogenetic network.
 
-    Uses a forward-in-time simulation: at the root, an allele state (red or 
-    green) is drawn from the stationary distribution. The state is then 
-    propagated down the network along each branch using the 2-state CTMC 
-    mutation model. At reticulation nodes, the parent lineage is chosen 
-    probabilistically based on the inheritance probability (gamma).
-
-    For samples=1 per taxon, this is an exact simulation under the biallelic 
-    mutation model. For samples > 1, the simulation draws each sample 
-    independently conditional on the leaf's evolved frequency — this is an 
-    approximation (a full coalescent simulation within each population branch 
-    would be needed for exact multi-sample simulation).
+    Draws an independent MSNC genealogy per site, evolves the exact two-state
+    mutation process down it, and aggregates sampled gene copies into red
+    allele counts. This matches the model consumed by ``BiMarkers`` for one
+    or multiple samples per taxon.
 
     Args:
         n (int): Expected number of taxa — used only for validation. 
                  The actual taxa come from the network's leaves.
         s (int): Number of SNP sites to simulate.
         net (Network): The phylogenetic network to simulate data on.
-        samples (dict[str, int] | None): Number of sampled individuals per 
+        samples (dict[str, int] | None): Number of sampled gene copies per
                                           taxon. Keys must match leaf names.
                                           Defaults to 1 per taxon.
         u (float): Mutation rate from red allele to green. Defaults to 1.0.
         v (float): Mutation rate from green allele to red. Defaults to 1.0.
-        coal (float): Coalescent rate parameter (theta). Stored in output 
-                      but not used in the forward simulation. Defaults to 0.005.
+        theta (float): Population mutation rate ``4*N*mu``.
+        branch_thetas (dict | None): Fixed per-population theta overrides.
         seed (int | None): Random seed for reproducibility. Defaults to None.
 
     Raises:
@@ -473,8 +485,6 @@ def simulate(
     Returns:
         SimulatedSNPData: Container with simulated data, network, and metadata.
     """
-    rng = np.random.default_rng(seed)
-
     leaves = net.get_leaves()
     leaf_names = sorted([leaf.label for leaf in leaves])
 
@@ -486,39 +496,34 @@ def simulate(
     if samples is None:
         samples = {name: 1 for name in leaf_names}
     else:
-        if set(samples.keys()) != set(leaf_names):
+        if set(samples) != set(leaf_names):
             raise ValueError(
-                f"Sample keys {set(samples.keys())} don't match "
+                f"Sample keys {set(samples)} don't match "
                 f"leaf names {set(leaf_names)}."
             )
+        try:
+            samples = {
+                name: operator.index(samples[name]) for name in leaf_names
+            }
+        except TypeError as exc:
+            raise ValueError("sample counts must be integers.") from exc
+        if any(count <= 0 for count in samples.values()):
+            raise ValueError("sample counts must be positive.")
 
-    # Precompute edge info for BFS traversal
-    # For each node, store (parent_node, branch_length, gamma_or_none)
-    root = net.root()
-
-    # Stationary distribution
-    p_red = v / (u + v)
-
-    # Simulate all sites in a vectorized manner
-    data: dict[str, list[int]] = {name: [] for name in leaf_names}
-
-    # Batch simulation for efficiency
-    for _ in range(s):
-        site_states = _simulate_one_site(net, root, p_red, u, v, rng)
-
-        for name in leaf_names:
-            base_state = site_states.get(name, 0)
-
-            if samples[name] == 1:
-                data[name].append(base_state)
-            else:
-                # For multi-sample: each sample independently gets the 
-                # evolved state. The red count is the sum.
-                red_count = sum(
-                    1 for _ in range(samples[name])
-                    if rng.random() < (base_state * 0.95 + (1 - base_state) * 0.05)
-                )
-                data[name].append(red_count)
+    mapping = {
+        name: [f"{name}_{i}" for i in range(samples[name])]
+        for name in leaf_names
+    }
+    data = simulate_biallelic_markers(
+        net,
+        s,
+        mapping,
+        theta=theta,
+        u=u,
+        v=v,
+        branch_thetas=branch_thetas,
+        rng=np.random.default_rng(seed),
+    )
 
     return SimulatedSNPData(
         network=net,
@@ -528,159 +533,9 @@ def simulate(
         samples=samples,
         u=u,
         v=v,
-        coal=coal,
-        seed=seed if seed is not None else -1
+        theta=theta,
+        seed=seed,
     )
-
-
-def _simulate_one_site(
-    net: Network,
-    root: Node,
-    p_red: float,
-    u: float,
-    v: float,
-    rng: np.random.Generator
-) -> dict[str, int]:
-    """
-    Forward-simulate one biallelic SNP site on the network.
-
-    Algorithm:
-        1. Draw root state from stationary distribution (P(red) = v/(u+v)).
-        2. BFS from the root, evolving the allele state along each branch 
-           using the exact 2-state CTMC transition probabilities.
-        3. At reticulation nodes (in-degree >= 2), only one parent lineage 
-           contributes — chosen with probability equal to the inheritance 
-           probability (gamma) on the corresponding edge.
-
-    Args:
-        net (Network): The phylogenetic network.
-        root (Node): The root node.
-        p_red (float): Stationary probability of the red allele.
-        u (float): Mutation rate red → green.
-        v (float): Mutation rate green → red.
-        rng (np.random.Generator): Random number generator.
-
-    Returns:
-        dict[str, int]: Mapping from node name to allele state (0=green, 1=red).
-    """
-    states: dict[str, int] = {}
-
-    # Draw root state
-    states[root.label] = 1 if rng.random() < p_red else 0
-
-    # BFS traversal from root
-    queue = deque([root])
-    visited = {root.label}
-
-    while queue:
-        node = queue.popleft()
-        parent_state = states[node.label]
-
-        for child in net.get_children(node):
-            edge = net.get_edge(node, child)
-            branch_len = edge.get_length()
-
-            if child.is_reticulation():
-                # Reticulation: decide if THIS parent contributes
-                gamma_val = edge.get_gamma()
-                if gamma_val is None:
-                    gamma_val = 0.5
-
-                if child.label in states:
-                    # Already resolved by another parent — skip
-                    continue
-
-                # All parents must be visited before we can resolve
-                parents = net.get_parents(child)
-                all_parents_visited = all(p.label in visited for p in parents)
-
-                if not all_parents_visited:
-                    # Defer: this child will be handled when the other 
-                    # parent visits it
-                    continue
-
-                # Now resolve: choose which parent lineage to follow
-                # Collect all parent edges with their gammas
-                parent_edges = []
-                for p in parents:
-                    pe = net.get_edge(p, child)
-                    g = pe.get_gamma() if pe.get_gamma() is not None else 0.5
-                    parent_edges.append((p, pe, g))
-
-                # Normalize gammas (in case they don't sum to 1)
-                total_g = sum(g for _, _, g in parent_edges)
-                if total_g > 0:
-                    probs = [g / total_g for _, _, g in parent_edges]
-                else:
-                    probs = [1.0 / len(parent_edges)] * len(parent_edges)
-
-                # Choose parent
-                chosen_idx = rng.choice(len(parent_edges), p=probs)
-                chosen_parent, chosen_edge, _ = parent_edges[chosen_idx]
-                chosen_len = chosen_edge.get_length()
-
-                chosen_state = states[chosen_parent.label]
-                child_state = _mutate_state(chosen_state, chosen_len, u, v, rng)
-                states[child.label] = child_state
-
-                if child.label not in visited:
-                    visited.add(child.label)
-                    queue.append(child)
-
-            else:
-                # Normal (tree) node: evolve state along branch
-                child_state = _mutate_state(parent_state, branch_len, u, v, rng)
-                states[child.label] = child_state
-
-                if child.label not in visited:
-                    visited.add(child.label)
-                    queue.append(child)
-
-    return states
-
-
-def _mutate_state(
-    state: int,
-    t: float,
-    u: float,
-    v: float,
-    rng: np.random.Generator
-) -> int:
-    """
-    Evolve a single biallelic allele state along a branch of length t using 
-    the exact transition probabilities of the 2-state CTMC.
-
-    The rate matrix is:
-        Q = [[-v,  v],
-             [ u, -u]]
-
-    where state 0 = green, state 1 = red.
-
-    The transition probabilities are:
-        P(stay at red | red, t)   = v/(u+v) + u/(u+v) * exp(-(u+v)*t)
-        P(become red | green, t)  = v/(u+v) * (1 - exp(-(u+v)*t))
-
-    Args:
-        state (int): Current allele state (0=green, 1=red).
-        t (float): Branch length (time in coalescent units).
-        u (float): Mutation rate red → green.
-        v (float): Mutation rate green → red.
-        rng (np.random.Generator): Random number generator.
-
-    Returns:
-        int: The evolved allele state (0 or 1).
-    """
-    total = u + v
-    exp_term = np.exp(-total * t)
-
-    if state == 1:  # red
-        # P(stay red) = v/(u+v) + u/(u+v) * exp(-(u+v)*t)
-        p_stay = v / total + (u / total) * exp_term
-        return 1 if rng.random() < p_stay else 0
-    else:  # green
-        # P(become red) = v/(u+v) * (1 - exp(-(u+v)*t))
-        p_red = (v / total) * (1 - exp_term)
-        return 1 if rng.random() < p_red else 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -90,6 +90,12 @@ from .MSA import MSA, DataSequence
 from .Matrix import Matrix
 from .Alphabet import Alphabet
 from .GeneTrees import GeneTrees
+from ._units import BranchLengthUnit, convert_network_branch_lengths
+from .PopulationGenetics import (
+    AdmixtureGraph,
+    PopulationData,
+    PopulationGeneticsError,
+)
 
 # =============================================================================
 # Parsing and I/O
@@ -225,6 +231,11 @@ __all__ = [
     "Matrix",
     "Alphabet",
     "GeneTrees",
+    "BranchLengthUnit",
+    "convert_network_branch_lengths",
+    "PopulationData",
+    "AdmixtureGraph",
+    "PopulationGeneticsError",
     # Parsing and I/O
     "get_labels",
     "NexusTemplate",

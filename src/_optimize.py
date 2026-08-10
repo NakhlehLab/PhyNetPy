@@ -351,6 +351,7 @@ def optimize_network_parameters(
     dirty_anchor = {net.root()} if net.V() else set()
 
     def evaluate() -> float:
+        """Re-score ``model.network`` after invalidating the dirty anchor, clamping non-finite results."""
         model.mark_touched(set(dirty_anchor))
         val = scorer(model)
         return val if math.isfinite(val) else _LOG_FLOOR
@@ -367,6 +368,7 @@ def optimize_network_parameters(
             saved = e.get_length()
 
             def neg(x: float, _e=e) -> float:
+                """Negated score with edge ``_e``'s length set to ``x`` (for Brent minimisation)."""
                 _e.set_length(float(x))
                 return -evaluate()
 
@@ -388,6 +390,7 @@ def optimize_network_parameters(
             saved1 = e1.get_gamma()
 
             def neg(g: float, _e0=e0, _e1=e1) -> float:
+                """Negated score with the reticulation's gamma pair set to ``(g, 1-g)`` (for Brent minimisation)."""
                 _e0.set_gamma(float(g))
                 _e1.set_gamma(float(1.0 - g))
                 return -evaluate()

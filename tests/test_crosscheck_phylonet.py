@@ -12,10 +12,12 @@ The whole module **auto-skips** unless the environment is set up:
 * the PhyloNet jar exists (``PHYLONET_JAR`` env var, or the default path), and
 * the BEAGLE native dir exists (``BEAGLE_DIR`` env var, or the default path).
 
-When those are present but ``CrossCheck.class`` has not been compiled yet, the
-fixture compiles it on the fly (requires ``javac`` on PATH); failing that it
-skips with an actionable message.  Because it shells out to Java + BEAGLE this
-is a slow, opt-in integration test rather than a unit test.
+When those are present, the fixture compiles ``CrossCheck.java`` for a Java 8
+runtime (requires ``javac`` on PATH). Targeting Java 8 keeps the harness
+compatible when the compiler is newer than the runtime, which is common on
+Windows machines with both a JDK and a legacy Java installation. Because it
+shells out to Java + BEAGLE this is an opt-in integration test rather than a
+unit test.
 
 Copyright 2025 Mark Kessler, Luay Nakhleh. All rights reserved.
 """
@@ -56,14 +58,26 @@ os.environ["PATH"] = str(_BEAGLE) + os.pathsep + os.environ.get("PATH", "")
 
 @pytest.fixture(scope="module")
 def java_results(tmp_path_factory):
-    """Compile (if needed) and run the Java harness once; return its results."""
+    """Compile for Java 8 and run the harness once; return its results."""
     cls = _CROSS / "CrossCheck.class"
-    if not cls.exists():
-        javac = shutil.which("javac")
-        if javac is None:
+    javac = shutil.which("javac")
+    if javac is None:
+        if not cls.exists():
             pytest.skip("CrossCheck.class missing and javac not on PATH")
+    else:
         subprocess.run(
-            [javac, "-cp", str(_JAR), "-d", str(_CROSS), str(_CROSS / "CrossCheck.java")],
+            [
+                javac,
+                "-source",
+                "8",
+                "-target",
+                "8",
+                "-cp",
+                str(_JAR),
+                "-d",
+                str(_CROSS),
+                str(_CROSS / "CrossCheck.java"),
+            ],
             check=True,
         )
     spec = tmp_path_factory.mktemp("crosscheck") / "cases.spec"

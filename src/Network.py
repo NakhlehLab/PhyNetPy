@@ -37,6 +37,7 @@ import networkx as nx
 import numpy as np
 
 from .MSA import DataSequence
+from ._units import BranchLengthUnit, coerce_branch_length_unit
 
 # ``NodeSet`` / ``EdgeSet`` are the compiled adjacency structures that back
 # every Network. They are required, not an optional accelerator: keeping a
@@ -810,6 +811,7 @@ class Edge:
         # Copy over the data
         new_edge.set_length(self.__length)
         new_edge.set_gamma(self.__gamma)
+        new_edge.set_tag(self.__tag)
         new_edge.set_weight(self.__weight)
         
         return new_edge
@@ -963,7 +965,8 @@ class Network:
     
     def __init__(self, 
                  edges : Union[EdgeSet, set[Edge], None] = None, 
-                 nodes : Union[NodeSet, set[Node], None] = None) -> None:
+                 nodes : Union[NodeSet, set[Node], None] = None,
+                 branch_length_unit : BranchLengthUnit | str | None = None) -> None:
         """
         Initialize a Network object.
         You may initialize with any combination of edges/nodes,
@@ -979,6 +982,9 @@ class Network:
                                                    Defaults to no edges.
             nodes (NodeSet | set[Node], optional): The nodes of the network.
                                                    Defaults to no nodes.
+            branch_length_unit: Explicit unit carried by edge lengths. Graph
+                operations accept ``UNSPECIFIED``; biological calculations
+                require a concrete unit.
         Returns:
             N/A
         """
@@ -1011,6 +1017,10 @@ class Network:
         
         # Counter behind add_uid_node's "UID_<n>" names.
         self.__uid : int = 0
+
+        self.__branch_length_unit = coerce_branch_length_unit(
+            branch_length_unit
+        )
         
         # Free floater nodes/edges are allowed.
         for edge in list(self._edges.get_set()):
@@ -1093,6 +1103,18 @@ class Network:
             int: The next unique id that :meth:`add_uid_node` will use.
         """
         return self.__uid
+
+    def get_branch_length_unit(self) -> BranchLengthUnit:
+        """Return the unit attached to this network's edge lengths."""
+
+        return self.__branch_length_unit
+
+    def set_branch_length_unit(
+        self, unit: BranchLengthUnit | str,
+    ) -> None:
+        """Tag edge lengths with an explicit unit without rescaling them."""
+
+        self.__branch_length_unit = coerce_branch_length_unit(unit)
 
     def set_uid_count(self, value : int) -> None:
         """
@@ -1236,13 +1258,18 @@ class Network:
             return []
 
     @classmethod
-    def from_newick(cls, newick : str) -> Network:
+    def from_newick(
+        cls,
+        newick : str,
+        branch_length_unit : BranchLengthUnit | str | None = None,
+    ) -> Network:
         """
         Construct a Network object by passing in a newick string and parsing out
         the topology from there.
 
         Args:
             newick (str): An extended newick string.
+            branch_length_unit: Unit represented by parsed branch lengths.
         Returns:
             Network: An initialized network object
         """
@@ -1287,6 +1314,7 @@ class Network:
             class NewickNode:
                 """Helper class to represent nodes during parsing"""
                 def __init__(self, name=None, length=None, children=None):
+                    """Create a parse-tree node with a name, branch length, and children."""
                     self.name = name
                     self.length = length if length is not None else 1.0
                     self.children = children if children is not None else []
@@ -1409,7 +1437,7 @@ class Network:
             def build_network(newick_node, parent_phynet_node=None, network=None, node_map=None, time=0.0):
                 """Convert parsed Newick structure to Network"""
                 if network is None:
-                    network = Network()
+                    network = cls(branch_length_unit=branch_length_unit)
                     node_map = {}
                 
                 # Create or retrieve PhyNet node

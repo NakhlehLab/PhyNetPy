@@ -62,6 +62,7 @@ from .criteria import Bayesian, Likelihood, MDC, PseudoLikelihood
 from .data import Alignment, BiallelicMarkers, GeneTrees
 from .models import MSC, Allopolyploid
 from .Network import Network
+from ._units import BranchLengthUnit, require_branch_length_unit
 
 __all__ = [
     "GTLikelihoodEngine",
@@ -147,9 +148,15 @@ class _GeneTreeEngine(Engine):
         from ._mcmc_gt import _populate_default_branch_lengths
 
         if self.start is not None:
+            require_branch_length_unit(
+                self.start.network,
+                BranchLengthUnit.COALESCENT_2N,
+                context="gene-tree inference",
+            )
             return copy.deepcopy(self.start.network)
 
         seed = data.build_majority_rule_consensus_tree(threshold=0.5)
+        seed.set_branch_length_unit(BranchLengthUnit.COALESCENT_2N)
         _populate_default_branch_lengths(seed)
         return seed
 
@@ -181,6 +188,12 @@ class _GeneTreeEngine(Engine):
         """
         from ._optimize import optimize_network_parameters
         from .ModelGraph import Model as GraphModel
+
+        require_branch_length_unit(
+            network,
+            BranchLengthUnit.COALESCENT_2N,
+            context="gene-tree likelihood",
+        )
 
         try:
             model = GraphModel(rng=np.random.default_rng())
@@ -214,6 +227,15 @@ class GTLikelihoodEngine(_GeneTreeEngine):
     method = "InferNetwork_ML"
 
     def infer(self, data: GeneTrees):
+        """Search for the network maximising the full MSNC likelihood.
+
+        Args:
+            data: Gene-tree topologies to fit.
+
+        Returns:
+            InferenceResult: The best network found, its log-likelihood,
+            and the search trace.
+        """
         from ._infernetworkml import InferNetwork_ML
         from .infer import InferenceResult
 
@@ -236,6 +258,17 @@ class GTLikelihoodEngine(_GeneTreeEngine):
         )
 
     def score(self, network: Network, data: GeneTrees, *, optimize: bool = False) -> float:
+        """Score ``network`` under the full MSNC likelihood (PhyloNet's ``CalGTProb``).
+
+        Args:
+            network: The network to score.
+            data: Gene-tree topologies.
+            optimize: When ``True``, also optimise the network's branch
+                lengths and inheritance probabilities before scoring.
+
+        Returns:
+            float: The log-likelihood.
+        """
         from ._mcmc_gt import MCMCGTScorer
 
         mapping = data.resolved_mapping()
@@ -258,6 +291,15 @@ class GTPseudoLikEngine(_GeneTreeEngine):
     method = "InferNetwork_MPL"
 
     def infer(self, data: GeneTrees):
+        """Search for the network maximising the triplet pseudo-likelihood.
+
+        Args:
+            data: Gene-tree topologies to fit.
+
+        Returns:
+            InferenceResult: The best network found and its pseudo-likelihood
+            score.
+        """
         from ._mpl import MPL
         from .infer import InferenceResult
 
@@ -273,6 +315,17 @@ class GTPseudoLikEngine(_GeneTreeEngine):
         )
 
     def score(self, network: Network, data: GeneTrees, *, optimize: bool = False) -> float:
+        """Score ``network`` under the triplet pseudo-likelihood (PhyloNet's ``InferNetwork_MPL``).
+
+        Args:
+            network: The network to score.
+            data: Gene-tree topologies.
+            optimize: When ``True``, also optimise the network's branch
+                lengths and inheritance probabilities before scoring.
+
+        Returns:
+            float: The pseudo-likelihood score.
+        """
         from ._mpl import MPL, MPLScorer, compute_gene_tree_triplets
 
         mapping = data.resolved_mapping()
@@ -310,6 +363,20 @@ class GTBayesEngine(_GeneTreeEngine):
         return prior if prior is not None else MCMC_GTPriors()
 
     def infer(self, data: GeneTrees):
+        """Sample the posterior over networks given gene-tree topologies.
+
+        Args:
+            data: Gene-tree topologies to fit.
+
+        Returns:
+            InferenceResult: The MAP network, its log-posterior, and the
+            posterior sample.
+
+        Raises:
+            NotImplementedError: If ``criterion.objective`` is a
+                :class:`~phynetpy.criteria.PseudoLikelihood` (not a valid
+                Bayesian data term; see class docstring).
+        """
         from ._mcmc_gt import MCMC_GT
         from .infer import InferenceResult
 
@@ -345,6 +412,17 @@ class GTBayesEngine(_GeneTreeEngine):
         )
 
     def score(self, network: Network, data: GeneTrees, *, optimize: bool = False) -> float:
+        """Score ``network`` under the MSNC posterior (log-likelihood + prior).
+
+        Args:
+            network: The network to score.
+            data: Gene-tree topologies.
+            optimize: When ``True``, also optimise the network's branch
+                lengths and inheritance probabilities before scoring.
+
+        Returns:
+            float: The log-posterior.
+        """
         # Unreachable through the public verb -- Bayesian.scorable is False,
         # so score() rejects it before dispatch -- but implemented so the
         # engine honours the Engine contract if called directly.
@@ -375,6 +453,13 @@ class SeqBayesEngine(Engine):
         """Build the sampler for this run."""
         from ._mcmc_seq import MCMC_SEQ
 
+        if network is not None:
+            require_branch_length_unit(
+                network,
+                BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+                context="MCMC_SEQ",
+            )
+
         return MCMC_SEQ(
             data.loci,
             data.resolved_mapping(),
@@ -382,12 +467,33 @@ class SeqBayesEngine(Engine):
             priors=self.criterion.prior,
             model=data.substitution_model,
             theta=self.model.theta,
+            branch_thetas=self.model.branch_thetas,
         )
 
     def infer(self, data: Alignment):
+        """Co-sample the network and gene trees from sequence alignments.
+
+        Args:
+            data: Multi-locus sequence alignment to fit.
+
+        Returns:
+            InferenceResult: The MAP network, its log-posterior, and the
+            posterior sample.
+
+        Raises:
+            NotImplementedError: If ``criterion.objective`` is a
+                :class:`~phynetpy.criteria.PseudoLikelihood`, or if
+                ``self.start`` requests ``StartMode.AUGMENT`` (unsupported
+                by this sampler's coupled moves).
+        """
         from .infer import InferenceResult
 
         criterion: Bayesian = self.criterion
+        if self.model.branch_thetas:
+            raise NotImplementedError(
+                "fixed branch_thetas can be used for sequence scoring, but "
+                "not topology-changing MCMC_SEQ inference."
+            )
         if isinstance(criterion.objective, PseudoLikelihood):
             raise NotImplementedError(
                 "MCMC_SEQ samples the full sequence likelihood; a "
@@ -421,6 +527,20 @@ class SeqBayesEngine(Engine):
         )
 
     def score(self, network: Network, data: Alignment, *, optimize: bool = False) -> float:
+        """Score ``network`` under the sequence-likelihood posterior.
+
+        Args:
+            network: The network to score.
+            data: Multi-locus sequence alignment.
+            optimize: Must be ``False``; MCMC_SEQ has no fixed-topology
+                parameter optimiser (see Raises).
+
+        Returns:
+            float: The log-posterior.
+
+        Raises:
+            NotImplementedError: If ``optimize`` is ``True``.
+        """
         if optimize:
             raise NotImplementedError(
                 "MCMC_SEQ has no fixed-topology parameter optimiser: its "
@@ -441,6 +561,20 @@ class _MarkerEngine(Engine):
     def score(
         self, network: Network, data: BiallelicMarkers, *, optimize: bool = False,
     ) -> float:
+        """Score ``network`` under the Bryant et al. biallelic-marker likelihood.
+
+        Args:
+            network: The network to score.
+            data: Biallelic-marker (SNP) alignment.
+            optimize: Must be ``False``; no optimiser is implemented for
+                this likelihood yet (see Raises).
+
+        Returns:
+            float: The log-likelihood.
+
+        Raises:
+            NotImplementedError: If ``optimize`` is ``True``.
+        """
         from .BiMarkers import _snp_log_likelihood
 
         if optimize:
@@ -453,7 +587,11 @@ class _MarkerEngine(Engine):
 
         return float(_snp_log_likelihood(
             network, data.alignment,
-            self.model.u, self.model.v, self.model.coal, data.samples,
+            self.model.u,
+            self.model.v,
+            self.model.theta if self.model.theta is not None else 0.02,
+            data.samples,
+            branch_thetas=self.model.branch_thetas,
             max_workers=self.search.get("max_workers", 8),
             sequential=self.search.get("sequential", True),
             verbose=self.search.get("verbose", False),
@@ -472,6 +610,15 @@ class MarkerLikelihoodEngine(_MarkerEngine):
     method = "MLE_BiMarkers"
 
     def infer(self, data: BiallelicMarkers):
+        """Unimplemented: maximum-likelihood search over biallelic markers.
+
+        Args:
+            data: Biallelic-marker (SNP) alignment.
+
+        Raises:
+            NotImplementedError: Always; only :meth:`score` is implemented
+                for this engine. Use ``criterion=Bayesian()`` to search.
+        """
         raise NotImplementedError(
             "maximum-likelihood search over networks from biallelic markers "
             "is not implemented; only scoring is. Use score(net, markers, "
@@ -490,10 +637,29 @@ class MarkerBayesEngine(_MarkerEngine):
     method = "MCMC_BiMarkers"
 
     def infer(self, data: BiallelicMarkers):
+        """Sample the posterior over networks given biallelic markers.
+
+        Args:
+            data: Biallelic-marker (SNP) alignment.
+
+        Returns:
+            InferenceResult: The best-scoring network among the samples
+            and its log-posterior.
+
+        Raises:
+            NotImplementedError: If ``criterion.objective`` is a
+                :class:`~phynetpy.criteria.PseudoLikelihood` (not
+                implemented for biallelic markers).
+        """
         from .BiMarkers import _snp_mcmc
         from .infer import InferenceResult
 
         criterion: Bayesian = self.criterion
+        if self.model.branch_thetas:
+            raise NotImplementedError(
+                "fixed branch_thetas can be used for marker simulation and "
+                "fixed-network scoring, but not topology-changing MCMC."
+            )
         if isinstance(criterion.objective, PseudoLikelihood):
             raise NotImplementedError(
                 "the biallelic pseudo-likelihood (PhyloNet's MLE_BiMarkers "
@@ -511,7 +677,9 @@ class MarkerBayesEngine(_MarkerEngine):
 
         scores = _snp_mcmc(
             data.alignment,
-            self.model.u, self.model.v, self.model.coal,
+            self.model.u,
+            self.model.v,
+            self.model.theta if self.model.theta is not None else 0.02,
             samples=data.samples, **kwargs,
         )
         best_net, best_score = _best_of(scores)
@@ -541,6 +709,20 @@ class AllopolyParsimonyEngine(_GeneTreeEngine):
     method = "MP_Allop"
 
     def infer(self, data: GeneTrees):
+        """Search for the allopolyploid network minimising extra gene lineages.
+
+        Args:
+            data: Gene-tree topologies to reconcile.
+
+        Returns:
+            InferenceResult: The best network found and its (positive,
+            lower-is-better) extra-lineage count.
+
+        Raises:
+            NotImplementedError: If ``self.start`` requests
+                ``StartMode.AUGMENT`` (unsupported by this search's only
+                move, ``SwitchParentage``).
+        """
         from ._infer_mp_allop import InferMPAllop, partition_gene_trees
         from .infer import InferenceResult
 
@@ -584,6 +766,20 @@ class AllopolyParsimonyEngine(_GeneTreeEngine):
         )
 
     def score(self, network: Network, data: GeneTrees, *, optimize: bool = False) -> float:
+        """Score ``network`` by its extra-lineage count against ``data``.
+
+        Args:
+            network: The (MUL-tree-compatible) network to score.
+            data: Gene-tree topologies to reconcile against.
+            optimize: Must be ``False``; parsimony has no continuous
+                parameters to optimise (see Raises).
+
+        Returns:
+            float: The (positive, lower-is-better) extra-lineage count.
+
+        Raises:
+            ValueError: If ``optimize`` is ``True``.
+        """
         from ._infer_mp_allop import allop_parsimony_score
 
         # Parsimony is defined on topologies, so there are no continuous

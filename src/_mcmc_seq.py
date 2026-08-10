@@ -66,6 +66,12 @@ from typing import Any, Callable, Optional, Sequence
 import numpy as np
 
 from .Network import Network, Node, Edge
+from ._units import (
+    _positive_theta,
+    BranchLengthUnit,
+    BranchThetaKey,
+    validate_branch_thetas,
+)
 from . import _network_moves as _nm
 from .GraphUtils import (
     count_reticulations,
@@ -444,6 +450,7 @@ def _descendant_species(
     memo: dict[Node, frozenset] = {}
 
     def desc(v: Node) -> frozenset:
+        """Memoized species-label set at/below ``v``."""
         cached = memo.get(v)
         if cached is not None:
             return cached
@@ -572,7 +579,9 @@ def build_upgma_gene_tree(alignment: dict[str, str]) -> Network:
     """
     labels = list(alignment.keys())
     if len(labels) == 1:
-        net = Network()
+        net = Network(
+            branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE
+        )
         only = Node(name=labels[0])
         net.add_nodes(only)
         return net
@@ -625,7 +634,10 @@ def build_upgma_gene_tree(alignment: dict[str, str]) -> Network:
         active = remaining + [new_idx]
         next_id += 1
 
-    return Network.from_newick(clusters[active[0]]["newick"] + ";")
+    return Network.from_newick(
+        clusters[active[0]]["newick"] + ";",
+        branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+    )
 
 
 # ======================================================================
@@ -649,6 +661,7 @@ class _SeqLikelihoodEngine:
         loci: list[dict[str, str]],
         species_of: dict[str, str],
         model: SubstitutionModel,
+        branch_thetas: Optional[dict[BranchThetaKey, float]] = None,
     ) -> None:
         """Initialise calculators and empty caches.
 
@@ -660,6 +673,7 @@ class _SeqLikelihoodEngine:
         self._calcs = [FelsensteinCalculator(aln) for aln in loci]
         self._species_of = species_of
         self._model = model
+        self._branch_thetas = branch_thetas
         self.n_loci = len(loci)
         self._felsen: list[Optional[float]] = [None] * self.n_loci
         self._msnc: list[Optional[float]] = [None] * self.n_loci
@@ -737,7 +751,12 @@ class _SeqLikelihoodEngine:
             if self._msnc[i] is None:
                 gti, events = self._gene_index(i, gene_trees[i])
                 self._msnc[i] = msnc_log_density_prebuilt(
-                    net_idx, sp_heights, gti, events, theta
+                    net_idx,
+                    sp_heights,
+                    gti,
+                    events,
+                    theta,
+                    self._branch_thetas,
                 )
             total += self._felsen[i] + self._msnc[i]
         if not math.isfinite(total):
@@ -779,6 +798,7 @@ class SeqState:
         priors: MCMCSeqPriors,
         model: SubstitutionModel,
         theta: float,
+        branch_thetas: Optional[dict[BranchThetaKey, float]] = None,
     ) -> None:
         """Initialise state and prime the likelihood caches.
 
@@ -796,8 +816,11 @@ class SeqState:
         self.species_of = species_of
         self.priors = priors
         self.theta = theta
+        self.branch_thetas = branch_thetas
         self.model = model
-        self._engine = _SeqLikelihoodEngine(loci, species_of, model)
+        self._engine = _SeqLikelihoodEngine(
+            loci, species_of, model, branch_thetas
+        )
 
         # Explicit ultrametric heights are the source of truth; edge lengths
         # are kept in sync so the likelihood factors see one consistent
@@ -877,6 +900,7 @@ def op_change_theta(
     state._engine.invalidate_network()
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.theta = old
         state._engine.restore_caches(snap)
 
@@ -921,6 +945,7 @@ def op_change_gamma(
     state._engine.invalidate_network()
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.species_net = old_net
         state.net_heights = old_heights
         state._engine.restore_caches(snap)
@@ -984,6 +1009,7 @@ def op_net_node_height(
     state._engine.invalidate_network()
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.species_net = old_net
         state.net_heights = old_heights
         state._engine.restore_caches(snap)
@@ -1013,6 +1039,7 @@ def op_gene_node_height(
     state._engine.invalidate_locus(i)
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.gene_trees[i] = old_gt
         state.gt_heights[i] = old_h
         state._engine.restore_caches(snap)
@@ -1078,6 +1105,7 @@ def op_gene_tree_nni(
     state._engine.invalidate_locus(i)
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.gene_trees[i] = old_gt
         state.gt_heights[i] = old_h
         state._engine.restore_caches(snap)
@@ -1174,7 +1202,14 @@ def _network_only_log_score(state: "SeqState", net: Network) -> float:
             sev = events if s == 1.0 else [
                 (t * s, a, b, c) for (t, a, b, c) in events
             ]
-            d = msnc_log_density_prebuilt(net_idx, sp_heights, gti, sev, state.theta)
+            d = msnc_log_density_prebuilt(
+                net_idx,
+                sp_heights,
+                gti,
+                sev,
+                state.theta,
+                state.branch_thetas,
+            )
             if math.isfinite(d):
                 terms.append(d)
         if not terms:
@@ -1431,6 +1466,7 @@ def op_add_reticulation(
     state._engine.invalidate_network()
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.species_net = old_net
         state.net_heights = old_heights
         state._engine.restore_caches(snap)
@@ -1582,6 +1618,7 @@ def op_delete_reticulation(
     state._engine.invalidate_network()
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.species_net = old_net
         state.net_heights = old_heights
         state._engine.restore_caches(snap)
@@ -1846,7 +1883,14 @@ def _candidate_logweights(
         if not math.isfinite(fels):
             continue
         gti, events = build_gene_tree_msnc_index(gt, eng._species_of)
-        msnc = msnc_log_density_prebuilt(net_idx, sp_heights, gti, events, theta)
+        msnc = msnc_log_density_prebuilt(
+            net_idx,
+            sp_heights,
+            gti,
+            events,
+            theta,
+            state.branch_thetas,
+        )
         if not math.isfinite(msnc):
             continue
         logw[j] = fels + msnc
@@ -1917,7 +1961,12 @@ def _enumerate_scored_candidates(
                     gti = build_gene_tree_topology_index(b_gt, eng._species_of)
                 events = gene_tree_events(b_gt, gti, scaled_h)
                 msnc = msnc_log_density_prebuilt(
-                    net_idx, sp_heights, gti, events, theta
+                    net_idx,
+                    sp_heights,
+                    gti,
+                    events,
+                    theta,
+                    state.branch_thetas,
                 )
                 if math.isfinite(msnc):
                     w = fels + msnc
@@ -1930,6 +1979,7 @@ def _enumerate_scored_candidates(
             descriptors.append((bi, s))
 
     def rebuild(k: int) -> tuple[Network, dict]:
+        """Reconstruct the ``k``-th sampled tree/heights from its descriptor."""
         bi, s = descriptors[k]
         b_gt, _b_h = bases[bi]
         cg = _clone_net(b_gt)
@@ -2133,6 +2183,7 @@ def op_add_reticulation_coupled(
         state._engine.invalidate_locus(i)
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.species_net = old_net
         state.net_heights = old_heights
         state.gene_trees = old_gts
@@ -2281,6 +2332,7 @@ def op_delete_reticulation_coupled(
         state._engine.invalidate_locus(i)
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.species_net = old_net
         state.net_heights = old_heights
         state.gene_trees = old_gts
@@ -2392,6 +2444,7 @@ def op_add_reticulation_decoupled(
     state._engine.invalidate_network()
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.species_net = old_net
         state.net_heights = old_heights
         state._engine.restore_caches(snap)
@@ -2517,6 +2570,7 @@ def op_delete_reticulation_decoupled(
     state._engine.invalidate_network()
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.species_net = old_net
         state.net_heights = old_heights
         state._engine.restore_caches(snap)
@@ -2732,6 +2786,7 @@ def op_relocate_reticulation_coupled(
         state._engine.invalidate_locus(i)
 
     def undo() -> None:
+        """Revert this proposal: restore the captured pre-move state."""
         state.species_net = old_net
         state.net_heights = old_heights
         state.gene_trees = old_gts
@@ -3148,6 +3203,7 @@ class MCMC_SEQ:
         priors: Optional[MCMCSeqPriors] = None,
         model: Optional[SubstitutionModel] = None,
         theta: Optional[float] = None,
+        branch_thetas: Optional[dict[BranchThetaKey, float]] = None,
         gene_trees: Optional[list[Network]] = None,
     ) -> None:
         """Initialise the inference object.
@@ -3164,6 +3220,8 @@ class MCMC_SEQ:
             priors: Prior hyperparameters (defaults match PhyloNet).
             model: Nucleotide substitution model (default JC69).
             theta: Starting population mutation rate (default ``theta_mean``).
+            branch_thetas: Fixed per-population theta overrides. Supported by
+                :meth:`score`; topology-changing :meth:`search` rejects them.
             gene_trees: Optional starting per-locus gene trees; when ``None``
                 each is built by UPGMA on its locus (PhyloNet's ``-sgt``).
         """
@@ -3171,7 +3229,14 @@ class MCMC_SEQ:
         self.mapping = mapping
         self.priors = priors if priors is not None else MCMCSeqPriors()
         self.model = model if model is not None else JC69()
-        self.theta = theta if theta is not None else self.priors.theta_mean
+        self.theta = _positive_theta(
+            theta if theta is not None else self.priors.theta_mean,
+            "theta",
+        )
+        validate_branch_thetas(branch_thetas)
+        self.branch_thetas = (
+            dict(branch_thetas) if branch_thetas else None
+        )
         self.species_of: dict[str, str] = {
             allele: sp for sp, alleles in mapping.items() for allele in alleles
         }
@@ -3194,6 +3259,7 @@ class MCMC_SEQ:
             self.priors,
             self.model,
             self.theta,
+            self.branch_thetas,
         )
 
     def _total_sites(self) -> Optional[int]:
@@ -3365,6 +3431,11 @@ class MCMC_SEQ:
             early stop the result holds the samples gathered up to that point
             and ``num_iterations`` reflects the iterations actually run.
         """
+        if self.branch_thetas:
+            raise NotImplementedError(
+                "fixed branch_thetas are supported by score(), but not by "
+                "topology-changing MCMC_SEQ search."
+            )
         _nm.warn_if_large_mcmc(len(self.mapping), method="MCMC_SEQ")
 
         if warm_start:
@@ -3696,6 +3767,7 @@ def _topology_signature(newick: str):
     cache: dict = {}
 
     def desc(v) -> frozenset:
+        """Memoized leaf-label set at/below ``v``."""
         if v in cache:
             return cache[v]
         kids = net.get_children(v)
@@ -3923,6 +3995,7 @@ def _chain_worker(
     last_iter = -1
 
     def control(prog: dict) -> str:
+        """Progress callback: forward a fresh status snapshot to the parent process."""
         nonlocal last_iter
         it = prog["iteration"]
         # Only push a fresh snapshot when the iteration advanced; this keeps a

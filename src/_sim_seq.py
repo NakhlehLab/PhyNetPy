@@ -80,6 +80,13 @@ from ._seq_likelihood import (
     JC69,
     DNA_STATES,
 )
+from ._units import (
+    BranchLengthUnit,
+    BranchThetaKey,
+    require_branch_length_unit,
+    resolve_branch_theta,
+    validate_branch_thetas,
+)
 
 
 __all__ = [
@@ -109,6 +116,7 @@ class SimulatedData:
         gene_trees: The *true* simulated gene tree for each locus.
         true_network: The species network the data were generated on.
         true_theta: The population mutation rate used.
+        true_branch_thetas: Fixed branch-specific population rates used.
         model: The substitution model used.
         seq_length: Number of sites simulated per locus.
     """
@@ -123,21 +131,25 @@ class SimulatedData:
     true_theta: float
     model: SubstitutionModel
     seq_length: int = 0
+    true_branch_thetas: Optional[dict[BranchThetaKey, float]] = None
 
     def to_mcmc_seq_kwargs(self) -> dict[str, Any]:
         """Keyword arguments to construct an :class:`MCMC_SEQ` on this data.
 
         Returns:
-            ``{"loci", "mapping", "model", "theta"}`` -- spreadable directly,
-            e.g. ``MCMC_SEQ(**data.to_mcmc_seq_kwargs())``.  The true network
-            and gene trees are deliberately *not* passed (let the sampler start
-            from its own UPGMA guess so recovery is a fair test).
+            Constructor keywords for ``MCMC_SEQ``. The true network and gene
+            trees are deliberately *not* passed so recovery starts from an
+            independent UPGMA guess.
         """
         return {
             "loci": self.loci,
             "mapping": self.mapping,
             "model": self.model,
             "theta": self.true_theta,
+            "branch_thetas": (
+                dict(self.true_branch_thetas)
+                if self.true_branch_thetas else None
+            ),
         }
 
 
@@ -163,7 +175,7 @@ def _reticulation_parent_gammas(
     Returns:
         ``[(edge0, gamma0), (edge1, gamma1)]`` with ``gamma0 + gamma1 == 1``.
     """
-    in_edges = list(net.in_edges(retic))
+    in_edges = sorted(net.in_edges(retic), key=lambda edge: edge.src.label)
     if len(in_edges) != 2:
         raise ValueError(
             f"Reticulation {retic.label!r} must have exactly two parent edges."
@@ -201,6 +213,12 @@ class _Lineage:
     __slots__ = ("newick", "height")
 
     def __init__(self, newick: str, height: float) -> None:
+        """Create a new ``_Lineage``.
+
+        Args:
+            newick: Newick string of the subtree subtended by this lineage.
+            height: Height (substitution units) of its youngest open end.
+        """
         self.newick = newick
         self.height = height
 
@@ -263,7 +281,7 @@ def simulate_gene_tree(
     theta: float,
     rng: np.random.Generator,
     *,
-    pop_sizes: Optional[dict[Node, float]] = None,
+    branch_thetas: Optional[dict[BranchThetaKey, float]] = None,
 ) -> Network:
     """Simulate one gene tree under the multispecies network coalescent.
 
@@ -281,54 +299,99 @@ def simulate_gene_tree(
             to sample; these become the gene-tree leaf labels.  Species absent
             from the map contribute a single lineage named after the species.
         theta: Constant population mutation rate (used for every branch unless
-            ``pop_sizes`` overrides it).
+            ``branch_thetas`` overrides it).
         rng: Random generator.
-        pop_sizes: Optional per-branch ``theta`` keyed by the *child* node of
-            the branch (the branch *above* that node), mirroring the density's
-            ``pop_sizes`` argument.
+        branch_thetas: Optional fixed per-population ``theta`` values.
 
     Returns:
         A rooted, ultrametric :class:`Network` (a tree) with branch lengths in
         substitution units and leaves labelled by the sampled alleles.
     """
+    require_branch_length_unit(
+        species_net,
+        BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+        context="MSNC gene-tree simulation",
+    )
+    leaves = sorted(
+        species_net.get_leaves(), key=lambda node: node.label
+    )
+    if not leaves and len(species_net.V()) == 1:
+        leaves = list(species_net.V())
+    leaf_names = {leaf.label for leaf in leaves}
+    unknown = set(alleles_per_species) - leaf_names
+    if unknown:
+        raise ValueError(
+            f"allele mapping contains unknown species: {sorted(unknown)}."
+        )
+    if any(not labels for labels in alleles_per_species.values()):
+        raise ValueError("every mapped species must have at least one allele.")
+    allele_labels = [
+        label
+        for labels in alleles_per_species.values()
+        for label in labels
+    ]
+    if len(allele_labels) != len(set(allele_labels)):
+        raise ValueError("allele labels must be unique across species.")
     heights = _node_heights(species_net)
     counter: list[int] = [0]
 
-    def theta_above(child: Node) -> float:
-        if pop_sizes is not None and child in pop_sizes:
-            return float(pop_sizes[child])
-        return theta
+    def theta_above(
+        child: Node,
+        parent: Optional[Node] = None,
+    ) -> float:
+        """Population mutation rate for the branch above ``child``."""
+
+        return resolve_branch_theta(
+            theta,
+            branch_thetas,
+            child,
+            parent=parent,
+        )
 
     # Lineages waiting at the bottom (child end) of each species edge.
     edge_bottom: dict[Edge, list[_Lineage]] = {}
+    root_newick: Optional[str] = None
 
     # Seed the leaves.
-    for leaf in species_net.get_leaves():
+    for leaf in leaves:
         labels = alleles_per_species.get(leaf.label, [leaf.label])
         lineages = [_Lineage(lab, 0.0) for lab in labels]
-        in_edges = list(species_net.in_edges(leaf))
+        in_edges = sorted(
+            species_net.in_edges(leaf), key=lambda edge: edge.src.label
+        )
         if in_edges:  # leaf below the root
             edge_bottom.setdefault(in_edges[0], []).extend(lineages)
         else:  # degenerate single-leaf "network"
-            edge_bottom[("__root__", leaf)] = lineages  # type: ignore[index]
+            final = _coalesce_within(
+                lineages, 0.0, None, theta_above(leaf), rng, counter
+            )
+            root_newick = final[0].newick if final else ""
 
     # Process every non-leaf node from youngest to oldest.
     internal = [v for v in species_net.V() if species_net.get_children(v)]
-    internal.sort(key=lambda v: heights[v])
+    internal.sort(key=lambda v: (heights[v], v.label))
 
-    root_newick: Optional[str] = None
     for v in internal:
         # Gather lineages arriving at v: coalesce each child branch up to h[v].
         arriving: list[_Lineage] = []
-        for child in species_net.get_children(v):
+        for child in sorted(
+            species_net.get_children(v), key=lambda node: node.label
+        ):
             e = _edge_between(species_net, v, child)
             bottom = edge_bottom.get(e, [])
             top = _coalesce_within(
-                bottom, heights[child], heights[v], theta_above(child), rng, counter
+                bottom,
+                heights[child],
+                heights[v],
+                theta_above(child, v),
+                rng,
+                counter,
             )
             arriving.extend(top)
 
-        parents = species_net.get_parents(v)
+        parents = sorted(
+            species_net.get_parents(v), key=lambda node: node.label
+        )
         if not parents:
             # Root: coalesce remaining lineages on the infinite branch.
             final = _coalesce_within(
@@ -350,10 +413,15 @@ def simulate_gene_tree(
         raise RuntimeError("Coalescent simulation produced no root lineage.")
     if "(" not in root_newick:
         # A single sampled lineage: build a trivial one-node tree.
-        net = Network()
+        net = Network(
+            branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE
+        )
         net.add_nodes(Node(name=root_newick))
         return net
-    return Network.from_newick(root_newick + ";")
+    return Network.from_newick(
+        root_newick + ";",
+        branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+    )
 
 
 # ======================================================================
@@ -404,6 +472,11 @@ def simulate_sequences(
         Map from leaf label -> simulated nucleotide string (length ``n_sites``,
         alphabet ``A,C,G,T``).
     """
+    require_branch_length_unit(
+        gene_tree,
+        BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+        context="sequence simulation",
+    )
     if n_sites <= 0:
         raise ValueError("n_sites must be positive.")
     root = gene_tree.root()
@@ -443,7 +516,7 @@ def simulate_multilocus(
     *,
     theta: float = 0.02,
     model: Optional[SubstitutionModel] = None,
-    pop_sizes: Optional[dict[Node, float]] = None,
+    branch_thetas: Optional[dict[Any, float]] = None,
     seed: Any = None,
 ) -> SimulatedData:
     """Simulate a full multilocus data set on a known species network.
@@ -461,9 +534,9 @@ def simulate_multilocus(
         n_loci: Number of independent loci to simulate.
         seq_length: Sites per locus.
         theta: Population mutation rate (constant across branches unless
-            ``pop_sizes`` is given).
+            ``branch_thetas`` is given).
         model: Substitution model (default :class:`JC69`).
-        pop_sizes: Optional per-branch ``theta`` keyed by child node.
+        branch_thetas: Optional fixed per-population ``theta`` values.
         seed: Seed for all randomness.
 
     Returns:
@@ -472,6 +545,7 @@ def simulate_multilocus(
     """
     if n_loci <= 0:
         raise ValueError("n_loci must be positive.")
+    validate_branch_thetas(branch_thetas)
     rng = np.random.default_rng(seed)
     model = model if model is not None else JC69()
     species_of = {a: sp for sp, alleles in mapping.items() for a in alleles}
@@ -480,7 +554,7 @@ def simulate_multilocus(
     gene_trees: list[Network] = []
     for _ in range(n_loci):
         gt = simulate_gene_tree(
-            species_net, mapping, theta, rng, pop_sizes=pop_sizes
+            species_net, mapping, theta, rng, branch_thetas=branch_thetas
         )
         aln = simulate_sequences(gt, model, seq_length, rng)
         gene_trees.append(gt)
@@ -495,4 +569,7 @@ def simulate_multilocus(
         true_theta=theta,
         model=model,
         seq_length=seq_length,
+        true_branch_thetas=(
+            dict(branch_thetas) if branch_thetas else None
+        ),
     )

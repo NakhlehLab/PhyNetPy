@@ -847,6 +847,7 @@ class _NewickTreeBuilder:
     """
 
     def __init__(self) -> None:
+        """Create a new ``_NewickTreeBuilder`` with fresh per-build state."""
         self._internal_count: int = 0
         self._inheritance: Dict[str, Dict] = {}
 

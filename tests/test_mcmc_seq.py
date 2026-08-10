@@ -31,7 +31,7 @@ import math
 import numpy as np
 import pytest
 
-from phynetpy.Network import Network
+from phynetpy.Network import Edge, Network, Node
 from phynetpy._seq_likelihood import (
     JC69,
     HKY85,
@@ -40,6 +40,10 @@ from phynetpy._seq_likelihood import (
     gene_tree_msnc_log_density,
 )
 from phynetpy.infer import MCMCSeqPriors
+from phynetpy.models import (
+    BranchLengthUnit,
+    convert_network_branch_lengths,
+)
 from phynetpy._mcmc_seq import MCMC_SEQ
 from phynetpy.GraphUtils import network_clusters
 from phynetpy import _msnc_density as msnc
@@ -53,6 +57,15 @@ expm = pytest.importorskip("scipy.linalg").expm
 
 def _identity_species_of(*taxa: str) -> dict[str, str]:
     return {t: t for t in taxa}
+
+
+def _timed_net(newick: str) -> Network:
+    """Parse a network on the timed-MSC substitutions-per-site scale."""
+
+    return Network.from_newick(
+        newick,
+        branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+    )
 
 
 def _brute_felsenstein(alignment, tree, model) -> float:
@@ -115,8 +128,8 @@ class TestFelsenstein:
 class TestMSCDensity:
     def test_two_taxa(self):
         theta, tau, c = 0.02, 0.01, 0.03
-        sp = Network.from_newick(f"(A:{tau},B:{tau});")
-        gt = Network.from_newick(f"(A:{c},B:{c});")
+        sp = _timed_net(f"(A:{tau},B:{tau});")
+        gt = _timed_net(f"(A:{c},B:{c});")
         got = gene_tree_msnc_log_density(
             gt, sp, _identity_species_of("A", "B"), theta=theta)
         expected = math.log(2.0 / theta) - 2.0 * (c - tau) / theta
@@ -124,13 +137,82 @@ class TestMSCDensity:
 
     def test_three_taxa(self):
         theta, h1, h2, cA, cB = 0.02, 0.01, 0.02, 0.015, 0.03
-        sp = Network.from_newick(f"((A:{h1},B:{h1}):{h2-h1},C:{h2});")
-        gt = Network.from_newick(f"((A:{cA},B:{cA}):{cB-cA},C:{cB});")
+        sp = _timed_net(f"((A:{h1},B:{h1}):{h2-h1},C:{h2});")
+        gt = _timed_net(f"((A:{cA},B:{cA}):{cB-cA},C:{cB});")
         got = gene_tree_msnc_log_density(
             gt, sp, _identity_species_of("A", "B", "C"), theta=theta)
         expected = (math.log(2.0 / theta) - (cA - h1) * 2.0 / theta
                     + math.log(2.0 / theta) - (cB - h2) * 2.0 / theta)
         assert got == pytest.approx(expected, abs=1e-9)
+
+    def test_heterogeneous_root_theta_closed_form(self):
+        default_theta, root_theta = 0.02, 0.04
+        tau, c = 0.01, 0.03
+        sp = _timed_net(f"(A:{tau},B:{tau})Root;")
+        gt = _timed_net(f"(A:{c},B:{c})GeneRoot;")
+
+        got = gene_tree_msnc_log_density(
+            gt,
+            sp,
+            _identity_species_of("A", "B"),
+            theta=default_theta,
+            branch_thetas={("__root__", "Root"): root_theta},
+        )
+        expected = (
+            math.log(2.0 / root_theta)
+            - 2.0 * (c - tau) / root_theta
+        )
+        assert got == pytest.approx(expected, abs=1e-9)
+
+    def test_unit_conversion_round_trip_with_branch_thetas(self):
+        original = _timed_net("(A:0.01,B:0.02)Root;")
+        branch_thetas = {
+            ("Root", "A"): 0.01,
+            "A": 0.5,  # edge key takes precedence over child label
+            "B": 0.04,
+        }
+        coalescent = convert_network_branch_lengths(
+            original,
+            BranchLengthUnit.COALESCENT_2N,
+            theta=0.02,
+            branch_thetas=branch_thetas,
+        )
+        restored = convert_network_branch_lengths(
+            coalescent,
+            BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+            theta=0.02,
+            branch_thetas=branch_thetas,
+        )
+
+        assert coalescent.get_branch_length_unit() is (
+            BranchLengthUnit.COALESCENT_2N
+        )
+        lengths = {
+            edge.dest.label: edge.get_length() for edge in restored.E()
+        }
+        assert lengths == pytest.approx({"A": 0.01, "B": 0.02})
+
+    def test_unit_conversion_preserves_parallel_edge_identity(self):
+        root = Node("Root")
+        hybrid = Node("#H0", is_reticulation=True)
+        network = Network(
+            nodes={root, hybrid},
+            branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+        )
+        network.add_edges([
+            Edge(root, hybrid, length=0.01, gamma=0.3, tag="minor"),
+            Edge(root, hybrid, length=0.02, gamma=0.7, tag="major"),
+        ])
+
+        converted = convert_network_branch_lengths(
+            network,
+            BranchLengthUnit.COALESCENT_2N,
+            theta=0.02,
+        )
+        lengths = {
+            edge.get_tag(): edge.get_length() for edge in converted.E()
+        }
+        assert lengths == pytest.approx({"minor": 1.0, "major": 2.0})
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -147,11 +229,11 @@ class TestReticulationDensity:
     def test_gamma_mixture(self):
         theta = 0.02
         so = _identity_species_of("A", "B", "C")
-        gt = Network.from_newick(self.GT)
+        gt = _timed_net(self.GT)
         d_g = gene_tree_msnc_log_density(
-            gt, Network.from_newick(self.SP_G), so, theta=theta)
+            gt, _timed_net(self.SP_G), so, theta=theta)
         d_1 = gene_tree_msnc_log_density(
-            gt, Network.from_newick(self.SP_1), so, theta=theta)
+            gt, _timed_net(self.SP_1), so, theta=theta)
         # Only the A-side embedding is valid for this gene tree, so the density
         # scales linearly with gamma.
         assert d_g == pytest.approx(d_1 + math.log(0.3), abs=1e-9)
@@ -173,8 +255,8 @@ class TestMSNCReticBound:
     def test_network_density_below_coalescent_bound(self):
         theta = 0.001
         so = _identity_species_of("A", "B", "C", "D")
-        gt = Network.from_newick(self.GENE)
-        net = Network.from_newick(self.NET)
+        gt = _timed_net(self.GENE)
+        net = _timed_net(self.NET)
         n = 4
         bound = (n - 1) * math.log(2.0 / theta)
         dens = gene_tree_msnc_log_density(gt, net, so, theta=theta)
@@ -358,7 +440,9 @@ class TestReticulationMoves:
         # tree-truth data) is a *separate, still-open* issue tracked elsewhere.
         from phynetpy.infer import simulate_multilocus
 
-        net = Network.from_newick("((A:0.04,B:0.04)I:0.04,(C:0.05,D:0.05)J:0.03)R;")
+        net = _timed_net(
+            "((A:0.04,B:0.04)I:0.04,(C:0.05,D:0.05)J:0.03)R;"
+        )
         mapping = {k: [k] for k in "ABCD"}
         data = simulate_multilocus(net, mapping, n_loci=12, seq_length=400,
                                    theta=0.02, seed=3)

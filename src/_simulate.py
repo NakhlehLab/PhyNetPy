@@ -26,12 +26,10 @@ calls with no glue code, because the type that comes out of ``simulate`` is
 the type that goes into the verbs.
 
 .. warning::
-   The simulators read *network* branch lengths in expected substitutions per
-   site, with the coalescent rate set by ``theta`` (the ``MCMC_SEQ``
-   convention), whereas the gene-tree criteria read them in coalescent units.
-   A round trip therefore recovers the *topology* on the same scale but not
-   the branch lengths: compare ``result.best`` against ``.true_network``
-   topologically, or score with ``optimize=True`` so the lengths are refit.
+   Simulation requires networks tagged with
+   :class:`~phynetpy.models.BranchLengthUnit.SUBSTITUTIONS_PER_SITE`.
+   Gene-tree criteria use ``COALESCENT_2N`` instead; convert explicitly with
+   :func:`phynetpy.models.convert_network_branch_lengths`.
 
 Docs   - [x]
 Tests  - [x]
@@ -40,12 +38,19 @@ Design - [x]
 
 from __future__ import annotations
 
+import operator
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 
 from .data import Alignment, BiallelicMarkers, Data, GeneTrees
-from .models import Allopolyploid, MSC, Model, resolve_model
+from .models import (
+    Allopolyploid,
+    BranchLengthUnit,
+    MSC,
+    Model,
+    resolve_model,
+)
 from .Network import Network
 
 __all__ = ["simulate"]
@@ -110,6 +115,7 @@ def _yule_species_tree(taxa: Any, birth_rate: float, seed: Any) -> Network:
     network = Yule(
         birth_rate, n=n_taxa, rng=np.random.default_rng(seed),
     ).generate_network()
+    network.set_branch_length_unit(BranchLengthUnit.SUBSTITUTIONS_PER_SITE)
 
     if labels is not None:
         for leaf, label in zip(sorted(network.get_leaves(), key=lambda v: v.label),
@@ -137,12 +143,12 @@ def simulate(
         model: The generative process (:class:`~phynetpy.models.MSC`).  A
             string shortcut such as ``"MSC"`` is accepted; ``None`` defaults
             to ``MSC()``.  Process parameters are read off the model:
-            ``theta`` for coalescent simulation, ``u``/``v``/``coal`` for
+            ``theta``/``branch_thetas`` for the coalescent and ``u``/``v`` for
             markers.
         network: The species network to simulate along.  Needs branch
-            lengths on every edge and inheritance probabilities on
-            reticulation in-edges.  ``None`` draws a species *tree* under a
-            pure-birth process instead, which requires *taxa*.
+            lengths tagged as ``SUBSTITUTIONS_PER_SITE`` and inheritance
+            probabilities on reticulation in-edges. ``None`` draws a species
+            *tree* under a pure-birth process instead, which requires *taxa*.
         n: How much data to generate.  Number of gene trees, number of loci,
             or number of marker sites, depending on *data*.
         data: Which data-axis type to return -- ``"gene_trees"``,
@@ -155,7 +161,7 @@ def simulate(
             when *network* is ``None``.
         birth_rate: Speciation rate for that pure-birth (Yule) process.
         **params: Extra arguments forwarded to the underlying simulator
-            (``pop_sizes``, ``substitution_model``, ``samples``, ...).
+            (``substitution_model``, ``samples``, ...).
 
     Returns:
         Data: A :class:`~phynetpy.data.GeneTrees`,
@@ -186,6 +192,11 @@ def simulate(
             compare_networks(result.best, sim.true_network)
     """
     model_obj: Model = resolve_model(model)
+    if "branch_thetas" in params:
+        raise TypeError(
+            "configure fixed population rates with "
+            "MSC(branch_thetas=...), not simulate(branch_thetas=...)."
+        )
 
     if n <= 0:
         raise ValueError(f"n must be positive; got {n}.")
@@ -225,7 +236,7 @@ def simulate(
 
     if kind == "gene_trees":
         result = _simulate_gene_trees(
-            model_obj, network, n, resolved_mapping, theta, seed, params,
+            model_obj, network, n, resolved_mapping, theta, seed,
         )
     elif kind == "alignment":
         result = _simulate_alignment(
@@ -234,7 +245,7 @@ def simulate(
         )
     else:
         result = _simulate_markers(
-            model_obj, network, n, resolved_mapping, seed, params,
+            model_obj, network, n, resolved_mapping, theta, seed, params,
         )
 
     # Ground truth, so a recovery check is two calls with nothing in between.
@@ -249,7 +260,6 @@ def _simulate_gene_trees(
     mapping: Dict[str, List[str]],
     theta: float,
     seed: Any,
-    params: Dict[str, Any],
 ) -> GeneTrees:
     """Simulate ``n`` gene trees under the MSNC along ``network``."""
     from ._sim_seq import simulate_gene_tree
@@ -258,7 +268,7 @@ def _simulate_gene_trees(
     trees = [
         simulate_gene_tree(
             network, mapping, theta, rng,
-            pop_sizes=params.get("pop_sizes", model.pop_sizes),
+            branch_thetas=model.branch_thetas,
         )
         for _ in range(n)
     ]
@@ -284,7 +294,7 @@ def _simulate_alignment(
         network, mapping, n, seq_length,
         theta=theta,
         model=params.get("substitution_model"),
-        pop_sizes=params.get("pop_sizes", model.pop_sizes),
+        branch_thetas=model.branch_thetas,
         seed=seed,
     )
     return Alignment(
@@ -297,25 +307,59 @@ def _simulate_markers(
     network: Network,
     n: int,
     mapping: Dict[str, List[str]],
+    theta: float,
     seed: Any,
     params: Dict[str, Any],
 ) -> BiallelicMarkers:
     """Simulate ``n`` biallelic marker sites along ``network``."""
     from .MSA import MSA, DataSequence
-    from .SNPSimulator import simulate as simulate_snp
+    from ._sim_markers import simulate_biallelic_markers
 
     samples = params.get("samples")
-    n_taxa = len(network.get_leaves())
-    simulated = simulate_snp(
-        n_taxa, n, network,
-        samples=samples,
+    marker_mapping = {sp: list(labels) for sp, labels in mapping.items()}
+    if samples is None:
+        samples = {sp: len(labels) for sp, labels in marker_mapping.items()}
+    else:
+        try:
+            samples = {
+                str(sp): operator.index(count)
+                for sp, count in samples.items()
+            }
+        except TypeError as exc:
+            raise ValueError("marker sample counts must be integers.") from exc
+        if set(samples) != set(marker_mapping):
+            raise ValueError(
+                "samples keys must exactly match the marker mapping."
+            )
+        for species, count in samples.items():
+            if count <= 0:
+                raise ValueError(
+                    f"sample count for {species!r} must be positive."
+                )
+            labels = marker_mapping[species]
+            if len(labels) == 1 and labels[0] == species and count > 1:
+                marker_mapping[species] = [
+                    f"{species}_{i}" for i in range(count)
+                ]
+            elif len(labels) != count:
+                raise ValueError(
+                    f"mapping for {species!r} has {len(labels)} labels but "
+                    f"samples requests {count}."
+                )
+
+    data = simulate_biallelic_markers(
+        network,
+        n,
+        marker_mapping,
+        theta=theta,
         u=model.u,
         v=model.v,
-        coal=model.coal,
-        seed=seed,
+        branch_thetas=model.branch_thetas,
+        rng=np.random.default_rng(seed),
     )
     records = [
-        DataSequence([int(count) for count in counts], label)
-        for label, counts in simulated.data.items()
+        DataSequence(data[label], label) for label in sorted(data)
     ]
-    return BiallelicMarkers(MSA(data=records), mapping, samples=samples)
+    return BiallelicMarkers(
+        MSA(data=records), marker_mapping, samples=samples
+    )

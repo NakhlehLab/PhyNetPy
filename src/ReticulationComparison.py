@@ -318,6 +318,7 @@ def _block_distance_factory(
     from .GraphUtils import induced_subnetwork_by_taxa
 
     def block_distance(P: FrozenSet[str], Q: FrozenSet[str]) -> float:
+        """Mix the leaf-set distance with the induced-subnetwork topology distance."""
         base = set_distance(P, Q, kind)
         shared = P & Q
         if len(shared) < 2:

@@ -28,7 +28,8 @@ import math
 import numpy as np
 import pytest
 
-from phynetpy.Network import Network
+from phynetpy.Network import Network, Node
+from phynetpy.models import BranchLengthUnit
 from phynetpy.GraphUtils import _node_height
 from phynetpy._seq_likelihood import JC69, HKY85
 from phynetpy.infer import (
@@ -42,6 +43,15 @@ from phynetpy.infer import (
 # ``infer(Alignment(...), criterion=Bayesian())``; these tests drive it
 # directly to check the recovery properties of the simulator.
 from phynetpy._mcmc_seq import MCMC_SEQ
+
+
+def _substitution_net(newick: str) -> Network:
+    """Parse a network whose lengths are expected substitutions per site."""
+
+    return Network.from_newick(
+        newick,
+        branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+    )
 
 
 def _descendant_leaves(net: Network, node) -> frozenset:
@@ -82,15 +92,48 @@ def _leaf_heights(gene_tree: Network) -> list[float]:
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestGeneTreeSim:
+    @pytest.mark.parametrize(
+        "unit",
+        [
+            BranchLengthUnit.UNSPECIFIED,
+            BranchLengthUnit.COALESCENT_2N,
+        ],
+    )
+    def test_requires_substitution_units(self, unit):
+        net = Network.from_newick(
+            "(A:0.05,B:0.05)Root;",
+            branch_length_unit=unit,
+        )
+        with pytest.raises(ValueError, match="requires|branch-length units"):
+            simulate_gene_tree(
+                net,
+                {"A": ["A"], "B": ["B"]},
+                0.02,
+                np.random.default_rng(1),
+            )
+
     def test_leaves_are_the_sampled_alleles(self):
-        net = Network.from_newick("((A:0.05,B:0.05)I:0.05,C:0.10)R;")
+        net = _substitution_net("((A:0.05,B:0.05)I:0.05,C:0.10)R;")
         rng = np.random.default_rng(0)
         gt = simulate_gene_tree(net, {"A": ["A"], "B": ["B"], "C": ["C"]}, 0.02, rng)
         assert sorted(l.label for l in gt.get_leaves()) == ["A", "B", "C"]
 
+    def test_single_species_coalesces_multiple_samples(self):
+        net = Network(
+            nodes={Node("A")},
+            branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE,
+        )
+        gt = simulate_gene_tree(
+            net,
+            {"A": ["a1", "a2"]},
+            0.02,
+            np.random.default_rng(7),
+        )
+        assert {leaf.label for leaf in gt.get_leaves()} == {"a1", "a2"}
+
     def test_ultrametric_and_above_divergence(self):
         # A,B diverge at 0.05; their coalescence can only happen at or above it.
-        net = Network.from_newick("(A:0.05,B:0.05)R;")
+        net = _substitution_net("(A:0.05,B:0.05)R;")
         rng = np.random.default_rng(1)
         for _ in range(200):
             gt = simulate_gene_tree(net, {"A": ["A"], "B": ["B"]}, 0.02, rng)
@@ -102,7 +145,7 @@ class TestGeneTreeSim:
         # Two alleles above a divergence D coalesce at rate 2/theta, so
         # E[TMRCA] = D + theta/2.
         D, theta = 0.05, 0.02
-        net = Network.from_newick(f"(A:{D},B:{D})R;")
+        net = _substitution_net(f"(A:{D},B:{D})R;")
         rng = np.random.default_rng(7)
         ts = [
             _tmrca(simulate_gene_tree(net, {"A": ["A"], "B": ["B"]}, theta, rng))
@@ -111,7 +154,7 @@ class TestGeneTreeSim:
         assert np.mean(ts) == pytest.approx(D + theta / 2.0, abs=2e-3)
 
     def test_multiple_alleles_per_species(self):
-        net = Network.from_newick("(A:0.05,B:0.05)R;")
+        net = _substitution_net("(A:0.05,B:0.05)R;")
         rng = np.random.default_rng(3)
         mapping = {"A": ["A_0", "A_1", "A_2"], "B": ["B_0", "B_1"]}
         gt = simulate_gene_tree(net, mapping, 0.05, rng)
@@ -121,6 +164,34 @@ class TestGeneTreeSim:
         # 5 tips -> 4 internal coalescences -> 9 nodes.
         assert len(gt.get_leaves()) == 5
 
+    def test_branch_theta_matches_within_population_probability(self):
+        # Two A lineages share the A branch for D time units. Their
+        # coalescence probability there is 1 - exp(-2D/theta_A).
+        D, theta_a = 0.03, 0.06
+        net = _substitution_net(f"(A:{D},B:{D})Root;")
+        mapping = {"A": ["A_0", "A_1"], "B": ["B"]}
+        rng = np.random.default_rng(19)
+        inside = 0
+        n_reps = 4000
+        for _ in range(n_reps):
+            gt = simulate_gene_tree(
+                net,
+                mapping,
+                0.02,
+                rng,
+                branch_thetas={"A": theta_a},
+            )
+            cache: dict = {}
+            pair_nodes = [
+                node for node in gt.V()
+                if _descendant_leaves(gt, node) == frozenset({"A_0", "A_1"})
+            ]
+            if pair_nodes and _node_height(gt, pair_nodes[0], cache) <= D + 1e-12:
+                inside += 1
+
+        expected = 1.0 - math.exp(-2.0 * D / theta_a)
+        assert inside / n_reps == pytest.approx(expected, abs=0.035)
+
     def test_reticulation_routes_by_gamma(self):
         # B is a hybrid: 70% A-side, 30% C-side.  With tiny theta the routed
         # lineage coalesces with its parent population almost immediately, so
@@ -129,7 +200,7 @@ class TestGeneTreeSim:
             "((A:2.0,(B:1.0)#H1:1.0[&gamma=0.7])PA:1.0,"
             "(C:2.0,#H1:1.0[&gamma=0.3])PC:1.0)R;"
         )
-        net = Network.from_newick(nw)
+        net = _substitution_net(nw)
         rng = np.random.default_rng(2)
         a_side = 0
         n = 3000
@@ -151,7 +222,7 @@ class TestGeneTreeSim:
 
 class TestSequenceSim:
     def test_shape_and_alphabet(self):
-        gt = Network.from_newick("(A:0.1,B:0.1)R;")
+        gt = _substitution_net("(A:0.1,B:0.1)R;")
         rng = np.random.default_rng(0)
         aln = simulate_sequences(gt, JC69(), 150, rng)
         assert set(aln) == {"A", "B"}
@@ -162,7 +233,7 @@ class TestSequenceSim:
         # Tips separated by path length 2d; the JC-corrected distance estimate
         # should recover it.
         d = 0.1
-        gt = Network.from_newick(f"(A:{d},B:{d})R;")
+        gt = _substitution_net(f"(A:{d},B:{d})R;")
         rng = np.random.default_rng(5)
         aln = simulate_sequences(gt, JC69(), 6000, rng)
         sa, sb = aln["A"], aln["B"]
@@ -174,7 +245,7 @@ class TestSequenceSim:
         # A long branch saturates: tip base composition -> pi.
         pi = [0.4, 0.3, 0.2, 0.1]
         model = HKY85(kappa=2.0, pi=pi)
-        gt = Network.from_newick("(A:5.0,B:5.0)R;")
+        gt = _substitution_net("(A:5.0,B:5.0)R;")
         rng = np.random.default_rng(9)
         aln = simulate_sequences(gt, model, 20000, rng)
         seq = aln["A"]
@@ -188,15 +259,20 @@ class TestSequenceSim:
 
 class TestEndToEnd:
     def test_simulated_data_bundle_feeds_mcmc_seq(self):
-        net = Network.from_newick("((A:0.05,B:0.05)I:0.05,C:0.10)R;")
+        net = _substitution_net("((A:0.05,B:0.05)I:0.05,C:0.10)R;")
         mapping = {"A": ["A"], "B": ["B"], "C": ["C"]}
+        branch_thetas = {"A": 0.03}
         data = simulate_multilocus(net, mapping, n_loci=3, seq_length=120,
-                                   theta=0.02, seed=11)
+                                   theta=0.02,
+                                   branch_thetas=branch_thetas, seed=11)
         assert isinstance(data, SimulatedData)
         assert len(data.loci) == 3 and len(data.gene_trees) == 3
         assert data.species_of == {"A": "A", "B": "B", "C": "C"}
         kwargs = data.to_mcmc_seq_kwargs()
-        assert set(kwargs) == {"loci", "mapping", "model", "theta"}
+        assert set(kwargs) == {
+            "loci", "mapping", "model", "theta", "branch_thetas",
+        }
+        assert kwargs["branch_thetas"] == branch_thetas
         # The bundle must construct a sampler and score a finite start state.
         sampler = MCMC_SEQ(**kwargs)
         assert math.isfinite(sampler.score())
@@ -206,7 +282,7 @@ class TestEndToEnd:
         # True species tree groups (A,B); simulate many loci, run a short
         # tree-only chain (max_reticulations=0 isolates topology recovery from
         # the RJMCMC dimension moves) and confirm the MAP keeps A,B together.
-        net = Network.from_newick("((A:0.04,B:0.04)I:0.06,C:0.10)R;")
+        net = _substitution_net("((A:0.04,B:0.04)I:0.06,C:0.10)R;")
         mapping = {"A": ["A"], "B": ["B"], "C": ["C"]}
         data = simulate_multilocus(net, mapping, n_loci=12, seq_length=400,
                                    theta=0.015, seed=23)

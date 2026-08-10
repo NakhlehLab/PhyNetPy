@@ -604,11 +604,13 @@ class AddReticulation(Move):
         return model
 
     def undo(self, model: Model) -> None:
+        """Restore the network from the deep-copy snapshot taken in ``execute``."""
         if self.undo_info is not None:
             model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
+        """No-op: replay is not supported for deep-copy-based moves."""
         pass
 
 
@@ -625,9 +627,21 @@ class RemoveReticulation(Move):
     """
 
     def __init__(self) -> None:
+        """Create a new ``RemoveReticulation`` proposal."""
         super().__init__()
 
     def execute(self, model: Model) -> Model:
+        """Delete a random reticulation from ``model.network``.
+
+        Args:
+            model: Model whose ``network`` will be mutated in place.
+                Uses ``model.rng`` to pick the reticulation and, when it
+                has two eligible parent edges, which one to drop.
+
+        Returns:
+            The same ``model``, with the network mutated in place (or
+            left unchanged if there are no reticulations to remove).
+        """
         net: Network = model.network
         self.undo_info = _clone_net(net)
 
@@ -688,11 +702,13 @@ class RemoveReticulation(Move):
         return (in_e.get_length() or 0.0) + (out_e.get_length() or 0.0)
 
     def undo(self, model: Model) -> None:
+        """Restore the network from the deep-copy snapshot taken in ``execute``."""
         if self.undo_info is not None:
             model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
+        """No-op: replay is not supported for deep-copy-based moves."""
         pass
 
 
@@ -804,11 +820,13 @@ class FlipReticulation(Move):
         return model
 
     def undo(self, model: Model) -> None:
+        """Restore the network from the deep-copy snapshot taken in ``execute``."""
         if self.undo_info is not None:
             model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
+        """No-op: replay is not supported for deep-copy-based moves."""
         pass
     
 
@@ -821,6 +839,13 @@ class SwitchParentage(Move):
     Uses deep-copy for undo/same_move to guarantee correctness.
     """
     def __init__(self, debug_id: int = 0) -> None:
+        """Create a new ``SwitchParentage`` (PSPP) proposal.
+
+        Args:
+            debug_id (int, optional): Identifier forwarded to the
+                internal :class:`~.Logger.Logger` for debug output.
+                Defaults to 0.
+        """
         super().__init__()
         self.valid_attachment_edges: list[Edge] = []
         self.logger = Logger(str(debug_id))
@@ -1156,6 +1181,14 @@ class SPR(Move):
     def __init__(self,
                  distance_decay: float | None = None,
                  debug_id: int = 0) -> None:
+        """Create a new ``SPR`` proposal.
+
+        Args:
+            distance_decay: Deprecated and ignored; retained only for
+                backward-compatible construction (see class docstring).
+            debug_id: Unused; retained for constructor-signature
+                compatibility with other moves.
+        """
         super().__init__()
         self.undo_info = None
         self.same_move_info = None
@@ -1194,6 +1227,23 @@ class SPR(Move):
         return prunable
 
     def execute(self, model: Model) -> Model:
+        """Propose a subtree-prune-and-regraft move on ``model.network``.
+
+        Prunes a random eligible subtree, then regrafts it uniformly at
+        random onto an edge outside the pruned subtree. See the class
+        docstring for the reversibility conditions and the exact
+        log-Hastings-ratio derivation.
+
+        Args:
+            model: Model whose ``network`` will be mutated in place.
+                Uses ``model.rng`` for both the prune and regraft
+                random draws.
+
+        Returns:
+            The same ``model``, with the network mutated in place (or
+            left unchanged if no edge is prunable or no regraft target
+            is eligible).
+        """
         net: Network = model.network
         self.undo_info = _clone_net(net)
         self._log_hr = 0.0
@@ -1262,11 +1312,13 @@ class SPR(Move):
         return model
 
     def undo(self, model: Model) -> None:
+        """Restore the network from the deep-copy snapshot taken in ``execute``."""
         if self.undo_info is not None:
             model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
+        """No-op: replay is not supported for deep-copy-based moves."""
         pass
 
 
@@ -1401,6 +1453,14 @@ class ChangeNodeHeight(Move):
     _TRUNCATE_RETRIES = 3
 
     def __init__(self, sigma_frac: float | None = None) -> None:
+        """Create a new ``ChangeNodeHeight`` proposal.
+
+        Args:
+            sigma_frac: Fraction of the feasible half-range used as the
+                standard deviation of the truncated-Gaussian slide
+                (see class docstring). Defaults to
+                :attr:`_DEFAULT_SIGMA_FRAC` when ``None``.
+        """
         super().__init__()
         self._sigma_frac = (
             self._DEFAULT_SIGMA_FRAC if sigma_frac is None else float(sigma_frac)
@@ -1421,6 +1481,21 @@ class ChangeNodeHeight(Move):
         return net.out_degree(edge.dest) == 0
 
     def execute(self, model: Model) -> Model:
+        """Slide a random internal node's height by a truncated-Gaussian delta.
+
+        Grows the node's parent branch(es) by ``delta`` and shrinks its
+        non-leaf child branch(es) by the same ``delta``, keeping every
+        adjusted branch length positive. See the class docstring for
+        why leaf (tip) branches are held fixed.
+
+        Args:
+            model: Model whose ``network`` will be mutated in place.
+                Uses ``model.rng`` to pick the node and draw ``delta``.
+
+        Returns:
+            The same ``model``, with the network mutated in place (or
+            left unchanged if no node has a feasible slide range).
+        """
         net: Network = model.network
 
         candidates = [
@@ -1534,6 +1609,11 @@ class ChangeNodeHeight(Move):
         return model
 
     def undo(self, model: Model) -> None:
+        """Restore every edge length changed in ``execute`` to its old value.
+
+        Resolves edges by node label (rather than by object identity)
+        since ``model`` may be a fresh clone.
+        """
         net: Network = model.network
         if self.undo_info is not None:
             for src_lbl, dest_lbl, old_len, _new_len in self.undo_info:
@@ -1544,6 +1624,11 @@ class ChangeNodeHeight(Move):
         model.mark_touched(self.touched_nodes(model.network))
 
     def same_move(self, model: Model) -> None:
+        """Re-apply the same edge-length deltas to a cloned ``model``.
+
+        Resolves edges by node label so the replay works on a
+        topologically-equivalent clone with distinct node objects.
+        """
         net: Network = model.network
         if self.same_move_info is not None:
             for src_lbl, dest_lbl, _old_len, new_len in self.same_move_info:
@@ -1584,6 +1669,12 @@ class ChangeInheritanceProb(Move):
     _EPS = 0.01
 
     def __init__(self, sigma: float | None = None) -> None:
+        """Create a new ``ChangeInheritanceProb`` proposal.
+
+        Args:
+            sigma: Standard deviation of the truncated-Gaussian random
+                walk on gamma. Defaults to :attr:`_SIGMA` when ``None``.
+        """
         super().__init__()
         if sigma is not None:
             self._sigma = sigma
@@ -1591,6 +1682,22 @@ class ChangeInheritanceProb(Move):
             self._sigma = self._SIGMA
 
     def execute(self, model: Model) -> Model:
+        """Perturb the gamma of a random reticulation's two parent edges.
+
+        Draws a new gamma from a Gaussian centered on the current value,
+        truncated to ``(_EPS, 1 - _EPS)``, and sets the two complementary
+        parent-edge gammas to ``new_g1`` / ``1 - new_g1``.
+
+        Args:
+            model: Model whose ``network`` will be mutated in place.
+                Uses ``model.rng`` to pick the reticulation and draw the
+                new gamma.
+
+        Returns:
+            The same ``model``, with the network mutated in place (or
+            left unchanged if there is no eligible reticulation or the
+            truncated draw could not land in bounds).
+        """
         net: Network = model.network
 
         retic_nodes = [
@@ -1647,6 +1754,11 @@ class ChangeInheritanceProb(Move):
         return model
 
     def undo(self, model: Model) -> None:
+        """Restore both parent edges' gammas to their pre-``execute`` values.
+
+        Resolves edges by node label (rather than by object identity)
+        since ``model`` may be a fresh clone.
+        """
         net: Network = model.network
         if self.undo_info is not None:
             s1, d1, g1, s2, d2, g2 = self.undo_info
@@ -1659,6 +1771,11 @@ class ChangeInheritanceProb(Move):
         model.mark_touched(self.touched_nodes(model.network))
 
     def same_move(self, model: Model) -> None:
+        """Re-apply the same gamma change to a cloned ``model``.
+
+        Resolves edges by node label so the replay works on a
+        topologically-equivalent clone with distinct node objects.
+        """
         net: Network = model.network
         if self.same_move_info is not None:
             s1, d1, g1, s2, d2, g2 = self.same_move_info
@@ -1778,11 +1895,13 @@ class ChangeReticSource(Move):
         return model
 
     def undo(self, model: Model) -> None:
+        """Restore the network from the deep-copy snapshot taken in ``execute``."""
         if self.undo_info is not None:
             model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
+        """No-op: replay is not supported for deep-copy-based moves."""
         pass
 
 
@@ -1961,11 +2080,13 @@ class RelocateReticulation(Move):
         return model
 
     def undo(self, model: Model) -> None:
+        """Restore the network from the deep-copy snapshot taken in ``execute``."""
         if self.undo_info is not None:
             model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
+        """No-op: replay is not supported for deep-copy-based moves."""
         pass
 
 
@@ -2068,10 +2189,12 @@ class ChangeReticDest(Move):
         return model
 
     def undo(self, model: Model) -> None:
+        """Restore the network from the deep-copy snapshot taken in ``execute``."""
         if self.undo_info is not None:
             model.network = self.undo_info
         model.update_network()
 
     def same_move(self, model: Model) -> None:
+        """No-op: replay is not supported for deep-copy-based moves."""
         pass
 

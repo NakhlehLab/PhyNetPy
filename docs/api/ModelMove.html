@@ -11,18 +11,18 @@
         <h1>PhyNetPy Documentation</h1>
         <p>Library for the Development and Use of Phylogenetic Network Methods</p>
     </div>
-    
+
     <div class="document">
         <div class="documentwrapper">
             <div class="body">
                 <div class="breadcrumb">
                     <a href="index.html">Home</a> &raquo; ModelMove
                 </div>
-                
+
                 <h1>ModelMove Module <span class="version-badge">v1.0.0</span></h1>
-                
+
                 <p>Network topology move operations for MCMC search (add/remove/flip reticulation, SPR).</p>
-                
+
                 <div class="module-info">
                     <dl>
                         <dt>Author:</dt>
@@ -33,7 +33,7 @@
                         <dd>ModelMove.py</dd>
                     </dl>
                 </div>
-                
+
                 <div class="toc">
                     <h4>Contents</h4>
                     <ul>
@@ -234,19 +234,7 @@
                                 <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Undo the most recent call to :meth:`execute`.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
-                                    </tr>
-                                </table>
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -254,19 +242,7 @@
                                 <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
-                                    </tr>
-                                </table>
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
                             </div>
                         </div>
                     </div>
@@ -285,7 +261,7 @@
                                 <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Initialise per-instance bookkeeping fields.</p>
+                                <p>Create a new ``RemoveReticulation`` proposal.</p>
                             </div>
                         </div>
                         <h4>Methods</h4>
@@ -294,7 +270,7 @@
                                 <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
                             </div>
                             <div class="function-body">
-                                <p>Apply the proposal to ``model.network`` in place.</p>
+                                <p>Delete a random reticulation from ``model.network``.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -304,10 +280,10 @@
                                     <tr>
                                         <td><span class="param-name">model</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Model whose ``network`` will be mutated.  The move uses ``model.rng`` (a seeded ``numpy.random.Generator``) for every random decision.</td>
+                                        <td>Model whose ``network`` will be mutated in place. Uses ``model.rng`` to pick the reticulation and, when it has two eligible parent edges, which one to drop.</td>
                                     </tr>
                                 </table>
-                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` for chaining convenience.  The underlying network is mutated in place; no copy is returned.</div>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model``, with the network mutated in place (or left unchanged if there are no reticulations to remove).</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -315,19 +291,7 @@
                                 <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Undo the most recent call to :meth:`execute`.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
-                                    </tr>
-                                </table>
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -335,19 +299,7 @@
                                 <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
-                                    </tr>
-                                </table>
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
                             </div>
                         </div>
                     </div>
@@ -408,19 +360,7 @@
                                 <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Undo the most recent call to :meth:`execute`.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
-                                    </tr>
-                                </table>
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -428,19 +368,7 @@
                                 <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
-                                    </tr>
-                                </table>
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
                             </div>
                         </div>
                     </div>
@@ -459,7 +387,24 @@
                                 <span class="name">__init__</span>(<span class="params">debug_id: int = 0</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Initialise per-instance bookkeeping fields.</p>
+                                <p>Create a new ``SwitchParentage`` (PSPP) proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">debug_id</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>Identifier forwarded to the</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">internal</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>class:`~.Logger.Logger` for debug output. Defaults to 0.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <h4>Methods</h4>
@@ -516,7 +461,24 @@
                                 <span class="name">__init__</span>(<span class="params">distance_decay: float | None = None, debug_id: int = 0</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Initialise per-instance bookkeeping fields.</p>
+                                <p>Create a new ``SPR`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">distance_decay</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Deprecated and ignored; retained only for backward-compatible construction (see class docstring).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">debug_id</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Unused; retained for constructor-signature compatibility with other moves.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <h4>Methods</h4>
@@ -525,7 +487,7 @@
                                 <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
                             </div>
                             <div class="function-body">
-                                <p>Apply the proposal to ``model.network`` in place.</p>
+                                <p>Propose a subtree-prune-and-regraft move on ``model.network``. Prunes a random eligible subtree, then regrafts it uniformly at random onto an edge outside the pruned subtree. See the class docstring for the reversibility conditions and the exact log-Hastings-ratio derivation.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -535,10 +497,10 @@
                                     <tr>
                                         <td><span class="param-name">model</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Model whose ``network`` will be mutated.  The move uses ``model.rng`` (a seeded ``numpy.random.Generator``) for every random decision.</td>
+                                        <td>Model whose ``network`` will be mutated in place. Uses ``model.rng`` for both the prune and regraft random draws.</td>
                                     </tr>
                                 </table>
-                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` for chaining convenience.  The underlying network is mutated in place; no copy is returned.</div>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model``, with the network mutated in place (or left unchanged if no edge is prunable or no regraft target is eligible).</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -546,19 +508,7 @@
                                 <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Undo the most recent call to :meth:`execute`.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
-                                    </tr>
-                                </table>
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -566,19 +516,7 @@
                                 <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
-                                    </tr>
-                                </table>
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
                             </div>
                         </div>
                     </div>
@@ -597,7 +535,19 @@
                                 <span class="name">__init__</span>(<span class="params">sigma_frac: float | None = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Initialise per-instance bookkeeping fields.</p>
+                                <p>Create a new ``ChangeNodeHeight`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sigma_frac</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Fraction of the feasible half-range used as the standard deviation of the truncated-Gaussian slide (see class docstring). Defaults to :attr:`_DEFAULT_SIGMA_FRAC` when ``None``.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <h4>Methods</h4>
@@ -606,7 +556,7 @@
                                 <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
                             </div>
                             <div class="function-body">
-                                <p>Apply the proposal to ``model.network`` in place.</p>
+                                <p>Slide a random internal node's height by a truncated-Gaussian delta. Grows the node's parent branch(es) by ``delta`` and shrinks its non-leaf child branch(es) by the same ``delta``, keeping every adjusted branch length positive. See the class docstring for why leaf (tip) branches are held fixed.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -616,10 +566,10 @@
                                     <tr>
                                         <td><span class="param-name">model</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Model whose ``network`` will be mutated.  The move uses ``model.rng`` (a seeded ``numpy.random.Generator``) for every random decision.</td>
+                                        <td>Model whose ``network`` will be mutated in place. Uses ``model.rng`` to pick the node and draw ``delta``.</td>
                                     </tr>
                                 </table>
-                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` for chaining convenience.  The underlying network is mutated in place; no copy is returned.</div>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model``, with the network mutated in place (or left unchanged if no node has a feasible slide range).</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -627,19 +577,7 @@
                                 <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Undo the most recent call to :meth:`execute`.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
-                                    </tr>
-                                </table>
+                                <p>Restore every edge length changed in ``execute`` to its old value. Resolves edges by node label (rather than by object identity) since ``model`` may be a fresh clone.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -647,19 +585,7 @@
                                 <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
-                                    </tr>
-                                </table>
+                                <p>Re-apply the same edge-length deltas to a cloned ``model``. Resolves edges by node label so the replay works on a topologically-equivalent clone with distinct node objects.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -686,7 +612,19 @@
                                 <span class="name">__init__</span>(<span class="params">sigma: float | None = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Initialise per-instance bookkeeping fields.</p>
+                                <p>Create a new ``ChangeInheritanceProb`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sigma</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Standard deviation of the truncated-Gaussian random walk on gamma. Defaults to :attr:`_SIGMA` when ``None``.</td>
+                                    </tr>
+                                </table>
                             </div>
                         </div>
                         <h4>Methods</h4>
@@ -695,7 +633,7 @@
                                 <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
                             </div>
                             <div class="function-body">
-                                <p>Apply the proposal to ``model.network`` in place.</p>
+                                <p>Perturb the gamma of a random reticulation's two parent edges. Draws a new gamma from a Gaussian centered on the current value, truncated to ``(_EPS, 1 - _EPS)``, and sets the two complementary parent-edge gammas to ``new_g1`` / ``1 - new_g1``.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -705,10 +643,10 @@
                                     <tr>
                                         <td><span class="param-name">model</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>Model whose ``network`` will be mutated.  The move uses ``model.rng`` (a seeded ``numpy.random.Generator``) for every random decision.</td>
+                                        <td>Model whose ``network`` will be mutated in place. Uses ``model.rng`` to pick the reticulation and draw the new gamma.</td>
                                     </tr>
                                 </table>
-                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` for chaining convenience.  The underlying network is mutated in place; no copy is returned.</div>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model``, with the network mutated in place (or left unchanged if there is no eligible reticulation or the truncated draw could not land in bounds).</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -716,19 +654,7 @@
                                 <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Undo the most recent call to :meth:`execute`.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
-                                    </tr>
-                                </table>
+                                <p>Restore both parent edges' gammas to their pre-``execute`` values. Resolves edges by node label (rather than by object identity) since ``model`` may be a fresh clone.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -736,19 +662,7 @@
                                 <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
-                                    </tr>
-                                </table>
+                                <p>Re-apply the same gamma change to a cloned ``model``. Resolves edges by node label so the replay works on a topologically-equivalent clone with distinct node objects.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -822,19 +736,7 @@
                                 <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Undo the most recent call to :meth:`execute`.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
-                                    </tr>
-                                </table>
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -842,19 +744,7 @@
                                 <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
-                                    </tr>
-                                </table>
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
                             </div>
                         </div>
                     </div>
@@ -915,19 +805,7 @@
                                 <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Undo the most recent call to :meth:`execute`.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
-                                    </tr>
-                                </table>
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -935,19 +813,7 @@
                                 <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
-                                    </tr>
-                                </table>
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
                             </div>
                         </div>
                     </div>
@@ -1008,19 +874,7 @@
                                 <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Undo the most recent call to :meth:`execute`.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
-                                    </tr>
-                                </table>
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
                             </div>
                         </div>
                         <div class="function-def">
@@ -1028,19 +882,7 @@
                                 <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
-                                                                <table class="param-table">
-                                    <tr>
-                                        <th>Parameter</th>
-                                        <th>Type</th>
-                                        <th>Description</th>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">model</span></td>
-                                        <td><span class="param-type"></span></td>
-                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
-                                    </tr>
-                                </table>
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
                             </div>
                         </div>
                     </div>
@@ -1078,19 +920,19 @@
                             </div>
                         </div>
 
-                
+
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
                 </div>
             </div>
         </div>
-        
+
         <div class="sphinxsidebar">
             <h3>Navigation</h3>
             <ul>
                 <li><a href="index.html">Home</a></li>
             </ul>
-            
+
             <h3>Modules</h3>
             <ul>
                 <li><a href="Alphabet.html">Alphabet</a></li>
@@ -1104,13 +946,12 @@
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
-                <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html" class="current">ModelMove</a></li>
                 <li><a href="ModelSelection.html">ModelSelection</a></li>
-                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
                 <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
                 <li><a href="SNPSimulator.html">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
@@ -1120,7 +961,7 @@
                 <li><a href="infer.html">infer</a></li>
                 <li><a href="models.html">models</a></li>
             </ul>
-            
+
             <h3>This Page</h3>
             <ul>
                 <li><a href="#exceptions">Exceptions</a></li>

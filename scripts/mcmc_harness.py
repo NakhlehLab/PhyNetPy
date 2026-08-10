@@ -53,7 +53,7 @@ from typing import Optional
 from phynetpy.Network import Network, Node, Edge
 from phynetpy.criteria import Bayesian, Likelihood
 from phynetpy.infer import JC69, MCMCSeqPriors, MCMC_GTPriors, infer, simulate
-from phynetpy.models import MSC
+from phynetpy.models import BranchLengthUnit, MSC
 
 
 # ======================================================================
@@ -122,7 +122,9 @@ def build_true_network() -> Network:
         name: Node(name, is_reticulation=(name == "H"))
         for name in _TRUE_HEIGHTS
     }
-    net = Network()
+    net = Network(
+        branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE
+    )
     net.add_nodes(*nodes.values())
 
     edges = []
@@ -328,7 +330,7 @@ class RunResult:
 # Runners for each data type
 # ======================================================================
 
-def run_gt(true_net: Network, *, loci: int, sites: int, iters: int,
+def run_gt(true_net: Network, *, loci: int, iters: int,
            burnin: int, thin: int, seed: int,
            max_reticulations: int = 2) -> RunResult:
     """Simulate gene trees on ``true_net`` and sample the posterior."""
@@ -431,7 +433,7 @@ def _format_model_selection(res) -> str:
 
 def run_snp(true_net: Network, *, sites: int, iters: int, burnin: int,
             thin: int, seed: int, u: float = 1.0, v: float = 1.0,
-            coal: float = 0.005, max_reticulations: int = 2) -> RunResult:
+            theta: float = 0.005, max_reticulations: int = 2) -> RunResult:
     """Simulate biallelic SNP data on ``true_net`` and sample the posterior.
 
     The mutation rates ``u`` / ``v`` and the coalescent rate live on the model
@@ -439,7 +441,7 @@ def run_snp(true_net: Network, *, sites: int, iters: int, burnin: int,
     no NEXUS round-trip in between.
     """
     samples = {leaf.label: 1 for leaf in true_net.get_leaves()}
-    model = MSC(u=u, v=v, coal=coal)
+    model = MSC(theta=theta, u=u, v=v)
     markers = simulate(model, true_net, n=sites, data="markers",
                        mapping=MAPPING, samples=samples, seed=seed)
 
@@ -496,7 +498,7 @@ def main() -> None:
 
     results: list[RunResult] = []
     if "gt" in which:
-        results.append(run_gt(true_net, loci=args.loci, sites=args.sites,
+        results.append(run_gt(true_net, loci=args.loci,
                               iters=args.iters, burnin=args.burnin,
                               thin=args.thin, seed=args.seed,
                               max_reticulations=args.max_retic))

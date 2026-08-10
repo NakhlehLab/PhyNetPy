@@ -71,6 +71,7 @@ class Data(ABC):
 
     @mapping.setter
     def mapping(self, value: Optional[Dict[str, List[str]]]) -> None:
+        """Set the explicit species -> allele mapping (``None`` to clear it)."""
         self._mapping = value
 
     def resolved_mapping(self) -> Dict[str, List[str]]:

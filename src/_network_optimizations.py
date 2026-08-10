@@ -638,6 +638,7 @@ def rooted_triplet_distance(net: "Network", other: "Network") -> float:
     """
 
     def get_rooted_triplets(network: "Network") -> Set[Tuple[Any, ...]]:
+        """Canonical ``(sibling_pair, outgroup)`` encoding of every leaf triple in ``network``."""
         triplets: Set[Tuple[Any, ...]] = set()
         leaves = network.get_leaves()
 
@@ -674,6 +675,7 @@ def rooted_triplet_distance(net: "Network", other: "Network") -> float:
         return triplets
 
     def triplet_distance(triplets1: Set[Tuple], triplets2: Set[Tuple]) -> float:
+        """Normalized symmetric difference between two triplet sets (0 = identical, 1 = disjoint)."""
         if not triplets1 and not triplets2:
             return 0.0
         if not triplets1 or not triplets2:
@@ -725,7 +727,9 @@ def copy(net: "Network") -> "tuple[Network, dict[Node, Node]]":
     forward so later ``add_uid_node()`` calls cannot regenerate ``UID_*`` names
     that collide with existing nodes (which would corrupt the graph).
     """
-    net_copy: Network = Network()
+    net_copy: Network = Network(
+        branch_length_unit=net.get_branch_length_unit()
+    )
     old_new: dict[Node, Node] = {}
 
     for node in net.V():

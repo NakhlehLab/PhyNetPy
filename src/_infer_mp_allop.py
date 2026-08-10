@@ -105,6 +105,12 @@ class InferAllopError(Exception):
     """
     def __init__(self, message: str = "Error during the execution of "
                                        "Infer_MP_Allop_2.0") -> None:
+        """Create an ``InferAllopError`` with a custom message.
+
+        Args:
+            message (str, optional): Error message. Defaults to a generic
+                Infer_MP_Allop_2.0 execution error.
+        """
         self.message = message
         super().__init__(self.message)
 
@@ -156,6 +162,7 @@ def _attach(net: Network,
     )
     
     def amt_allowed(cluster: tuple[Node], lti: dict) -> int:
+        """Max ploidy gain a hybrid edge to ``cluster`` can give, bounded by its neediest member."""
         return min([lti[node] for node in cluster])
     
     chosen_cluster = None
@@ -739,6 +746,7 @@ class AlleleMap:
     """
     
     def __init__(self) -> None:
+        """Create an empty ``AlleleMap`` with no leaves mapped yet."""
         self.map: dict[str, str] = dict()
         self.disallowed: set[str] = set()
 
@@ -774,6 +782,15 @@ class MPAllopScorer:
                  gene_map: dict[str, list[str]],
                  gene_trees: list[Network],
                  rng: np.random.Generator) -> None:
+        """Create a new ``MPAllopScorer``.
+
+        Args:
+            gene_map: Subgenome mapping from species to their gene-copy
+                labels, forwarded to the internal :class:`Allop_MUL`.
+            gene_trees: Gene trees to reconcile against each candidate
+                network's multiple-labelled tree.
+            rng: Random generator used when resolving allele-map ties.
+        """
         self.mul = Allop_MUL(gene_map, rng)
         self.gene_trees = gene_trees
     

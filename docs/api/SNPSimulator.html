@@ -11,18 +11,18 @@
         <h1>PhyNetPy Documentation</h1>
         <p>Library for the Development and Use of Phylogenetic Network Methods</p>
     </div>
-    
+
     <div class="document">
         <div class="documentwrapper">
             <div class="body">
                 <div class="breadcrumb">
                     <a href="index.html">Home</a> &raquo; SNPSimulator
                 </div>
-                
+
                 <h1>SNPSimulator Module <span class="version-badge">v1.1.0</span></h1>
-                
+
                 <p>SNP data simulator for phylogenetic networks using a forward-in-time 2-state CTMC.</p>
-                
+
                 <div class="module-info">
                     <dl>
                         <dt>Author:</dt>
@@ -33,7 +33,7 @@
                         <dd>SNPSimulator.py</dd>
                     </dl>
                 </div>
-                
+
                 <div class="toc">
                     <h4>Contents</h4>
                     <ul>
@@ -48,7 +48,7 @@
                         <span class="keyword">class</span> <span class="name">SimulatedSNPData</span>
                     </div>
                     <div class="class-body">
-                        <p>Container for simulated SNP data and the generating network. Attributes: network (Network): The phylogenetic network used for simulation. data (dict[str, list[int]]): Mapping from taxon name to a list of red allele counts per site. n_taxa (int): Number of leaf taxa. n_sites (int): Number of simulated SNP sites. samples (dict[str, int]): Number of sampled individuals per taxon. u (float): Mutation rate from red to green allele. v (float): Mutation rate from green to red allele. coal (float): Coalescent rate parameter (theta). seed (int): Random seed used for simulation.</p>
+                        <p>Container for simulated SNP data and the generating network. Attributes: network (Network): The phylogenetic network used for simulation. data (dict[str, list[int]]): Mapping from taxon name to a list of red allele counts per site. n_taxa (int): Number of leaf taxa. n_sites (int): Number of simulated SNP sites. samples (dict[str, int]): Number of sampled gene copies per taxon. u (float): Mutation rate from red to green allele. v (float): Mutation rate from green to red allele. theta (float): Population mutation rate ``4*N*mu``. seed (int): Random seed used for simulation.</p>
                         <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
@@ -63,7 +63,7 @@
                                 <span class="name">write_nexus</span>(<span class="params">filepath: str</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Write the simulated data and network to a NEXUS file compatible with SNP_LIKELIHOOD. The output file contains: - TAXA block with taxon labels - DATA block with SNP site patterns (0/1 per site for samples=1) - TREES block with the network in extended newick format (including branch lengths and gamma annotations)</p>
+                                <p>Write the simulated data and network to a NEXUS file compatible with SNP_LIKELIHOOD. The output file contains: - TAXA block with taxon labels - DATA block with one hexadecimal red-allele count per site - TREES block with the network in extended newick format (including branch lengths and gamma annotations)</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -127,10 +127,10 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">simulate</span>(<span class="params">n: int, s: int, net: Network, samples: dict[str, int] | None = None, u: float = 1.0, v: float = 1.0, coal: float = 0.005, seed: int | None = None</span>) <span class="keyword">-&gt;</span> SimulatedSNPData
+                                <span class="name">simulate</span>(<span class="params">n: int, s: int, net: Network, samples: dict[str, int] | None = None, u: float = 1.0, v: float = 1.0, theta: float = 0.02, branch_thetas: dict[BranchThetaKey, float] | None = None, seed: int | None = None</span>) <span class="keyword">-&gt;</span> SimulatedSNPData
                             </div>
                             <div class="function-body">
-                                <p>Simulate SNP (biallelic marker) data over a phylogenetic network. Uses a forward-in-time simulation: at the root, an allele state (red or green) is drawn from the stationary distribution. The state is then propagated down the network along each branch using the 2-state CTMC mutation model. At reticulation nodes, the parent lineage is chosen probabilistically based on the inheritance probability (gamma). For samples=1 per taxon, this is an exact simulation under the biallelic mutation model. For samples &gt; 1, the simulation draws each sample independently conditional on the leaf's evolved frequency — this is an approximation (a full coalescent simulation within each population branch would be needed for exact multi-sample simulation).</p>
+                                <p>Simulate SNP (biallelic marker) data over a phylogenetic network. Draws an independent MSNC genealogy per site, evolves the exact two-state mutation process down it, and aggregates sampled gene copies into red allele counts. This matches the model consumed by ``BiMarkers`` for one or multiple samples per taxon.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -155,7 +155,7 @@
                                     <tr>
                                         <td><span class="param-name">samples</span></td>
                                         <td><span class="param-type">dict[str, int] | None</span></td>
-                                        <td>Number of sampled individuals per taxon. Keys must match leaf names. Defaults to 1 per taxon.</td>
+                                        <td>Number of sampled gene copies per taxon. Keys must match leaf names. Defaults to 1 per taxon.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">u</span></td>
@@ -168,9 +168,14 @@
                                         <td>Mutation rate from green allele to red. Defaults to 1.0.</td>
                                     </tr>
                                     <tr>
-                                        <td><span class="param-name">coal</span></td>
+                                        <td><span class="param-name">theta</span></td>
                                         <td><span class="param-type">float</span></td>
-                                        <td>Coalescent rate parameter (theta). Stored in output but not used in the forward simulation. Defaults to 0.005.</td>
+                                        <td>Population mutation rate ``4*N*mu``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">branch_thetas</span></td>
+                                        <td><span class="param-type">dict | None</span></td>
+                                        <td>Fixed per-population theta overrides.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">seed</span></td>
@@ -183,19 +188,19 @@
                             </div>
                         </div>
 
-                
+
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
                 </div>
             </div>
         </div>
-        
+
         <div class="sphinxsidebar">
             <h3>Navigation</h3>
             <ul>
                 <li><a href="index.html">Home</a></li>
             </ul>
-            
+
             <h3>Modules</h3>
             <ul>
                 <li><a href="Alphabet.html">Alphabet</a></li>
@@ -209,13 +214,12 @@
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
-                <li><a href="ModelFactory.html">ModelFactory</a></li>
                 <li><a href="ModelGraph.html">ModelGraph</a></li>
                 <li><a href="ModelMove.html">ModelMove</a></li>
                 <li><a href="ModelSelection.html">ModelSelection</a></li>
-                <li><a href="ModelTraversal.html">ModelTraversal</a></li>
                 <li><a href="Network.html">Network</a></li>
                 <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
                 <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
                 <li><a href="SNPSimulator.html" class="current">SNPSimulator</a></li>
                 <li><a href="State.html">State</a></li>
@@ -225,7 +229,7 @@
                 <li><a href="infer.html">infer</a></li>
                 <li><a href="models.html">models</a></li>
             </ul>
-            
+
             <h3>This Page</h3>
             <ul>
                 <li><a href="#simulatedsnpdata">SimulatedSNPData</a></li>

@@ -30,21 +30,21 @@
 
   <main class="content-page">
     <article class="release">
-      <p class="eyebrow">Released May 12, 2026</p>
-      <h2>PhyNetPy 0.5.0</h2>
+      <p class="eyebrow">Released August 10, 2026</p>
+      <h2>PhyNetPy 0.6.0</h2>
       <p>
-        PhyNetPy 0.5.0 is focused on faster and more reliable
-        phylogenetic-network search. The release keeps existing public imports
-        backward compatible while adding a curated inference front door.
+        PhyNetPy 0.6.0 consolidates inference around three typed axes and makes
+        biological units explicit. This is a breaking alpha release; review the
+        migration notes before upgrading from 0.5.x.
       </p>
 
       <h3>Highlights</h3>
       <ul class="highlight-list">
-        <li><strong>Unified inference API:</strong> <code>phynetpy.infer</code> re-exports supported inference workflows.</li>
-        <li><strong>Cython acceleration:</strong> MPL dynamic programming and gene-tree MSC scoring now have optimized engines.</li>
-        <li><strong>Adaptive proposal kernels:</strong> MCMC-GT tracks per-move statistics and can tune proposal weights during search.</li>
-        <li><strong>Simulated annealing improvements:</strong> geometric, linear, and plateau-aware schedules are available.</li>
-        <li><strong>Reticulation correctness fixes:</strong> topology moves preserve gamma sum-to-one invariants.</li>
+        <li><strong>One inference API:</strong> <code>infer</code>, <code>score</code>, and <code>simulate</code> dispatch over data, model, and criterion.</li>
+        <li><strong>Explicit units:</strong> branch lengths are tagged and converted instead of being interpreted implicitly.</li>
+        <li><strong>Exact marker simulation:</strong> every biallelic site receives an independently sampled MSNC genealogy.</li>
+        <li><strong>Population parameters:</strong> fixed per-branch theta values are available for simulation and scoring.</li>
+        <li><strong>Population genetics:</strong> validated allele-count and pulse-admixture containers are now public.</li>
       </ul>
 
       <h3>Install</h3>
@@ -52,7 +52,7 @@
 
       <p>
         The repository also includes the full Markdown release notes at
-        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/RELEASE_NOTES_0.5.0.md">RELEASE_NOTES_0.5.0.md</a>
+        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/RELEASE_NOTES_0.6.0.md">RELEASE_NOTES_0.6.0.md</a>
         and the running changelog at
         <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/CHANGELOG.md">CHANGELOG.md</a>.
       </p>
@@ -62,9 +62,11 @@
       <article class="callout">
         <h2>Release Archive</h2>
         <p>
-          Add future releases here as separate cards so users can quickly scan
-          changes before upgrading.
+          <strong>PhyNetPy 0.5.0 — May 12, 2026.</strong> Added the curated
+          inference facade, Cython scoring engines, adaptive proposal kernels,
+          and reticulation-move correctness fixes.
         </p>
+        <p><a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/RELEASE_NOTES_0.5.0.md">Read the 0.5.0 notes</a></p>
       </article>
     </section>
   </main>
