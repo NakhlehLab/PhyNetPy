@@ -36,7 +36,18 @@ import traceback
 import warnings
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 from Bio import Phylo, SeqIO
 from nexus import NexusReader
@@ -130,8 +141,7 @@ def read_fasta_records(filepath: str) -> List[DataSequence]:
 def read_fasta(
     filepath: str,
     grouping: Optional[Dict[str, list]] = None,
-    grouping_auto_detect: bool = False
-) -> MSA:
+    grouping_auto_detect: bool = False) -> MSA:
     """
     Read a FASTA file and return an MSA object containing all sequences.
 
@@ -254,8 +264,7 @@ def write_fasta(msa: MSA, filepath: str, line_width: int = FASTA_LINE_WIDTH) -> 
 def write_fasta_from_network(
     network: Network, 
     filepath: str, 
-    line_width: int = FASTA_LINE_WIDTH
-) -> None:
+    line_width: int = FASTA_LINE_WIDTH) -> None:
     """
     Extract sequences from the leaf nodes of a Network and write them to a 
     FASTA file.
@@ -359,8 +368,7 @@ def _parse_vcf_genotype(gt_str: str) -> Optional[int]:
 def read_vcf(
     filepath: str,
     grouping: Optional[Dict[str, list]] = None,
-    missing_value: str = "?"
-) -> MSA:
+    missing_value: str = "?") -> MSA:
     """
     Read a VCF (Variant Call Format) file and return an MSA object.
 
@@ -618,8 +626,7 @@ def write_vcf(
     chrom: str = "chr1",
     start_pos: int = 1,
     ref_allele: str = "A",
-    alt_allele: str = "T"
-) -> None:
+    alt_allele: str = "T") -> None:
     """
     Write an MSA of SNP/allele-count data to a simplified VCF file.
 
@@ -707,7 +714,6 @@ def write_vcf(
     
     except OSError as e:
         raise IOError(f"Failed to write VCF file '{filepath}': {str(e)}")
-
 
 def _allele_count_to_gt(value: Any) -> str:
     """
@@ -841,6 +847,7 @@ class _NewickTreeBuilder:
     """
 
     def __init__(self) -> None:
+        """Create a new ``_NewickTreeBuilder`` with fresh per-build state."""
         self._internal_count: int = 0
         self._inheritance: Dict[str, Dict] = {}
 
@@ -1210,8 +1217,7 @@ def _validate_tree_topology(network: Network, label: str = "") -> List[str]:
 def _networks_to_genetrees(
     networks: List[Network],
     species_gene_mapping: Optional[Dict[str, List[str]]] = None,
-    naming_rule: Optional[Any] = None,
-) -> GeneTrees:
+    naming_rule: Optional[Any] = None) -> GeneTrees:
     """
     Convert a list of Network objects into a GeneTrees container,
     enforcing rooting and validating tree topology along the way.
@@ -1251,15 +1257,43 @@ def _networks_to_genetrees(
     return gt
 
 
+def _restrict_network_to_taxa(
+    net: Network,
+    restrict: Sequence[str],
+    min_leaves: int,
+) -> Optional[Network]:
+    """
+    Induce a subnetwork containing only leaves whose names appear in *restrict*.
+
+    Args:
+        net: Parsed network or tree.
+        restrict: Candidate leaf names (typically species or gene labels).
+        min_leaves: If fewer than this many names from *restrict* are present
+            as leaves in *net*, return None.
+
+    Returns:
+        Induced network, or None if too few target leaves are present.
+    """
+    from .GraphUtils import induced_subnetwork_by_taxa
+
+    present = sorted({name for name in restrict if net.has_node_named(name)})
+    if len(present) < min_leaves:
+        return None
+    return induced_subnetwork_by_taxa(net, present)
+
+
 ####################################
 #### Newick Reading Functions ######
 ####################################
 
 def read_newick_file(
-    filepath: str,
+    filepath: Union[str, Path],
     return_type: Literal["networks", "genetrees"] = "networks",
     species_gene_mapping: Optional[Dict[str, List[str]]] = None,
     naming_rule: Optional[Callable[..., Any]] = None,
+    *,
+    restrict_to_taxa: Optional[Sequence[str]] = None,
+    min_leaves_after_restrict: int = 1,
 ) -> Union[List[Network], GeneTrees]:
     """
     Read a file containing one or more newick strings (one per line) 
@@ -1268,7 +1302,7 @@ def read_newick_file(
     Blank lines and lines starting with '#' are skipped.
 
     Args:
-        filepath (str): Path to a file containing newick strings.
+        filepath: Path to a file containing newick strings.
         return_type (str): ``"networks"`` (default) returns a list of
             Network objects.  ``"genetrees"`` validates each network as
             a rooted binary tree and wraps them in a GeneTrees object.
@@ -1278,27 +1312,59 @@ def read_newick_file(
         naming_rule (Callable, optional): Gene-label-to-species callable.
             Only used when *return_type* is ``"genetrees"`` and no
             explicit mapping is given.
+        restrict_to_taxa (Sequence[str], optional): If set, each parsed
+            network is replaced by the subnetwork induced on those leaf
+            labels that appear in both the network and this sequence
+            (via :func:`GraphUtils.induced_subnetwork_by_taxa`). Lines
+            where fewer than ``min_leaves_after_restrict`` of these
+            labels are present are skipped with a warning.
+        min_leaves_after_restrict (int): Minimum number of ``restrict_to_taxa``
+            labels that must be present on a tree after restriction.
+            Ignored when ``restrict_to_taxa`` is None. Default ``1``.
 
     Raises:
         FileNotFoundError: If the file does not exist.
         IOError: If no valid newick strings are found, or parsing fails.
+        ValueError: If ``restrict_to_taxa`` is an empty sequence.
 
     Returns:
         list[Network] | GeneTrees: Parsed phylogenetic data.
     """
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"Newick file not found: {filepath}")
+    path = os.fspath(filepath)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Newick file not found: {path}")
+
+    restrict_tuple: Optional[Tuple[str, ...]] = None
+    if restrict_to_taxa is not None:
+        restrict_tuple = tuple(restrict_to_taxa)
+        if not restrict_tuple:
+            raise ValueError("restrict_to_taxa must be non-empty when provided")
 
     networks: List[Network] = []
 
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             for line_num, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line or line.startswith('#'):
                     continue
                 try:
+                    line = convert_newick(line, standard="PhyNetPy")
                     net = read_newick(line)
+                    if restrict_tuple is not None:
+                        restricted = _restrict_network_to_taxa(
+                            net,
+                            restrict_tuple,
+                            min_leaves_after_restrict,
+                        )
+                        if restricted is None:
+                            warnings.warn(
+                                f"Line {line_num}: skipped after restrict_to_taxa "
+                                f"(fewer than {min_leaves_after_restrict} "
+                                f"matching leaves)."
+                            )
+                            continue
+                        net = restricted
                     networks.append(net)
                 except Exception as e:
                     warnings.warn(
@@ -1306,11 +1372,11 @@ def read_newick_file(
                         f"'{line[:50]}...': {str(e)}"
                     )
     except OSError as e:
-        raise IOError(f"Failed to read newick file '{filepath}': {str(e)}")
+        raise IOError(f"Failed to read newick file '{path}': {str(e)}")
 
     if not networks:
         raise IOError(
-            f"No valid newick strings found in '{filepath}'."
+            f"No valid newick strings found in '{path}'."
         )
 
     if return_type == "genetrees":
@@ -1343,11 +1409,9 @@ def write_newick(network: Network) -> str:
     """
     return network.newick()
 
-
 def write_newick_file(
     networks: List[Network],
-    filepath: str
-) -> None:
+    filepath: str) -> None:
     """
     Write one or more Networks to a file as newick strings, one per line.
 
@@ -1382,8 +1446,7 @@ def read_nexus(
     print_validation_summary: bool = False,
     return_type: Literal["networks", "genetrees"] = "networks",
     species_gene_mapping: Optional[Dict[str, List[str]]] = None,
-    naming_rule: Optional[Callable[..., Any]] = None,
-) -> Union[List[Network], GeneTrees]:
+    naming_rule: Optional[Callable[..., Any]] = None) -> Union[List[Network], GeneTrees]:
     """
     Read a nexus file and parse all trees/networks in the TREES block 
     into PhyNetPy Network objects.
@@ -1537,8 +1600,7 @@ def write_nexus(
     taxa: Optional[Set[str]] = None,
     tree_prefix: str = "net",
     overwrite: bool = True,
-    phylonet_cmds: Optional[List[str]] = None
-) -> None:
+    phylonet_cmds: Optional[List[str]] = None) -> None:
     """
     Write one or more Networks to a nexus file with TAXA and TREES blocks.
 

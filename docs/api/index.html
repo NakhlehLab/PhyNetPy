@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <h1>PhyNetPy API Reference</h1>
+
+                <p>Welcome to the PhyNetPy documentation. PhyNetPy is a comprehensive Python library
+                for phylogenetic network analysis, providing tools for network construction, manipulation,
+                simulation, and inference.</p>
+
+                <div class="module-info">
+                    <dl>
+                        <dt>Version:</dt>
+                        <dd>0.6.0</dd>
+                        <dt>Authors:</dt>
+                        <dd>Mark Kessler, Luay Nakhleh</dd>
+                        <dt>Copyright:</dt>
+                        <dd>2025</dd>
+                    </dl>
+                </div>
+
+                <h2>Module Index</h2>
+
+                <table class="module-index">
+                    <thead>
+                        <tr>
+                            <th>Module</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><a href="Alphabet.html">Alphabet</a></td>
+                            <td>Character-to-state mapping for biological sequence data (DNA, RNA, Protein, Codon, SNP).</td>
+                        </tr>
+                        <tr>
+                            <td><a href="BiMarkers.html">BiMarkers</a></td>
+                            <td>SNP (biallelic marker) likelihood computation for phylogenetic networks, with optional GPU acceleration.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="BirthDeath.html">BirthDeath</a></td>
+                            <td>Birth-death process network simulators (Yule and CBDP models).</td>
+                        </tr>
+                        <tr>
+                            <td><a href="GTR.html">GTR</a></td>
+                            <td>Time-reversible nucleotide substitution models (GTR, JC, K80, F81, HKY, K81, SYM, TN93).</td>
+                        </tr>
+                        <tr>
+                            <td><a href="GeneTrees.html">GeneTrees</a></td>
+                            <td>Gene tree container and analysis utilities including consensus tree construction and concordance factors.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="GraphUtils.html">GraphUtils</a></td>
+                            <td>Network decomposition, distances, and structural edits: blobs, tree-of-blobs, cluster/mu/tripartition distances, reticulation-aware comparison, and ASCII rendering.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="IO.html">IO</a></td>
+                            <td>Central I/O hub for reading and writing phylogenetic file formats (FASTA, VCF, Newick, Nexus).</td>
+                        </tr>
+                        <tr>
+                            <td><a href="Logger.html">Logger</a></td>
+                            <td>Simple debug logger for internal model move compatibility.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="MSA.html">MSA</a></td>
+                            <td>Multiple Sequence Alignment parsing, storage, grouping, and distance computation.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="Matrix.html">Matrix</a></td>
+                            <td>Data matrix storage and reduction for sequence alignments with unique site pattern compression.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="MetropolisHastings.html">MetropolisHastings</a></td>
+                            <td>Hill-climbing and simulated-annealing search drivers, plus the ProposalKernel interface.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="ModelGraph.html">ModelGraph</a></td>
+                            <td>The Model container pairing a network with its likelihood calculator, plus dirty-state tracking for incremental rescoring.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="ModelMove.html">ModelMove</a></td>
+                            <td>Network topology move operations for MCMC search (add/remove/flip reticulation, SPR).</td>
+                        </tr>
+                        <tr>
+                            <td><a href="ModelSelection.html">ModelSelection</a></td>
+                            <td>Information-criterion-based reticulation-count selection (AIC, BIC, AICc) and reticulation sweep helpers.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="Network.html">Network</a></td>
+                            <td>Core phylogenetic network data structures: Node, Edge, Branch, and Network classes.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="Newick.html">Newick</a></td>
+                            <td>Newick format label extraction and Nexus file generation utilities.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="PopulationGenetics.html">PopulationGenetics</a></td>
+                            <td>Validated population allele-count data and pulse-admixture graph semantics.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="ReticulationComparison.html">ReticulationComparison</a></td>
+                            <td>Reticulation-aware network comparison: tripartition matching, Nakhleh metric, and precision/recall over reticulations.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="SNPSimulator.html">SNPSimulator</a></td>
+                            <td>SNP data simulator for phylogenetic networks using a forward-in-time 2-state CTMC.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="State.html">State</a></td>
+                            <td>State management for MCMC accept/reject decisions with model validation.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="Validation.html">Validation</a></td>
+                            <td>Comprehensive file format validation for phylogenetic data files (Newick, Nexus, FASTA, PHYLIP, etc.).</td>
+                        </tr>
+                        <tr>
+                            <td><a href="criteria.html">criteria</a></td>
+                            <td>Axis 3 -- the statistical objective: MDC, Likelihood, PseudoLikelihood, and Bayesian, which wraps one of the likelihoods rather than sitting parallel to them.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="data.html">data</a></td>
+                            <td>Axis 1 -- what you observed: GeneTrees, Alignment, BiallelicMarkers. The input knows its own type, which is half of the dispatch key.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="infer.html">infer</a></td>
+                            <td>The public inference API: the verbs infer, score, and simulate, the InferenceResult they return, plus the registry, scorers, kernels, result types, and MCMC diagnostics around them.</td>
+                        </tr>
+                        <tr>
+                            <td><a href="models.html">models</a></td>
+                            <td>Axis 2 -- the generative biology: MSC (diploid, ILS only) and Allopolyploid (whole-genome duplication).</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h2>Getting Started</h2>
+
+                <h3>Installation</h3>
+                <pre><code>pip install phynetpy</code></pre>
+
+                <h3>Quick Example</h3>
+                <pre><code>from phynetpy import read_newick
+
+# Parse a network from a Newick string
+network = read_newick("((A:0.1,B:0.2):0.3,C:0.4);")[0]
+
+# Access network properties
+print(f"Number of nodes: {len(network.V())}")
+print(f"Number of edges: {len(network.E())}")
+print(f"Leaves: {[leaf.label for leaf in network.get_leaves()]}")</code></pre>
+
+                <h2>Module Categories</h2>
+
+                <h3>Core Data Structures</h3>
+                <ul class="method-list">
+                    <li><a href="Alphabet.html">Alphabet</a> - Character-to-state mapping for biological sequence data (DNA, RNA, Protein, Codon, SNP).</li>
+                    <li><a href="MSA.html">MSA</a> - Multiple Sequence Alignment parsing, storage, grouping, and distance computation.</li>
+                    <li><a href="Matrix.html">Matrix</a> - Data matrix storage and reduction for sequence alignments with unique site pattern compression.</li>
+                    <li><a href="Network.html">Network</a> - Core phylogenetic network data structures: Node, Edge, Branch, and Network classes.</li>
+                    <li><a href="PopulationGenetics.html">PopulationGenetics</a> - Validated population allele-count data and pulse-admixture graph semantics.</li>
+                </ul>
+                <h3>Models</h3>
+                <ul class="method-list">
+                    <li><a href="GTR.html">GTR</a> - Time-reversible nucleotide substitution models (GTR, JC, K80, F81, HKY, K81, SYM, TN93).</li>
+                </ul>
+                <h3>Simulation</h3>
+                <ul class="method-list">
+                    <li><a href="BirthDeath.html">BirthDeath</a> - Birth-death process network simulators (Yule and CBDP models).</li>
+                    <li><a href="SNPSimulator.html">SNPSimulator</a> - SNP data simulator for phylogenetic networks using a forward-in-time 2-state CTMC.</li>
+                </ul>
+                <h3>Inference</h3>
+                <ul class="method-list">
+                    <li><a href="BiMarkers.html">BiMarkers</a> - SNP (biallelic marker) likelihood computation for phylogenetic networks, with optional GPU acceleration.</li>
+                    <li><a href="MetropolisHastings.html">MetropolisHastings</a> - Hill-climbing and simulated-annealing search drivers, plus the ProposalKernel interface.</li>
+                    <li><a href="ModelMove.html">ModelMove</a> - Network topology move operations for MCMC search (add/remove/flip reticulation, SPR).</li>
+                    <li><a href="ModelSelection.html">ModelSelection</a> - Information-criterion-based reticulation-count selection (AIC, BIC, AICc) and reticulation sweep helpers.</li>
+                    <li><a href="State.html">State</a> - State management for MCMC accept/reject decisions with model validation.</li>
+                    <li><a href="criteria.html">criteria</a> - Axis 3 -- the statistical objective: MDC, Likelihood, PseudoLikelihood, and Bayesian, which wraps one of the likelihoods rather than sitting parallel to them.</li>
+                    <li><a href="data.html">data</a> - Axis 1 -- what you observed: GeneTrees, Alignment, BiallelicMarkers. The input knows its own type, which is half of the dispatch key.</li>
+                    <li><a href="infer.html">infer</a> - The public inference API: the verbs infer, score, and simulate, the InferenceResult they return, plus the registry, scorers, kernels, result types, and MCMC diagnostics around them.</li>
+                    <li><a href="models.html">models</a> - Axis 2 -- the generative biology: MSC (diploid, ILS only) and Allopolyploid (whole-genome duplication).</li>
+                </ul>
+                <h3>Analysis</h3>
+                <ul class="method-list">
+                    <li><a href="GeneTrees.html">GeneTrees</a> - Gene tree container and analysis utilities including consensus tree construction and concordance factors.</li>
+                    <li><a href="GraphUtils.html">GraphUtils</a> - Network decomposition, distances, and structural edits: blobs, tree-of-blobs, cluster/mu/tripartition distances, reticulation-aware comparison, and ASCII rendering.</li>
+                    <li><a href="ReticulationComparison.html">ReticulationComparison</a> - Reticulation-aware network comparison: tripartition matching, Nakhleh metric, and precision/recall over reticulations.</li>
+                </ul>
+                <h3>I/O</h3>
+                <ul class="method-list">
+                    <li><a href="IO.html">IO</a> - Central I/O hub for reading and writing phylogenetic file formats (FASTA, VCF, Newick, Nexus).</li>
+                    <li><a href="Newick.html">Newick</a> - Newick format label extraction and Nexus file generation utilities.</li>
+                    <li><a href="Validation.html">Validation</a> - Comprehensive file format validation for phylogenetic data files (Newick, Nexus, FASTA, PHYLIP, etc.).</li>
+                </ul>
+                <h3>Infrastructure</h3>
+                <ul class="method-list">
+                    <li><a href="Logger.html">Logger</a> - Simple debug logger for internal model move compatibility.</li>
+                    <li><a href="ModelGraph.html">ModelGraph</a> - The Model container pairing a network with its likelihood calculator, plus dirty-state tracking for incremental rescoring.</li>
+                </ul>
+
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html" class="current">Home</a></li>
+            </ul>
+
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
+                <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html">criteria</a></li>
+                <li><a href="data.html">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html">models</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

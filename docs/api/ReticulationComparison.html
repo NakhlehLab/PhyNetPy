@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReticulationComparison - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; ReticulationComparison
+                </div>
+
+                <h1>ReticulationComparison Module <span class="version-badge">v0.5.0</span></h1>
+
+                <p>Reticulation-aware network comparison: tripartition matching, Nakhleh metric, and precision/recall over reticulations.</p>
+
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Source:</dt>
+                        <dd>ReticulationComparison.py</dd>
+                    </dl>
+                </div>
+
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#constants">Constants</a></li>
+                        <li><a href="#reticulationtripartition">ReticulationTripartition</a></li>
+                        <li><a href="#networkcomparison">NetworkComparison</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="constants">Constants</h2>
+                <div class="constant-def">
+                    <span class="constant-name">JACCARD</span> = 'jaccard'
+                </div>
+                <div class="constant-def">
+                    <span class="constant-name">SYMMETRIC</span> = 'symmetric'
+                </div>
+
+                <h2 id="reticulationtripartition">ReticulationTripartition</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ReticulationTripartition</span>
+                    </div>
+                    <div class="class-body">
+                        <p>The reticulation tripartition ``theta_h = (A_h, B_h, C_h)`` of a reticulation node ``h`` with parents ``u`` and ``v`` (Definition 1). * ``B = L(h)`` is the cluster of the hybrid (its leaf descendants); * ``A = L(u) \ L(h)`` are the descendants contributed by parent ``u`` other than through ``h``; * ``C = L(v) \ L(h)`` likewise for parent ``v``. Because ``L(h)`` is a subset of both ``L(u)`` and ``L(v)``, the middle block is always disjoint from the outer blocks; the two outer blocks are disjoint iff the parents share no descendant except through ``h`` (Proposition 1). There is no canonical order on the two parents, so the triple is only defined up to the swap ``(A, B, C) &lt;-&gt; (C, B, A)`` (Remark 2); every comparison in this module is invariant under that swap. Attributes: A (FrozenSet[...</p>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">is_proper</span> <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Whether the three blocks are pairwise disjoint (Proposition 1). The tripartition is proper iff the two parents share no descendant outside the hybrid, i.e. ``A`` and ``C`` are disjoint (the middle block is disjoint from the outer blocks unconditionally).</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True if ``A``, ``B``, ``C`` are pairwise disjoint.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">swapped</span> <span class="keyword">-&gt;</span> 'ReticulationTripartition'
+                            </div>
+                            <div class="function-body">
+                                <p>Return the parent-swapped tripartition ``(C, B, A)`` (Remark 2).</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> ReticulationTripartition: The swapped triple.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="networkcomparison">NetworkComparison</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">NetworkComparison</span>
+                    </div>
+                    <div class="class-body">
+                        <p>The result of :func:`compare_networks`: a reticulation-aware comparison of a reference network against an inferred one. Iterating the object yields exactly the ``(D, D_ret_hat, Prec, Rec)`` tuple that Section 9 specifies as the library's score entry point, so:: D, D_ret_hat, prec, rec = compare_networks(reference, inferred) while the remaining fields expose the unnormalized metrics (for callers that rely on the metric axioms; Remark 4), the matching, and the recovery counts. Attributes: D (float): Global metric ``D`` (unnormalized; Equation 5). D_hat (float): Bounded global score ``2 D / (|V1| + |V2|)`` in ``[0, 1]``. D_ret (float): Reticulation dissimilarity ``D_ret`` (unnormalized metric on tripartition multisets; Equation 4). D_ret_hat (float): Normalized reticulation dissimilarity ``D_...</p>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__iter__</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Yield the ``(D, D_ret_hat, Prec, Rec)`` tuple of Section 9.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">as_tuple</span> <span class="keyword">-&gt;</span> Tuple[float, float, float, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Return the ``(D, D_ret_hat, Prec, Rec)`` score tuple.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> Tuple[float, float, float, float]: The four headline scores.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">combined</span>(<span class="params">lam: float</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>The unnormalized convex combination ``D_lambda`` (Equation 6). ``D_lambda = lambda * D_ret + (1 - lambda) * D`` is a metric for every ``lambda &lt; 1`` on any class where ``D`` is a metric, and a pseudometric at ``lambda = 1`` (Proposition 5).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">lam</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Weight ``lambda`` in ``[0, 1]`` on the reticulation term.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: ``D_lambda(N1, N2)``.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">combined_normalized</span>(<span class="params">lam: float</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>The bounded reporting combination ``lambda * D_ret_hat + (1 - lambda) * D_hat`` (Remark 4). This trades the triangle inequality for a value in ``[0, 1]``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">lam</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Weight ``lambda`` in ``[0, 1]`` on the reticulation term.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The bounded combined score.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_distance</span>(<span class="params">P: FrozenSet[str], Q: FrozenSet[str], kind: str = JACCARD</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Distance between two finite sets of leaf labels (Equations 1--2). Two choices are supported, both of which are metrics on finite sets: * :data:`SYMMETRIC` -- the symmetric-difference cardinality ``|P triangle Q|``; * :data:`JACCARD` -- the normalized Jaccard distance ``|P triangle Q| / |P union Q|`` (0 when both sets are empty), which takes values in ``[0, 1]``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">P</span></td>
+                                        <td><span class="param-type">FrozenSet[str]</span></td>
+                                        <td>First set of leaf labels.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">Q</span></td>
+                                        <td><span class="param-type">FrozenSet[str]</span></td>
+                                        <td>Second set of leaf labels.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">kind</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Either :data:`JACCARD` (default) or :data:`SYMMETRIC`.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The set distance ``d(P, Q)``.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If ``kind`` is not a recognized distance.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reticulation_tripartitions</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> List[ReticulationTripartition]
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the reticulation tripartitions of a network (Definition 1). One tripartition ``(A_h, B_h, C_h)`` is produced per reticulation node ``h``. A tree (no reticulations) yields the empty list.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A phylogenetic network.  Every reticulation node is assumed binary (in-degree exactly 2).</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> List[ReticulationTripartition]: One tripartition per reticulation, as a (multiset-representing) list.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If a reticulation node does not have exactly two parents, i.e. the binary-network assumption is violated.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">tripartition_dissimilarity</span>(<span class="params">theta: ReticulationTripartition, theta_prime: ReticulationTripartition, kind: str = JACCARD, normalize: bool = False</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Tripartition dissimilarity ``delta`` between two reticulations (Equation 3, the leaf-set variant of Sections 4--5). ``delta`` is a metric on tripartitions (up to parent swap) whenever the ground set distance is a metric (Proposition 2). Under the Jaccard ground distance ``delta`` lies in ``[0, 3]``; ``normalize=True`` divides by 3 to give ``delta_bar`` in ``[0, 1]`` (Remark 3).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">theta</span></td>
+                                        <td><span class="param-type">ReticulationTripartition</span></td>
+                                        <td>First tripartition.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">theta_prime</span></td>
+                                        <td><span class="param-type">ReticulationTripartition</span></td>
+                                        <td>Second tripartition.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">kind</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Ground set distance, :data:`JACCARD` or :data:`SYMMETRIC`.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>If True (and ``kind`` is Jaccard), divide by 3 to return ``delta_bar`` in ``[0, 1]``.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: ``delta`` (or ``delta_bar`` when normalized).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">nakhleh_metric</span>(<span class="params">net1: Network, net2: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Nakhleh's global metric ``D`` on reduced phylogenetic networks (Equation 5). ``D`` is half the cardinality of the symmetric difference of the two multisets of rooted subnetworks (each subnetwork counted with its multiplicity ``kappa``): ``D(N1, N2) = 0.5 * sum_key |kappa_N1(key) - kappa_N2(key)|``. It is a metric on reduced networks, tree-child networks, semibinary tree-sibling time-consistent networks, and multilabeled trees, computable in polynomial time, and reduces on trees to half the symmetric difference of their rooted-subtree multisets. Being global, it separates networks but is dominated by tree-like structure -- which is precisely why the note pairs it with the reticulation-aware :func:`reticulation_dissimilarity`.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>If True, return the bounded score ``D_hat = 2 D / (|V1| + |V2|)`` in ``[0, 1]``.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: ``D`` (or ``D_hat`` when normalized).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">compare_networks</span>(<span class="params">reference: Network, inferred: Network, distance: str = JACCARD, rho: Optional[float] = None, tolerance: float = 0.0, alpha: float = 1.0</span>) <span class="keyword">-&gt;</span> NetworkComparison
+                            </div>
+                            <div class="function-body">
+                                <p>Reticulation-aware comparison of a reference network against an inferred one -- the single score entry point of Section 9. Computes, in one pass over the reticulations, the global metric ``D`` (Eq. 5), the reticulation dissimilarity ``D_ret`` and its normalized form ``D_ret_hat`` (Eq. 4), and reticulation-level precision / recall / F1 (Definition 4). The returned :class:`NetworkComparison` is iterable, yielding the headline ``(D, D_ret_hat, Prec, Rec)`` tuple. Reference / inferred orientation matters for precision and recall: recall is ``g / r(reference)`` (fraction of true events recovered) and precision is ``g / r(inferred)`` (fraction of inferred events that are correct), with the conventions ``Prec = 1`` when ``r(inferred) = 0`` and ``Rec = 1`` when ``r(reference) = 0`` (Definition 4). ``D`` and ``D_ret`` themselves are symmetric. Boundary behaviour (Section 6.1): two trees give ``D_ret_hat = 0``; a network compared against a tree gives ``D_ret_hat = 1`` (every reticulation is unmatched); self-comparison gives all zeros with ``Prec = Rec = 1``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">reference</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The reference (true) network ``N1``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">inferred</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The inferred network ``N2``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">distance</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Ground set distance, :data:`JACCARD` (default) or :data:`SYMMETRIC`.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rho</span></td>
+                                        <td><span class="param-type">Optional[float]</span></td>
+                                        <td>Deletion penalty for an unmatched reticulation. Defaults to the maximum real--real ``delta`` (3 under Jaccard), i.e. &quot;maximally wrong&quot;.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tolerance</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Recovery tolerance ``tau &gt;= 0``; a matched pair counts as recovered iff its cost is ``&lt;= tau``. ``tau = 0`` demands exact recovery of the hybrid and both parents.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alpha</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Block weight in ``[0, 1]`` for the topology-aware refinement (Section 8).  ``alpha = 1`` (default) is the leaf-set measure; ``alpha &lt; 1`` mixes in the induced sub-network distance ``D``.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> NetworkComparison: The bundled scores and optimal matching.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If a distance name is unrecognized, if ``alpha`` / ``tolerance`` are out of range, or if a reticulation is not binary.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reticulation_dissimilarity</span>(<span class="params">net1: Network, net2: Network, distance: str = JACCARD, rho: Optional[float] = None, alpha: float = 1.0, normalize: bool = True</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Reticulation dissimilarity ``D_ret`` between two networks (Equation 4). A convenience wrapper over :func:`compare_networks` that returns just the scalar. ``D_ret`` is a pseudometric on networks (a metric on reticulation-tripartition multisets) under the penalty condition of Proposition 3, and is deliberately blind to tree-only differences.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">distance</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Ground set distance, :data:`JACCARD` or :data:`SYMMETRIC`.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rho</span></td>
+                                        <td><span class="param-type">Optional[float]</span></td>
+                                        <td>Deletion penalty; see :func:`compare_networks`.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alpha</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Block weight for the topology-aware refinement.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>If True (default), return the bounded ``D_ret_hat`` in ``[0, 1]``; otherwise the unnormalized metric ``D_ret``.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: ``D_ret_hat`` (normalized) or ``D_ret`` (unnormalized).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reticulation_precision_recall</span>(<span class="params">reference: Network, inferred: Network, distance: str = JACCARD, rho: Optional[float] = None, tolerance: float = 0.0, alpha: float = 1.0</span>) <span class="keyword">-&gt;</span> Tuple[float, float, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Reticulation precision, recall, and F1 (Definition 4). A convenience wrapper over :func:`compare_networks`. With ``reference`` the true network and ``inferred`` the estimate, recall is the fraction of true reticulations recovered and precision the fraction of inferred reticulations that are correct, where &quot;recovered&quot; means matched at cost ``&lt;= tolerance``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">reference</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The reference (true) network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">inferred</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The inferred network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">distance</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Ground set distance.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rho</span></td>
+                                        <td><span class="param-type">Optional[float]</span></td>
+                                        <td>Deletion penalty; see :func:`compare_networks`.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tolerance</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Recovery tolerance ``tau &gt;= 0``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alpha</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Block weight for the topology-aware refinement.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Tuple[float, float, float]: ``(precision, recall, f1)``.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">combined_dissimilarity</span>(<span class="params">net1: Network, net2: Network, lam: float = 0.5, distance: str = JACCARD, rho: Optional[float] = None, alpha: float = 1.0, normalize: bool = False</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>The convex combination ``D_lambda`` of the reticulation and global terms (Equation 6). ``D_lambda = lambda * D_ret + (1 - lambda) * D`` interpolates between the global comparison (``lambda -&gt; 0``) and the reticulation-aware one (``lambda -&gt; 1``). On any class where ``D`` is a metric it is a metric for every ``lambda &lt; 1`` and a pseudometric at ``lambda = 1`` (Proposition 5).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net1</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>First network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net2</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Second network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">lam</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Weight ``lambda`` in ``[0, 1]`` on the reticulation term.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">distance</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Ground set distance.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rho</span></td>
+                                        <td><span class="param-type">Optional[float]</span></td>
+                                        <td>Deletion penalty; see :func:`compare_networks`.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alpha</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Block weight for the topology-aware refinement.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">normalize</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>If True, combine the bounded scores ``lambda * D_ret_hat + (1 - lambda) * D_hat`` in ``[0, 1]`` (Remark 4); otherwise the unnormalized metrics.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: ``D_lambda`` (unnormalized) or its bounded reporting form.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If ``lam`` is outside ``[0, 1]``.</div>
+                            </div>
+                        </div>
+
+
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
+                <li><a href="ReticulationComparison.html" class="current">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html">criteria</a></li>
+                <li><a href="data.html">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html">models</a></li>
+            </ul>
+
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#constants">Constants</a></li>
+                <li><a href="#reticulationtripartition">ReticulationTripartition</a></li>
+                <li><a href="#networkcomparison">NetworkComparison</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

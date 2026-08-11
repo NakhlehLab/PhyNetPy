@@ -33,17 +33,14 @@ import os
 import re
 import warnings
 from abc import ABC, abstractmethod
-from collections import Counter, defaultdict
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from collections import Counter
+from typing import Any, Dict, List, Optional, Set
 from io import StringIO
 from pathlib import Path
 
 # BioPython imports
 try:
     from Bio import Phylo, SeqIO, AlignIO
-    from Bio.Seq import Seq
-    from Bio.SeqRecord import SeqRecord
-    from Bio.Align import MultipleSeqAlignment
     HAS_BIOPYTHON = True
 except ImportError:
     HAS_BIOPYTHON = False
@@ -75,22 +72,14 @@ class ValidationError(Exception):
     Base exception for validation errors.
     """
     def __init__(self, message: str = "Validation error occurred") -> None:
+        """Create a ``ValidationError`` with a custom message.
+
+        Args:
+            message (str, optional): Error message. Defaults to
+                "Validation error occurred".
+        """
         self.message = message
         super().__init__(self.message)
-
-
-class FileFormatError(ValidationError):
-    """
-    Exception raised when file format is invalid or corrupted.
-    """
-    pass
-
-
-class DataIntegrityError(ValidationError):
-    """
-    Exception raised when data integrity checks fail.
-    """
-    pass
 
 
 ######################
@@ -295,7 +284,7 @@ class GeneTreeReport:
         lines.append(f"    Taxa: {sorted(self.taxa)}")
         
         if self.has_reticulation:
-            lines.append(f"    Network: Yes (contains reticulation nodes)")
+            lines.append("    Network: Yes (contains reticulation nodes)")
         
         if self.duplicate_taxa:
             lines.append(f"    [!] DUPLICATE TAXA: {sorted(self.duplicate_taxa)}")
@@ -312,7 +301,7 @@ class GeneTreeReport:
             if self.zero_branch_lengths > 0:
                 lines.append(f"    [~] {self.zero_branch_lengths} zero-length branch(es)")
         elif not self.has_branch_lengths:
-            lines.append(f"    Branch Lengths: Not present")
+            lines.append("    Branch Lengths: Not present")
         
         if self.polytomy_nodes > 0:
             lines.append(f"    Polytomies: {self.polytomy_nodes} node(s) with >2 children")
@@ -539,6 +528,7 @@ class NewickValidator(BaseValidator):
     _dependency_msg = "BioPython required for Newick validation"
     
     def __init__(self):
+        """Create a ``NewickValidator`` for ``.nwk``/``.newick``/``.tre``/``.tree`` files."""
         super().__init__()
         self.supported_extensions = {'.nwk', '.newick', '.tre', '.tree'}
         
@@ -650,6 +640,7 @@ class NexusValidator(BaseValidator):
     _dependency_msg = "python-nexus required for Nexus validation"
     
     def __init__(self):
+        """Create a ``NexusValidator`` for ``.nex``/``.nexus`` files."""
         super().__init__()
         self.supported_extensions = {'.nex', '.nexus'}
         
@@ -1023,6 +1014,7 @@ class FastaValidator(BaseValidator):
     _dependency_msg = "BioPython required for FASTA validation"
     
     def __init__(self):
+        """Create a ``FastaValidator`` for ``.fasta``/``.fas``/``.fa`` (and related) files."""
         super().__init__()
         self.supported_extensions = {'.fasta', '.fas', '.fa', '.fna', '.ffn', '.faa'}
         
@@ -1101,6 +1093,7 @@ class PhylipValidator(BaseValidator):
     _dependency_msg = "BioPython required for PHYLIP validation"
     
     def __init__(self):
+        """Create a ``PhylipValidator`` for ``.phy``/``.phylip`` files."""
         super().__init__()
         self.supported_extensions = {'.phy', '.phylip'}
         
@@ -1159,6 +1152,7 @@ class ClustalValidator(BaseValidator):
     _dependency_msg = "BioPython required for Clustal validation"
     
     def __init__(self):
+        """Create a ``ClustalValidator`` for ``.aln``/``.clustal`` files."""
         super().__init__()
         self.supported_extensions = {'.aln', '.clustal'}
         
@@ -1206,6 +1200,7 @@ class XMLValidator(BaseValidator):
     _dependency_msg = "XML parsing not available"
     
     def __init__(self):
+        """Create an ``XMLValidator`` for ``.xml`` files."""
         super().__init__()
         self.supported_extensions = {'.xml'}
         
@@ -1254,6 +1249,7 @@ class GenBankValidator(BaseValidator):
     _dependency_msg = "BioPython required for GenBank validation"
     
     def __init__(self):
+        """Create a ``GenBankValidator`` for ``.gb``/``.gbk``/``.genbank`` files."""
         super().__init__()
         self.supported_extensions = {'.gb', '.gbk', '.genbank'}
         

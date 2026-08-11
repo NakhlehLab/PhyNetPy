@@ -27,16 +27,18 @@ Tests  - [ ]
 Design - [x]
 """
 
+import copy
 import os
+import random
 import tempfile
 import subprocess
 import warnings
 from io import StringIO
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, FrozenSet, List, Literal, Optional, Set, Tuple
 
 from Bio import Phylo
 
-from .Network import *
+from .Network import Network, Node, Edge
 from .GraphUtils import get_all_clusters
 
 #########################
@@ -85,13 +87,6 @@ def phynetpy_naming(taxa_name: str) -> str:
     else:
         raise GeneTreeError("Error Applying PhyNetPy Naming Rule: \
                              3rd position is not an a-z character")
-
-def external_naming(taxa_name: str) -> str:
-    """
-    TODO: Examine the need for this function and remove if not needed.
-    """
-    return taxa_name.split("_")[0]
-    
 
 
 ####################
@@ -166,6 +161,7 @@ class GeneTrees:
 
     @species_gene_mapping.setter
     def species_gene_mapping(self, value: Optional[Dict[str, List[str]]]) -> None:
+        """Set the explicit species-to-gene mapping (``None`` to clear it)."""
         self._species_gene_mapping = value
 
     def _resolve_mapping(self) -> Dict[str, List[str]]:
@@ -419,6 +415,7 @@ class GeneTrees:
                 continue
             # Project clusters to common taxa by intersecting
             def project_clusters(net: Network) -> Set[FrozenSet[str]]:
+                """Rooted clusters of ``net``, restricted to the shared taxon set."""
                 return set(
                     frozenset(n.label for n in c if n.label in common)
                     for c in get_all_clusters(net, include_trivial=False)
@@ -440,6 +437,85 @@ class GeneTrees:
 
         return total / len(self.trees)
 
+    def most_frequent_gene_tree(
+        self,
+        *,
+        include_trivial: bool = False,
+        restrict_to_taxa: Optional[Set[str]] = None,
+        tiebreak: Literal["first", "random"] = "first",
+        seed: Optional[int] = None,
+    ) -> Network:
+        """Return a deep copy of the most frequent gene tree topology.
+
+        Gene trees are grouped by the frozenset of their rooted clusters
+        (topology signature, ignoring branch lengths and internal-node
+        labels). The largest group wins; a representative of that group is
+        returned. Guaranteed binary iff the input gene trees are binary.
+
+        This is generally a better MPL search seed than a majority-rule
+        consensus because consensus trees are often non-binary (unresolved
+        polytomies) and hence give pathologically low starting MPL scores.
+
+        Args:
+            include_trivial: Include size-1 clusters (leaves) in the
+                topology signature. Defaults to False (only informative
+                clusters matter for the topology class).
+            restrict_to_taxa: If provided, only gene trees whose leaf set
+                equals this taxa set participate. Useful when gene trees
+                have ragged taxon coverage and you want a seed that covers
+                the full species set.
+            tiebreak: On ties between multiple topologies with the same
+                maximum frequency, either pick the first one encountered
+                (``"first"``) or sample uniformly (``"random"``).
+            seed: RNG seed when ``tiebreak="random"``.
+
+        Returns:
+            Network: Deep copy of a representative gene tree from the modal
+            topology class.
+
+        Raises:
+            GeneTreeError: If no gene trees satisfy ``restrict_to_taxa``.
+        """
+        if len(self.trees) == 0:
+            raise GeneTreeError("No gene trees available to pick a seed from.")
+
+        if restrict_to_taxa is not None:
+            target = set(restrict_to_taxa)
+            eligible = [
+                t for t in self.trees
+                if {leaf.label for leaf in t.get_leaves()} == target
+            ]
+            if not eligible:
+                raise GeneTreeError(
+                    "No gene trees cover exactly restrict_to_taxa "
+                    f"({len(target)} taxa); cannot build a seed.",
+                )
+        else:
+            eligible = list(self.trees)
+
+        # Topology signature: frozenset of rooted cluster-labels.
+        def signature(tree: Network) -> FrozenSet[FrozenSet[str]]:
+            """Topology signature of ``tree``: its set of rooted clusters."""
+            clusters = get_all_clusters(tree, include_trivial=include_trivial)
+            return frozenset(
+                frozenset(n.label for n in clus) for clus in clusters
+            )
+
+        groups: Dict[FrozenSet[FrozenSet[str]], List[Network]] = {}
+        for tree in eligible:
+            groups.setdefault(signature(tree), []).append(tree)
+
+        max_size = max(len(g) for g in groups.values())
+        winners = [g for g in groups.values() if len(g) == max_size]
+
+        if len(winners) == 1 or tiebreak == "first":
+            representative = winners[0][0]
+        else:
+            rng = random.Random(seed)
+            representative = rng.choice(winners)[0]
+
+        return copy.deepcopy(representative)
+
     def build_majority_rule_consensus_tree(self,
                                            threshold: float = 0.5) -> Network:
         """
@@ -460,6 +536,12 @@ class GeneTrees:
 
         selected: List[FrozenSet[str]] = []
         def compatible(a: FrozenSet[str], b: FrozenSet[str]) -> bool:
+            """True if clusters ``a`` and ``b`` can coexist in one tree.
+
+            Two rooted clusters are compatible when one is a subset of the
+            other, or they are disjoint; overlapping-but-incomparable
+            clusters cannot both appear in a single tree.
+            """
             # Clusters a,b are compatible if one subset of the other or disjoint
             return a.issubset(b) or b.issubset(a) or a.isdisjoint(b)
 
@@ -480,10 +562,10 @@ class GeneTrees:
         name_to_node: Dict[str, Any] = {}
 
         def build(subtaxa: Set[str]) -> Any:
+            """Recursively build the subtree spanning ``subtaxa`` and return its root."""
             if len(subtaxa) == 1:
                 label = next(iter(subtaxa))
                 if label not in name_to_node:
-                    from Network import Node  # local import to avoid cycles
                     n = Node(label)
                     net.add_nodes(n)
                     name_to_node[label] = n
@@ -502,7 +584,6 @@ class GeneTrees:
             for x in subtaxa.difference(covered):
                 maximal.append({x})
 
-            from Network import Node
             parent = Node(f"Internal_{len(net.V())}")
             net.add_nodes(parent)
             for block in maximal:
@@ -510,7 +591,7 @@ class GeneTrees:
                 net.add_edges(Edge(parent, child))
             return parent
 
-        root = build(set(taxa))
+        build(set(taxa))
         # Clean spurious degree-1 chains
         net.clean([False, False, True])
         return net
@@ -538,6 +619,7 @@ class GeneTrees:
         results: Dict[Tuple[str, str], float] = {}
 
         def cluster_key(labels: Set[str]) -> Tuple[str, str]:
+            """Short, order-independent key for a cluster: its min/max labels."""
             # produce a short key from the smallest and largest label
             if len(labels) == 0:
                 return ("", "")
@@ -654,6 +736,7 @@ class GeneTrees:
         created: Dict[Any, Any] = {}
 
         def ensure_node(clade, parent_node: Optional[Any]) -> Any:
+            """Get or create the ``Node`` for ``clade``, setting its time from ``parent_node``."""
             if clade in created:
                 return created[clade]
             name = clade.name if clade.name is not None else f"Internal_{len(created)}"
@@ -671,7 +754,7 @@ class GeneTrees:
         # Create nodes top-down
         roots = [tree.root]
         for cl in roots:
-            parent_node = ensure_node(cl, None)
+            ensure_node(cl, None)
             # BFS children
             q = [cl]
             while q:
@@ -723,12 +806,15 @@ class GeneTrees:
         }
 
         def lca_of_species(names: Set[str]) -> Any:
+            """Most recent common ancestor of ``names`` in ``species_tree``."""
             return species_tree.mrca(set(names))
 
         def is_descendant(u: Any, v: Any) -> bool:
+            """True if ``v`` lies in the subtree rooted at ``u`` in ``species_tree``."""
             return v in species_tree.get_subtree_at(u)
 
         def distance_down(anc: Any, desc: Any) -> int:
+            """Number of edges from ``anc`` down to ``desc`` in ``species_tree``."""
             if anc == desc:
                 return 0
             from collections import deque
@@ -763,6 +849,7 @@ class GeneTrees:
             mapped: Dict[Any, Any] = {}
 
             def map_node(n: Any) -> Any:
+                """LCA-map gene-tree node ``n`` onto its species-tree node."""
                 if n in mapped:
                     return mapped[n]
                 if n in leaf_to_species:
@@ -771,6 +858,7 @@ class GeneTrees:
                     return sp_node
                 desc_species: Set[str] = set()
                 def collect_species(x: Any) -> None:
+                    """Accumulate into ``desc_species`` the species under gene-tree node ``x``."""
                     if x in leaf_to_species:
                         desc_species.add(leaf_to_species[x])
                     else:

@@ -1,6 +1,80 @@
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=61", "wheel", "cython>=0.29"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "phynetpy"
+description = "A library and framework for Phylogenetics research, data analytics, network inference, and network tooling."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Mark Kessler", email = "mak17@rice.edu" }]
+# Annotations across the package use PEP 604 unions (``X | None``) under
+# ``from __future__ import annotations``, and PEP 585 builtin generics
+# (``list[X]``) at runtime, which require 3.9+.
+requires-python = ">=3.9"
+keywords = [
+    "phylogenetics",
+    "networks",
+    "biology",
+    "graphical modeling",
+    "methods",
+    "statistics",
+    "bayesian",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "numpy>=1.19.0",
+    "scipy>=1.5.0",
+    "scikit-learn>=0.24.0",
+    "matplotlib>=3.3.0",
+    "networkx>=2.5",
+    "biopython>=1.78",
+    "python-nexus",
+    "newick",
+    "pulp",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+# Retained so that ``pip install 'phynetpy[fast]'`` keeps working; the Cython
+# kernels are now compiled unconditionally, so this is a no-op.
+fast = ["cython>=0.29"]
+test = ["pytest", "coverage"]
+dev = ["pytest", "coverage", "cython>=0.29", "build", "twine", "check-manifest"]
+
+[project.urls]
+Homepage = "https://github.com/NakhlehLab/PhyNetPy"
+Source = "https://github.com/NakhlehLab/PhyNetPy"
+"Bug Reports" = "https://github.com/NakhlehLab/PhyNetPy/issues"
+
+[tool.setuptools]
+# The importable ``phynetpy`` package lives in ``src/``.
+package-dir = { phynetpy = "src" }
+packages = [
+    "phynetpy",
+    "phynetpy.cython",
+    "phynetpy.data",
+    "phynetpy.models",
+    "phynetpy.criteria",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "phynetpy._version.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: longer-running tests (e.g. MCMC recovery runs); deselect with -m 'not slow'",
+]

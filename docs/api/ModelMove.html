@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ModelMove - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; ModelMove
+                </div>
+
+                <h1>ModelMove Module <span class="version-badge">v1.0.0</span></h1>
+
+                <p>Network topology move operations for MCMC search (add/remove/flip reticulation, SPR).</p>
+
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>4/24/26</dd>
+                        <dt>Source:</dt>
+                        <dd>ModelMove.py</dd>
+                    </dl>
+                </div>
+
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#move">Move</a></li>
+                        <li><a href="#addreticulation">AddReticulation</a></li>
+                        <li><a href="#removereticulation">RemoveReticulation</a></li>
+                        <li><a href="#flipreticulation">FlipReticulation</a></li>
+                        <li><a href="#switchparentage">SwitchParentage</a></li>
+                        <li><a href="#spr">SPR</a></li>
+                        <li><a href="#changenodeheight">ChangeNodeHeight</a></li>
+                        <li><a href="#changeinheritanceprob">ChangeInheritanceProb</a></li>
+                        <li><a href="#changereticsource">ChangeReticSource</a></li>
+                        <li><a href="#relocatereticulation">RelocateReticulation</a></li>
+                        <li><a href="#changereticdest">ChangeReticDest</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">MoveError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>This exception is raised whenever there is a fatal error in executing a network move.</p>
+                    </div>
+                </div>
+
+                <h2 id="move">Move</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Move</span>(<span class="params">ABC</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Abstract base class for every network proposal move. A :class:`Move` is a stateful object whose ``execute`` method mutates the ``Network`` held by a :class:`Model` and whose ``undo`` method restores the pre-execute state. The contract is: * ``execute(model)`` performs the proposal and records just enough information (either compact deltas in ``same_move_info`` or a full ``copy.deepcopy`` snapshot in ``undo_info``) to later roll back or replay the move. * ``undo(model)`` returns the network to its pre-execute state. Must be cheap and side-effect-free on anything else. * ``same_move(model)`` re-plays the proposal on a clone of the model, used by the parallel MCMC driver. * ``log_hastings_ratio()`` returns ``log[ q(x | x') / q(x' | x) ]`` (in log space, ``0.0`` for symmetric moves) plus any r...</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialise per-instance bookkeeping fields.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Apply the proposal to ``model.network`` in place.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated.  The move uses ``model.rng`` (a seeded ``numpy.random.Generator``) for every random decision.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` for chaining convenience.  The underlying network is mutated in place; no copy is returned.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Undo the most recent call to :meth:`execute`.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The same model that was passed to :meth:`execute`.  After this call, the network is restored to its pre-execute state.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None <span class="keyword">abstract</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Replay the last proposal on an identical (cloned) model. Used by the parallel MCMC driver, which runs multiple chains with shared move sequences. Concrete moves that use deep-copy ``undo_info`` typically implement this as a no-op, since replay is not meaningful without the exact random draws.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A topologically-equivalent clone of the model passed to :meth:`execute`.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">touched_nodes</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> 'set[Node] | None'
+                            </div>
+                            <div class="function-body">
+                                <p>Network nodes whose incident branches or gammas this move modified. Consumed by scorers that maintain per-network-edge likelihood caches (see :class:`phynetpy._mcmc_gt._GTLikelihoodEngine`): any node returned here -- plus its ancestor path to the root -- will have its cached partials invalidated, everything else is reused across iterations. The default implementation returns ``None`` (fully dirty), which is the safe fallback for moves whose impact on the network structure is hard to localise. Topology-preserving moves (``ChangeNodeHeight``, ``ChangeInheritanceProb``) should override and return the single node whose incident edges changed. Topology-changing moves (``SPR``, ``AddReticulation``, ``RemoveReticulation``, ``RelocateReticulation``, ``ChangeReticSource``, ``ChangeReticDest``, ``FlipReticulation``) generally keep the default ``None``: they replace edges entirely, which the engine's per-edge cache has to rebuild anyway.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Current network (i.e. the network after :meth:`execute`).  Overrides may use it to resolve stored labels to live :class:`Node` references.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> ``None`` for &quot;fully dirty&quot; (the engine rebuilds every cached partial), or a possibly-empty ``set[Node]`` of touched network nodes.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">log_hastings_ratio</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Log proposal-asymmetry correction ``log[ q(x|x') / q(x'|x) ]``. A proper MCMC sampler corrects for asymmetric proposal distributions via the Hastings ratio so the chain converges to the target distribution. This method returns that ratio **in log space**, which is the convention used throughout PhyNetPy's samplers (see :mod:`phynetpy._network_moves` and :mod:`phynetpy._mcmc_seq`): the acceptance rule is log_alpha = (logpi' - logpi) + log_hastings_ratio (+ log|J|) so a strictly symmetric move returns ``0.0`` (not ``1.0``). The previous interface returned a *linear* ratio and every move returned ``1.0``; consumed additively in log space that silently inflated acceptance by a factor of ``e`` and left genuinely asymmetric moves uncorrected. Three moves in this module are not symmetric and supply real corrections (delegated to :mod:`phynetpy._network_moves` where the math is shared with the sequence sampler): * :class:`SPR` weights candidate regraft edges by ``1 / d ** distance_decay``; the correction accounts for the forward / reverse regraft-weight asymmetry. * :class:`ChangeNodeHeight` draws a Gaussian whose sigma scales with the feasible half-range, which differs pre/post-move. * :class:`ChangeInheritanceProb` uses a Gaussian on ``gamma``; the correction is the truncated-normal normaliser ratio ``log[ Z(old) / Z(new) ]``. Dimension-changing moves (:class:`AddReticulation` / :class:`RemoveReticulation`) additionally fold the reversible-jump Jacobian into this return value, mirroring :func:`phynetpy._mcmc_seq.op_add_reticulation`. Note: the optimisation drivers (:class:`HillClimbing`, :class:`SimulatedAnnealing`) ignore this term -- they climb a score surface rather than sample a stationary distribution -- so for MPL search the exact value is immaterial.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: ``log[ q(x|x') / q(x'|x) ]``.  ``0.0`` for symmetric moves; a finite real (possibly including a log-Jacobian) for asymmetric / dimension-changing moves.  The value is computed in :meth:`execute` and cached on ``self._log_hr``.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="addreticulation">AddReticulation</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">AddReticulation</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>A move that adds a reticulation to a network. Host edges are split at a random point so their original branch length is preserved across the two halves. The new reticulation edge is given a short length drawn from Exp(mean=0.1*min_host_len) and both parent edges of the new reticulation node receive gamma = 0.5. Uses deep-copy for undo/same_move to guarantee correctness.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">max_reticulations: int | None = None, max_level: int | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``AddReticulation`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_reticulations</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional hard cap on the number of reticulations.  If the current network already has ``max_reticulations`` reticulation nodes, the proposal silently returns without modifying the network.  ``None`` disables the cap.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_level</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional cap on network level (``max_lvl`` search flag).  If the addition would push the network level above this, the move self-reverts to a no-op. ``None`` disables the per-move check.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Insert a new reticulation into ``model.network``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated in place.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` (mutated) for chaining convenience.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="removereticulation">RemoveReticulation</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">RemoveReticulation</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Remove a reticulation node from the network. Algorithm: 1. Pick a random reticulation node c (in=2, out=1). 2. Randomly choose one of its two parent edges to delete. 3. Remove that parent edge. c now has (in=1, out=1) -- suppress c. 4. The source of the deleted edge may now be degree-2 -- suppress it. Uses deep-copy for undo/same_move to guarantee correctness.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``RemoveReticulation`` proposal.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Delete a random reticulation from ``model.network``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated in place. Uses ``model.rng`` to pick the reticulation and, when it has two eligible parent edges, which one to drop.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model``, with the network mutated in place (or left unchanged if there are no reticulations to remove).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="flipreticulation">FlipReticulation</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">FlipReticulation</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Flip the direction of one reticulation edge. Picks a random reticulation edge ``z -&gt; c`` and reverses it to ``c -&gt; z``, provided the result is still a valid DAG. After the flip, ``z`` becomes a reticulation (in-degree 2) and ``c`` may lose its reticulation status. Invariants enforced on the candidate edge before the flip: * ``c`` must be a reticulation (so it currently has in-degree 2 -- otherwise the flip wouldn't produce a well-defined reticulation swap). * ``z`` must not be the root (the root cannot become a reticulation). * ``z`` must not already be a reticulation and must have in-degree &lt;= 1 (otherwise the flip would push ``z``'s in-degree to 3, an invalid structure that the acyclicity check does not catch). If the post-flip network is cyclic (rare but possible through other ...</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">max_level: int | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``FlipReticulation`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_level</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional cap on network level (``max_lvl`` search flag).  If the flip raises the level above this, the move self-reverts to a no-op.  ``None`` disables the check.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Propose a single reticulation-edge flip on ``model.network``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated in place.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` (mutated) for chaining convenience.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="switchparentage">SwitchParentage</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SwitchParentage</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>PSPP (Parentage-Switching for Polyploid Phylogenetics) move for Infer_MP_Allop. Alters the genetic parentage of a subnetwork while maintaining the same ploidy values for each leaf. Uses deep-copy for undo/same_move to guarantee correctness.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">debug_id: int = 0</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``SwitchParentage`` (PSPP) proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">debug_id</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>Identifier forwarded to the</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">internal</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>class:`~.Logger.Logger` for debug output. Defaults to 0.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Executes the PSPP (Switch-Parentage) move.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type">Model</span></td>
+                                        <td>A model object with a populated network field.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Model: The modified model with a newly proposed network topology.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restores the network to its pre-move state.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Replays the same topology change on a different model instance.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="spr">SPR</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SPR</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Subtree Prune and Regraft on a phylogenetic network. Network-safe algorithm: 1. Select a random edge (u -&gt; v) to prune, subject to: - v is not a leaf - v is not a reticulation (we don't detach reticulation children) - u is not a reticulation with out-degree 1 (would leave it (2,0)) - u is not root with out-degree 2 (would leave root with 1 child) 2. Remove the edge (u -&gt; v). 3. Repair u: if u becomes (1,1), suppress u (merge incident edges). 4. Collect subtree nodes rooted at v (used to prevent cycles). 5. Select a target edge (a -&gt; b) where neither endpoint is in the subtree (prevents cycles). Edges are weighted by inverse topological distance from the prune point so that nearby regraft locations are strongly preferred. 6. Subdivide (a -&gt; b) by inserting a new node w: a -&gt; ...</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">distance_decay: float | None = None, debug_id: int = 0</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``SPR`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">distance_decay</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Deprecated and ignored; retained only for backward-compatible construction (see class docstring).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">debug_id</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Unused; retained for constructor-signature compatibility with other moves.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Propose a subtree-prune-and-regraft move on ``model.network``. Prunes a random eligible subtree, then regrafts it uniformly at random onto an edge outside the pruned subtree. See the class docstring for the reversibility conditions and the exact log-Hastings-ratio derivation.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated in place. Uses ``model.rng`` for both the prune and regraft random draws.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model``, with the network mutated in place (or left unchanged if no edge is prunable or no regraft target is eligible).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="changenodeheight">ChangeNodeHeight</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ChangeNodeHeight</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Slide an internal node up or down by adjusting incident branch lengths. A random internal (non-root, non-leaf) node is chosen and shifted by a Gaussian delta. The step standard deviation is ``sigma_frac`` times the feasible half-range (the maximum shift that doesn't push any incident branch below ``_EPSILON``), so proposals stay in bounds naturally while still concentrating mass around the current height. ``sigma_frac`` is meant to be tuned by ``MPLKernel``'s adaptive scheduler so the acceptance rate tracks a target. Leaf branches (edges whose destination is a tip) are never modified. Under the MSC they carry a single lineage in and out, so their coalescent contribution ``g_{1,1}`` is 1.0 for any length: the length is non-identifiable and optimising it only wastes proposal budget. Concrete...</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">sigma_frac: float | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``ChangeNodeHeight`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sigma_frac</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Fraction of the feasible half-range used as the standard deviation of the truncated-Gaussian slide (see class docstring). Defaults to :attr:`_DEFAULT_SIGMA_FRAC` when ``None``.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Slide a random internal node's height by a truncated-Gaussian delta. Grows the node's parent branch(es) by ``delta`` and shrinks its non-leaf child branch(es) by the same ``delta``, keeping every adjusted branch length positive. See the class docstring for why leaf (tip) branches are held fixed.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated in place. Uses ``model.rng`` to pick the node and draw ``delta``.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model``, with the network mutated in place (or left unchanged if no node has a feasible slide range).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restore every edge length changed in ``execute`` to its old value. Resolves edges by node label (rather than by object identity) since ``model`` may be a fresh clone.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Re-apply the same edge-length deltas to a cloned ``model``. Resolves edges by node label so the replay works on a topologically-equivalent clone with distinct node objects.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">touched_nodes</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> 'set[Node] | None'
+                            </div>
+                            <div class="function-body">
+                                <p>Return the single node whose height changed. Sliding one internal node by a Gaussian delta only modifies its incident parent / child branch lengths. For the MCMC_GT engine this means only the DP partials on the touched node's ancestor-to-root path need recomputation.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="changeinheritanceprob">ChangeInheritanceProb</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ChangeInheritanceProb</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Propose a new inheritance probability for a random reticulation node. The two parent edges of a reticulation always carry complementary gammas (gamma and 1-gamma). The new value is drawn from a Gaussian centered on the current gamma, truncated to (epsilon, 1-epsilon), so proposals stay close to the current value and accept more often than a flat Uniform(0, 1) draw.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">sigma: float | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``ChangeInheritanceProb`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sigma</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Standard deviation of the truncated-Gaussian random walk on gamma. Defaults to :attr:`_SIGMA` when ``None``.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Perturb the gamma of a random reticulation's two parent edges. Draws a new gamma from a Gaussian centered on the current value, truncated to ``(_EPS, 1 - _EPS)``, and sets the two complementary parent-edge gammas to ``new_g1`` / ``1 - new_g1``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated in place. Uses ``model.rng`` to pick the reticulation and draw the new gamma.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model``, with the network mutated in place (or left unchanged if there is no eligible reticulation or the truncated draw could not land in bounds).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restore both parent edges' gammas to their pre-``execute`` values. Resolves edges by node label (rather than by object identity) since ``model`` may be a fresh clone.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Re-apply the same gamma change to a cloned ``model``. Resolves edges by node label so the replay works on a topologically-equivalent clone with distinct node objects.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">touched_nodes</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> 'set[Node] | None'
+                            </div>
+                            <div class="function-body">
+                                <p>Return the single reticulation whose inheritance prob changed. Updating the gamma on one reticulation's two parent edges only affects that node's incident branch weights -- the rest of the per-network-edge partial cache can be reused.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="changereticsource">ChangeReticSource</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ChangeReticSource</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Move the source (tail / parent) end of a reticulation edge. Picks a random reticulation edge ``z -&gt; c``, detaches the source end, cleans up anything ``z`` leaves behind (deg-2 collapse or orphan-chain pruning), then reattaches ``c``'s parent from a freshly-inserted node split into a randomly chosen host edge. Cycle-safe: host edges downstream of ``c`` are filtered out. Uses deep-copy for undo/same_move to guarantee correctness.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">max_level: int | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``ChangeReticSource`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_level</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional cap on network level (``max_lvl`` search flag).  If relocating the source raises the level above</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">this</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>the move self-reverts to a no-op.  ``None`` disables the check.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Propose a source-relocation for one reticulation edge.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated in place.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` (mutated) for chaining convenience.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="relocatereticulation">RelocateReticulation</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">RelocateReticulation</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Atomically relocate a reticulation node end-to-end. Picks a random reticulation node, detaches both incoming edges and the single outgoing edge, cleans up any passthroughs or orphan chains left behind, and then reattaches a fresh reticulation on two newly split host edges. This is equivalent to ``ChangeReticSource + ChangeReticDest`` in a single atomic step, avoiding the deep likelihood valley that would arise from the intermediate partially-detached state. Cycle-safe via a ``descendants_of_child`` filter on host edges. Uses deep-copy for undo to guarantee correctness. Hastings ratio. Like :class:`SPR`, the exact reverse density for a whole-reticulation relocation on a non-ultrametric network (two host-edge picks among state-dependent eligible sets, plus split Jacobians) is impractical to ...</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">max_level: int | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``RelocateReticulation`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_level</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional cap on network level (``max_lvl`` search flag).  If the relocation moves a reticulation into an already-occupied blob and raises the level above this, the move self-reverts to a no-op.  ``None`` disables the check.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Propose a whole-reticulation relocation.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated in place.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` (mutated) for chaining convenience.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="changereticdest">ChangeReticDest</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">ChangeReticDest</span>(<span class="params">Move</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Move the destination (head) end of a reticulation edge. Picks a random reticulation edge ``z -&gt; c``, detaches the destination end, clears ``c``'s reticulation flag and collapses it if it became a deg-2 passthrough, then reattaches into a freshly-inserted reticulation node split onto a randomly chosen host edge. Cycle-safe: edges upstream of ``z`` are filtered out. Uses deep-copy for undo/same_move to guarantee correctness.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">max_level: int | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a new ``ChangeReticDest`` proposal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_level</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional cap on network level (``max_lvl`` search flag).  If relocating the destination raises the level above this, the move self-reverts to a no-op.  ``None`` disables the check.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">execute</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> Model
+                            </div>
+                            <div class="function-body">
+                                <p>Propose a destination-relocation for one reticulation edge.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Model whose ``network`` will be mutated in place.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> The same ``model`` (mutated) for chaining convenience.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">undo</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Restore the network from the deep-copy snapshot taken in ``execute``.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_move</span>(<span class="params">model: Model</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>No-op: replay is not supported for deep-copy-based moves.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">insert_node_in_edge</span>(<span class="params">edge: Edge, node: Node, net: Network</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Given an edge, a -&gt; b, place a node c, such that a -&gt; c -&gt; b. This requires the deletion of edge a -&gt; b, then the addition of edges a -&gt; c and c -&gt; b. Gamma preservation. When ``b`` is a reticulation, the original edge ``a -&gt; b`` carries an inheritance probability ``gamma`` that represents one component of ``b``'s parental-mass split. After the insertion the new in-edge to ``b`` is ``c -&gt; b`` (``a -&gt; c`` is just a fresh tree edge feeding the new internal node), so we propagate the original gamma to ``c -&gt; b``. Without this, every ``insert_node_in_edge`` call on a retic in-edge silently breaks the retic gamma sum invariant -- which is the root cause of the historical 14% bad-gamma rate in ``AddReticulation``. The new ``a -&gt; c`` edge has no gamma (its retic-ness, if any, is the caller's responsibility to set explicitly).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">edge</span></td>
+                                        <td><span class="param-type">Edge</span></td>
+                                        <td>An edge, a -&gt; b</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A node, c.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The network that contains nodes a, b, and c</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+
+
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html" class="current">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
+                <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html">criteria</a></li>
+                <li><a href="data.html">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html">models</a></li>
+            </ul>
+
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#move">Move</a></li>
+                <li><a href="#addreticulation">AddReticulation</a></li>
+                <li><a href="#removereticulation">RemoveReticulation</a></li>
+                <li><a href="#flipreticulation">FlipReticulation</a></li>
+                <li><a href="#switchparentage">SwitchParentage</a></li>
+                <li><a href="#spr">SPR</a></li>
+                <li><a href="#changenodeheight">ChangeNodeHeight</a></li>
+                <li><a href="#changeinheritanceprob">ChangeInheritanceProb</a></li>
+                <li><a href="#changereticsource">ChangeReticSource</a></li>
+                <li><a href="#relocatereticulation">RelocateReticulation</a></li>
+                <li><a href="#changereticdest">ChangeReticDest</a></li>
+                <li><a href="#functions">Module Functions</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_slow:
+        description: Run slow recovery and stress tests
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install package and test dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[test]"
+      - name: Run default suite
+        run: python -m pytest -m "not slow" -q
+
+  windows:
+    name: Windows smoke tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - name: Install package and test dependencies
+        run: python -m pip install --upgrade pip; python -m pip install -e ".[test]"
+      - name: Run focused Windows tests
+        run: python -m pytest tests/test_infer_api.py tests/test_sim_markers.py tests/test_population_genetics.py -q
+
+  package:
+    name: Build and inspect distributions
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install release tools
+        run: python -m pip install --upgrade pip build twine check-manifest
+      - name: Check source manifest
+        run: python -m check_manifest
+      - name: Build wheel and source distribution
+        run: python -m build
+      - name: Validate metadata
+        run: python -m twine check dist/*
+      - name: Clean-install wheel
+        run: |
+          python -m venv wheel-test
+          wheel-test/bin/python -m pip install dist/*.whl
+          wheel-test/bin/python -c "import phynetpy; assert phynetpy.__version__ == '0.6.0'"
+      - name: Clean-install source distribution
+        run: |
+          python -m venv sdist-test
+          sdist-test/bin/python -m pip install dist/*.tar.gz
+          sdist-test/bin/python -c "import phynetpy; assert phynetpy.__version__ == '0.6.0'"
+
+  slow:
+    name: Slow recovery and stress tests
+    if: github.event_name == 'workflow_dispatch' && inputs.run_slow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install package and test dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[test]"
+      - name: Run slow suite
+        run: python -m pytest -m slow -q --durations=20

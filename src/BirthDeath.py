@@ -35,10 +35,11 @@ SOURCES:
 
 """
 
+import math
 import random
 import numpy as np
 import scipy
-from .Network import *
+from .Network import Network, Node, Edge
 from math import log, exp
 from typing import Union
 

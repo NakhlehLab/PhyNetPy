@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ModelGraph - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; ModelGraph
+                </div>
+
+                <h1>ModelGraph Module <span class="version-badge">v0.1.0</span></h1>
+
+                <p>The Model container pairing a network with its likelihood calculator, plus dirty-state tracking for incremental rescoring.</p>
+
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>3/11/25</dd>
+                        <dt>Source:</dt>
+                        <dd>ModelGraph.py</dd>
+                    </dl>
+                </div>
+
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#model">Model</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">ModelError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Class to handle any errors related to building the model or running likelihoods computations on the model.</p>
+                    </div>
+                </div>
+
+                <h2 id="model">Model</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">Model</span>
+                    </div>
+                    <div class="class-body">
+                        <p>A network under evaluation, together with the calculator that scores it. Search drivers mutate ``network`` through :class:`~.ModelMove.Move` objects and read the resulting score back through :meth:`likelihood`, which caches until a move marks the model dirty.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">rng: np.random.Generator | np.random.SeedSequence | int | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a model object.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">rng</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional RNG context.  Accepts a ``numpy.random.Generator`` (used directly), a ``numpy.random.SeedSequence`` (used to build a fresh generator), or an ``int`` seed.  ``None`` falls back to ``numpy.random.default_rng()``, which seeds itself from OS entropy.  Callers that care about reproducibility (e.g. ``MPL.search``) should pass a ``SeedSequence`` spawned from the search-wide seed.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_likelihood_calculator</span>(<span class="params">calculator: Any</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Set a callable that computes the model's likelihood/score. The callable should accept a single argument (the Model instance) and return a float.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">calculator</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A callable (Model) -&gt; float.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">update_network</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Called after any move modifies the network topology. Marks the model as needing recomputation. Treated as a *full* invalidation: any fine-grained dirty-node set that a move may have posted via :meth:`mark_touched` is promoted to ``None`` (all-dirty) so the scorer's fallback path kicks in. Moves that know exactly which nodes they touched should call :meth:`mark_touched` *instead of* this method (or before it).</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">mark_touched</span>(<span class="params">nodes: 'set[Node] | None'</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Record which network nodes were modified by the last move. Called by :class:`Move` subclasses from ``execute``/``undo`` to let scorers with per-network-edge caches (e.g. MCMC_GT's :class:`_GTLikelihoodEngine`) invalidate only the affected region instead of the entire likelihood. Semantics: * ``mark_touched(None)`` -&gt; escalate to full invalidation, regardless of any previously-posted set. Safe fallback used by moves whose impact is hard to localize. * ``mark_touched(set(...))`` -&gt; merge into any existing dirty set (so multiple sequential mutations accumulate). If the model is already &quot;all dirty&quot; the call is a no-op. * ``mark_touched(set())`` -&gt; initialise an empty set, signalling &quot;nothing dirty this iteration&quot; (useful for rebinding after a full rescore).</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">nodes</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Nodes whose incident branches or gammas changed, or ``None`` for all-dirty.</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">clear_dirty_nodes</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Reset the fine-grained dirty-node set to &quot;nothing dirty&quot;. Called by scorers after they have consumed ``_dirty_nodes`` and updated their caches accordingly. Leaves the coarse ``_dirty`` flag alone; the caller controls that via :meth:`likelihood` gating.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">likelihood</span> <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the model likelihood/score using the registered calculator.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: The model likelihood or score.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ModelError</code>: If no likelihood calculator has been set.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelGraph.html" class="current">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
+                <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html">criteria</a></li>
+                <li><a href="data.html">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html">models</a></li>
+            </ul>
+
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#model">Model</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

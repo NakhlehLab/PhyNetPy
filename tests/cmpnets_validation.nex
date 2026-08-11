@@ -1,0 +1,14 @@
+#NEXUS
+
+BEGIN NETWORKS;
+Network true_D = (((b:0.009,((x:0.006,(y:0.003,z:0.003):0.003):0.003)#H1:0):0.003,(#H1:0,a:0.009):0.003):0.04366667,o:0.10233333);
+Network inferred_D = ((((y,(z,x)internal2)UID_3)#UID_1,(b,o)internal1)UID_0,(a,#UID_1)UID_2)root;
+Network true_E = (o:0.10283333,(((a:0.006,((y:0.003,z:0.003):0.003)#H1:0):0.003,(x:0.009)#H2:0):0.003,(#H2:0,(#H1:0,b:0.006):0.003):0.003):0.04316667);
+Network inferred_E = (((o,(a,(y)#UID_1)UID_7)UID_5,((z)#UID_9,((x)#UID_3,b)internal1)UID_10)UID_0,(#UID_9,(#UID_3,#UID_1)UID_11)UID_4)root;
+END;
+
+BEGIN PHYLONET;
+cmpnets true_D inferred_D;
+cmpnets true_E inferred_E;
+cmpnets true_D true_E;
+END;

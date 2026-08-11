@@ -1,0 +1,5 @@
+# This directory holds MPL demo outputs: cached consensus seeds,
+# per-run logs, multi-seed summaries, and reticulation-sweep artifacts
+# (CSV + PNG).  Its contents are ignored by git (see .gitignore).  The
+# folder itself is kept in version control via this placeholder so
+# that the demo scripts always have a writable target directory.

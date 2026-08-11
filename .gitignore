@@ -1,9 +1,15 @@
+# macOS directory metadata
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 
-# C extensions
+# C extensions, and the C sources Cython generates from the .pyx files.
+# setup.py always cythonizes from .pyx, so the generated .c is never a build
+# input -- keeping it out of git avoids ~100k lines of churn per touch.
 *.so
+src/cython/*.c
 
 # Distribution / packaging
 bin/
@@ -16,11 +22,14 @@ lib64/
 parts/
 sdist/
 var/
-Data/
-Nexus/
-NexusFiles/
-Guides/
-DEFJ/
+# Anchored to the repo root only -- unanchored patterns here previously
+# shadowed same-named nested dirs (e.g. "Data/" was silently matching
+# tests/data/ too, due to case-insensitive matching on Windows/Mac,
+# leaving tests/data/MCMCseq_example0.nex permanently untracked).
+/Data/
+/Nexus/
+/NexusFiles/
+/DEFJ/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -33,6 +42,7 @@ pip-delete-this-directory.txt
 .tox/
 .coverage
 .cache
+.pytest_cache/
 nosetests.xml
 coverage.xml
 
@@ -56,3 +66,22 @@ docs/_build/
 
 # Archived modules
 archive/
+
+# PyPI deployment token
+.pypi_token
+
+# MPL demo outputs (logs, cached seeds, sweep artifacts)
+# The folder itself is kept via runs/.gitkeep so scripts always have a
+# writable target; only the contents are ignored.
+runs/*
+!runs/.gitkeep
+
+# Compiled Java bytecode for the PhyloNet cross-check harness -- rebuilt
+# on demand by tests/test_crosscheck_phylonet.py via javac.
+tests/crosscheck/*.class
+
+# Cursor canvas artifacts (local, not part of the library)
+.canvas/
+
+# Output written by examples/ when run from the repo root
+example_output.nex

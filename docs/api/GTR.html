@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GTR - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; GTR
+                </div>
+
+                <h1>GTR Module <span class="version-badge">v1.0.0</span></h1>
+
+                <p>Time-reversible nucleotide substitution models (GTR, JC, K80, F81, HKY, K81, SYM, TN93).</p>
+
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Last Edit:</dt>
+                        <dd>8/3/26</dd>
+                        <dt>Source:</dt>
+                        <dd>GTR.py</dd>
+                    </dl>
+                </div>
+
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#gtr">GTR</a></li>
+                        <li><a href="#jc">JC</a></li>
+                        <li><a href="#k80">K80</a></li>
+                        <li><a href="#f81">F81</a></li>
+                        <li><a href="#hky">HKY</a></li>
+                        <li><a href="#tn93">TN93</a></li>
+                        <li><a href="#k81">K81</a></li>
+                        <li><a href="#sym">SYM</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">SubstitutionModelError</span>(<span class="params">Exception</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Class of exception that gets raised when there is an error in the formulation of a substitution model, whether it be inputs that don't adhere to requirements or there is an issue in computation.</p>
+                    </div>
+                </div>
+
+                <h2 id="gtr">GTR</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">GTR</span>
+                    </div>
+                    <div class="class-body">
+                        <p>General superclass for time reversable substitution models. Implements Eigenvalue decomposition for computing e^(Q*t). Special case subclasses attempt to improve on the time complexity of the matrix exponential operation. This is the Generalized Time Reversible (GTR) model.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">base_freqs: list[float], transitions: list[float], states: int = 4</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a GTR substitution model object with the required/needed parameters.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">base_freqs</span></td>
+                                        <td><span class="param-type">list[float]</span></td>
+                                        <td>An array of floats of 'states' length. Must sum to 1.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">transitions</span></td>
+                                        <td><span class="param-type">list[float]</span></td>
+                                        <td>An array of floats that is ('states'^2 - 'states') / 2 long.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">states</span></td>
+                                        <td><span class="param-type">int, optional</span></td>
+                                        <td>Number of possible data states. Defaults to 4 (For DNA, {A, C, G, T}).</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SubstitutionModelError</code>: If the base frequency or transition arrays are malformed.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">getQ</span> <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Get the Q matrix.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: numpy array object that represents the Q matrix</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">set_hyperparams</span>(<span class="params">params: dict[str, Any]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Change this model's free parameters and recompute the Q matrix. Accepted names are listed in this class's ``HYPERPARAMS``; anything else raises, since a silently ignored name would leave the caller believing a change took effect.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">params</span></td>
+                                        <td><span class="param-type">dict[str, Any]</span></td>
+                                        <td>A mapping from parameter names to their values. For the GTR superclass the names are &quot;states&quot; (int), &quot;base frequencies&quot; (list[float]) and &quot;transitions&quot; (list[float]).</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SubstitutionModelError</code>: If a parameter name is not one this model accepts, or if the resulting values are malformed/invalid.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">get_hyperparams</span> <span class="keyword">-&gt;</span> tuple[list[float], list[float]]
+                            </div>
+                            <div class="function-body">
+                                <p>Gets the base frequency and transition arrays.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple[list[float], list[float]]: List that contains the base frequencies in the first element, and the transitions in the second.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">state_count</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Get the number of states for this substitution model.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: Number of states.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">buildQ</span> <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Populate the normalized Q matrix with the correct values. Based on (7), Tavaré's GTR parameterization. Off-diagonal entries are ``Q[i][j] = r_ij * pi_j``, where ``r_ij`` is the symmetric exchangeability for the pair {i, j}. Multiplying by the *destination* frequency is what makes Q time reversible, i.e. ``pi_i * Q[i][j] == pi_j * Q[j][i]``, with pi as its stationary distribution. Diagonal entries are set so that rows sum to 0, and the whole matrix is then scaled so the expected number of substitutions per unit time is 1 (``-sum_i pi_i Q_ii == 1``), which makes t directly interpretable as branch length in substitutions per site.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: A numpy ndarray that represents the just built Q matrix.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SubstitutionModelError</code>: If the resulting matrix is degenerate (a non-positive overall substitution rate).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expt</span>(<span class="params">t: float</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the matrix exponential e^(Q*t) and store the result. The eigendecomposition of Q is cached, so repeated calls with different values of t only cost a rescaling and one matrix product.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Generally going to be a positive number for phylogenetic applications. Represents time, in coalescent units or any other unit. Negative values are clamped to 0.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: A numpy ndarray that is the result of the matrix exponential with respect to Q and time t. Rows are a probability distribution over the destination state, so each sums to 1.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="jc">JC</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">JC</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>For DNA only (4 states, 6 transitions). The Jukes Cantor model is the simplest of all time reversible models, in which all parameters (transitions, base frequencies) are assumed to be equal. JC has no free parameters, so :meth:`set_hyperparams` rejects everything. A closed form for the matrix exponential, e^(Q*t), exists.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params"></span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>No arguments need to be provided, as the JC Q matrix is fixed.</p>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expt</span>(<span class="params">t: float</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the matrix exponential e^(Q*t) and store the result. For JC, a closed form solution for e^(Q*t) exists and we do not need to perform any exponentiation. With all rates and frequencies equal, the normalized Q has off-diagonals 1/3 and diagonal -1, giving P(no change) = 1/4 + 3/4 e^(-4t/3) P(change) = 1/4 - 1/4 e^(-4t/3)</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Generally going to be a positive number for phylogenetic applications. Represents time, in coalescent units or any other unit. Negative values are clamped to 0.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: A numpy ndarray that is the result of the matrix exponential with respect to Q and time t.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="k80">K80</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">K80</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>For DNA only (4 states, 6 transitions). Kimura 2 parameter model from (1). Also known as K80 or K2P. Parameterized by ``kappa``, the transition/transversion rate ratio. This is the standard parameterization: because Q is normalized to unit mean rate, only the *ratio* of the two rates is identifiable, so kappa is the model's single free parameter. It is also how BEAST, MrBayes, RAxML, PAML and PhyloNet expose K80/HKY, and how this library's own sequence-likelihood engine takes HKY85. ``kappa == 1`` gives Jukes-Cantor, and empirical DNA estimates usually fall in the 2-10 range. Kimura's original notation writes the rate matrix with a transition rate alpha and a transversion rate beta, where ``kappa = alpha / beta``. Both are available as read-only properties holding the normalized rates, whi...</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">alpha</span> <span class="keyword">-&gt;</span> float <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Normalized transition rate (A&lt;-&gt;G, C&lt;-&gt;T), in Kimura's notation. Equals ``Q[A][G]``, and satisfies ``alpha / beta == kappa`` and ``alpha + 2 * beta == 1``.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: kappa / (kappa + 2)</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">beta</span> <span class="keyword">-&gt;</span> float <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Normalized transversion rate, in Kimura's notation. Equals ``Q[A][C]``, and satisfies ``alpha + 2 * beta == 1``.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: 1 / (kappa + 2)</div>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">kappa: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize a K80 model from a transition/transversion rate ratio.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">kappa</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Transition/transversion rate ratio. ``kappa == 1`` is Jukes-Cantor. If you have separate transition and transversion rates alpha and beta, pass ``alpha / beta``.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SubstitutionModelError</code>: If kappa is not positive and finite.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expt</span>(<span class="params">t: float</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the matrix exponential e^(Q*t) and store the result. For K2P, a closed form solution for e^(Q*t) exists and we do not need to perform any exponentiation. K80 is HKY with uniform base frequencies, so this defers to the shared Tamura-Nei kernel with a single transition rate. In terms of the normalized rates alpha (transition) and beta (transversion), where alpha + 2 beta = 1, that kernel reduces to the familiar Kimura 2-parameter equations: P(no change) = 1/4 + 1/4 e^(-4 beta t) + 1/2 e^(-2 (alpha + beta) t) P(transition) = 1/4 + 1/4 e^(-4 beta t) - 1/2 e^(-2 (alpha + beta) t) P(transversion) = 1/4 - 1/4 e^(-4 beta t)</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Generally going to be a positive number for phylogenetic applications. Represents time, in coalescent units or any other unit. Negative values are clamped to 0.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: A numpy ndarray that is the result of the matrix exponential with respect to Q and time t.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="f81">F81</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">F81</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>For DNA only (4 states, 6 transitions). Formulated by Felsenstein in 1981, this substitution model assumes that all base frequencies are free, but all transition probabilities are equal. A closed form for the matrix (Q) exponential exists.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">bases: list[float]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize the F81 model with a list of base frequencies of length 4. Transition probabilities will all be the same.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">bases</span></td>
+                                        <td><span class="param-type">list[float]</span></td>
+                                        <td>a list of 4 base frequency values.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SubstitutionModelError</code>: If the base frequencies given do not sum to 1 or if the list does not have exactly 4 elements.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expt</span>(<span class="params">t: float</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the matrix exponential e^(Q*t) and store the result. For F81, a closed form solution for e^(Q*t) exists and we do not need to perform any exponentiation. Because every exchangeability is equal, Q collapses to ``u * (1 pi^T - I)``, whose exponential is P(t) = e^(-u t) I + (1 - e^(-u t)) 1 pi^T i.e. ``P[i][j] = pi_j + (delta_ij - pi_j) e^(-u t)``, with ``u = 1 / (1 - sum_i pi_i^2)`` fixing the expected substitution rate at 1. Setting pi = 1/4 recovers the Jukes-Cantor equations with u = 4/3.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Generally going to be a positive number for phylogenetic applications. Represents time, in coalescent units or any other unit. Negative values are clamped to 0.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: A numpy ndarray that is the result of the matrix exponential with respect to Q and time t.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="hky">HKY</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">HKY</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>For DNA only (4 states, 6 transitions). Developed by Hasegawa et al. (3). Free base frequencies plus a single transition/transversion rate ratio, ``kappa``: all four transversions share one rate and both transitions share another. HKY sits between F81 (``kappa == 1``) and TN93 (which frees the purine and pyrimidine ratios from each other), and reduces to K80 when the base frequencies are uniform.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">base_freqs: list[float], kappa: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize the HKY model with 4 base frequencies that sum to 1 and a transition/transversion rate ratio.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">base_freqs</span></td>
+                                        <td><span class="param-type">list[float]</span></td>
+                                        <td>Array of 4 values that sum to 1, in</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">A</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>C, G, T order.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">kappa</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Transition/transversion rate ratio. ``kappa == 1`` gives F81.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SubstitutionModelError</code>: If the base frequencies are malformed or kappa is not positive and finite.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expt</span>(<span class="params">t: float</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the matrix exponential e^(Q*t) and store the result. HKY is the special case of TN93 in which the purine and pyrimidine transition rates are equal, so the Tamura-Nei closed form applies and no exponentiation is needed.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Generally going to be a positive number for phylogenetic applications. Represents time, in coalescent units or any other unit. Negative values are clamped to 0.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: A numpy ndarray that is the result of the matrix exponential with respect to Q and time t.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="tn93">TN93</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">TN93</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>For DNA only (4 states, 6 transitions). Developed by Tamura and Nei in 1993 (4). Like HKY, but the purine transition A&lt;-&gt;G and the pyrimidine transition C&lt;-&gt;T get separate transition/transversion ratios instead of sharing one. Base frequencies are free. This is the most general model in the module that still has a closed-form matrix exponential; HKY (``kappa_r == kappa_y``), K80 and F81 are all special cases of it.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">base_freqs: list[float], kappa_r: float, kappa_y: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize with 4 base frequencies that sum to 1 and the two transition/transversion rate ratios.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">base_freqs</span></td>
+                                        <td><span class="param-type">list[float]</span></td>
+                                        <td>A list of 4 base frequencies, in</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">A</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>C, G, T order.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">kappa_r</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Purine (R = A/G) transition/transversion ratio, governing A&lt;-&gt;G.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">kappa_y</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Pyrimidine (Y = C/T) transition/transversion ratio, governing C&lt;-&gt;T.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SubstitutionModelError</code>: If the base frequencies are malformed or either ratio is not positive and finite.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expt</span>(<span class="params">t: float</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the matrix exponential e^(Q*t) and store the result. TN93 admits a closed form (see :func:`_tn93_p_matrix`), so no exponentiation is needed.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Generally going to be a positive number for phylogenetic applications. Represents time, in coalescent units or any other unit. Negative values are clamped to 0.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: A numpy ndarray that is the result of the matrix exponential with respect to Q and time t.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="k81">K81</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">K81</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>For DNA only (4 states, 6 transitions). Developed by Kimura in 1981 (5). Also known as K3ST or K3P. Base frequencies are equal, and the six substitution types collapse into three rate classes: alpha -- transitions, A&lt;-&gt;G and C&lt;-&gt;T beta -- transversions, A&lt;-&gt;C and G&lt;-&gt;T gamma -- transversions, A&lt;-&gt;T and C&lt;-&gt;G K80 is the special case ``beta == gamma``. The rates are scale free, since normalizing Q discards their overall magnitude and keeps only their ratios; they are stored exactly as given, so ``alpha``, ``beta`` and ``gamma`` read back the values passed in. Use :meth:`getQ` for the normalized rates.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">alpha: float, beta: float, gamma: float</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize with the three K3ST rate classes. Only the ratios between the three matter, so ``K81(1, 5, 2)`` and ``K81(2, 10, 4)`` are the same model.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alpha</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Transition rate, shared by A&lt;-&gt;G and C&lt;-&gt;T.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">beta</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Transversion rate, shared by A&lt;-&gt;C and G&lt;-&gt;T.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gamma</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Transversion rate, shared by A&lt;-&gt;T and C&lt;-&gt;G.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SubstitutionModelError</code>: If any rate is not positive and finite.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">expt</span>(<span class="params">t: float</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Compute the matrix exponential e^(Q*t) and store the result. K81 has three rate classes over uniform base frequencies, which the characters of the Klein four-group diagonalize exactly, so a closed form exists and no exponentiation is needed. See :func:`_k3st_p_matrix`.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">t</span></td>
+                                        <td><span class="param-type">float</span></td>
+                                        <td>Generally going to be a positive number for phylogenetic applications. Represents time, in coalescent units or any other unit. Negative values are clamped to 0.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> np.ndarray: A numpy ndarray that is the result of the matrix exponential with respect to Q and time t.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="sym">SYM</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">SYM</span>(<span class="params">GTR</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>For DNA only (4 states, 6 transitions). Developed by Zharkikh in 1994 (6), this model assumes that all base frequencies are equal, and all six exchangeabilities are free. Because nothing constrains the six rates, SYM has no closed form for ``e^(Q*t)`` and inherits :meth:`GTR.expt`. Uniform base frequencies do make Q symmetric, so that cached eigendecomposition is exact and cheap.</p>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">transitions: list[float]</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Initialize with a list of 6 free transition probabilities. Base frequencies are all equal.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">transitions</span></td>
+                                        <td><span class="param-type">list[float]</span></td>
+                                        <td>A list of 6 transition rates, in</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">AC</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>AG, AT, CG, CT, GT order.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>SubstitutionModelError</code>: if the transitions array is not of length 6.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html" class="current">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html">PopulationGenetics</a></li>
+                <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html">criteria</a></li>
+                <li><a href="data.html">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html">models</a></li>
+            </ul>
+
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#gtr">GTR</a></li>
+                <li><a href="#jc">JC</a></li>
+                <li><a href="#k80">K80</a></li>
+                <li><a href="#f81">F81</a></li>
+                <li><a href="#hky">HKY</a></li>
+                <li><a href="#tn93">TN93</a></li>
+                <li><a href="#k81">K81</a></li>
+                <li><a href="#sym">SYM</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

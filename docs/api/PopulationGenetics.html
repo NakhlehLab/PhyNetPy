@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PopulationGenetics - PhyNetPy Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>PhyNetPy Documentation</h1>
+        <p>Library for the Development and Use of Phylogenetic Network Methods</p>
+    </div>
+
+    <div class="document">
+        <div class="documentwrapper">
+            <div class="body">
+                <div class="breadcrumb">
+                    <a href="index.html">Home</a> &raquo; PopulationGenetics
+                </div>
+
+                <h1>PopulationGenetics Module <span class="version-badge">v1.0.0</span></h1>
+
+                <p>Validated population allele-count data and pulse-admixture graph semantics.</p>
+
+                <div class="module-info">
+                    <dl>
+                        <dt>Author:</dt>
+                        <dd>Mark Kessler</dd>
+                        <dt>Source:</dt>
+                        <dd>PopulationGenetics.py</dd>
+                    </dl>
+                </div>
+
+                <div class="toc">
+                    <h4>Contents</h4>
+                    <ul>
+                        <li><a href="#exceptions">Exceptions</a></li>
+                        <li><a href="#populationdata">PopulationData</a></li>
+                        <li><a href="#admixturegraph">AdmixtureGraph</a></li>
+                    </ul>
+                </div>
+
+                <h2 id="exceptions">Exceptions</h2>
+                <div class="class-def exception-def">
+                    <div class="class-header">
+                        <span class="keyword">exception</span> <span class="name">PopulationGeneticsError</span>(<span class="params">ValueError</span>)
+                    </div>
+                    <div class="class-body">
+                        <p>Raised when population-genetic data or graph semantics are invalid.</p>
+                    </div>
+                </div>
+
+                <h2 id="populationdata">PopulationData</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">PopulationData</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Biallelic allele counts arranged as populations by sites. The numerator and denominator are stored separately. This avoids treating missing genotypes as reference alleles and supports different sample sizes among populations and sites. A callable count of zero denotes a missing population/site observation. This is an analysis container, not a ``phynetpy.data.Data`` inference-axis type; :func:`phynetpy.infer.infer` and :func:`phynetpy.infer.score` do not consume it.</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">populations</span> <span class="keyword">-&gt;</span> tuple[str, ...] <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Population labels in matrix-row order.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">sites</span> <span class="keyword">-&gt;</span> tuple[str, ...] | None <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Site labels in matrix-column order, if supplied.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">n_populations</span> <span class="keyword">-&gt;</span> int <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Number of populations.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">n_sites</span> <span class="keyword">-&gt;</span> int <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Number of sites.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">alternate_allele_counts</span> <span class="keyword">-&gt;</span> np.ndarray <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Read-only population-by-site alternate-allele counts.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">called_allele_counts</span> <span class="keyword">-&gt;</span> np.ndarray <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Read-only population-by-site callable-allele counts.</p>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">alternate_allele_counts: Any, called_allele_counts: Any, populations: Sequence[str], sites: Sequence[str] | None = None</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Create a population-by-site allele-count table.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">alternate_allele_counts</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Two-dimensional nonnegative integer counts.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">called_allele_counts</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Matching counts of callable gene copies.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">populations</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Unique population labels, one per matrix row.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sites</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional unique site labels, one per matrix column.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>PopulationGeneticsError</code>: If dimensions, labels, or counts are inconsistent.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">allele_frequencies</span>(<span class="params">population: str | None = None</span>) <span class="keyword">-&gt;</span> np.ndarray
+                            </div>
+                            <div class="function-body">
+                                <p>Calculate alternate-allele frequencies without imputing missing data.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">population</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional population label. If omitted, return the full population-by-site matrix.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> A floating-point array. Entries with no called alleles are ``NaN``.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>PopulationGeneticsError</code>: If *population* is unknown.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_genotypes</span>(<span class="params">genotypes: Any, samples: Sequence[str], population_members: Mapping[str, Sequence[str]], ploidy: int | Sequence[int] = 2, sites: Sequence[str] | None = None</span>) <span class="keyword">-&gt;</span> PopulationData <span class="keyword">@classmethod</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Aggregate a sample-by-site matrix into population allele counts. Genotypes are alternate-allele copy counts. ``None``, ``NaN``, ``&quot;.&quot;``, ``&quot;?&quot;``, ``&quot;-&quot;``, ``&quot;./.&quot;``, and ``&quot;.|.&quot;`` are treated as missing. Every sample must belong to exactly one population.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">genotypes</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Two-dimensional sample-by-site genotype-count matrix.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">samples</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Unique sample labels in matrix-row order.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">population_members</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Population label -&gt; member sample labels.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">ploidy</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Positive ploidy shared by all samples, or one value per sample.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sites</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Optional site labels.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Aggregated: class:`PopulationData`.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>PopulationGeneticsError</code>: If genotypes, ploidy, or membership are malformed.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">from_biallelic_markers</span>(<span class="params">markers: Any, called_alleles: int | Mapping[str, int] | None = None</span>) <span class="keyword">-&gt;</span> PopulationData <span class="keyword">@classmethod</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Aggregate PhyNetPy biallelic-marker rows by their population mapping. The marker object's species-to-allele mapping supplies population membership. Callable gene-copy counts must be supplied explicitly: ``BiallelicMarkers`` defaults its ``samples`` values to one even when a VCF row contains diploid genotype dosages, so that default is not a reliable denominator.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">markers</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A :class:`phynetpy.data.BiallelicMarkers` object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">called_alleles</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A positive count shared by all marker rows, or a row-label -&gt; count mapping. Pass ``markers.samples`` explicitly when those values are known to have been supplied correctly.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Aggregated: class:`PopulationData`.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>PopulationGeneticsError</code>: If *markers* is the wrong type or callable-copy counts are absent or incomplete.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 id="admixturegraph">AdmixtureGraph</h2>
+                <div class="class-def">
+                    <div class="class-header">
+                        <span class="keyword">class</span> <span class="name">AdmixtureGraph</span>
+                    </div>
+                    <div class="class-body">
+                        <p>Validated pulse-admixture topology and proportions over a ``Network``. ``Network``, ``Node``, and ``Edge`` remain the graph implementation. This wrapper adds only population-genetic invariants: * one rooted directed acyclic component; * nodes with multiple parents are explicitly marked as reticulations; * their incoming inheritance proportions are strictly between zero and one and sum to one. The wrapper intentionally does not interpret ``Edge.length``. PhyNetPy networks currently carry sequence or coalescent units, while classical allele-frequency admixture graphs use genetic-drift lengths. Conflating those quantities would be scientifically incorrect. Divergence nodes may be unary or multifurcating, and admixture may involve more than two sources. Thus the wrapper does not impose the bin...</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">network</span> <span class="keyword">-&gt;</span> Network <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>The wrapped graph. Call :meth:`validate` after mutating it.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">root</span> <span class="keyword">-&gt;</span> Node <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>The unique ancestral root.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">terminal_populations</span> <span class="keyword">-&gt;</span> tuple[Node, ...] <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Terminal population nodes in deterministic label order.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">admixture_nodes</span> <span class="keyword">-&gt;</span> tuple[Node, ...] <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>Nodes with ancestry from two or more parent populations.</p>
+                            </div>
+                        </div>
+                        <h4>Constructor</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__init__</span>(<span class="params">network: Network, tolerance: float = 1e-08</span>) <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Attach admixture-graph semantics to an existing network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">network</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The directed graph to validate and wrap.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tolerance</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>Absolute tolerance for inheritance proportions summing to one and for recognizing an unused zero gamma.</td>
+                                    </tr>
+                                </table>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>PopulationGeneticsError</code>: If the graph is not a valid admixture history.</div>
+                            </div>
+                        </div>
+                        <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">admixture_proportions</span>(<span class="params">node: Node | str</span>) <span class="keyword">-&gt;</span> dict[str, float]
+                            </div>
+                            <div class="function-body">
+                                <p>Map each parent population to its contribution at an admixture node.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>An admixture node or its label.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Parent label -&gt; inheritance proportion, sorted by parent label.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>PopulationGeneticsError</code>: If the node is absent or is not an admixture node.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">validate</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Validate topology, reticulation flags, and inheritance proportions.</p>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>PopulationGeneticsError</code>: At the first violated invariant.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="footer">
+                    <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="sphinxsidebar">
+            <h3>Navigation</h3>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+            </ul>
+
+            <h3>Modules</h3>
+            <ul>
+                <li><a href="Alphabet.html">Alphabet</a></li>
+                <li><a href="BiMarkers.html">BiMarkers</a></li>
+                <li><a href="BirthDeath.html">BirthDeath</a></li>
+                <li><a href="GTR.html">GTR</a></li>
+                <li><a href="GeneTrees.html">GeneTrees</a></li>
+                <li><a href="GraphUtils.html">GraphUtils</a></li>
+                <li><a href="IO.html">IO</a></li>
+                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="MSA.html">MSA</a></li>
+                <li><a href="Matrix.html">Matrix</a></li>
+                <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
+                <li><a href="ModelGraph.html">ModelGraph</a></li>
+                <li><a href="ModelMove.html">ModelMove</a></li>
+                <li><a href="ModelSelection.html">ModelSelection</a></li>
+                <li><a href="Network.html">Network</a></li>
+                <li><a href="Newick.html">Newick</a></li>
+                <li><a href="PopulationGenetics.html" class="current">PopulationGenetics</a></li>
+                <li><a href="ReticulationComparison.html">ReticulationComparison</a></li>
+                <li><a href="SNPSimulator.html">SNPSimulator</a></li>
+                <li><a href="State.html">State</a></li>
+                <li><a href="Validation.html">Validation</a></li>
+                <li><a href="criteria.html">criteria</a></li>
+                <li><a href="data.html">data</a></li>
+                <li><a href="infer.html">infer</a></li>
+                <li><a href="models.html">models</a></li>
+            </ul>
+
+            <h3>This Page</h3>
+            <ul>
+                <li><a href="#exceptions">Exceptions</a></li>
+                <li><a href="#populationdata">PopulationData</a></li>
+                <li><a href="#admixturegraph">AdmixtureGraph</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

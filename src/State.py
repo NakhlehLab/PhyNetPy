@@ -1,6 +1,28 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
+"""
+Author : Mark Kessler
+Last Edit : 5/12/26
+First Included in Version : 1.0.0
+
+State -- accept/reject bookkeeping for MCMC and hill-climbing search.
+
+Wraps a :class:`~.ModelGraph.Model` with snapshot / restore semantics so
+that the search driver can:
+
+* propose a topology or parameter move and tentatively evaluate it,
+* atomically commit the move on acceptance, or
+* revert it on rejection or model-validation failure.
+
+The class is intentionally lightweight -- it holds references to the
+mutable model and a small set of rollback hooks; the heavy lifting (move
+execution, scoring) is delegated to :mod:`.ModelMove` and the inference
+module's scorer.
+"""
+
+from __future__ import annotations
+
 ##############################################################################
 ##  -- PhyNetPy --                                                              
 ##  Library for the Development and use of Phylogenetic Network Methods
@@ -17,41 +39,39 @@
 ##
 ##############################################################################
 
-""" 
-Author : Mark Kessler
-Last Edit : 3/11/25
-First Included in Version : 1.0.0
-
-V1 Architecture - State management for MCMC accept/reject.
-"""
-
 import copy
 from typing import Callable
 
 # Relative imports
 from .BirthDeath import CBDP
+from .GraphUtils import _valid_network_degrees
 from .ModelGraph import Model
 from .Matrix import Matrix
-from .GTR import GTR, JC
+from .GTR import GTR
 from .ModelMove import Move
-from .Network import Network
 
 
-def acyclic_routine(model: Model) -> bool:
-    """
-    Checks the Model's network for cycles. 
+def network_invariants_routine(model: Model) -> bool:
+    """Validate that a network satisfies phylogenetic invariants.
+
+    Checks:
+      1. Exactly one root (in-degree 0, out-degree >= 2)
+      2. Every leaf has (in=1, out=0)
+      3. Every reticulation has (in=2, out=1)
+      4. Every other internal node has (in=1, out >= 2)
+      5. The graph is a DAG (acyclic)
 
     Args:
-        model (Model): A Model with a phylogenetic network.
+        model: A Model whose ``network`` attribute is the phylogenetic network.
 
     Returns:
-        bool: True if the model's network is free of cycles, False if it 
-              contains cycles.
+        True when all invariants hold, False otherwise.
     """
-    assert(model.network is not None)
-    if model.network.is_acyclic():
-        return True
-    return False
+    net = model.network
+    if net is None or not _valid_network_degrees(net):
+        return False
+
+    return net.is_acyclic()
 
 
 class State:
@@ -70,7 +90,7 @@ class State:
 
     def __init__(self, 
                  model: Model | None = None,
-                 validate: Callable[[Model], bool] = acyclic_routine) -> None:
+                 validate: Callable[[Model], bool] = network_invariants_routine) -> None:
         """
         Initialize a State. A State contains two models-- one current model, 
         and one proposed model that contains one singular edit to the current 
@@ -87,10 +107,12 @@ class State:
                                                 should be a Model object, and 
                                                 return True if the Model is 
                                                 valid, False if not.
-                                                Defaults to 'acyclic_routine',
-                                                which checks that the Model's 
-                                                phylogenetic network is 
-                                                free of cycles.
+                                                Defaults to
+                                                'network_invariants_routine',
+                                                which checks that the Model's
+                                                phylogenetic network is acyclic
+                                                and has well-formed root, leaf,
+                                                and reticulation degrees.
         Returns:
             N/A                                   
         """
@@ -118,7 +140,10 @@ class State:
     def generate_next(self, move: Move) -> bool:
         """
         Set the proposed model to a new model that is the result of applying
-        one move to the former proposed model
+        one move to the former proposed model.
+
+        Relies on the move's own undo() for rollback instead of deep-copying
+        the entire model as a snapshot.
 
         Args:
             move (Move): Any instantiated subclass of Move.
@@ -127,8 +152,18 @@ class State:
             bool: True if the network associated with the model is valid, False
                   otherwise.
         """
-        self.proposed_model = self.proposed_model.execute_move(move)
-        return self.validate_proposed_network(move)
+        try:
+            self.proposed_model = move.execute(self.proposed_model)
+            valid = self.validate_proposed_network(move)
+        except Exception:
+            try:
+                move.undo(self.proposed_model)
+            except Exception:
+                pass
+            return False
+        if not valid:
+            return False
+        return True
 
     def revert(self, move: Move) -> None:
         """
@@ -144,15 +179,18 @@ class State:
 
     def commit(self, move: Move) -> None:
         """
-        The proposed change was beneficial. Make the same move on the current
-        model as was made to the proposed model.
+        The proposed change was beneficial.  Synchronise the current model
+        by copying the proposed network (cheaper than replaying the move).
         
         Args:
             move (Move): Any instantiated subclass of Move.
         Returns:
             N/A
         """
-        move.same_move(self.current_model)
+        self.current_model.network = copy.deepcopy(
+            self.proposed_model.network
+        )
+        self.current_model.update_network()
 
     def proposed(self) -> Model:
         """
@@ -186,20 +224,6 @@ class State:
         self.current_model = Model()
         self.current_model.network = network
         self.proposed_model = copy.deepcopy(self.current_model)
-
-    def write_line_to_summary(self, line: str) -> None:
-        """
-        Accumulate log output by appending line to the end of the
-        current string.
-
-        'line' need not be new line terminated.
-        
-        Args:
-            line (str): logging information, plain text.
-        Returns:
-            N/A
-        """
-        self.current_model.summary_str += line.strip() + "\n"
 
     def validate_proposed_network(self, prev_move: Move) -> bool:
         """
