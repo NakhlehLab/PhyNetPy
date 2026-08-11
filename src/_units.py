@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from enum import Enum
 import math
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
 if TYPE_CHECKING:
     from .Network import Network
 
-BranchThetaKey = str | tuple[str, str]
+BranchThetaKey = Union[str, tuple[str, str]]
 
 
 class BranchLengthUnit(str, Enum):
