@@ -8,6 +8,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `GraphUtils.get_displayed_trees(net)` enumerates the trees a network
+  displays, returning one `Network` per *distinct* topology. A network with
+  k reticulations admits at most 2^k displayed trees but often fewer: when the
+  hybrid-edge choices at two reticulations discard each other's subtrees,
+  different choices display the same tree. Pass `unique=False` for the old
+  one-tree-per-choice behaviour.
+- `GraphUtils.count_displayed_trees(net, exact=True)` counts distinct displayed
+  trees by enumerating them, rather than multiplying reticulation in-degrees.
+
+### Fixed -- displayed trees kept nodes that stand for no taxon
+
+- Deleting the unused in-edges of a reticulation can leave a tree node with no
+  children, and `Network.clean` suppresses degree-2 chains and floaters but not
+  a childless internal node. Every displayed tree therefore carried the
+  orphaned node as an extra leaf named after an internal node. On
+  `(t2,((t4,t6),(((t3)#H1,(t1)#H2),((t5,#H1),#H2))));` one of the four trees
+  from `get_all_subtrees` had seven leaves rather than six. Displayed trees are
+  now reduced over the network's own leaf set, and the suppression cascades,
+  since orphaning a node can orphan its parent.
+- Reticulation flags are cleared on displayed trees. A reticulation with two
+  children survived the degree-2 contraction and stayed flagged, so `is_tree`
+  was False and `count_reticulations` non-zero for a tree.
+- `softwired_cluster_distance`, `displayed_tree_distance`,
+  `average_path_distance`, and `weighted_average_path_distance` share that
+  enumeration and so counted clusters over the spurious leaves. Their values
+  change for networks where a reticulation's parents can both be discarded.
+
 ---
 
 ## [0.6.0] -- 2026-08-10
