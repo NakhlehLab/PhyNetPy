@@ -60,6 +60,7 @@ library from 0.2.0 to 0.5.0:
 | 0.3.2   | 2 April 2026    |
 | 0.3.3   | 17 April 2026   |
 | 0.5.0   | 13 May 2026     |
+| 0.6.0   | 11 August 2026  |
 
 
 All behavioural changes are recorded in `CHANGELOG.md`, with migration tables for
@@ -384,7 +385,7 @@ ordinary contributors.
 
 ## 2. Products
 
-**Software.** PhyNetPy v0.5.0, MIT licensed.
+**Software.** PhyNetPy v0.6.0, MIT licensed.
 
 - PyPI: `pip install phynetpy`. Python 3.9–3.13.
 - Source: [https://github.com/NakhlehLab/PhyNetPy](https://github.com/NakhlehLab/PhyNetPy)

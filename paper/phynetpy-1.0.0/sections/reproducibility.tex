@@ -1,0 +1,81 @@
+\section{Reproducibility and software citation}
+\label{sec:reproducibility}
+
+\subsection{Reproducing the results in this paper}
+
+Every number, table and figure in Sections~\ref{sec:validation}
+and~\ref{sec:examples} is produced by scripts in
+\code{paper/phynetpy-1.0.0/}. Running
+
+\begin{lstlisting}[language=bash, basicstyle=\ttfamily\small]
+export PHYLONET_JAR=/path/to/phylonet.jar
+python paper/phynetpy-1.0.0/benchmarks/run_all.py
+python paper/phynetpy-1.0.0/benchmarks/make_analyses_table.py
+python paper/phynetpy-1.0.0/listings/paper_listings.py
+\end{lstlisting}
+
+regenerates the benchmark JSON, rewrites \code{tables/*.tex} and
+\code{figures/performance.pdf} from it, rebuilds Table~\ref{tab:analyses} from
+the live dispatch registry, and executes every code listing. The PhyloNet
+comparison is skipped with a warning if no jar is configured; the rest needs
+nothing beyond the package and its dependencies. The tables under
+\code{tables/} are generated files and carry a header saying so.
+
+\subsection{Environment}
+
+Measurements in this paper were taken under the following configuration, which
+each benchmark script also records in the \code{meta} block of its own JSON
+output:
+
+\begin{itemize}
+  \item \phynetpy\ 0.6.0.\footnote{[TODO: re-run every benchmark against the
+    tagged 1.0.0 release and update this section, the abstract and
+    Section~\ref{sec:validation}. The measurements reported here were taken on
+    the 0.6.0 codebase, which is 1.0.0 without the two unbuilt cells of
+    Table~\ref{tab:analyses}.]}
+  \item CPython 3.14.2 on Windows 11 (build 10.0.26200), AMD64.
+  \item AMD Family 25 Model 97 (Zen 4 class), single-threaded unless stated.
+  \item NumPy 2.3.5, SciPy 1.16.3, NetworkX 3.6.1.
+  \item PhyloNet 3.8.2 (\code{phylonet.jar}, 41{,}019{,}851 bytes) under
+    Java 1.8.0\_491, with BEAGLE for the Felsenstein cross-check.
+\end{itemize}
+
+Random seeds are fixed in every script and recorded per measurement. The
+head-to-head comparison runs three replicates per condition, replicate $i$ using
+seed $20260925 + i$ for both simulation and \phynetpy's search; the component
+benchmarks use seeds 7 and 11, and the marker timings use seed 1. PhyloNet's
+search is stochastic and its command-line interface is not seeded here, so its
+variation across replicates is uncontrolled -- which is part of why the
+comparison is replicated rather than run once. The generating network for each
+replicate is stored as Newick in the benchmark JSON alongside its results,
+together with the gene-tree concordance that replicate produced, so any trial can
+be reconstructed exactly.
+
+\paragraph{Timing protocol.} Microbenchmarks report the median of repeated
+batches measured with \code{time.perf_counter}, after one warm-up call; loop and
+repeat counts are stored per measurement. Interpreter start-up and module import
+are excluded and recorded separately. For the PhyloNet comparison, PhyloNet's
+self-reported running time is used because it excludes JVM start-up and is
+therefore comparable to \phynetpy's in-process timing; total wall time including
+JVM start-up is also recorded in the JSON. No result in this paper uses
+multi-threading or GPU offload.
+
+\paragraph{Datasets.} All data are simulated by \phynetpy\ itself, from seeds
+recorded in the scripts, so no external archive is required. No empirical dataset
+is analysed in this paper.
+
+\subsection{Citing \phynetpy}
+
+\begin{itemize}
+  \item Software: \phynetpy\ version 1.0.0.
+  \item Repository: \url{https://github.com/NakhlehLab/PhyNetPy}, tag
+    \code{v1.0.0}.\footnote{[TODO: create the \code{v1.0.0} tag and confirm this
+    reference before submission; the current release tag is \code{v0.6.0}.]}
+  \item Package: \url{https://pypi.org/project/phynetpy/}.
+  \item License: MIT.
+  \item Archived release: \cite{TODO_PhyNetPy_archive}.
+\end{itemize}
+
+Methods reimplemented from published work should be cited to their original
+sources rather than to \phynetpy\ or to PhyloNet generically; the relevant
+citation for each is given in Table~\ref{tab:analyses}.

@@ -211,3 +211,21 @@ class Model:
             self._cached_likelihood = self._likelihood_calculator(self)
             self._dirty = False
         return self._cached_likelihood
+
+    def prime_likelihood(self, value: float) -> None:
+        """Seed the likelihood cache with an already-known score.
+
+        Search drivers call this after committing an accepted proposal: the
+        committed network's score is exactly the proposal's score, which was
+        computed moments earlier.  Without priming, :meth:`update_network`
+        would leave the model dirty and the next :meth:`likelihood` call
+        would recompute a value it already has.
+
+        Only valid when ``value`` is genuinely the score of the model's
+        current network; passing anything else silently corrupts the search.
+
+        Args:
+            value: The known score of the current network.
+        """
+        self._cached_likelihood = value
+        self._dirty = False

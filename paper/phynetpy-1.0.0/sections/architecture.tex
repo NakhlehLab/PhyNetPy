@@ -1,0 +1,173 @@
+\section{Software architecture}
+\label{sec:architecture}
+
+Figure~\ref{fig:architecture} shows how \phynetpy\ is put together. The
+organising decision is that no analysis owns the network. A network is a data
+structure that the library provides; scoring criteria, generative models,
+topology moves and search drivers are separate things that act on it. Almost
+everything else in this section follows from that separation.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{architecture.pdf}
+  \caption{\phynetpy\ organised by dependency. A run is specified by picking
+  one object from each of the three axes at the top and calling one of the
+  three verbs. The registry resolves that triple to an engine. Engines do not
+  implement their own search machinery, topology moves, parameter optimisation
+  or network operations; they compose the shared components below them. The
+  compiled kernels sit under the network layer and are not part of the public
+  interface.}
+  \label{fig:architecture}
+\end{figure}
+
+\subsection{The network as a reusable object}
+
+\code{Network} is a rooted directed acyclic graph over \code{Node} and
+\code{Edge}, with \code{Branch} carrying length, inheritance probability and
+tag. Trees are not a separate type: a tree is a network with no reticulation
+nodes, and the same code paths serve both. Gene trees supplied as input are
+\code{Network} instances, which is why a gene tree and an inferred species
+network can be passed to the same distance function.
+
+Reticulation in-degree is not capped at two. \code{Network.get_parents}
+imposes no limit and \code{add_edges} does not check parent counts, so a node
+representing an unresolved or aggregated reticulation with three or more
+parents is representable. Some analyses do assume the binary case --
+\code{reticulation_tripartitions} requires exactly two parents, for instance --
+so the generality lives in the representation rather than throughout the
+library.
+
+The operations on \code{Network} are the ones network methods keep needing:
+topological ordering, breadth- and depth-first traversal, most recent common
+ancestors, leaf-descendant sets for all nodes at once, induced subnetworks,
+acyclicity checking, and copying. Ploidy is first class through
+\code{subgenome_count} and the corresponding edge queries, and conversion to a
+multiply-labelled (MUL) tree is implemented because the allopolyploid parsimony
+criterion is defined on that representation.
+
+Two design choices in this layer are worth stating because they change what
+callers can get wrong. Branch lengths carry an explicit unit --
+\code{SUBSTITUTIONS_PER_SITE}, \code{COALESCENT_2N}, or
+\code{UNSPECIFIED} -- and \code{convert_network_branch_lengths} refuses to
+convert when either side is unspecified rather than guessing. Coalescent
+methods and sequence methods read branch lengths on different scales, and
+mixing them produces plausible numbers rather than an error, so the unit is
+tracked on the network instead of being left to the user's discipline. Second,
+the node and edge containers are compiled (\code{graph_core_cy}) and maintain
+indices for incidence and name lookup, because network search evaluates large
+numbers of candidate topologies and the cost of a single edge insertion sets
+the ceiling on tractable problem size.
+
+\subsection{Three axes and three verbs}
+
+A phylogenetic network method is usually presented as a named procedure. Seen
+from the software side, most of those names vary along three independent
+dimensions: the data observed, the generative process assumed, and the
+statistical objective optimised. \phynetpy\ makes those three dimensions
+explicit arguments and reduces the interface to three verbs.
+
+\code{infer} searches for a network. \code{score} evaluates one. \code{simulate}
+runs the axes backwards, taking a model and a network and returning a data
+object. The axes are:
+
+\begin{itemize}
+  \item \textbf{Data} --- \code{GeneTrees}, \code{Alignment},
+    \code{BiallelicMarkers}. Each carries the species-to-allele mapping, and
+    each knows its own type, so a caller never declares what kind of data it
+    is passing.
+  \item \textbf{Model} --- \code{MSC}, the multispecies network coalescent with
+    a population parameter $\theta = 4N\mu$, and \code{Allopolyploid}, which
+    takes a subgenome map. The generative process used to be implicit in which
+    scorer a user selected.
+  \item \textbf{Criterion} --- \code{MDC} (minimising deep coalescences),
+    \code{Likelihood}, \code{PseudoLikelihood}, and \code{Bayesian}.
+\end{itemize}
+
+\code{Bayesian} wraps an objective rather than sitting beside the likelihoods:
+\code{Bayesian(objective=Likelihood())}. Sampling a posterior is a mode of
+working with a likelihood, not a fourth thing to optimise, and expressing it
+that way means \code{Bayesian} inherits the data types its objective accepts
+instead of restating them.
+
+The practical consequence is that changing method means changing an argument.
+The same call that maximises a pseudo-likelihood samples a posterior if the
+criterion changes, and \code{infer} returns the same type either way:
+\code{InferenceResult} carries \code{.best}, \code{.score}, \code{.trace}, and
+\code{.posterior}, the last populated only for Bayesian runs. Attribute access
+falls through to \code{.raw}, the engine's native result, so per-method
+richness -- log writers, information criteria, reticulation posteriors --
+remains reachable without the wrapper having to enumerate it.
+
+\subsection{Dispatch as a validity matrix}
+
+Whether a run makes sense depends on the whole triple, not on any one axis. A
+parsimony criterion over a sequence alignment is not a missing feature; it is a
+category error, since minimising deep coalescences is defined over gene-tree
+topologies. Maximum parsimony from gene trees under the \code{MSC}, by
+contrast, is perfectly well defined and simply has no implementation here yet.
+A criterion that needs branch lengths applied to gene trees that lack them is a
+third, different problem.
+
+\code{resolve} in \code{_registry.py} separates these three cases and raises
+accordingly: \code{TypeError} when the criterion is not defined on that data
+type, \code{ValueError} when the data lack branch lengths the criterion
+requires, and \code{NotImplementedError} when the combination is meaningful but
+unbuilt. Conflating them is what makes an unsupported request hard to act on:
+a user cannot tell whether to supply different data, wait for a release, or
+abandon the idea.
+
+Because dispatch is a registry keyed on the triple, the set of available
+methods is introspectable. \code{validity_matrix()} tabulates it, and the table
+is built from the registry rather than maintained alongside it, so it cannot
+fall out of date. \code{registered_cells()} lists every implemented
+combination; Table~\ref{tab:analyses} is generated from that call.
+
+\subsection{Extension}
+
+Adding a method means registering a cell:
+
+\begin{lstlisting}
+@register(GeneTrees, MSC, MyCriterion)
+class MyEngine(Engine):
+    method = "MyMethod"
+
+    def infer(self, data): ...
+    def score(self, network, data, optimize=False): ...
+\end{lstlisting}
+
+What an engine author does not write is the rest of the run. The search drivers
+(\code{HillClimbing}, \code{SimulatedAnnealing}, and the \code{ProposalKernel}
+interface), the ten topology-move classes, the Brent coordinate-ascent
+optimiser for branch lengths and inheritance probabilities, the I/O layer and
+the chain diagnostics are shared. This is the claim in the paper's title that
+rests on design rather than measurement, so it is worth being precise about the
+evidence: the registry is exercised by all seven of the library's own methods,
+which is a weaker statement than demonstrating that an outside contributor
+found it sufficient.
+
+One cross-cutting option illustrates the difference between a constraint and a
+hint. A starting phylogeny can be supplied as \code{Start(net)}, a free
+starting point, or as \code{Start(net, StartMode.AUGMENT)}, which requires the
+result to contain that network. The second is enforced by a cluster-containment
+check in the accept path rather than approximated by withholding moves, which
+is possible because adding reticulations to a network preserves its clusters.
+Engines whose proposal kernels cannot honour it -- \code{MCMC_SEQ} and the
+allopolyploid search -- reject the request explicitly instead of accepting it
+and quietly doing something else.
+
+\subsection{Compiled kernels}
+
+Four Cython modules are compiled at install time. \code{graph_core_cy} provides
+the node and edge containers; \code{gt_msc_cy} and \code{mpl_engine_cy}
+accelerate the gene-tree coalescent likelihood and the pseudo-likelihood
+dynamic program. The fourth, \code{seq_engine_cy}, is compiled but not yet
+called from \code{_seq_likelihood.py}.
+
+None of these are part of the public interface, and the graph core is a hard
+requirement rather than an optional accelerator: \code{Network} imports it at
+module load and raises with build instructions if it is absent. That removes a
+class of bug in which a user unknowingly runs a slower parallel implementation,
+at the cost of requiring a C compiler when installing from source.
+Section~\ref{sec:validation} reports what the compiled pseudo-likelihood kernel
+is worth against the pure-Python path that remains in the repository as a
+reference.

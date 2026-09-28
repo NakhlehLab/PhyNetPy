@@ -45,9 +45,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import defj_common as dc  # noqa: E402
 
 from phynetpy.IO import read_newick
-from phynetpy.infer import MPAllopComponent
-from phynetpy._infer_mp_allop import allele_map_set, partition_gene_trees
-from phynetpy.ModelFactory import ModelFactory
+from phynetpy._infer_mp_allop import (
+    allele_map_set,
+    build_mp_allop_model,
+    partition_gene_trees,
+)
 from phynetpy.ModelMove import SwitchParentage
 from phynetpy.MetropolisHastings import (
     Infer_MP_Allop_Kernel,
@@ -80,9 +82,9 @@ def build_model(scenario: str, g: int, n: int, t: int, r: int, seed: int):
         gt.put_item("allele maps", allele_map_set(gt, gene_map))
         gt.put_item("leaf descendants", gt.leaf_descendants_all())
     start_net = partition_gene_trees(gene_map, rng=rng)
-    model = ModelFactory(MPAllopComponent(start_net, gene_map, gts, rng)).build()
-    # ModelFactory builds a Model() with its own default (OS-seeded) RNG; pin
-    # it so the move stream is reproducible.
+    model = build_mp_allop_model(start_net, gene_map, gts, rng)
+    # build_mp_allop_model seeds the scorer only and leaves model.rng
+    # OS-seeded; pin it so the move stream is reproducible.
     model.rng = rng
     return model
 

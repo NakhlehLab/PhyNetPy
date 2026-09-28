@@ -44,7 +44,7 @@ from typing import Callable
 
 # Relative imports
 from .BirthDeath import CBDP
-from .GraphUtils import _valid_network_degrees
+from .GraphUtils import _clone_net, _valid_network_degrees
 from .ModelGraph import Model
 from .Matrix import Matrix
 from .GTR import GTR
@@ -177,20 +177,33 @@ class State:
         """
         move.undo(self.proposed_model)
 
-    def commit(self, move: Move) -> None:
+    def commit(self, move: Move, score: float | None = None) -> None:
         """
         The proposed change was beneficial.  Synchronise the current model
         by copying the proposed network (cheaper than replaying the move).
-        
+
+        Uses :func:`_clone_net` rather than ``copy.deepcopy``: the structural
+        clone is ~5x cheaper and carries everything the scorers read.  The
+        same clone already round-trips the network on every *rejected*
+        proposal via ``Move.execute``/``Move.undo``, so accept and reject now
+        agree on copy semantics.
+
         Args:
             move (Move): Any instantiated subclass of Move.
+            score (float | None): The proposal's score, if the caller already
+                computed it.  The committed network is a clone of the
+                proposed one, so its score is identical; supplying it here
+                primes the cache and skips a redundant full re-score.  Omit
+                it to leave the model dirty and re-score lazily.
         Returns:
             N/A
         """
-        self.current_model.network = copy.deepcopy(
+        self.current_model.network = _clone_net(
             self.proposed_model.network
         )
         self.current_model.update_network()
+        if score is not None:
+            self.current_model.prime_likelihood(score)
 
     def proposed(self) -> Model:
         """

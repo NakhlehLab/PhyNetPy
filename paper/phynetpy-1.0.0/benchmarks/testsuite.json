@@ -1,0 +1,107 @@
+{
+  "meta": {
+    "phynetpy_version": "0.6.0",
+    "python": "3.14.2",
+    "python_implementation": "CPython",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "numpy": "2.3.5",
+    "scipy": "1.16.3",
+    "networkx": "3.6.1",
+    "timestamp": "2026-09-25 12:06:39-0500",
+    "timing": {
+      "clock": "time.perf_counter",
+      "statistic": "median of repeats",
+      "warmup_calls": 1,
+      "startup_included": false,
+      "parallelism": "single process, single thread unless noted"
+    },
+    "measurement": {
+      "quantity": "test counts and wall time for the default suite",
+      "command": "pytest -m \"not slow\" -q",
+      "note": "The PhyloNet cross-check module skips unless a PhyloNet jar and BEAGLE are installed, so the skipped count is environment dependent. This run had both present."
+    }
+  },
+  "suite": {
+    "collected_total": 1130,
+    "default_run": {
+      "passed": 1125,
+      "failed": 0,
+      "skipped": 0,
+      "deselected": 5,
+      "errors": 0
+    },
+    "default_summary_line": "1125 passed, 5 deselected in 45.42s",
+    "wall_seconds": 46.09875730006024
+  },
+  "areas": {
+    "substitution_models": {
+      "files": [
+        "tests/test_gtr.py"
+      ],
+      "collected": 432
+    },
+    "network_comparison": {
+      "files": [
+        "tests/test_network_distances.py",
+        "tests/test_reticulation_comparison.py",
+        "tests/test_blobs_and_subnet.py"
+      ],
+      "collected": 153
+    },
+    "phylonet_crosscheck": {
+      "files": [
+        "tests/test_crosscheck_phylonet.py"
+      ],
+      "collected": 23
+    },
+    "network_core": {
+      "files": [
+        "tests/test_network.py",
+        "tests/test_network_moves.py"
+      ],
+      "collected": 163
+    },
+    "inference_api": {
+      "files": [
+        "tests/test_infer_api.py"
+      ],
+      "collected": 88
+    },
+    "memory_and_mutation_cost": {
+      "files": [
+        "tests/test_memory.py"
+      ],
+      "collected": 9
+    }
+  },
+  "ci": {
+    "workflow": ".github/workflows/ci.yml",
+    "python_versions": [
+      "3.9",
+      "3.10",
+      "3.11",
+      "3.12",
+      "3.13",
+      "3.14"
+    ],
+    "jobs": [
+      "tests",
+      "windows",
+      "package",
+      "slow"
+    ],
+    "runs_on": [
+      "ubuntu-latest",
+      "windows-latest"
+    ],
+    "windows_smoke": true,
+    "packaging_checks": [
+      "check_manifest",
+      "build",
+      "twine check"
+    ],
+    "slow_suite_opt_in": true
+  }
+}

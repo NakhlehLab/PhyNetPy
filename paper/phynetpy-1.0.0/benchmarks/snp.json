@@ -1,0 +1,176 @@
+{
+  "meta": {
+    "phynetpy_version": "0.6.0",
+    "python": "3.14.2",
+    "python_implementation": "CPython",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "numpy": "2.3.5",
+    "scipy": "1.16.3",
+    "networkx": "3.6.1",
+    "timestamp": "2026-09-25 12:06:33-0500",
+    "timing": {
+      "clock": "time.perf_counter",
+      "statistic": "median of repeats",
+      "warmup_calls": 1,
+      "startup_included": false,
+      "parallelism": "single process, single thread unless noted"
+    },
+    "measurement": {
+      "quantity": "exact biallelic-marker log-likelihood of a fixed network",
+      "criterion": "Likelihood",
+      "model": "MSC(theta=0.02)",
+      "branch_length_unit": "substitutions_per_site",
+      "seed": 1,
+      "device": "CPU",
+      "note": "cold_s is a single call including likelihood-model construction; warm_per_call_s is the median of repeated calls, which is what an inference loop pays per candidate network."
+    }
+  },
+  "configurations": {
+    "3taxa_100sites": {
+      "taxa": 3,
+      "sites": 100,
+      "newick": "((A:0.01,B:0.01):0.01,C:0.02);",
+      "cold_s": 1.6812186999013647,
+      "warm_per_call_s": 0.00037376664113253355,
+      "log_likelihood": -106.19449292263452,
+      "protocol": {
+        "loops": 3,
+        "repeats": 5,
+        "median_total_s": 0.0011212999233976007,
+        "per_call_us": 373.76664113253355,
+        "best_per_call_us": 364.5666486894091,
+        "worst_per_call_us": 557.0999734724561
+      }
+    },
+    "3taxa_1000sites": {
+      "taxa": 3,
+      "sites": 1000,
+      "newick": "((A:0.01,B:0.01):0.01,C:0.02);",
+      "cold_s": 0.0016858000308275223,
+      "warm_per_call_s": 0.001197933335788548,
+      "log_likelihood": -1030.6258388705405,
+      "protocol": {
+        "loops": 3,
+        "repeats": 5,
+        "median_total_s": 0.003593800007365644,
+        "per_call_us": 1197.933335788548,
+        "best_per_call_us": 1163.1999708091219,
+        "worst_per_call_us": 1267.1666918322444
+      }
+    },
+    "3taxa_5000sites": {
+      "taxa": 3,
+      "sites": 5000,
+      "newick": "((A:0.01,B:0.01):0.01,C:0.02);",
+      "cold_s": 0.005505899898707867,
+      "warm_per_call_s": 0.0049449999739105506,
+      "log_likelihood": -5161.819066263107,
+      "protocol": {
+        "loops": 3,
+        "repeats": 5,
+        "median_total_s": 0.01483499992173165,
+        "per_call_us": 4944.999973910551,
+        "best_per_call_us": 4920.533353773256,
+        "worst_per_call_us": 5029.699997976422
+      }
+    },
+    "4taxa_100sites": {
+      "taxa": 4,
+      "sites": 100,
+      "newick": "((A:0.01,B:0.01):0.01,(C:0.01,D:0.01):0.01);",
+      "cold_s": 0.002063699997961521,
+      "warm_per_call_s": 0.0006882666687791547,
+      "log_likelihood": -114.1939290540714,
+      "protocol": {
+        "loops": 3,
+        "repeats": 5,
+        "median_total_s": 0.002064800006337464,
+        "per_call_us": 688.2666687791547,
+        "best_per_call_us": 498.79999520877993,
+        "worst_per_call_us": 853.4000177557269
+      }
+    },
+    "4taxa_1000sites": {
+      "taxa": 4,
+      "sites": 1000,
+      "newick": "((A:0.01,B:0.01):0.01,(C:0.01,D:0.01):0.01);",
+      "cold_s": 0.0021310000447556376,
+      "warm_per_call_s": 0.0017326666663090389,
+      "log_likelihood": -1067.0491626621254,
+      "protocol": {
+        "loops": 3,
+        "repeats": 5,
+        "median_total_s": 0.005197999998927116,
+        "per_call_us": 1732.6666663090389,
+        "best_per_call_us": 1711.1000294486682,
+        "worst_per_call_us": 2845.133344332377
+      }
+    },
+    "4taxa_5000sites": {
+      "taxa": 4,
+      "sites": 5000,
+      "newick": "((A:0.01,B:0.01):0.01,(C:0.01,D:0.01):0.01);",
+      "cold_s": 0.008266399963758886,
+      "warm_per_call_s": 0.007944433329006037,
+      "log_likelihood": -5774.660390975424,
+      "protocol": {
+        "loops": 3,
+        "repeats": 5,
+        "median_total_s": 0.02383329998701811,
+        "per_call_us": 7944.433329006037,
+        "best_per_call_us": 7642.266650994618,
+        "worst_per_call_us": 11734.366649761796
+      }
+    },
+    "5taxa_100sites": {
+      "taxa": 5,
+      "sites": 100,
+      "newick": "(((A:0.01,B:0.01):0.005,C:0.015):0.005,(D:0.01,E:0.01):0.01);",
+      "cold_s": 0.002345999935641885,
+      "warm_per_call_s": 0.0007036000024527311,
+      "log_likelihood": -120.9019189896627,
+      "protocol": {
+        "loops": 3,
+        "repeats": 5,
+        "median_total_s": 0.0021108000073581934,
+        "per_call_us": 703.6000024527311,
+        "best_per_call_us": 653.3000074947873,
+        "worst_per_call_us": 799.8666648442546
+      }
+    },
+    "5taxa_1000sites": {
+      "taxa": 5,
+      "sites": 1000,
+      "newick": "(((A:0.01,B:0.01):0.005,C:0.015):0.005,(D:0.01,E:0.01):0.01);",
+      "cold_s": 0.002965899999253452,
+      "warm_per_call_s": 0.002401999974002441,
+      "log_likelihood": -1196.5587666207703,
+      "protocol": {
+        "loops": 3,
+        "repeats": 5,
+        "median_total_s": 0.007205999922007322,
+        "per_call_us": 2401.999974002441,
+        "best_per_call_us": 2337.033317113916,
+        "worst_per_call_us": 2709.2333184555173
+      }
+    },
+    "5taxa_5000sites": {
+      "taxa": 5,
+      "sites": 5000,
+      "newick": "(((A:0.01,B:0.01):0.005,C:0.015):0.005,(D:0.01,E:0.01):0.01);",
+      "cold_s": 0.01179220003541559,
+      "warm_per_call_s": 0.011887299983451763,
+      "log_likelihood": -6461.321282847848,
+      "protocol": {
+        "loops": 3,
+        "repeats": 5,
+        "median_total_s": 0.03566189995035529,
+        "per_call_us": 11887.299983451763,
+        "best_per_call_us": 11590.466679384312,
+        "worst_per_call_us": 12218.766690542301
+      }
+    }
+  }
+}

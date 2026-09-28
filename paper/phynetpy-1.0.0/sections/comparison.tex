@@ -1,0 +1,118 @@
+\section{Moving from PhyloNet to \phynetpy}
+\label{sec:comparison}
+
+This section is addressed to researchers with working PhyloNet analyses. The
+useful question is not which tool is better but what specifically changes, and
+what does not carry over.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{transition.pdf}
+  \caption{The same body of methods under two organisations. On the left each
+  analysis is a named command that handles its own input, search and scoring.
+  On the right the analyses are cells of a product of three axes over shared
+  machinery, so the empty cells are visible and distinguishable: $-$ marks a
+  combination that is well defined but unbuilt, $\times$ one that is not
+  defined for that data type. The figure makes no claim that one organisation
+  produces better inferences.}
+  \label{fig:transition}
+\end{figure}
+
+\begin{table}[t]
+  \centering
+  \scriptsize
+  \input{tables/comparison}
+  \caption{PhyloNet 3.8.2 and \phynetpy\ 1.0.0. \phynetpy\ entries are verified
+  against the source; entries marked \textbf{[TODO]} could not be established
+  from the material available and must be checked against PhyloNet's
+  documentation before submission rather than guessed.}
+  \label{tab:comparison}
+\end{table}
+
+\subsection{What changes}
+
+\paragraph{The driver file disappears.}
+A PhyloNet analysis is a NEXUS file with a \code{PHYLONET} block, executed
+through \code{java -jar}. Parameters are positional and flag-based inside that
+block, and a sweep over conditions means generating files. In \phynetpy\ the
+analysis is Python: a loop over $\theta$ values or reticulation budgets is a
+loop, and intermediate results stay as objects.
+
+\paragraph{Choosing a method becomes choosing arguments.}
+Switching from maximum likelihood to pseudo-likelihood changes one argument
+rather than one command name, and the return type does not change with it. In
+PhyloNet the corresponding change is to a different command with its own syntax
+and output format.
+
+\paragraph{Results are objects, not text to parse.}
+PhyloNet writes inferred networks and scores to standard output, and a pipeline
+around it is usually a parser. \code{infer} returns an \code{InferenceResult}
+whose \code{.best} is a \code{Network} that the distance functions, the
+decomposition routines and \code{score} all accept directly. This is the
+practical difference most PhyloNet users will notice first.
+
+\paragraph{Unsupported requests say which kind of unsupported they are.}
+The three-way distinction between \code{TypeError}, \code{ValueError} and
+\code{NotImplementedError} tells a user whether to change the data, change the
+criterion, or wait.
+
+\subsection{What does not carry over}
+
+\paragraph{Input files are not automatically compatible.}
+\phynetpy\ reads extended Newick, NEXUS, FASTA and VCF, so the \emph{data} in a
+PhyloNet NEXUS file is usually readable. The \code{PHYLONET} command block is
+not: there is no translator from a PhyloNet block to a \phynetpy\ call, and the
+migration is a rewrite of the driver, not a conversion.
+
+\paragraph{Results will not be identical.}
+The two implementations agree on the likelihood of a fixed network to $10^{-5}$
+(Section~\ref{sec:validation}), but searches are stochastic and their proposal
+kernels differ, so inferred networks can differ --- and in
+Section~\ref{sec:headtohead} they did on one reticulate condition. The
+\code{phylonet} search preset exists to narrow this gap when the point is a
+comparison rather than an analysis, by reproducing PhyloNet's
+optimise-every-parameter-per-topology behaviour.
+
+\paragraph{Some analyses are not available.}
+Maximum parsimony from gene trees under diploid hybridization is absent, and
+marker maximum likelihood can score but not search. Anyone whose work depends on
+those should continue to use PhyloNet.
+
+\paragraph{Installation requirements differ.}
+PhyloNet needs a JVM and a jar. \phynetpy\ installs with \code{pip}, but the
+compiled graph core is required, so installing from a source distribution needs
+a C compiler. Where a wheel is published for the target platform this does not
+arise.
+
+\subsection{A worked correspondence}
+
+A PhyloNet pseudo-likelihood analysis reads, inside a NEXUS file:
+
+\begin{lstlisting}[language={}]
+BEGIN PHYLONET;
+InferNetwork_MPL (gt1,gt2,...,gt100) 1 -pl 4;
+END;
+\end{lstlisting}
+
+The corresponding \phynetpy\ analysis:
+
+\begin{lstlisting}
+from phynetpy.data import GeneTrees
+from phynetpy.criteria import PseudoLikelihood
+from phynetpy.infer import infer
+
+gts = GeneTrees.from_file("genes.nex", {"A": ["A1", "A2"], "B": ["B1"]})
+result = infer(gts, criterion=PseudoLikelihood(), max_reticulations=1)
+\end{lstlisting}
+
+The species-to-allele mapping moves from a \code{-a} flag into the data object,
+where it travels with the data it describes instead of being restated per
+command. The reticulation budget is a keyword rather than a positional integer.
+The gene trees are named once, by file, rather than enumerated in the call.
+
+These two are not equivalent in every respect, and the differences are the
+point of this section rather than a caveat to it: the searches differ, the
+defaults differ, and \code{-pl 4} requests four-way parallelism from PhyloNet
+whereas the \phynetpy\ call above is single-threaded. A migration should
+re-establish results on data with a known answer rather than assume the two
+calls are interchangeable.

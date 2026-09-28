@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "phynetpy_version": "0.6.0",
+    "python": "3.14.2",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "numpy": "2.3.5",
+    "timestamp": "2026-08-24 15:12:46",
+    "has_cython_mpl": true
+  },
+  "kernel_ab": {
+    "6taxa": {
+      "taxa": 6,
+      "gene_trees": 40,
+      "active_triplets": 20,
+      "cython_cached_ms": 0.1370650005992502,
+      "cython_with_extract_ms": 0.17230200115591288,
+      "python_ms": 0.5775599973276258,
+      "speedup_kernel": 4.213767152829132,
+      "speedup_with_extract": 3.352021412711292,
+      "max_abs_diff": 0.0,
+      "log_pl": -375.01477250705557
+    },
+    "8taxa": {
+      "taxa": 8,
+      "gene_trees": 60,
+      "active_triplets": 56,
+      "cython_cached_ms": 0.2936894993763417,
+      "cython_with_extract_ms": 0.3388180024921894,
+      "python_ms": 1.974454999435693,
+      "speedup_kernel": 6.722933586759168,
+      "speedup_with_extract": 5.827479605311732,
+      "max_abs_diff": 0.0,
+      "log_pl": -1381.8546849968238
+    },
+    "10taxa": {
+      "taxa": 10,
+      "gene_trees": 80,
+      "active_triplets": 120,
+      "cython_cached_ms": 0.5788710003253073,
+      "cython_with_extract_ms": 0.6219119997695088,
+      "python_ms": 4.664885008241981,
+      "speedup_kernel": 8.058591647569948,
+      "speedup_with_extract": 7.500876345802729,
+      "max_abs_diff": 0.0,
+      "log_pl": -3928.919784311708
+    },
+    "12taxa": {
+      "taxa": 12,
+      "gene_trees": 100,
+      "active_triplets": 220,
+      "cython_cached_ms": 1.116636999649927,
+      "cython_with_extract_ms": 1.1811499996110797,
+      "python_ms": 9.54209000337869,
+      "speedup_kernel": 8.545382256158625,
+      "speedup_with_extract": 8.078643700224898,
+      "max_abs_diff": 0.0,
+      "log_pl": -8821.516653392555
+    },
+    "16taxa": {
+      "taxa": 16,
+      "gene_trees": 120,
+      "active_triplets": 560,
+      "cython_cached_ms": 3.1266389996744692,
+      "cython_with_extract_ms": 3.2764660008251667,
+      "python_ms": 28.002389997709543,
+      "speedup_kernel": 8.956067521906116,
+      "speedup_with_extract": 8.546522378275018,
+      "max_abs_diff": 0.0,
+      "log_pl": -25379.807767124094
+    }
+  }
+}

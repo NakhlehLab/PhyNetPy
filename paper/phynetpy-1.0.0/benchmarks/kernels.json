@@ -1,0 +1,142 @@
+{
+  "meta": {
+    "phynetpy_version": "0.6.0",
+    "python": "3.14.2",
+    "python_implementation": "CPython",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "numpy": "2.3.5",
+    "scipy": "1.16.3",
+    "networkx": "3.6.1",
+    "timestamp": "2026-09-25 12:06:31-0500",
+    "timing": {
+      "clock": "time.perf_counter",
+      "statistic": "median of repeats",
+      "warmup_calls": 1,
+      "startup_included": false,
+      "parallelism": "single process, single thread unless noted"
+    },
+    "measurement": {
+      "quantity": "log pseudo-likelihood of a fixed network (triplet DP)",
+      "toggle": "phynetpy._mpl._HAS_CYTHON_MPL",
+      "seed": 11,
+      "model": "MSC(theta=0.5)",
+      "cython_available": true
+    }
+  },
+  "mpl_engine": {
+    "6taxa_40genes": {
+      "taxa": 6,
+      "gene_trees": 40,
+      "cython_ms": 1.1348600033670664,
+      "python_ms": 1.4646333099032443,
+      "speedup": 1.2905850109773531,
+      "log_pl_cython": -540.3169247464914,
+      "log_pl_python": -540.3169247464913,
+      "abs_diff": 1.1368683772161603e-13,
+      "protocol": {
+        "cython": {
+          "loops": 5,
+          "repeats": 3,
+          "median_total_s": 0.005674300016835332,
+          "per_call_us": 1134.8600033670664,
+          "best_per_call_us": 1033.560000360012,
+          "worst_per_call_us": 1198.5599994659424
+        },
+        "python": {
+          "loops": 3,
+          "repeats": 3,
+          "median_total_s": 0.0043938999297097325,
+          "per_call_us": 1464.6333099032443,
+          "best_per_call_us": 1431.2999943892162,
+          "worst_per_call_us": 1626.266671034197
+        }
+      }
+    },
+    "8taxa_60genes": {
+      "taxa": 8,
+      "gene_trees": 60,
+      "cython_ms": 2.9712799936532974,
+      "python_ms": 4.685933313642939,
+      "speedup": 1.5770756453959804,
+      "log_pl_cython": -1805.307509616393,
+      "log_pl_python": -1805.3075096163918,
+      "abs_diff": 1.1368683772161603e-12,
+      "protocol": {
+        "cython": {
+          "loops": 5,
+          "repeats": 3,
+          "median_total_s": 0.014856399968266487,
+          "per_call_us": 2971.2799936532974,
+          "best_per_call_us": 2941.459999419749,
+          "worst_per_call_us": 3073.420003056526
+        },
+        "python": {
+          "loops": 3,
+          "repeats": 3,
+          "median_total_s": 0.014057799940928817,
+          "per_call_us": 4685.933313642939,
+          "best_per_call_us": 4588.700016029179,
+          "worst_per_call_us": 5532.833359514673
+        }
+      }
+    },
+    "10taxa_80genes": {
+      "taxa": 10,
+      "gene_trees": 80,
+      "cython_ms": 7.101540011353791,
+      "python_ms": 11.077933323880037,
+      "speedup": 1.5599339447737919,
+      "log_pl_cython": -5035.969284326285,
+      "log_pl_python": -5035.969284326284,
+      "abs_diff": 9.094947017729282e-13,
+      "protocol": {
+        "cython": {
+          "loops": 5,
+          "repeats": 3,
+          "median_total_s": 0.035507700056768954,
+          "per_call_us": 7101.540011353791,
+          "best_per_call_us": 6596.620008349419,
+          "worst_per_call_us": 7491.460000164807
+        },
+        "python": {
+          "loops": 3,
+          "repeats": 3,
+          "median_total_s": 0.03323379997164011,
+          "per_call_us": 11077.933323880037,
+          "best_per_call_us": 10852.59998217225,
+          "worst_per_call_us": 11184.866695354382
+        }
+      }
+    },
+    "12taxa_100genes": {
+      "taxa": 12,
+      "gene_trees": 100,
+      "cython_ms": 12.931200000457466,
+      "python_ms": 21.704599998580914,
+      "speedup": 1.6784675821124933,
+      "log_pl_cython": -10664.69301238275,
+      "log_pl_python": -10664.69301238272,
+      "abs_diff": 2.9103830456733704e-11,
+      "protocol": {
+        "cython": {
+          "loops": 5,
+          "repeats": 3,
+          "median_total_s": 0.06465600000228733,
+          "per_call_us": 12931.200000457466,
+          "best_per_call_us": 12912.54002135247,
+          "worst_per_call_us": 13175.739999860525
+        },
+        "python": {
+          "loops": 3,
+          "repeats": 3,
+          "median_total_s": 0.06511379999574274,
+          "per_call_us": 21704.599998580914,
+          "best_per_call_us": 21316.13332312554,
+          "worst_per_call_us": 21886.433319499094
+        }
+      }
+    }
+  }
+}

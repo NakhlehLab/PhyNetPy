@@ -1,0 +1,153 @@
+\section{Example workflows}
+\label{sec:examples}
+
+Every listing below is an excerpt of a function in
+\code{paper/phynetpy-1.0.0/listings/paper_listings.py}, which runs as a script
+and fails loudly if any listing stops matching the API. Figure~\ref{fig:workflow}
+shows how the pieces fit together.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.78\linewidth]{workflow.pdf}
+  \caption{A simulate--infer--evaluate loop in the public API. Data enters
+  either by reading a file or by simulating from a known network; the two verbs
+  act on it; the evaluation step closes the loop. Because \code{simulate}
+  returns the same kind of object that \code{infer} consumes, a recovery check
+  needs no intermediate conversion.}
+  \label{fig:workflow}
+\end{figure}
+
+\subsection{Building and inspecting a network}
+
+Reticulations are written in extended Newick and the resulting object supports
+the structural queries directly.
+
+\begin{lstlisting}
+from phynetpy import blobs, count_reticulations, level, read_newick
+
+net = read_newick("((A:0.1,(B:0.2)#H1:0.1):0.3,(#H1:0.2,C:0.3):0.2);")
+
+count_reticulations(net)   # 1
+level(net)                 # 1
+net.is_acyclic()           # True
+len(blobs(net))            # 4
+\end{lstlisting}
+
+The same type can be assembled node by node, which is what a method that
+proposes topologies does internally:
+
+\begin{lstlisting}
+from phynetpy import Edge, Network, Node
+
+root, internal = Node("Root"), Node("I1")
+a, b, c = Node("A"), Node("B"), Node("C")
+net = Network()
+net.add_nodes([root, internal, a, b, c])
+for edge in (Edge(root, internal), Edge(root, c),
+             Edge(internal, a), Edge(internal, b)):
+    net.add_edges(edge)
+\end{lstlisting}
+
+\subsection{Scoring a network, then inferring one}
+
+This listing shows the unit discipline in use. The simulator writes branch
+lengths in expected substitutions per site; the gene-tree criteria read
+coalescent units. Converting is a call, not an assumption.
+
+\begin{lstlisting}
+from phynetpy import BranchLengthUnit, convert_network_branch_lengths
+from phynetpy.criteria import Likelihood, PseudoLikelihood
+from phynetpy.infer import infer, score, simulate
+from phynetpy.models import MSC
+
+theta = 0.5
+gts = simulate(MSC(theta=theta), taxa=6, n=200, data="gene_trees", seed=3)
+truth = convert_network_branch_lengths(
+    gts.true_network, BranchLengthUnit.COALESCENT_2N, theta=theta
+)
+
+score(truth, gts, model=MSC(theta=theta), criterion=Likelihood())
+#  -514.956
+score(truth, gts, model=MSC(theta=theta), criterion=PseudoLikelihood())
+# -1883.194
+
+result = infer(gts, criterion=PseudoLikelihood(), max_reticulations=0)
+result.method        # 'InferNetwork_MPL'
+result.score         # -1882.494
+\end{lstlisting}
+
+Changing \code{criterion} to \code{Bayesian()} turns the same call into a
+posterior sample, and \code{result.posterior} is then populated. The rest of the
+call, and the type it returns, do not change.
+
+\subsection{Simulation and recovery}
+
+Because \code{simulate} produces a data-axis object, a recovery check is two
+lines. This is the pattern behind the benchmark in
+Section~\ref{sec:headtohead} and behind \code{Examples/sim_recovery.py}.
+
+\begin{lstlisting}
+from phynetpy.GraphUtils import mu_distance
+from phynetpy.infer import infer, simulate
+
+sim = simulate(MSC(theta=0.5), taxa=6, n=200, data="gene_trees", seed=11)
+recovered = infer(sim, criterion=PseudoLikelihood(), max_reticulations=0)
+
+mu_distance(sim.true_network, recovered.best)   # 0
+\end{lstlisting}
+
+The generating network is attached to the simulated data as
+\code{.true_network}, so the comparison does not require tracking it separately.
+
+\subsection{Inspecting and extending the method set}
+
+The set of available methods is queryable rather than documented separately:
+
+\begin{lstlisting}
+from phynetpy.infer import validity_matrix
+
+for data, row in validity_matrix().items():
+    print(data, row)
+\end{lstlisting}
+
+\begin{lstlisting}[language={}, basicstyle=\ttfamily\scriptsize]
+GeneTrees        {'MDC': '-', 'Likelihood': 'InferNetwork_ML',
+                  'PseudoLikelihood': 'InferNetwork_MPL', 'Bayesian': 'MCMC_GT'}
+Alignment        {'MDC': 'x', 'Likelihood': '-',
+                  'PseudoLikelihood': 'x', 'Bayesian': 'MCMC_SEQ'}
+BiallelicMarkers {'MDC': 'x', 'Likelihood': 'MLE_BiMarkers',
+                  'PseudoLikelihood': '-', 'Bayesian': 'MCMC_BiMarkers'}
+\end{lstlisting}
+
+Adding a criterion means declaring what it accepts and registering an engine for
+it. The objective below is deliberately trivial -- total branch length -- so that
+the mechanism rather than the statistics is visible:
+
+\begin{lstlisting}
+from phynetpy.criteria import Criterion
+from phynetpy.data import GeneTrees
+from phynetpy.infer import Engine, register, score
+from phynetpy.models import MSC
+
+class TreeLength(Criterion):
+    accepts_data = (GeneTrees,)
+    scorable = True
+    use_branch_lengths = False
+
+@register(GeneTrees, MSC, TreeLength)
+class TreeLengthEngine(Engine):
+    method = "TreeLength"
+
+    def infer(self, data):
+        raise NotImplementedError("scoring only")
+
+    def score(self, network, data, optimize=False):
+        return sum(e.get_length() or 0.0 for e in network.E())
+\end{lstlisting}
+
+After that, \code{score(net, data, criterion=TreeLength())} dispatches to the new
+engine, \code{validity_matrix()} shows the new column, and an unregistered
+combination involving \code{TreeLength} raises \code{NotImplementedError} rather
+than silently falling back. A real criterion would additionally implement
+\code{infer}, and would get the search drivers, topology moves and parameter
+optimiser from the shared layer rather than reimplementing them.
