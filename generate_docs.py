@@ -62,10 +62,6 @@ MODULE_META = {
         "desc": "Central I/O hub for reading and writing phylogenetic file formats (FASTA, VCF, Newick, Nexus).",
         "category": "I/O",
     },
-    "Logger": {
-        "desc": "Simple debug logger for internal model move compatibility.",
-        "category": "Infrastructure",
-    },
     "Matrix": {
         "desc": "Data matrix storage and reduction for sequence alignments with unique site pattern compression.",
         "category": "Core Data Structures",

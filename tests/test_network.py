@@ -1661,3 +1661,61 @@ class TestNodeSet:
             assert ns.out_edges(ghost) == set()
 
         assert entries_held(ns) == before, "absent nodes leaked into the maps"
+
+
+class TestHybridGammaCompletion:
+    """A Newick string may give a reticulation's gamma on one occurrence only.
+
+    ``newick(annotate=True)`` writes ``[&gamma=g]`` on the first occurrence;
+    both parsers must give the other hybrid edge ``1 - g`` (and ``1/k`` each
+    when no occurrence carries a gamma).
+    """
+
+    FIRST = "(((B:0.05)#H0[&gamma=0.3]:0.05,A:0.1)I2:0.1,(C:0.1,#H0:0.05)I1:0.1)I3;"
+    SECOND = "(((B:0.05)#H0:0.05,A:0.1)I2:0.1,(C:0.1,#H0[&gamma=0.7]:0.05)I1:0.1)I3;"
+    BOTH = "(((B:0.05)#H0[&gamma=0.3]:0.05,A:0.1)I2:0.1,(C:0.1,#H0[&gamma=0.7]:0.05)I1:0.1)I3;"
+    NONE = "(((B:0.05)#H0:0.05,A:0.1)I2:0.1,(C:0.1,#H0:0.05)I1:0.1)I3;"
+
+    @staticmethod
+    def _gammas(net: Network) -> dict[str, float]:
+        hybrid = next(node for node in net.V() if net.in_degree(node) == 2)
+        return {edge.src.label: edge.get_gamma() for edge in net.in_edges(hybrid)}
+
+    def test_from_newick_completes_the_unannotated_edge(self):
+        from phynetpy.IO import read_newick
+        for text in (self.FIRST, self.SECOND, self.BOTH):
+            for parse in (Network.from_newick, read_newick):
+                gammas = self._gammas(parse(text))
+                assert abs(gammas["I2"] - 0.3) < 1e-12, (parse.__name__, text)
+                assert abs(gammas["I1"] - 0.7) < 1e-12, (parse.__name__, text)
+        for parse in (Network.from_newick, read_newick):
+            gammas = self._gammas(parse(self.NONE))
+            assert gammas == {"I1": 0.5, "I2": 0.5}
+
+    def test_annotated_newick_round_trip_keeps_every_gamma(self):
+        from phynetpy.IO import read_newick
+        for build in (build_level1_network, build_level2_network, build_level2_10_leaves):
+            net = build()
+            for node in net.V():
+                # A fixture may leave a hybrid pair unset or not summing to one;
+                # the writer only round-trips a proper pair.
+                if net.in_degree(node) == 2 and abs(sum(e.get_gamma() for e in net.in_edges(node)) - 1.0) > 1e-9:
+                    first, second = net.in_edges(node)
+                    first.set_gamma(0.25)
+                    second.set_gamma(0.75)
+            expected = {
+                node.label: sorted(e.get_gamma() for e in net.in_edges(node))
+                for node in net.V() if net.in_degree(node) == 2
+            }
+            text = net.newick(annotate=True)
+            # IO.read_newick only accepts #H / #R / #LGT reticulation labels.
+            standard = all(label.lstrip("#")[0] in "HRL" for label in expected)
+            for parse in (Network.from_newick, read_newick) if standard else (Network.from_newick,):
+                back = parse(text)
+                got = {
+                    node.label.lstrip("#"): sorted(e.get_gamma() for e in back.in_edges(node))
+                    for node in back.V() if back.in_degree(node) == 2
+                }
+                assert set(got) == {label.lstrip("#") for label in expected}
+                for label, gammas in expected.items():
+                    assert all(abs(a - b) < 1e-12 for a, b in zip(gammas, got[label.lstrip("#")])), (build.__name__, parse.__name__)

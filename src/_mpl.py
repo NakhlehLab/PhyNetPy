@@ -2279,6 +2279,21 @@ class MPLKernel(ProposalKernel):
             weights.append(base[cls])
         return moves, weights
 
+    def phase_switch_due(self) -> bool:
+        """Whether the next :meth:`generate` will change phase.
+
+        Hill climbing decides to stop before it asks for the next
+        move, and the phase change happens inside that request. When
+        both counters reach the same threshold, the stop wins and the
+        reticulation phase is never sampled. The driver calls this so
+        a switch that is already due still gets one proposal.
+
+        Returns:
+            bool: True when this kernel cycles phases and stagnation
+            has reached ``phase_patience``.
+        """
+        return self._phased and self._stagnation >= self._phase_patience
+
     def _maybe_switch_phase(self) -> None:
         """Advance to the next phase when stagnation exceeds patience."""
         if self._stagnation < self._phase_patience:
@@ -2873,6 +2888,7 @@ class MPL:
         optimize_params: bool | None = None,
         optimize_scope: str | None = None,
         optimize_band: float = 5.0,
+        phase_patience: int | None = None,
         save_best_path: str | os.PathLike[str] | None = None,
         reference_network: Network | None = None,
         comparison_report_path: str | os.PathLike[str] | None = None,
@@ -2968,9 +2984,15 @@ class MPL:
                 when its raw score is within ``optimize_band`` of the
                 current score (i.e. ``raw >= current - optimize_band``), so
                 clearly-bad random proposals never pay the optimisation
-                cost.  Larger values optimise more proposals (more
-                accurate, slower).  Only used when ``optimize_params`` is
-                ``True``.
+                cost.  :class:`~phynetpy.ModelMove.AddReticulation` is
+                exempt: a new hybrid is born at gamma 0.5, and that raw
+                score is not evidence the insertion is bad.  Larger values
+                optimise more of the remaining proposals (more accurate,
+                slower).  Only used when ``optimize_params`` is ``True``.
+            phase_patience: Consecutive non-improving proposals before
+                :class:`MPLKernel` switches phase.  ``None`` keeps the
+                kernel default (150), which lines up with a long annealing
+                schedule.  Ignored when a custom ``kernel`` is supplied.
             save_best_path: Optional Newick output path for the best
                 network found.
             reference_network: Optional ground-truth / baseline
@@ -3057,7 +3079,7 @@ class MPL:
         # the run completes successfully.
         # ----------------------------------------------------------------
         model = Model(rng=model_ss)
-        model.network = copy.deepcopy(self.net)
+        model.network = self.net.copy()[0]
         model.set_likelihood_calculator(scorer)
 
         # ----------------------------------------------------------------
@@ -3066,7 +3088,10 @@ class MPL:
         # same SeedSequence so reproducibility still holds.
         # ----------------------------------------------------------------
         if kernel is None:
-            kernel = MPLKernel(
+            # phase_patience is a kernel setting. Leaving it None keeps
+            # the long-run default; a short hill climb passes a smaller
+            # value so the reticulation phase arrives inside the budget.
+            kernel_kwargs: dict = dict(
                 move_types=resolve_move_types(
                     opt_bl=opt_bl, fix_st=fix_st,
                     augment_only=backbone is not None,
@@ -3075,6 +3100,9 @@ class MPL:
                 max_level=max_lvl,
                 rng=np.random.default_rng(kernel_ss),
             )
+            if phase_patience is not None:
+                kernel_kwargs["phase_patience"] = phase_patience
+            kernel = MPLKernel(**kernel_kwargs)
         elif getattr(kernel, "rng", None) is None:
             kernel.rng = np.random.default_rng(kernel_ss)
 
@@ -3094,9 +3122,11 @@ class MPL:
         # Lever 1: optimise only the reticulation parameters (gammas +
         # incident branches) so reticulation topologies are judged near
         # their optimum -- the fix for systematically-worse r>=1 results.
-        # Lever 2: lazy gating -- only optimise reticulation-bearing
-        # proposals that are already within ``optimize_band`` of the
-        # incumbent, so the vast majority of rejected proposals stay cheap.
+        # Lever 2: lazy gating -- optimise a reticulation-bearing
+        # proposal when its raw score is already within ``optimize_band``
+        # of the incumbent. AddReticulation is the exception: its birth
+        # gamma is 0.5, so the raw score of a correct insertion is
+        # typically far outside that band and has to be fit first.
         # ----------------------------------------------------------------
         optimize_proposal = None
         should_optimize = None
@@ -3117,7 +3147,7 @@ class MPL:
                 def should_optimize(
                     opt_m: Model, raw_proposed: float, current: float, move,
                 ) -> bool:
-                    """Gate: only optimise reticulation-bearing topology proposals near the incumbent."""
+                    """Gate: fit gamma on a new hybrid; otherwise only near the incumbent."""
                     # Only re-optimise after a *topology* move (matching
                     # PhyloNet's per-round behaviour); pure continuous moves
                     # already explored their parameter, so re-optimising the
@@ -3128,6 +3158,11 @@ class MPL:
                     net = opt_m.network
                     if not any(v.is_reticulation() for v in net.V()):
                         return False
+                    # Gamma 0.5 is not a fitted value. Judging the
+                    # insertion there rejects hybrids whose optimised
+                    # gamma beats the current tree.
+                    if isinstance(move, AddReticulation):
+                        return True
                     return raw_proposed >= current - optimize_band
 
         if method == "hc":

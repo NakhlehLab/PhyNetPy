@@ -53,7 +53,7 @@ from Bio import Phylo, SeqIO
 from nexus import NexusReader
 
 from .MSA import DataSequence, MSA
-from .Network import Edge, Network, Node
+from .Network import Edge, Network, Node, _complete_hybrid_gammas
 from .Newick import get_labels as _get_newick_labels
 from .GeneTrees import GeneTrees
 
@@ -850,6 +850,9 @@ class _NewickTreeBuilder:
         """Create a new ``_NewickTreeBuilder`` with fresh per-build state."""
         self._internal_count: int = 0
         self._inheritance: Dict[str, Dict] = {}
+        # Hybrid edges whose gamma the string gave (directly or as the
+        # complement of an earlier occurrence); the rest are completed in build.
+        self._explicit_edges: set = set()
 
     def build(self, tree: Any) -> Network:
         """
@@ -875,6 +878,9 @@ class _NewickTreeBuilder:
             parent_node = self._parse_parent(par, net)
             self._parse_child(node, net, parent_node)
 
+        # A reticulation whose first occurrence carried no gamma had that
+        # edge created before the second occurrence supplied one.
+        _complete_hybrid_gammas(net, self._explicit_edges)
         return net
 
     def _parse_comment(self, node: Any, parent: Node) -> dict:
@@ -1069,11 +1075,14 @@ class _NewickTreeBuilder:
         else:
             new_edge.set_length(1)
 
-        # Set gamma if applicable
+        # Set gamma if applicable. -1 marks a parent whose gamma is still
+        # unknown; it is completed once every occurrence has been read.
         inheritance_prob = parsed_node.attribute_value("gamma")
         if inheritance_prob is not None:
-            gamma_value = inheritance_prob[parent.label][0]
-            new_edge.set_gamma(gamma_value)
+            gamma_value = inheritance_prob.get(parent.label, [None])[0]
+            if gamma_value is not None and gamma_value >= 0:
+                new_edge.set_gamma(gamma_value)
+                self._explicit_edges.add(new_edge)
 
         network.add_edges(new_edge)
         return parsed_node
@@ -1393,7 +1402,7 @@ def read_newick_file(
 #### Newick Writing Functions ####
 ##################################
 
-def write_newick(network: Network) -> str:
+def write_newick(network: Network, annotate: bool = False) -> str:
     """
     Convert a PhyNetPy Network into a newick string.
 
@@ -1403,11 +1412,15 @@ def write_newick(network: Network) -> str:
 
     Args:
         network (Network): A PhyNetPy Network object.
+        annotate (bool, optional): If True, emit branch lengths (``:len``) 
+                                    and inheritance probabilities 
+                                    (``[&gamma=g]``) as well as the 
+                                    topology. Defaults to False.
 
     Returns:
         str: The newick representation of the network, ending with ';'.
     """
-    return network.newick()
+    return network.newick(annotate)
 
 def write_newick_file(
     networks: List[Network],

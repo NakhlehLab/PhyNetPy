@@ -264,13 +264,39 @@ class Branch:
         return self.__str__()
 
 
+def stable_hash(text : str) -> int:
+    """
+    A hash of ``text`` that is the same in every Python process.
+
+    Python salts ``hash(str)`` per process, so collections keyed by node
+    names (and anything that iterates them: candidate lists in search moves,
+    the merger's edge scans) came out in a different order on every run,
+    and fixed-seed searches were not reproducible. This is 64-bit FNV-1a:
+    cheap, well spread, and process independent. Node and Edge hashes are
+    computed from it once and cached.
+
+    Args:
+        text (str): The string to hash.
+    Returns:
+        int: A 64-bit hash.
+    """
+    h = 0xcbf29ce484222325
+    for byte in text.encode("utf-8"):
+        h ^= byte
+        h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
+    # Python reduces __hash__ results modulo 2**61 - 1; do it here so
+    # hash(node) == stable_hash(node.label) holds exactly.
+    return h % ((1 << 61) - 1)
+
+
 class Node:
     """
     Node class that provides support for managing network constructs like 
     reticulation nodes and other phylogenetic attributes.
     """
     __slots__ = ('_Node__attributes', '_Node__is_retic', '_Node__name', 
-                 '_Node__hash', '_Node__seq', '_Node__t', '_Node__is_dirty')
+                 '_Node__hash', '_Node__seq', '_Node__t', '_Node__is_dirty',
+                 '_owner')
 
     def __init__(self, 
                  name : str, 
@@ -303,15 +329,29 @@ class Node:
         self.__is_retic : bool = is_reticulation
         self.__name : str = name
         # Cache the (name-based) hash. ``__hash__`` is called tens of millions
-        # of times per MCMC chain via node dict/set lookups; recomputing
-        # ``hash(name)`` each time (a builtin call) was ~12% of chain runtime
-        # in profiling. The cache is refreshed in ``set_name`` -- the sole
-        # rename path (NodeSet.update -> set_name) -- so it stays consistent,
-        # and collections already discard/re-add around renames.
-        self.__hash : int = hash(name)
+        # of times per MCMC chain via node dict/set lookups; recomputing it
+        # each time was ~12% of chain runtime in profiling. The cache is
+        # refreshed in ``set_name`` -- the sole rename path
+        # (NodeSet.update -> set_name) -- so it stays consistent, and
+        # collections already discard/re-add around renames. ``stable_hash``
+        # (not ``hash``) so iteration order is the same in every process.
+        self.__hash : int = stable_hash(name)
         self.__seq : Union[DataSequence, None] = seq
         self.__t : Union[float, None] = t
         self.__is_dirty : bool = False
+        # The Network this node belongs to, set by Network.add_nodes and
+        # cleared by Network.remove_nodes. Lets the setters below record
+        # old values in the owner's transaction journal (see
+        # Network.begin_transaction). None while the node is free.
+        self._owner = None
+
+    def _record(self, setter : str, old : Any) -> None:
+        """Tell the owning network, if any, that ``setter`` is about to change this node."""
+        # getattr: a node or edge unpickled from before these slots existed
+        # has no owner and no cached hash yet.
+        owner = getattr(self, "_owner", None)
+        if owner is not None:
+            owner._record_attr(self, setter, old)
     
     def get_attributes(self) -> dict[Union[str, Any], Any]:
         """
@@ -367,6 +407,7 @@ class Node:
             N/A
         """
         if new_t >= 0:
+            self._record("set_time", self.__t)
             self.__t = new_t 
         else:
             raise NodeError("Please set speciation time, t, to a non-negative number!")
@@ -526,7 +567,7 @@ class Node:
             N/A
         """
         self.__name = new_name
-        self.__hash = hash(new_name)
+        self.__hash = stable_hash(new_name)
         self.__is_dirty = True
 
     def set_is_reticulation(self, new_is_retic : bool) -> None:
@@ -539,6 +580,7 @@ class Node:
         Returns:
             N/A
         """
+        self._record("set_is_reticulation", self.__is_retic)
         self.__is_retic = new_is_retic
 
     def is_reticulation(self) -> bool:
@@ -646,7 +688,7 @@ class Edge:
     """
     
     __slots__ = ('_src', '_dest', '_Edge__length', '_Edge__gamma', 
-                 '_Edge__weight', '_Edge__tag')
+                 '_Edge__weight', '_Edge__tag', '_owner', '_Edge__hash')
     
     def __init__(self,
                  source : Node, 
@@ -687,6 +729,14 @@ class Edge:
         
         self._src = source
         self._dest = destination
+        # Owning Network, set by Network.add_edges and cleared by
+        # Network.remove_edge; None while the edge is free. See Node._owner.
+        self._owner = None
+        # Process-independent hash from the endpoint labels at construction.
+        # Fixed for the life of the edge, so a later node rename cannot move
+        # it between buckets of the sets that hold it; equality stays
+        # identity, so two edges with the same labels are still distinct.
+        self.__hash : int = stable_hash(f"{source.label}\x00{destination.label}")
         
         #Set all fields
         if length is not None:
@@ -742,6 +792,7 @@ class Edge:
         Returns:
             N/A
         """
+        self._record("set_tag", getattr(self, "_Edge__tag", None))
         self.__tag = new_tag
         
     def get_tag(self) -> str:
@@ -756,6 +807,28 @@ class Edge:
         """
         return self.__tag
     
+    def __hash__(self) -> int:
+        """
+        Hash function for Edge objects: a process-independent hash of the
+        endpoint labels fixed at construction. Equality is identity.
+
+        Returns:
+            int: The cached hash.
+        """
+        try:
+            return self.__hash
+        except AttributeError:
+            self.__hash = stable_hash(f"{self._src.label}\x00{self._dest.label}")
+            return self.__hash
+
+    def _record(self, setter : str, old : Any) -> None:
+        """Tell the owning network, if any, that ``setter`` is about to change this edge."""
+        # getattr: a node or edge unpickled from before these slots existed
+        # has no owner and no cached hash yet.
+        owner = getattr(self, "_owner", None)
+        if owner is not None:
+            owner._record_attr(self, setter, old)
+
     def set_gamma(self, gamma : float) -> None:
         """
         Set the inheritance probability of this edge. Only applicable to 
@@ -773,6 +846,7 @@ class Edge:
         if gamma < 0 or gamma > 1:
             raise ValueError("Please provide a probabilistic value for \
                                 gamma (between 0 and 1, inclusive)!")
+        self._record("set_gamma", getattr(self, "_Edge__gamma", None))
         self.__gamma = gamma
     
     def get_gamma(self) -> float:
@@ -872,6 +946,7 @@ class Edge:
                                 that is not equivalent to the difference \
                                 in their set speciation times")     
         
+        self._record("set_length", getattr(self, "_Edge__length", None))
         self.__length : float = branch_length
     
     def get_length(self) -> float:
@@ -894,6 +969,7 @@ class Edge:
         Returns:
             N/A
         """
+        self._record("set_weight", getattr(self, "_Edge__weight", None))
         self.__weight = new_weight
     
     def get_weight(self) -> float:
@@ -939,6 +1015,47 @@ class Edge:
 #########################
 #### NETWORK CLASSES ####
 #########################
+# Private slot behind each journaled element setter, for restoring an
+# unset value on rollback (the setters reject None).
+_ATTR_SLOT = {
+    "set_time": "_Node__t",
+    "set_is_reticulation": "_Node__is_retic",
+    "set_gamma": "_Edge__gamma",
+    "set_length": "_Edge__length",
+    "set_tag": "_Edge__tag",
+    "set_weight": "_Edge__weight",
+}
+
+
+def _complete_hybrid_gammas(network: "Network", explicit: "set[Edge]") -> None:
+    """Fill in the inheritance probabilities a Newick string left implicit.
+
+    Extended Newick often annotates only one occurrence of a reticulation
+    with ``[&gamma=g]`` (:func:`newick` writes it on the first); the other
+    hybrid edge's probability is then ``1 - g``. :class:`Edge` stores an
+    unset gamma as ``0.0``, so the parser passes the edges it annotated
+    explicitly and this fills every other edge into a node of in-degree two
+    or more with an equal share of the remaining probability (``1/k`` each
+    when none was annotated).
+
+    Args:
+        network (Network): The freshly parsed network, mutated in place.
+        explicit (set[Edge]): Edges whose gamma came from the string.
+    """
+    for node in network.V():
+        edges = list(network.in_edges(node))
+        if len(edges) < 2:
+            continue
+        unknown = [edge for edge in edges if edge not in explicit]
+        if not unknown:
+            continue
+        known = sum(edge.get_gamma() for edge in edges if edge in explicit)
+        remainder = min(max(1.0 - known, 0.0), 1.0)
+        share = remainder / len(unknown)
+        for edge in unknown:
+            edge.set_gamma(share)
+
+
 class Network:
     """
     A directed (and potentially acyclic) graph of Nodes joined by Edges.
@@ -1030,6 +1147,145 @@ class Network:
                                      if self._nodes.out_deg(node) == 0}
         self.__roots : set[Node] = {node for node in self._nodes.get_set()
                                     if self._nodes.in_deg(node) == 0}
+        # Transaction journal: a stack of frames, each a list of inverse
+        # operations, or None when no transaction is open. See
+        # begin_transaction.
+        self._journal : Union[list[list[tuple]], None] = None
+        self._replaying : bool = False
+        for node in self._nodes.get_set():
+            node._owner = self
+        for edge in self._edges.get_set():
+            edge._owner = self
+
+    # ── Transactions ──────────────────────────────────────────────
+
+    def begin_transaction(self) -> None:
+        """
+        Start recording every change to this network so it can be undone.
+
+        While a transaction is open, each node and edge added or removed,
+        each rename, and each change to a node's time or reticulation flag
+        or an edge's length, gamma, weight or tag is journaled with its
+        inverse. :meth:`rollback_transaction` replays the inverses and
+        restores the network exactly, same objects included;
+        :meth:`commit_transaction` discards the journal. Transactions nest:
+        an inner commit folds its journal into the outer one, an inner
+        rollback undoes only the inner changes.
+
+        This is the general form of "mutate, evaluate, maybe revert". A
+        search move can be undone without cloning the network first, and
+        code that tries a candidate edit in place can roll it back instead
+        of working on a copy.
+
+        Changes made through ``Node.set_name`` directly, through the
+        attribute dictionaries, or by touching the underlying node and
+        edge sets are not journaled; use :meth:`update_node_name` and the
+        network methods.
+
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
+        if self._journal is None:
+            self._journal = []
+        self._journal.append([])
+
+    def in_transaction(self) -> bool:
+        """
+        Whether a transaction is open on this network.
+
+        Args:
+            N/A
+        Returns:
+            bool: True between :meth:`begin_transaction` and the matching
+                  commit or rollback.
+        """
+        return self._journal is not None
+
+    def commit_transaction(self) -> None:
+        """
+        Keep the changes of the innermost open transaction.
+
+        A no-op when no transaction is open, so a driver can call it on
+        acceptance without knowing whether the move used a transaction.
+
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
+        if self._journal is None:
+            return
+        frame = self._journal.pop()
+        if self._journal:
+            self._journal[-1].extend(frame)
+        else:
+            self._journal = None
+
+    def rollback_transaction(self) -> None:
+        """
+        Undo every change of the innermost open transaction.
+
+        The inverses are replayed newest first with journaling suspended,
+        so the network returns to the state at :meth:`begin_transaction`
+        with the same node and edge objects. A no-op when no transaction
+        is open.
+
+        Args:
+            N/A
+        Returns:
+            N/A
+        """
+        if self._journal is None:
+            return
+        frame = self._journal.pop()
+        if not self._journal:
+            self._journal = None
+        self._replaying = True
+        try:
+            for entry in reversed(frame):
+                kind = entry[0]
+                if kind == "add_node":
+                    node = entry[1]
+                    self._nodes.remove(node)
+                    self.__leaves.discard(node)
+                    self.__roots.discard(node)
+                    node._owner = None
+                elif kind == "remove_node":
+                    _, node, was_leaf, was_root = entry
+                    self._nodes.add(node)
+                    node._owner = self
+                    if was_leaf:
+                        self.__leaves.add(node)
+                    if was_root:
+                        self.__roots.add(node)
+                elif kind == "add_edge":
+                    self.remove_edge(entry[1])
+                elif kind == "remove_edge":
+                    self.add_edges(entry[1])
+                elif kind == "rename":
+                    self.update_node_name(entry[1], entry[2])
+                elif kind == "attr":
+                    _, element, setter, old = entry
+                    if old is None:
+                        # The setters validate their argument; an unset
+                        # value is restored by clearing the slot itself.
+                        setattr(element, _ATTR_SLOT[setter], None)
+                    else:
+                        getattr(element, setter)(old)
+        finally:
+            self._replaying = False
+
+    def _record(self, entry : tuple) -> None:
+        """Append an inverse-operation entry to the open transaction, if any."""
+        if self._journal is not None and not self._replaying:
+            self._journal[-1].append(entry)
+
+    def _record_attr(self, element : Any, setter : str, old : Any) -> None:
+        """Journal an element attribute change (called by Node and Edge setters)."""
+        if self._journal is not None and not self._replaying:
+            self._journal[-1].append(("attr", element, setter, old))
     
     def __contains__(self, obj : Union[Node, Edge]) -> bool:
         """
@@ -1061,7 +1317,14 @@ class Network:
         Returns:
             N/A
         """
+        flat : list[Node] = []
+        for item in nodes:
+            flat.extend(item if type(item) is list else [item])
+        fresh = [node for node in flat if node not in self._nodes]
         self._nodes.add(*nodes)
+        for node in fresh:
+            node._owner = self
+            self._record(("add_node", node))
                          
     def add_uid_node(self, node : Union[Node, None] = None) -> Node:
         """
@@ -1434,6 +1697,10 @@ class Network:
                 
                 return node, idx
             
+            # Edges whose gamma the string gave explicitly; the rest are
+            # completed to the remaining probability once the graph exists.
+            explicit_edges: set = set()
+
             def build_network(newick_node, parent_phynet_node=None, network=None, node_map=None, time=0.0):
                 """Convert parsed Newick structure to Network"""
                 if network is None:
@@ -1458,6 +1725,7 @@ class Network:
                     edge = Edge(parent_phynet_node, phynet_node, length=newick_node.length)
                     if newick_node.gamma is not None:
                         edge.set_gamma(newick_node.gamma)
+                        explicit_edges.add(edge)
                     network.add_edges(edge)
                 
                 # Process children
@@ -1483,6 +1751,7 @@ class Network:
                 
                 # Build network
                 network = build_network(root)
+                _complete_hybrid_gammas(network, explicit_edges)
                 
                 # Clean up the network
                 network.clean([True, True, True])
@@ -1520,6 +1789,8 @@ class Network:
             for edge in edges: 
                 if self._nodes.ready(edge):              
                     self._edges.add(edge)
+                    edge._owner = self
+                    self._record(("add_edge", edge))
                     self._nodes.process(edge)  
                     self.__reclassify_node(edge.src, True, True)
                     self.__reclassify_node(edge.dest, False, True)
@@ -1530,6 +1801,8 @@ class Network:
         elif type(edges) is Edge:
             if self._nodes.ready(edges):
                 self._edges.add(edges)
+                edges._owner = self
+                self._record(("add_edge", edges))
                 self._nodes.process(edges)
                 self.__reclassify_node(edges.src, True, True)
                 self.__reclassify_node(edges.dest, False, True)  
@@ -1561,7 +1834,9 @@ class Network:
             for edge in out_edges:
                 self.remove_edge(edge)
 
+            self._record(("remove_node", node, node in self.__leaves, node in self.__roots))
             self._nodes.remove(node)
+            node._owner = None
 
             # Drop the node from the leaf/root caches.  Edge removal above
             # reclassifies a soon-to-be-deleted node as a leaf and/or root
@@ -1605,6 +1880,8 @@ class Network:
         if edge_present and type(edge) is Edge:
             # Remove the edge from the edge set
             self._edges.remove(edge)
+            edge._owner = None
+            self._record(("remove_edge", edge))
         
             #Make the edge set aware of the edge removal
             self._nodes.process(edge, removal = True)
@@ -1634,6 +1911,7 @@ class Network:
         """
         is_leaf = node in self.__leaves
         is_root = node in self.__roots
+        self._record(("rename", node, node.label))
         self.__leaves.discard(node)
         self.__roots.discard(node)
 
@@ -2002,16 +2280,19 @@ class Network:
         """
         return _nopt.leaf_descendants_all(self)
     
-    def newick(self) -> str:
+    def newick(self, annotate : bool = False) -> str:
         """
         Generate the newick string of the network.
 
         Args:
-            N/A
+            annotate (bool, optional): If True, branch lengths (``:len``) and
+                                       inheritance probabilities
+                                       (``[&gamma=g]``) are written alongside
+                                       the topology. Defaults to False.
         Returns:
             str: The newick representation of the network.
         """
-        return _nopt.newick(self)
+        return _nopt.newick(self, annotate)
     
     def is_acyclic(self) -> bool:
         """
@@ -2103,7 +2384,135 @@ class Network:
                                               nodes.
         """
         return _nopt.copy(self)
-    
+
+    def graft_subtree(self,
+                      subtree: Network,
+                      *,
+                      sibling_of: Node | None = None,
+                      under: Node | None = None) -> Node:
+        """Copy ``subtree`` into this network and attach it.
+
+        Internal labels that already occur here are replaced with fresh
+        ones. Leaf labels are kept, and a leaf label that is already present
+        is an error: grafting must not duplicate a taxon. The copy is
+        attached either by splitting the edge above ``sibling_of`` or as a
+        new child of ``under``.
+
+        If ``sibling_of`` is the root, there is no edge to split. A new root
+        is created with the old root and the grafted subtree as its two
+        children, so the grafted leaves are not dropped.
+
+        Args:
+            subtree (Network): The subtree to copy in. Its own root is the
+                node that becomes the attachment point.
+            sibling_of (Node | None): A node of this network. The subtree
+                becomes its sibling.
+            under (Node | None): A node of this network. The subtree becomes
+                a new child of it.
+
+        Returns:
+            Node: The image, in this network, of ``subtree``'s root.
+
+        Raises:
+            NetworkError: If neither or both of ``sibling_of`` and ``under``
+                are given, if the anchor is not in this network, or if a
+                leaf label of ``subtree`` is already present.
+        """
+        if (sibling_of is None) == (under is None):
+            raise NetworkError(
+                "Pass exactly one of sibling_of or under."
+            )
+        anchor = sibling_of if sibling_of is not None else under
+        if anchor not in self._nodes:
+            raise NetworkError("Graft anchor is not in the network.")
+
+        # Absorb a renamed copy first, then wire one new edge. Leaf
+        # collisions abort before any edge of this network changes.
+        image = self._absorb_subtree(subtree)
+
+        if under is not None:
+            self.add_edges(Edge(under, image))
+            return image
+
+        parents = self.get_parents(sibling_of)
+        if not parents:
+            # Sibling of the root: a new root holds both clades.
+            new_root = Node(self._fresh_label("R"))
+            self.add_nodes(new_root)
+            self.add_edges([Edge(new_root, sibling_of), Edge(new_root, image)])
+            return image
+
+        parent = parents[0]
+        edge = self.get_edge(parent, sibling_of)
+        length = edge.get_length()
+        gamma = edge.get_gamma()
+        child_is_retic = sibling_of.is_reticulation()
+        self.remove_edge(edge)
+        mid = Node(self._fresh_label("I"))
+        self.add_nodes(mid)
+        upper = Edge(parent, mid, length=length)
+        lower = Edge(mid, sibling_of, length=length)
+        # An inheritance probability on the split edge belongs on the half
+        # that still enters the reticulation, not on the new upper edge.
+        if child_is_retic and gamma:
+            lower.set_gamma(gamma)
+        self.add_edges([upper, lower, Edge(mid, image)])
+        return image
+
+    def _fresh_label(self, prefix: str) -> str:
+        """A label that does not collide with any node already here."""
+        used = {node.label for node in self.V()}
+        n = 0
+        while True:
+            label = f"{prefix}{n}"
+            if label not in used:
+                return label
+            n += 1
+
+    def _absorb_subtree(self, subtree: Network) -> Node:
+        """Copy ``subtree``'s nodes and edges into this network.
+
+        Returns the image of ``subtree.root()``. Internal names that collide
+        are replaced. Leaf names that collide raise.
+        """
+        used = {node.label for node in self.V()}
+        mapping: dict[Node, Node] = {}
+        for node in subtree.V():
+            is_leaf = subtree.out_degree(node) == 0
+            if is_leaf:
+                if node.label in used:
+                    raise NetworkError(
+                        f"Cannot graft leaf '{node.label}': it is already "
+                        f"in the network."
+                    )
+                image = Node(node.label)
+            else:
+                label = node.label
+                if not label or label in used:
+                    label = self._fresh_label("I")
+                    while label in used:
+                        label = self._fresh_label("I")
+                image = Node(label, is_reticulation=node.is_reticulation())
+            used.add(image.label)
+            mapping[node] = image
+            self.add_nodes(image)
+
+        for edge in subtree.E():
+            new_edge = Edge(mapping[edge.src], mapping[edge.dest],
+                            length=edge.get_length())
+            gamma = edge.get_gamma()
+            if gamma:
+                new_edge.set_gamma(gamma)
+            self.add_edges(new_edge)
+        # A one-leaf network has in-degree 0 and out-degree 0. Network.root()
+        # ignores out-degree-0 nodes, so take the unique in-degree-0 node.
+        roots = [node for node in subtree.V() if subtree.in_degree(node) == 0]
+        if len(roots) != 1:
+            raise NetworkError(
+                "A grafted subtree must have exactly one root."
+            )
+        return mapping[roots[0]]
+
     def to_networkx(self) -> nx.Graph:
         """
         Convert this network to a NetworkX graph object.

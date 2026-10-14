@@ -252,43 +252,8 @@ def _log_beta_pdf(x: float, alpha: float, beta: float) -> float:
     )
 
 
-def _ancestor_depths(net: Network, start: Node) -> dict[Node, int]:
-    """Map every ancestor of ``start`` (inclusive) to its min edge-distance."""
-    dist: dict[Node, int] = {start: 0}
-    frontier = [start]
-    while frontier:
-        nxt: list[Node] = []
-        for u in frontier:
-            for p in net.get_parents(u):
-                if p not in dist:
-                    dist[p] = dist[u] + 1
-                    nxt.append(p)
-        frontier = nxt
-    return dist
-
-
-def _reticulation_cycle_size(net: Network, retic: Node) -> int:
-    """Number of nodes on the reticulation's cycle (undirected graph).
-
-    The cycle is the reticulation ``retic`` plus the two ancestral paths from
-    its parents up to their lowest common ancestor.  A return of ``2`` means
-    parallel edges (both parents identical); ``0`` means the node is not a
-    proper 2-parent reticulation (treated as degenerate by the caller).
-    """
-    parents = net.get_parents(retic)
-    if len(parents) < 2:
-        return 0
-    p1, p2 = parents[0], parents[1]
-    if p1 is p2:
-        return 2
-    d1 = _ancestor_depths(net, p1)
-    d2 = _ancestor_depths(net, p2)
-    common = [n for n in d1 if n in d2]
-    if not common:
-        return 0
-    lca = min(common, key=lambda n: d1[n] + d2[n])
-    # r + (path p1..lca) + (path p2..lca), lca shared once.
-    return d1[lca] + d2[lca] + 2
+# Moved to GraphUtils so DIMPLE's ground-truth oracle can share it.
+from .GraphUtils import reticulation_cycle_size as _reticulation_cycle_size  # noqa: E402
 
 
 def log_prior_seq(

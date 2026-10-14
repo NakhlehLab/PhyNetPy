@@ -107,8 +107,12 @@ def random_species_selection(nodes : list[Node],
     Returns:
         Node: The randomly selected node to operate on
     """
-    live_nodes = live_species(nodes)
-    
+    # Callers pass Network.V(), which is backed by a set, and Node.__hash__ is
+    # hash(name) -- so its iteration order shifts with PYTHONHASHSEED between
+    # processes. Sorting by label makes the index draw below, and therefore the
+    # whole simulation, reproducible from the rng seed alone.
+    live_nodes = sorted(live_species(nodes), key = lambda nd : nd.label)
+
     #use the rng object to select an index
     randomInt : int = rng.integers(0, len(live_nodes)) # type: ignore
     

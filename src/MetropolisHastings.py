@@ -277,7 +277,14 @@ class HillClimbing:
         cached_cur: float | None = None
         
         while iter_no < self.num_iter:
-            if no_progress == 150:
+            # generate() is where a phased kernel changes phase. Stopping
+            # first drops the proposal that switch was about to make:
+            # both counters land on 150, and the new phase is never
+            # sampled. Allow that one proposal; a later rejection still
+            # stops, because the count is then past 150 and the switch
+            # has already been consumed.
+            switch_due = getattr(self.kernel, "phase_switch_due", None)
+            if no_progress >= 150 and not (callable(switch_due) and switch_due()):
                 break
             
             next_move = self.kernel.generate(self.current_state.current_model)
@@ -335,7 +342,7 @@ class HillClimbing:
                 accepted: bool = True 
                 
                 if delta < 0:
-                    self.current_state.commit(next_move)  
+                    self.current_state.commit(next_move, proposed)
                     cached_cur = proposed
                     no_progress = 0
                 else:
@@ -348,23 +355,22 @@ class HillClimbing:
 
                 self.kernel.report_outcome(accepted, delta=proposed - cur)
                 
-                cur_net = self.current_state.current_model.network
-        
-                if cur_net not in leaderboard.keys():
-                    if accepted:
-                        if leaderboard:
-                            cur_max_val = max(leaderboard.values())
-                        else:
-                            cur_max_val = float('-inf')
-                        
-                        if len(list(leaderboard.keys())) < top_network_ct:
-                            leaderboard[cur_net] = proposed
-                        elif proposed > cur_max_val:
-                            leaderboard[cur_net] = proposed
-                            old_nets = [net for net in leaderboard.keys()
-                                       if leaderboard[net] == cur_max_val]
-                            if old_nets:
-                                del leaderboard[old_nets[0]]
+                # The state holds one live network that keeps changing, so a
+                # leaderboard entry has to be a snapshot taken at insertion.
+                if accepted:
+                    if leaderboard:
+                        cur_max_val = max(leaderboard.values())
+                    else:
+                        cur_max_val = float('-inf')
+
+                    if len(list(leaderboard.keys())) < top_network_ct:
+                        leaderboard[self.current_state.current_model.network.copy()[0]] = proposed
+                    elif proposed > cur_max_val:
+                        leaderboard[self.current_state.current_model.network.copy()[0]] = proposed
+                        old_nets = [net for net in leaderboard.keys()
+                                    if leaderboard[net] == cur_max_val]
+                        if old_nets:
+                            del leaderboard[old_nets[0]]
             else:
                 self.kernel.report_outcome(False, delta=0.0)
                 if self.enhanced_stop:
@@ -605,7 +611,7 @@ class SimulatedAnnealing:
         accepted = 0
         uphill_accepted = 0
         best_run_score = state.likelihood()
-        best_run_network = copy.deepcopy(state.current_model.network)
+        best_run_network = state.current_model.network.copy()[0]
 
         for i in range(self.num_iter):
             try:
@@ -632,11 +638,11 @@ class SimulatedAnnealing:
 
                 was_accepted = False
                 if delta < 0:
-                    state.commit(next_move)
+                    state.commit(next_move, proposed)
                     accepted += 1
                     was_accepted = True
                 elif temp > 0 and self.rng.random() < math.exp(-delta / temp):
-                    state.commit(next_move)
+                    state.commit(next_move, proposed)
                     accepted += 1
                     uphill_accepted += 1
                     was_accepted = True
@@ -648,7 +654,7 @@ class SimulatedAnnealing:
                 score_now = state.likelihood()
                 if score_now > best_run_score:
                     best_run_score = score_now
-                    best_run_network = copy.deepcopy(state.current_model.network)
+                    best_run_network = state.current_model.network.copy()[0]
 
                 if i >= plateau_end:
                     temp *= self.alpha
@@ -694,7 +700,7 @@ class SimulatedAnnealing:
         accepted = 0
         uphill_accepted = 0
         best_run_score = state.likelihood()
-        best_run_network = copy.deepcopy(state.current_model.network)
+        best_run_network = state.current_model.network.copy()[0]
 
         steps_at_level = 0
         since_best_improve = 0
@@ -775,11 +781,11 @@ class SimulatedAnnealing:
 
                 was_accepted = False
                 if delta < 0:
-                    state.commit(next_move)
+                    state.commit(next_move, proposed)
                     accepted += 1
                     was_accepted = True
                 elif temp > 0 and self.rng.random() < math.exp(-delta / temp):
-                    state.commit(next_move)
+                    state.commit(next_move, proposed)
                     accepted += 1
                     uphill_accepted += 1
                     uphill_in_window += 1
@@ -792,7 +798,7 @@ class SimulatedAnnealing:
                 score_now = state.likelihood()
                 if score_now > best_run_score:
                     best_run_score = score_now
-                    best_run_network = copy.deepcopy(state.current_model.network)
+                    best_run_network = state.current_model.network.copy()[0]
                     since_best_improve = 0
                     # Re-arm the reheat mechanism: we just escaped the basin
                     # that was provoking cascade-guard suspension (if any).

@@ -563,7 +563,7 @@ class InferNetwork_ML:
 
                 # Starting network: the seed for run 0, a perturbed copy
                 # afterwards.
-                start_net = copy.deepcopy(self.net)
+                start_net = self.net.copy()[0]
                 if run_idx > 0:
                     start_net = self._random_restart(
                         start_net,
@@ -614,7 +614,7 @@ class InferNetwork_ML:
             if not ranked:
                 # Degenerate: no move ever improved -- score the seed.
                 model = Model(rng=np.random.default_rng())
-                model.network = copy.deepcopy(self.net)
+                model.network = self.net.copy()[0]
                 model.set_likelihood_calculator(scorer)
                 base = float(scorer(model))
                 ranked = [(base, model.network)]
@@ -851,7 +851,7 @@ class InferNetwork_ML:
         existing = leaderboard.get(sig)
         if existing is not None and existing[0] >= score:
             return
-        leaderboard[sig] = (score, copy.deepcopy(net))
+        leaderboard[sig] = (score, net.copy()[0])
 
         # Trim to the top ``num_networks`` (keep a little slack so a
         # transiently-low topology can still climb back in).
