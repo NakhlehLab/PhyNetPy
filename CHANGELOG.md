@@ -102,6 +102,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   switch for short runs. With `optimize_params=True`, an `AddReticulation`
   proposal is always parameter-optimised before it is judged: a new hybrid is
   born at gamma 0.5, and its raw score is not evidence against the insertion.
+- `SimulatedAnnealing` takes four new options: `stall_limit` stops a chain
+  after that many iterations without a new run-best score (ignored by the
+  `geometric_reheat` schedule); `neutral_accept_prob` gates proposals that
+  tie the current score instead of always accepting them; `restart_factory`
+  builds a fresh model per restart so restarts are independent rather than
+  parallel chains; `trace=True` records a per-iteration tuple in
+  `run_stats[i]["trace"]`. Each restart's model now draws its own child
+  seed, so restarts no longer replay the same move stream.
 - `SwitchParentage(debug_id=...)` is accepted and ignored.
 - The compiled MPL kernel's node limit rose from 128 to 1024, with the DP
   workspace sized by the network actually scored.
