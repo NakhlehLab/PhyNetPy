@@ -1719,3 +1719,33 @@ class TestHybridGammaCompletion:
                 assert set(got) == {label.lstrip("#") for label in expected}
                 for label, gammas in expected.items():
                     assert all(abs(a - b) < 1e-12 for a, b in zip(gammas, got[label.lstrip("#")])), (build.__name__, parse.__name__)
+
+
+class TestReticulationLabelLeniency:
+    """``read_newick`` accepts reticulation labels that are not extended-Newick
+    event codes. Networks built in memory are written with ``#UID_<n>`` names
+    (``Network.add_uid_node``), and other tools emit ``#1`` or ``#h1``; before
+    this the written file could not be read back."""
+
+    @pytest.mark.parametrize("label", ["#UID_6057", "#1", "#h1", "#X"])
+    def test_round_trip_label(self, label):
+        from phynetpy.IO import read_newick
+        net = read_newick(f"((A,(B){label}),({label},C));")
+        assert sorted(l.label for l in net.get_leaves()) == ["A", "B", "C"]
+        retics = [v for v in net.V() if v.is_reticulation()]
+        assert len(retics) == 1 and retics[0].label == label
+        assert len(net.get_parents(retics[0])) == 2
+
+    def test_written_network_reads_back(self):
+        from phynetpy.IO import read_newick
+        from phynetpy.GraphUtils import mu_distance
+        net = read_newick("((A,(B)#H1),(#H1,C));")
+        net.update_node_name(net.has_node_named("#H1"), "#UID_42")
+        again = read_newick(net.newick())
+        assert mu_distance(net, again) == 0
+
+    def test_malformed_lgt_still_rejected(self):
+        from phynetpy.IO import read_newick, IOError as PhyIOError
+        with pytest.raises(PhyIOError):
+            read_newick("((A,(B)#LGX1),(#LGX1,C));")
+

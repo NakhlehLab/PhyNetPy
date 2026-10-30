@@ -359,7 +359,7 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">write_newick</span>(<span class="params">network: Network</span>) <span class="keyword">-&gt;</span> str
+                                <span class="name">write_newick</span>(<span class="params">network: Network, annotate: bool = False</span>) <span class="keyword">-&gt;</span> str
                             </div>
                             <div class="function-body">
                                 <p>Convert a PhyNetPy Network into a newick string. Delegates to the Network's built-in ``newick()`` method, which produces extended-newick notation for networks with reticulation nodes.</p>
@@ -373,6 +373,11 @@
                                         <td><span class="param-name">network</span></td>
                                         <td><span class="param-type">Network</span></td>
                                         <td>A PhyNetPy Network object.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">annotate</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If True, emit branch lengths (``:len``) and inheritance probabilities (``[&amp;gamma=g]``) as well as the topology. Defaults to False.</td>
                                     </tr>
                                 </table>
                                 <div class="returns"><span class="returns-label">Returns:</span> str: The newick representation of the network, ending with ';'.</div>

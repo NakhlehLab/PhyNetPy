@@ -89,6 +89,8 @@ __all__ = [
     "joint_dissimilarity",
     "JointDissimilarityResult",
     "JOINT_KINDS",
+    "hybrid_ancestry",
+    "hybrid_ancestry_error",
     "pairwise_leaf_distance",
     "average_path_distance",
     "weighted_average_path_distance",
@@ -1213,6 +1215,30 @@ def _leaf_label_set(net: Network) -> frozenset[str]:
     return frozenset(n.label for n in net.get_leaves())
 
 
+def _require_same_leaves(net1: Network, net2: Network, caller: str) -> frozenset[str]:
+    """
+    Check that two networks have identical leaf label sets.
+
+    Args:
+        net1 (Network): First network.
+        net2 (Network): Second network.
+        caller (str): Name of the metric, for the error message.
+
+    Returns:
+        frozenset[str]: The shared leaf label set.
+
+    Raises:
+        NetworkError: If the leaf label sets differ.
+    """
+    leaves1, leaves2 = _leaf_label_set(net1), _leaf_label_set(net2)
+    if leaves1 != leaves2:
+        raise NetworkError(
+            f"{caller} requires identical leaf label sets. "
+            f"Got {sorted(leaves1)} vs {sorted(leaves2)}"
+        )
+    return leaves1
+
+
 def _hardwired_clusters_by_label(
     net: Network,
     include_trivial: bool = False
@@ -1572,16 +1598,7 @@ def mu_distance(net1: Network, net2: Network) -> int:
     Returns:
         The mu-distance (non-negative integer).
     """
-    leaves1 = _leaf_label_set(net1)
-    leaves2 = _leaf_label_set(net2)
-
-    if leaves1 != leaves2:
-        raise NetworkError(
-            "mu_distance requires identical leaf label sets. "
-            f"Got {sorted(leaves1)} vs {sorted(leaves2)}"
-        )
-
-    leaf_order = sorted(leaves1)
+    leaf_order = sorted(_require_same_leaves(net1, net2, "mu_distance"))
     mu1 = _mu_vectors(net1, leaf_order)
     mu2 = _mu_vectors(net2, leaf_order)
 
@@ -1590,6 +1607,60 @@ def mu_distance(net1: Network, net2: Network) -> int:
 
     all_keys = set(counter1) | set(counter2)
     return sum(abs(counter1.get(k, 0) - counter2.get(k, 0)) for k in all_keys)
+
+
+def hybrid_ancestry(net: Network) -> frozenset[str]:
+    """
+    The leaf labels that descend from at least one reticulation node.
+
+    A taxon is of *hybrid ancestry* if some reticulation lies on a directed
+    path from the root to it, i.e. it belongs to the hardwired cluster of
+    some reticulation node. Since every leaf below a reticulation is reached
+    along every edge, the set is independent of inheritance probabilities and
+    of the root placement.
+
+    Args:
+        net (Network): A phylogenetic network.
+
+    Returns:
+        frozenset[str]: Labels of the leaves below any reticulation; empty
+                        for a tree.
+    """
+    below = _leaf_labels_below(net)
+    return frozenset().union(*(below[v] for v in net.V() if v.is_reticulation()))
+
+
+def hybrid_ancestry_error(estimated: Network, true_net: Network) -> float:
+    """
+    Hybrid-ancestry balanced error (HAE) of an estimated network against the
+    true network.
+
+    Let B be the hybrid-ancestry set (see :func:`hybrid_ancestry`) of the
+    estimate and A that of the truth. The false-positive rate is
+    |B - A| / |B| and the false-negative rate |A - B| / |A|; HAE is their
+    mean, in [0, 1]. Each rate is defined as 0 when its denominator is empty,
+    so a tree estimated for a reticulate truth scores 0.5 and a tree estimated
+    for a tree scores 0. Unlike :func:`mu_distance`, this measure is
+    *asymmetric*: the argument order matters.
+
+    The convention follows the HAE column of the NetCSEval evaluation
+    scripts (``hae_datafinal.jl``), so values are comparable to that work.
+
+    Args:
+        estimated (Network): The inferred network.
+        true_net (Network): The reference (true) network.
+
+    Returns:
+        float: Balanced hybrid-ancestry error in [0, 1].
+
+    Raises:
+        NetworkError: If the two networks have different leaf label sets.
+    """
+    _require_same_leaves(estimated, true_net, "hybrid_ancestry_error")
+    B, A = hybrid_ancestry(estimated), hybrid_ancestry(true_net)
+    fpr = len(B - A) / len(B) if B else 0.0
+    fnr = len(A - B) / len(A) if A else 0.0
+    return (fpr + fnr) / 2
 
 
 def tripartition_distance(

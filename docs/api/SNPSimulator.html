@@ -55,7 +55,8 @@
                                 <span class="name">taxa_names</span> <span class="keyword">-&gt;</span> list[str]
                             </div>
                             <div class="function-body">
-                                <p>Return sorted list of taxon names.</p>
+                                <p>List the taxa present in the simulated data, in sorted order.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[str]: Taxon names, sorted lexicographically.</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -77,6 +78,7 @@
                                     </tr>
                                 </table>
                                 <div class="returns"><span class="returns-label">Returns:</span> None</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ValueError</code>: If any taxon's count vector is not exactly n_sites long, or if any red count falls outside 0..15.</div>
                             </div>
                         </div>
                     </div>
@@ -98,7 +100,7 @@
                                     <tr>
                                         <td><span class="param-name">n</span></td>
                                         <td><span class="param-type">int</span></td>
-                                        <td>Number of leaf taxa (must be &gt;= 3 for level &gt;= 1).</td>
+                                        <td>Number of leaf taxa. A tree on n leaves has only n - 2 edges joining two internal nodes, and a reticulation consumes two non-nested ones, so n &gt;= 5 in practice for level &gt;= 1.</td>
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">level</span></td>
@@ -121,8 +123,8 @@
                                         <td>Random seed for reproducibility. Defaults to None.</td>
                                     </tr>
                                 </table>
-                                <div class="returns"><span class="returns-label">Returns:</span> Network: A phylogenetic network with n leaves and `level` reticulation nodes.</div>
-                                <div class="raises"><span class="raises-label">Raises:</span> <code>ValueError</code>: If n &lt; 2 or level &lt; 0, or not enough edges to place all reticulations.</div>
+                                <div class="returns"><span class="returns-label">Returns:</span> Network: A phylogenetic network with n leaves and at most `level` reticulation nodes.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>ValueError</code>: If n &lt; 2 or level &lt; 0. Warns: UserWarning: If the topology runs out of legal insertion sites before `level` reticulations are placed. The network is returned with however many were added.</div>
                             </div>
                         </div>
                         <div class="function-def">

@@ -801,6 +801,7 @@ def _parse_reticulation_attributes(attr_str: str) -> Tuple[str, int]:
         - "H1"    -> ("Hybridization", 1)
         - "LGT21" -> ("Lateral Gene Transfer", 21)
         - "R3"    -> ("Recombination", 3)
+        - "UID_7" -> ("Hybridization", 7)   (any other prefix)
 
     Args:
         attr_str (str): A node name suffix carrying reticulation event 
@@ -812,7 +813,7 @@ def _parse_reticulation_attributes(attr_str: str) -> Tuple[str, int]:
     Returns:
         tuple[str, int]: (event_type, index)
     """
-    if len(attr_str) < 2:
+    if not attr_str:
         raise IOError("Reticulation event label formatting incorrect")
 
     index_lookup = 0
@@ -830,7 +831,12 @@ def _parse_reticulation_attributes(attr_str: str) -> Tuple[str, int]:
         else:
             raise IOError("Invalid reticulation label format (event error)")
     else:
-        raise IOError("Invalid reticulation label format (event error)")
+        # Not an extended-Newick event code. Networks built in memory carry
+        # labels such as "#UID_6057" (see Network.add_uid_node), and other
+        # tools write "#1" or "#h1"; treat them all as hybridizations and
+        # keep any trailing digits as the index.
+        digits = re.search(r"(\d+)$", attr_str)
+        return "Hybridization", int(digits.group(1)) if digits else -1
 
     try:
         num = int(attr_str[index_lookup:])

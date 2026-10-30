@@ -31,6 +31,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `cluster` (multiset hardwired clusters) or `nakhleh` (vertex-equivalence
   classes). `tests/crosscheck/jointdist_standalone.py` is the reference
   implementation the port is tested against.
+- `GraphUtils.hybrid_ancestry_error(estimated, true_net)` -- the balanced
+  hybrid-ancestry error (HAE) used in the NetCSEval evaluation: the mean of the
+  false-positive and false-negative rates of the set of taxa descending from a
+  reticulation, with each rate 0 when its denominator is empty. Asymmetric,
+  like a precision/recall summary. `GraphUtils.hybrid_ancestry(net)` returns
+  the set itself. The DIMPLE benchmark records `mu_dist` and `hae` per
+  replicate alongside the existing metrics.
+
+### Fixed -- networks written by `Network.newick` could not be read back
+
+- `IO.read_newick` rejected any reticulation label that was not an
+  extended-Newick event code (`#H1`, `#R1`, `#LGT1`). Networks built in
+  memory carry `#UID_<n>` reticulation names, so a network written with
+  `write_newick_file` failed to parse on reload, and other tools' `#1` or
+  `#h1` labels failed too. Such labels are now read as hybridizations, with
+  any trailing digits kept as the index; the two occurrences are still paired
+  by the full name.
 
 ### Fixed -- displayed trees kept nodes that stand for no taxon
 
