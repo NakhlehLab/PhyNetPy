@@ -1,0 +1,2088 @@
+{
+  "meta": {
+    "phynetpy_version": "0.6.0",
+    "python": "3.14.2",
+    "python_implementation": "CPython",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "numpy": "2.3.5",
+    "scipy": "1.16.3",
+    "networkx": "3.6.1",
+    "timestamp": "2026-09-25 12:11:23-0500",
+    "timing": {
+      "clock": "time.perf_counter",
+      "statistic": "median of repeats",
+      "warmup_calls": 1,
+      "startup_included": false,
+      "parallelism": "single process, single thread unless noted"
+    },
+    "phynetpy_import_s": 0.5383428999921307,
+    "comparison": {
+      "method": "InferNetwork_MPL",
+      "phylonet_jar": "C:\\Users\\Marky\\Documents\\PhyloNetJar\\phylonet.jar",
+      "phylonet_jar_bytes": 41019851,
+      "java_version": "java version \"1.8.0_491\"",
+      "max_reticulations": "matched to the generating network per condition",
+      "phylonet_search_runs_per_invocation": 1,
+      "replicates_per_condition": 3,
+      "data_generator": "phynetpy simulate under MSC(theta=0.5)",
+      "base_seed": 20260925,
+      "seed_scheme": "replicate i uses seed SEED + i for simulation and search",
+      "stochasticity_note": "Both searches are stochastic. PhyNetPy is seeded per replicate; PhyloNet's command-line interface is not seeded here, so its variation across replicates is uncontrolled. Aggregates over 3 replicates are what the paper reports; per-replicate values are retained under conditions[*].replicates.",
+      "timing_note": "PhyloNet wall_s includes JVM startup; self_reported_s does not. PhyNetPy wall_s is in-process with modules already imported; the one-time import cost is meta.phynetpy_import_s. Compare self_reported_s against PhyNetPy wall_s for like-for-like."
+    }
+  },
+  "conditions": {
+    "4taxa_25genes_r0": {
+      "taxa": 4,
+      "gene_trees": 25,
+      "reticulations_requested": 0,
+      "reticulations_in_truth": 0,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(spec2,((spec1,spec4)internal2,spec3)internal1)root;",
+          "ils": {
+            "gene_trees": 25,
+            "concordant_with_truth": 10,
+            "distinct_topologies": 6
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.13655830000061542,
+              "score": -74.11506650596094,
+              "newick": "(spec2,((spec1,spec4)Internal_2,spec3)Internal_1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.06016879994422197,
+              "score": -74.11506650211318,
+              "newick": "(spec2,(spec3,(spec4,spec1)UID_1)UID_2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.42190780001692474,
+            "self_reported_s": 0.064,
+            "log_pseudolikelihood": -74.1196668203167,
+            "newick": "(spec2:0.4712406830032386,(spec3:2.4430665404927545,(spec1:0.4048926275357265,spec4:0.12658525182222166):1.1998342167804277):0.555669532532665);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20260926,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(((spec4,spec3)internal2,spec1)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 25,
+            "concordant_with_truth": 18,
+            "distinct_topologies": 3
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.14577920001465827,
+              "score": -19.775964391424285,
+              "newick": "((spec1,(spec4,spec3)UID_1)UID_0,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.10891179996542633,
+              "score": -19.775964391424235,
+              "newick": "(spec2,((spec4,spec3)UID_3,spec1)UID_4)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.538612199947238,
+            "self_reported_s": 0.136,
+            "log_pseudolikelihood": -20.19607017756062,
+            "newick": "(spec2:0.6264313101316781,(spec1:0.04425221362686993,(spec4:0.3617973645442819,spec3:0.007081610599715822):0.9221182245443917):4.37261128131841);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20260927,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((spec3,(spec4,spec1)internal2)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 25,
+            "concordant_with_truth": 2,
+            "distinct_topologies": 8
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.060189700103364885,
+              "score": -78.78119715211685,
+              "newick": "(((spec3,spec1)Internal_2,spec4)Internal_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 2.0,
+                "rf": 2.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.06566880003083497,
+              "score": -78.78119705672206,
+              "newick": "(((spec1,spec3)UID_0,spec4)UID_2,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 2.0,
+                "rf": 2.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.4631619000574574,
+            "self_reported_s": 0.12300000000000001,
+            "log_pseudolikelihood": -78.78310517007544,
+            "newick": "(spec2:1.3342532998080516,(spec4:1.8063879153261206,(spec3:0.683299159285292,spec1:0.3090316430931218):0.6221065306244045):0.7393831829648119);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 2.0,
+              "rf": 2.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 0.11417573337287952,
+              "min": 0.060189700103364885,
+              "max": 0.14577920001465827,
+              "n": 3
+            },
+            "mu": {
+              "mean": 0.6666666666666666,
+              "min": 0.0,
+              "max": 2.0,
+              "n": 3
+            },
+            "exact_recoveries": 2
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 0.07824979998016109,
+              "min": 0.06016879994422197,
+              "max": 0.10891179996542633,
+              "n": 3
+            },
+            "mu": {
+              "mean": 0.6666666666666666,
+              "min": 0.0,
+              "max": 2.0,
+              "n": 3
+            },
+            "exact_recoveries": 2
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 0.10766666666666667,
+            "min": 0.064,
+            "max": 0.136,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 0.47456063334054005,
+            "min": 0.42190780001692474,
+            "max": 0.538612199947238,
+            "n": 3
+          },
+          "mu": {
+            "mean": 0.6666666666666666,
+            "min": 0.0,
+            "max": 2.0,
+            "n": 3
+          },
+          "exact_recoveries": 2
+        },
+        "concordance_mean": 0.39999999999999997
+      }
+    },
+    "4taxa_100genes_r0": {
+      "taxa": 4,
+      "gene_trees": 100,
+      "reticulations_requested": 0,
+      "reticulations_in_truth": 0,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(((spec1,spec4)internal2,spec3)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 100,
+            "concordant_with_truth": 37,
+            "distinct_topologies": 10
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.0887559000402689,
+              "score": -141839.24172843323,
+              "newick": "(spec2,spec3,(spec1,spec4)Internal_1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.059127099928446114,
+              "score": -99543.41954249515,
+              "newick": "(spec3,(spec4,spec1)UID_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.48479369992855936,
+            "self_reported_s": 0.174,
+            "log_pseudolikelihood": -321.444245242594,
+            "newick": "((spec3:0.005071241823717546,(spec4:0.22495868079593323,spec1:2.5044754648716934):1.1063131480840038):0.3921906536816202,spec2:0.0839925992047591);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20260926,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((spec1,(spec3,spec4)internal2)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 100,
+            "concordant_with_truth": 78,
+            "distinct_topologies": 5
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.1320691000437364,
+              "score": -90.08275116150212,
+              "newick": "(spec2,((spec3,spec4)Internal_2,spec1)UID_0)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.08860099990852177,
+              "score": -90.08275115334096,
+              "newick": "(((spec3,spec4)UID_7,spec1)UID_5,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.5196152999997139,
+            "self_reported_s": 0.142,
+            "log_pseudolikelihood": -90.08368887140156,
+            "newick": "((spec1:0.9944437864466846,(spec4:0.017113122128670652,spec3:0.6937331868046723):1.1339661912996906):3.675128081461389,spec2:0.021022259525728913);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20260927,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((spec3,(spec1,spec4)internal2)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 100,
+            "concordant_with_truth": 23,
+            "distinct_topologies": 10
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.0507984000723809,
+              "score": -87107.58653471,
+              "newick": "((spec3,spec1,spec4)Internal_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.036658499971963465,
+              "score": -116122.03221205228,
+              "newick": "((spec4,spec3,spec1)Internal_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.4470952999545261,
+            "self_reported_s": 0.13099999999999998,
+            "log_pseudolikelihood": -322.48450749159895,
+            "newick": "(spec2:0.22100569336640652,(spec4:0.02294906430526486,(spec1:1.0441773134717047,spec3:0.5555360113192065):0.0565171683554613):0.986708080610579);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 2.0,
+              "rf": 2.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 0.09054113338546206,
+              "min": 0.0507984000723809,
+              "max": 0.1320691000437364,
+              "n": 3
+            },
+            "mu": {
+              "mean": 0.6666666666666666,
+              "min": 0.0,
+              "max": 1.0,
+              "n": 3
+            },
+            "exact_recoveries": 1
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 0.06146219993631045,
+              "min": 0.036658499971963465,
+              "max": 0.08860099990852177,
+              "n": 3
+            },
+            "mu": {
+              "mean": 0.6666666666666666,
+              "min": 0.0,
+              "max": 1.0,
+              "n": 3
+            },
+            "exact_recoveries": 1
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 0.149,
+            "min": 0.13099999999999998,
+            "max": 0.174,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 0.4838347666275998,
+            "min": 0.4470952999545261,
+            "max": 0.5196152999997139,
+            "n": 3
+          },
+          "mu": {
+            "mean": 0.6666666666666666,
+            "min": 0.0,
+            "max": 2.0,
+            "n": 3
+          },
+          "exact_recoveries": 2
+        },
+        "concordance_mean": 0.46
+      }
+    },
+    "5taxa_50genes_r0": {
+      "taxa": 5,
+      "gene_trees": 50,
+      "reticulations_requested": 0,
+      "reticulations_in_truth": 0,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((spec5,spec2)internal3,(spec3,(spec4,spec1)internal2)internal1)root;",
+          "ils": {
+            "gene_trees": 50,
+            "concordant_with_truth": 12,
+            "distinct_topologies": 16
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.11278239998500794,
+              "score": -89542.0763979448,
+              "newick": "(((spec1,spec4)UID_4,spec3)UID_3,spec5,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.059795300010591745,
+              "score": -94607.26849787687,
+              "newick": "(spec2,((spec4,spec1)Internal_1,spec3)UID_1,spec5)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.7377282999223098,
+            "self_reported_s": 0.376,
+            "log_pseudolikelihood": -402.3501353423844,
+            "newick": "((spec3:0.22100719266517738,(spec4:2.343937167626458,spec1:0.5413329609037377):0.39563751628784377):0.2132511758116185,(spec5:0.06998818192710599,spec2:5.601475852464175):2.174850148169191);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20260926,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(((spec5,spec1)internal3,(spec4,spec3)internal2)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 50,
+            "concordant_with_truth": 39,
+            "distinct_topologies": 3
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.20159139996394515,
+              "score": -67.9400341432617,
+              "newick": "(((spec1,spec5)UID_3,(spec3,spec4)Internal_2)UID_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.24921809998340905,
+              "score": -68.46400683909981,
+              "newick": "(((spec5,spec1)UID_19,(spec4,spec3)UID_18)UID_20,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.561728399945423,
+            "self_reported_s": 0.221,
+            "log_pseudolikelihood": -92.62895667194024,
+            "newick": "(((spec4:0.31289149504823144,spec3:0.41792520398471183):1.2609878529835528,(spec5:0.03289767436956992,spec1:7.713035941253974E-4):1.501595514079353):2.911616465429334,spec2:0.7306674620859344);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20260927,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(spec2,(spec3,(spec1,(spec4,spec5)internal3)internal2)internal1)root;",
+          "ils": {
+            "gene_trees": 50,
+            "concordant_with_truth": 0,
+            "distinct_topologies": 25
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.051395999966189265,
+              "score": -129441.15398884156,
+              "newick": "(spec2,(spec4,spec5,spec3,spec1)Internal_1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 2.0,
+                "rf": 2.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.040601500077173114,
+              "score": -128523.59991565482,
+              "newick": "(spec2,(spec4,spec3,spec5,spec1)Internal_1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 2.0,
+                "rf": 2.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 1.11536229995545,
+            "self_reported_s": 0.761,
+            "log_pseudolikelihood": -446.6525417077583,
+            "newick": "(spec2:2.3156915152429702,(spec5:9.392251681098324,(spec1:0.28817546853266773,(spec3:9.97097165950033,spec4:2.2898390095920482):0.08382764744417995):0.010550848155202873):0.9300039845615476);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 4.0,
+              "rf": 4.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 0.12192326663838078,
+              "min": 0.051395999966189265,
+              "max": 0.20159139996394515,
+              "n": 3
+            },
+            "mu": {
+              "mean": 1.0,
+              "min": 0.0,
+              "max": 2.0,
+              "n": 3
+            },
+            "exact_recoveries": 1
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 0.11653830002372463,
+              "min": 0.040601500077173114,
+              "max": 0.24921809998340905,
+              "n": 3
+            },
+            "mu": {
+              "mean": 1.0,
+              "min": 0.0,
+              "max": 2.0,
+              "n": 3
+            },
+            "exact_recoveries": 1
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 0.4526666666666667,
+            "min": 0.221,
+            "max": 0.761,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 0.8049396666077276,
+            "min": 0.561728399945423,
+            "max": 1.11536229995545,
+            "n": 3
+          },
+          "mu": {
+            "mean": 1.3333333333333333,
+            "min": 0.0,
+            "max": 4.0,
+            "n": 3
+          },
+          "exact_recoveries": 2
+        },
+        "concordance_mean": 0.34
+      }
+    },
+    "5taxa_200genes_r0": {
+      "taxa": 5,
+      "gene_trees": 200,
+      "reticulations_requested": 0,
+      "reticulations_in_truth": 0,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((spec5,spec2)internal3,((spec1,spec4)internal2,spec3)internal1)root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 68,
+            "distinct_topologies": 27
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.1633323000278324,
+              "score": -593773.232232006,
+              "newick": "(spec2,spec5,(spec3,(spec4,spec1)Internal_1)UID_2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.06544289994053543,
+              "score": -412889.38080101676,
+              "newick": "(spec2,((spec4,spec1)UID_1,spec5)UID_0,spec3)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 3.0,
+                "rf": 3.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.6652971999719739,
+            "self_reported_s": 0.3,
+            "log_pseudolikelihood": -1445.9942735019454,
+            "newick": "((spec3:4.11625540575088,(spec1:5.067616129217634E-4,spec4:0.17470137628244162):0.6915148884192447):0.3443236333655042,(spec5:0.2950932753431373,spec2:3.0799664026959057):2.1299642094542515);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20260926,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(spec2,((spec3,spec4)internal2,(spec1,spec5)internal3)internal1)root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 152,
+            "distinct_topologies": 5
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.1593515999848023,
+              "score": -362.54817175002336,
+              "newick": "(((spec3,spec4)Internal_2,(spec1,spec5)Internal_5)Internal_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.2532704999903217,
+              "score": -363.21933752144673,
+              "newick": "(((spec4,spec3)UID_11,(spec5,spec1)UID_13)UID_14,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.5521894000703469,
+            "self_reported_s": 0.222,
+            "log_pseudolikelihood": -392.78642476238883,
+            "newick": "(spec2:4.991051100671834,((spec3:0.011117255937078033,spec4:0.04435613841701924):0.7021476667396724,(spec5:0.7670873421215522,spec1:0.5930212533961199):3.0907358740885496):2.921895950955898);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20260927,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((((spec5,spec4)internal3,spec1)internal2,spec3)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 10,
+            "distinct_topologies": 44
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.04659210005775094,
+              "score": -530655.3454648984,
+              "newick": "((spec4,spec5,spec1,spec3)Internal_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 2.0,
+                "rf": 2.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.05518130003474653,
+              "score": -472641.1161191948,
+              "newick": "(spec2,(spec1,spec4,spec3,spec5)Internal_1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 2.0,
+                "rf": 2.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 1.0563491999637336,
+            "self_reported_s": 0.705,
+            "log_pseudolikelihood": -1680.35116680715,
+            "newick": "(spec2:1.3040700249645618,((spec3:1.702485686056748,(spec1:0.9145146538398428,spec5:0.5080374499107256):0.06890927107211889):0.008556538121141963,spec4:11.625411070931511):1.124354217354378);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 4.0,
+              "rf": 4.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 0.12309200002346188,
+              "min": 0.04659210005775094,
+              "max": 0.1633323000278324,
+              "n": 3
+            },
+            "mu": {
+              "mean": 1.0,
+              "min": 0.0,
+              "max": 2.0,
+              "n": 3
+            },
+            "exact_recoveries": 1
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 0.12463156665520121,
+              "min": 0.05518130003474653,
+              "max": 0.2532704999903217,
+              "n": 3
+            },
+            "mu": {
+              "mean": 1.6666666666666667,
+              "min": 0.0,
+              "max": 3.0,
+              "n": 3
+            },
+            "exact_recoveries": 1
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 0.409,
+            "min": 0.222,
+            "max": 0.705,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 0.7579452666686848,
+            "min": 0.5521894000703469,
+            "max": 1.0563491999637336,
+            "n": 3
+          },
+          "mu": {
+            "mean": 1.3333333333333333,
+            "min": 0.0,
+            "max": 4.0,
+            "n": 3
+          },
+          "exact_recoveries": 2
+        },
+        "concordance_mean": 0.38333333333333336
+      }
+    },
+    "6taxa_100genes_r0": {
+      "taxa": 6,
+      "gene_trees": 100,
+      "reticulations_requested": 0,
+      "reticulations_in_truth": 0,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((spec2,spec5)internal3,((spec6,spec3)internal4,(spec1,spec4)internal2)internal1)root;",
+          "ils": {
+            "gene_trees": 100,
+            "concordant_with_truth": 28,
+            "distinct_topologies": 29
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.14728909998666495,
+              "score": -511986.1409976735,
+              "newick": "(((spec1,spec4)Internal_4,spec5)UID_0,spec2,(spec6,spec3)UID_1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 3.0,
+                "rf": 3.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.16721780004445463,
+              "score": -518756.6825822693,
+              "newick": "(spec5,spec2,((spec1,spec4)UID_13,(spec6,spec3)UID_11)UID_12)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.9775582998991013,
+            "self_reported_s": 0.613,
+            "log_pseudolikelihood": -1389.334950448612,
+            "newick": "((spec2:0.08878394005875237,spec5:0.9890290522282239):1.5625308838030407,((spec1:2.055364571869035,spec4:3.788621256448754):0.7732055440689007,(spec3:0.3221792389299625,spec6:6.87180279749726):1.8569576248752133):0.40945167307564573);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20260926,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(((spec1,(spec6,spec5)internal4)internal3,(spec3,spec4)internal2)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 100,
+            "concordant_with_truth": 36,
+            "distinct_topologies": 11
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.1997364000417292,
+              "score": -208812.749194745,
+              "newick": "(((spec3,spec4)UID_6,(spec1,spec6,spec5)Internal_2)UID_5,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.13370410003699362,
+              "score": -208813.08950941206,
+              "newick": "(spec2,((spec4,spec3)UID_2,(spec1,spec6,spec5)Internal_2)UID_4)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.9391014999710023,
+            "self_reported_s": 0.516,
+            "log_pseudolikelihood": -417.75281825642213,
+            "newick": "(spec2:0.7839087839951235,(((spec5:0.014398026555576648,spec6:0.4639005857684654):0.5825236837165986,spec1:1.5971741703878146):5.06924107141096,(spec4:0.04579848252439561,spec3:4.164131005377098):1.244586348116091):3.8109592713853186);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20260927,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(spec2,(spec3,(((spec4,spec6)internal4,spec5)internal3,spec1)internal2)internal1)root;",
+          "ils": {
+            "gene_trees": 100,
+            "concordant_with_truth": 3,
+            "distinct_topologies": 41
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.21019359992351383,
+              "score": -441464.0824490472,
+              "newick": "(spec2,((spec5,spec6,spec1,spec3)Internal_1,spec4)UID_3)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 4.0,
+                "rf": 4.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.15947140008211136,
+              "score": -502029.50203074305,
+              "newick": "(spec2,(spec4,spec3,spec5,(spec6,spec1)UID_7)Internal_1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 4.0,
+                "rf": 4.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 1.3350011999718845,
+            "self_reported_s": 0.9779999999999999,
+            "log_pseudolikelihood": -1462.6292231507246,
+            "newick": "(spec2:4.414373451845728,(spec5:5.131241882302108,((spec1:1.5232791884262964,(spec6:0.2848395587238194,spec4:0.7178664259030192):2.037540483654473):0.15053328645849365,spec3:5.802609080620687):0.007580300540890969):1.1317345498109326);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 4.0,
+              "rf": 4.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 0.18573969998396933,
+              "min": 0.14728909998666495,
+              "max": 0.21019359992351383,
+              "n": 3
+            },
+            "mu": {
+              "mean": 2.6666666666666665,
+              "min": 1.0,
+              "max": 4.0,
+              "n": 3
+            },
+            "exact_recoveries": 0
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 0.1534644333878532,
+              "min": 0.13370410003699362,
+              "max": 0.16721780004445463,
+              "n": 3
+            },
+            "mu": {
+              "mean": 2.0,
+              "min": 1.0,
+              "max": 4.0,
+              "n": 3
+            },
+            "exact_recoveries": 0
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 0.7023333333333333,
+            "min": 0.516,
+            "max": 0.9779999999999999,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 1.0838869999473293,
+            "min": 0.9391014999710023,
+            "max": 1.3350011999718845,
+            "n": 3
+          },
+          "mu": {
+            "mean": 1.3333333333333333,
+            "min": 0.0,
+            "max": 4.0,
+            "n": 3
+          },
+          "exact_recoveries": 2
+        },
+        "concordance_mean": 0.22333333333333336
+      }
+    },
+    "6taxa_400genes_r0": {
+      "taxa": 6,
+      "gene_trees": 400,
+      "reticulations_requested": 0,
+      "reticulations_in_truth": 0,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(((spec1,spec4)internal2,(spec3,spec6)internal4)internal1,(spec5,spec2)internal3)root;",
+          "ils": {
+            "gene_trees": 400,
+            "concordant_with_truth": 136,
+            "distinct_topologies": 57
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.16327839996665716,
+              "score": -1170433.5765290384,
+              "newick": "(((spec4,spec1)Internal_4,spec5)UID_0,(spec3,spec6)UID_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 3.0,
+                "rf": 3.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.1580642000772059,
+              "score": -2440160.19166253,
+              "newick": "(spec2,(spec6,spec3)UID_5,(spec5,(spec1,spec4)UID_4)UID_2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 3.0,
+                "rf": 3.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.7611942000221461,
+            "self_reported_s": 0.334,
+            "log_pseudolikelihood": -5278.322598089943,
+            "newick": "((spec2:0.4556806282996746,spec5:0.6827334144105706):1.630298168097877,((spec4:0.1734540940395383,spec1:0.3605413146877914):0.785572484682891,(spec3:0.10534860140144575,spec6:1.5218289874759678):2.8364049485244):0.5562806304816966);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20260926,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((((spec5,spec6)internal4,spec1)internal3,(spec4,spec3)internal2)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 400,
+            "concordant_with_truth": 156,
+            "distinct_topologies": 16
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.25740870006848127,
+              "score": -831008.0571537638,
+              "newick": "(spec2,((spec3,spec4)UID_3,(spec1,spec6,spec5)Internal_2)UID_4)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.1214081000071019,
+              "score": -831944.4981232235,
+              "newick": "(spec2,((spec4,spec3)UID_0,(spec5,spec1,spec6)Internal_2)UID_1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 0.7767539999913424,
+            "self_reported_s": 0.396,
+            "log_pseudolikelihood": -1781.6506915847644,
+            "newick": "(spec2:1.0,(((spec1:2.0238981908390703,spec6:0.17230169773407503):0.03059669709190795,spec5:0.8579517627302603):1.9499558064607567,(spec3:0.8879594534840269,spec4:2.2041550795092215):2.1217181571708243):3.0470026314049115);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 2.0,
+              "rf": 2.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20260927,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(spec2,(spec3,(spec1,((spec4,spec6)internal4,spec5)internal3)internal2)internal1)root;",
+          "ils": {
+            "gene_trees": 400,
+            "concordant_with_truth": 17,
+            "distinct_topologies": 95
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.08077450003474951,
+              "score": -1715322.2701829176,
+              "newick": "((spec6,(spec3,spec5,spec4,spec1)Internal_1)UID_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 4.0,
+                "rf": 4.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.084926399984397,
+              "score": -1850080.8964822337,
+              "newick": "(spec2,(spec6,(spec4,spec3,spec5,spec1)Internal_1)UID_2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 4.0,
+                "rf": 4.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 1.9445240999339148,
+            "self_reported_s": 1.474,
+            "log_pseudolikelihood": -6073.242711435638,
+            "newick": "(spec2:0.26907083797370335,(spec3:4.270854243457196E-6,((spec6:7.879230110795675,spec4:0.9945895077956686):1.8623631679261614,(spec5:3.7597614480954706,spec1:2.6234076803644495):0.018913972281312322):0.07346922011801518):1.0390901851617254);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 2.0,
+              "rf": 2.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 0.16715386668996265,
+              "min": 0.08077450003474951,
+              "max": 0.25740870006848127,
+              "n": 3
+            },
+            "mu": {
+              "mean": 2.6666666666666665,
+              "min": 1.0,
+              "max": 4.0,
+              "n": 3
+            },
+            "exact_recoveries": 0
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 0.12146623335623492,
+              "min": 0.084926399984397,
+              "max": 0.1580642000772059,
+              "n": 3
+            },
+            "mu": {
+              "mean": 2.6666666666666665,
+              "min": 1.0,
+              "max": 4.0,
+              "n": 3
+            },
+            "exact_recoveries": 0
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 0.7346666666666667,
+            "min": 0.334,
+            "max": 1.474,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 1.1608240999824677,
+            "min": 0.7611942000221461,
+            "max": 1.9445240999339148,
+            "n": 3
+          },
+          "mu": {
+            "mean": 1.3333333333333333,
+            "min": 0.0,
+            "max": 2.0,
+            "n": 3
+          },
+          "exact_recoveries": 1
+        },
+        "concordance_mean": 0.2575
+      }
+    },
+    "8taxa_200genes_r0": {
+      "taxa": 8,
+      "gene_trees": 200,
+      "reticulations_requested": 0,
+      "reticulations_in_truth": 0,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((spec5,spec2)internal3,((spec4,((spec8,spec7)internal6,spec1)internal5)internal2,(spec6,spec3)internal4)internal1)root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 32,
+            "distinct_topologies": 74
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.4471748999785632,
+              "score": -1483993.594070643,
+              "newick": "(((spec3,spec6)UID_7,((spec8,(spec1,spec7)UID_1)UID_4,spec4)UID_10)UID_11,spec2,spec5)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 3.0,
+                "rf": 3.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.3867264000000432,
+              "score": -1483975.835199689,
+              "newick": "(((spec3,spec6)UID_8,(((spec8,spec7)UID_12,spec1)UID_7,spec4)UID_10)UID_9,spec2,spec5)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 1.0,
+                "rf": 1.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 2.527637700084597,
+            "self_reported_s": 2.12,
+            "log_pseudolikelihood": -6434.78264149943,
+            "newick": "(((spec6:7.770829793097388,spec3:6.963309487361281):1.890079963362726,((spec1:2.3114229262999553,(spec8:0.8003899154845528,spec7:2.247541527936791E-6):0.1578964299862444):3.7311615387834793,spec4:0.0036380458713981875):0.7578906209155771):0.39658881156100917,(spec5:0.6979093226535342,spec2:0.3316864659629444):2.2482548606183004);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20260926,
+          "reticulations_in_truth": 0,
+          "truth_newick": "((spec8,spec2)internal6,((spec4,spec3)internal2,((spec1,spec7)internal5,(spec5,spec6)internal4)internal3)internal1)root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 51,
+            "distinct_topologies": 36
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.46270340005867183,
+              "score": -1502.2553599273058,
+              "newick": "(((spec3,spec4)UID_3,((spec5,spec6)UID_4,(spec7,spec1)UID_1)UID_0)Internal_1,(spec8,spec2)Internal_12)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.5231808999087662,
+              "score": -1504.2413163715796,
+              "newick": "((spec2,spec8)UID_16,(((spec6,spec5)UID_9,(spec7,spec1)UID_7)UID_6,(spec3,spec4)UID_14)UID_15)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 2.526009700028226,
+            "self_reported_s": 2.158,
+            "log_pseudolikelihood": -1551.5336275290772,
+            "newick": "((spec8:0.6205566618477134,spec2:0.683128308488496):3.6019477403831908,(((spec6:0.006934679545364879,spec5:1.4680654240160962):0.3008506078849066,(spec1:3.3667306440647877,spec7:0.4840920921016808):0.1877770409742539):9.564948608632786,(spec4:0.2399760409569227,spec3:0.12906816678264768):0.9624878721411004):4.8551957975311995);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20260927,
+          "reticulations_in_truth": 0,
+          "truth_newick": "(((((spec5,spec8)internal6,(spec6,spec4)internal4)internal3,spec1)internal2,(spec3,spec7)internal5)internal1,spec2)root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 8,
+            "distinct_topologies": 77
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.3126942999660969,
+              "score": -1903005.4562959794,
+              "newick": "((((spec8,spec3,spec1,spec4)Internal_1,spec6)UID_11,(spec5,spec7)UID_7)UID_10,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 8.0,
+                "rf": 8.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.46909460006281734,
+              "score": -2251711.1933167637,
+              "newick": "((spec3,(spec8,(spec7,spec1)UID_17)UID_18,spec5,(spec4,spec6)UID_14)Internal_1,spec2)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 6.0,
+                "rf": 6.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 3.284813700011,
+            "self_reported_s": 2.857,
+            "log_pseudolikelihood": -7656.498221926489,
+            "newick": "(((spec1:13.948376168229338,((spec8:0.05546404552517563,spec5:1.9194815727438104):3.873468780883737,(spec6:0.4233198818965751,spec4:0.2153786558333981):1.991869923610251):0.08619956462579254):0.06202553774503611,(spec3:3.60422790115721,spec7:0.13887275753928707):2.3628124993594506):1.110750273457812,spec2:0.6108365187918336);",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 0.4075242000011106,
+              "min": 0.3126942999660969,
+              "max": 0.46270340005867183,
+              "n": 3
+            },
+            "mu": {
+              "mean": 3.6666666666666665,
+              "min": 0.0,
+              "max": 8.0,
+              "n": 3
+            },
+            "exact_recoveries": 1
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 0.45966729999054223,
+              "min": 0.3867264000000432,
+              "max": 0.5231808999087662,
+              "n": 3
+            },
+            "mu": {
+              "mean": 2.3333333333333335,
+              "min": 0.0,
+              "max": 6.0,
+              "n": 3
+            },
+            "exact_recoveries": 1
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 2.3783333333333334,
+            "min": 2.12,
+            "max": 2.857,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 2.7794870333746076,
+            "min": 2.526009700028226,
+            "max": 3.284813700011,
+            "n": 3
+          },
+          "mu": {
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "n": 3
+          },
+          "exact_recoveries": 3
+        },
+        "concordance_mean": 0.15166666666666667
+      }
+    },
+    "5taxa_100genes_r1": {
+      "taxa": 5,
+      "gene_trees": 100,
+      "reticulations_requested": 1,
+      "reticulations_in_truth": 1,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 1,
+          "truth_newick": "((((T4,T1)I3)#H0,(T2,T5)I2)I_r0,(#H0,T3)I1)Root;",
+          "ils": {
+            "gene_trees": 100,
+            "concordant_with_truth": 0,
+            "distinct_topologies": 27
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.3571719001047313,
+              "score": -869.1496802364461,
+              "newick": "(((T2)#UID_9,T5)UID_19,((T4,T1)UID_18,T3)UID_23,#UID_9)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 5.0,
+                "rf": 1.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 2.045818699989468,
+              "score": -798.213024122562,
+              "newick": "((((T3)#UID_24,(T4,T1)UID_29)UID_18,(T2,T5)UID_30)UID_13,#UID_24)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 6.0,
+                "rf": 1.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 1.193435400025919,
+            "self_reported_s": 0.668,
+            "log_pseudolikelihood": -800.626319454052,
+            "newick": "(((T2:1.0299753145863686,T5:3.360289553068011)I0:1.4108170101394844,((T1:0.8198344423938588,T4:1.233414888535635)I4:0.14412364639805203)I5#H1:0.4038393265952912::0.6382307717892703)I2:1.0294550521114822,(T3:0.10422765964683456,I5#H1:2.6433360941318234::0.3617692282107297)I3:0.2769222821620934)I1;",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20261431,
+          "reticulations_in_truth": 1,
+          "truth_newick": "(((T5,T1)I2,((T3,T4)I3)#H0)I_r0,(T2,#H0)I1)Root;",
+          "ils": {
+            "gene_trees": 100,
+            "concordant_with_truth": 0,
+            "distinct_topologies": 19
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 1.3788077000062913,
+              "score": -695.0826246233036,
+              "newick": "((((T4,T3)UID_12)#UID_11,(T5,T1)Internal_1)UID_3,(#UID_11,T2)UID_9)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 2.082174099981785,
+              "score": -697.2511896014579,
+              "newick": "(((((T2,T4)UID_17)#UID_10,T3)UID_14,(T5,T1)UID_18)UID_15,#UID_10)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 8.0,
+                "rf": 3.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 1.3185394000029191,
+            "self_reported_s": 0.977,
+            "log_pseudolikelihood": -704.6413121939153,
+            "newick": "((T5:1.9927638226235649,T1:2.2028374604785217)I3:3.0165521612403214,((T4:1.4585575803616737,T2:4.206858731701418)I6:0.049558527888256515,T3:3.281956612968435)I0:0.5872651615029374)I5;",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 6.0,
+              "rf": 3.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20261028,
+          "reticulations_in_truth": 1,
+          "truth_newick": "((((T5,T3)I3)#H0,T2)I2,((T1,T4)I1,#H0)I_r0)Root;",
+          "ils": {
+            "gene_trees": 100,
+            "concordant_with_truth": 0,
+            "distinct_topologies": 24
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 1.5879946999484673,
+              "score": -731.2899320568354,
+              "newick": "(((T4,T1)UID_19,((T3,T5)UID_6)#UID_13)UID_15,(#UID_13,T2)UID_18)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 12.325264399987645,
+              "score": -731.2502111446635,
+              "newick": "((((T5,T3)UID_13)#UID_27,T2)UID_30,(#UID_27,(T4,T1)UID_29)UID_25)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 0.0,
+                "rf": 0.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 1.2565740999998525,
+            "self_reported_s": 0.9390000000000001,
+            "log_pseudolikelihood": -731.7665049412112,
+            "newick": "((T2:4.16990955824979)I1#H1:1.7206156258959169::0.4256125264653739,((T4:1.7077340234171086,T1:1.0182234038360094)I0:1.3180314944530653,(I1#H1:1.173997936370793::0.5743874735346262,(T3:1.56884492099601,T5:1.389300408381831)I5:0.7664840588241337)I7:0.5403745822084722)I6:1.5195541434161128)I3;",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 6.0,
+              "rf": 1.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 1.1079914333531633,
+              "min": 0.3571719001047313,
+              "max": 1.5879946999484673,
+              "n": 3
+            },
+            "mu": {
+              "mean": 1.6666666666666667,
+              "min": 0.0,
+              "max": 5.0,
+              "n": 3
+            },
+            "exact_recoveries": 2
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 5.484419066652966,
+              "min": 2.045818699989468,
+              "max": 12.325264399987645,
+              "n": 3
+            },
+            "mu": {
+              "mean": 4.666666666666667,
+              "min": 0.0,
+              "max": 8.0,
+              "n": 3
+            },
+            "exact_recoveries": 1
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 0.8613333333333334,
+            "min": 0.668,
+            "max": 0.977,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 1.2561829666762303,
+            "min": 1.193435400025919,
+            "max": 1.3185394000029191,
+            "n": 3
+          },
+          "mu": {
+            "mean": 4.0,
+            "min": 0.0,
+            "max": 6.0,
+            "n": 3
+          },
+          "exact_recoveries": 1
+        },
+        "concordance_mean": 0.0
+      }
+    },
+    "6taxa_200genes_r1": {
+      "taxa": 6,
+      "gene_trees": 200,
+      "reticulations_requested": 1,
+      "reticulations_in_truth": 1,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 1,
+          "truth_newick": "(((T1,T4)I3,((T6,T3)I4)#H0)I1,(#H0,(T5,T2)I2)I_r0)Root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 0,
+            "distinct_topologies": 63
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.29348380002193153,
+              "score": -689212.277794348,
+              "newick": "((T2)#UID_11,((T4,T1)UID_16,(T6,T3)UID_15)UID_14,(T5,#UID_11)UID_10)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 5.0,
+                "rf": 1.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.0980594001011923,
+              "score": -591357.989268623,
+              "newick": "(T5,((T2,T4)UID_5,(T3,T6)UID_7)UID_6,T1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 9.0,
+                "rf": 6.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 1.8183260000078008,
+            "self_reported_s": 1.2850000000000001,
+            "log_pseudolikelihood": -3133.659246264288,
+            "newick": "(((T1:3.5767309320018965,T4:2.499755782571241)I4:0.9893075144799308)I6#H1:0.9580495280471281::0.6086021669355993,((T2:1.0650184222085393,T5:1.7992376366927738)I1:1.601931357347286,((T6:1.9712482837142429,T3:0.26525675772306756)I7:0.4931070398944747,I6#H1:0.12870081622488933::0.3913978330644007)I8:1.1842242503490776)I5:0.37937113752025275)I2;",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 6.0,
+              "rf": 1.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20260926,
+          "reticulations_in_truth": 1,
+          "truth_newick": "(T2,((T1,(((T3,T4)I3)#H0,(T6,T5)I4)I_r0)I2,#H0)I1)Root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 52,
+            "distinct_topologies": 12
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.5943369000451639,
+              "score": -1288.7088388399832,
+              "newick": "(((((T6,T5)UID_16)#UID_21,T1)UID_23,((T3,#UID_21)UID_22,T4)Internal_5)UID_13,T2)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 10.0,
+                "rf": 3.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.9928311000112444,
+              "score": -1307.2599889461053,
+              "newick": "((((T5,T6)UID_17,T1)Internal_1,((T4)#UID_19,(T3,#UID_19)UID_20)UID_11)UID_16,T2)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 10.0,
+                "rf": 2.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 1.2419682000763714,
+            "self_reported_s": 0.8220000000000001,
+            "log_pseudolikelihood": -1309.0801138785932,
+            "newick": "(T2:0.5646664712967857,((T1:4.378359947168525,((T5:1.527764152319838,T6:1.342776507295882)I2:3.24521414450586)I5#H1:0.2835276336844803::0.5)I8:0.9055296671076455,((T3:0.3357920638745263,T4:2.469935956688351)I3:1.0673228341644543,I5#H1:1.0::0.5)I1:0.18479807918946647)I4:4.774907898074422)I0;",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 8.0,
+              "rf": 1.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20261028,
+          "reticulations_in_truth": 1,
+          "truth_newick": "((T2,((T3,T5)I4,(((T6,T1)I3,T4)I1)#H0)I_r0)I2,#H0)Root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 47,
+            "distinct_topologies": 38
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 2.354382700053975,
+              "score": -2478.3394618274638,
+              "newick": "((((T3,T5)UID_7)#UID_10,((T1,T6)Internal_2,T4)Internal_1)UID_9,(T2,#UID_10)UID_12)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 6.0,
+                "rf": 1.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 1.6932988999178633,
+              "score": -2501.2939711106656,
+              "newick": "(((T4,(T6,T1)UID_9)UID_6,((T3)#UID_7,(#UID_7,T5)UID_8)UID_1)UID_4,T2)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 8.0,
+                "rf": 0.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 3.0444132999982685,
+            "self_reported_s": 2.344,
+            "log_pseudolikelihood": -2481.2298390820933,
+            "newick": "((T2:2.5928466504867815,((T3:1.1437418723032216,T5:0.06179687720873697)I0:2.559904961493201)I3#H1:0.2525063697257776::0.33346237342804175)I4:0.5015564479071789,((T4:1.9405952923920364,(T1:1.9452680616235152,T6:3.5706709522166458)I5:1.1430723342704807)I7:0.9175214437778569,I3#H1:0.6534284163278155::0.6665376265719583)I2:0.5006000575983612)I1;",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 6.0,
+              "rf": 1.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 1.0807344667070236,
+              "min": 0.29348380002193153,
+              "max": 2.354382700053975,
+              "n": 3
+            },
+            "mu": {
+              "mean": 7.0,
+              "min": 5.0,
+              "max": 10.0,
+              "n": 3
+            },
+            "exact_recoveries": 0
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 0.9280631333434334,
+              "min": 0.0980594001011923,
+              "max": 1.6932988999178633,
+              "n": 3
+            },
+            "mu": {
+              "mean": 9.0,
+              "min": 8.0,
+              "max": 10.0,
+              "n": 3
+            },
+            "exact_recoveries": 0
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 1.483666666666667,
+            "min": 0.8220000000000001,
+            "max": 2.344,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 2.03490250002748,
+            "min": 1.2419682000763714,
+            "max": 3.0444132999982685,
+            "n": 3
+          },
+          "mu": {
+            "mean": 6.666666666666667,
+            "min": 6.0,
+            "max": 8.0,
+            "n": 3
+          },
+          "exact_recoveries": 0
+        },
+        "concordance_mean": 0.165
+      }
+    },
+    "8taxa_200genes_r1": {
+      "taxa": 8,
+      "gene_trees": 200,
+      "reticulations_requested": 1,
+      "reticulations_in_truth": 1,
+      "replicates": [
+        {
+          "replicate": 0,
+          "seed": 20260925,
+          "network_seed": 20260925,
+          "reticulations_in_truth": 1,
+          "truth_newick": "(((T5,T2)I2,((T7,T8)I6)#H0)I_r0,(((T1,#H0)I5,T4)I3,(T6,T3)I4)I1)Root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 0,
+            "distinct_topologies": 115
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 2.748696399969049,
+              "score": -9715.899330785853,
+              "newick": "(((T2,T5)UID_19)#Internal_1,(((T8,(T1,T4)UID_33)UID_34,(#Internal_1,T7)UID_35)UID_22,(T6,T3)UID_26)UID_30)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 14.0,
+                "rf": 9.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 5.65959119994659,
+              "score": -9837.910421911696,
+              "newick": "(((T3)#UID_25,(#UID_25,T6)UID_7)UID_24,(((T7,T8)UID_22,(T4,T1)UID_21)UID_26,(T2,T5)UID_19)UID_23)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 10.0,
+                "rf": 5.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 4.5979110999032855,
+            "self_reported_s": 3.801,
+            "log_pseudolikelihood": -9222.960660165769,
+            "newick": "((T2:1.1816770846746654,(T5:6.574018985300134E-5,((T8:0.4088197248023371,T7:3.203038215259909)I4:0.3805779419034419)I7#H1:1.0002723298946827::0.45205943338628085)I2:0.01071464613014761)I5:1.9026816060838452,((T3:0.33509446511881247,T6:7.022643970928378)I6:1.853304438837667,(T4:3.233519651266244,(T1:4.989311002560505,I7#H1:0.32659755488626896::0.5479405666137191)I1:1.090342294162052)I3:1.1245683778110944)I0:0.36172230197657523)I9;",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 2.0,
+              "rf": 2.0
+            }
+          }
+        },
+        {
+          "replicate": 1,
+          "seed": 20260926,
+          "network_seed": 20260926,
+          "reticulations_in_truth": 1,
+          "truth_newick": "(((((T6,T5)I5,(T7,T1)I6)I4)#H0,(T8,T2)I2)I_r0,((T3,T4)I3,#H0)I1)Root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 0,
+            "distinct_topologies": 58
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.19815419998485595,
+              "score": -3126443.202196931,
+              "newick": "((T8,(T3,T4)Internal_7)UID_0,T2,(T5,T6,(T7,T1)Internal_2)Internal_1)Internal_0;",
+              "reticulations_inferred": 0,
+              "distances": {
+                "mu": 8.0,
+                "rf": 5.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 0.6158365999581292,
+              "score": -2690483.4885396888,
+              "newick": "(T2,((T6,(((T1)#UID_7,T7)UID_6,#UID_7)UID_4,T5)Internal_1,T8)UID_5,(T4,T3)UID_1)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 12.0,
+                "rf": 5.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 6.62483590003103,
+            "self_reported_s": 5.722,
+            "log_pseudolikelihood": -4471.784465913975,
+            "newick": "(((((T5:5.987952226093591,T6:0.05213103757497047)I8:0.1778566004160054,(T7:0.25295979011436426,T1:0.5615456556523607)I9:0.3976331122562722)I6:3.220352272004589)I3#H1:0.830319749357364::0.4724760716008586,(T8:0.4541833445651551,T2:1.1293614333009547)I2:2.4220772066362244)I7:2.6548561199634557,(I3#H1:0.46876953324561266::0.5275239283991414,(T4:0.7839564733738755,T3:1.1895576731542667)I0:0.8851320895056267)I1:5.552353769788107)I5;",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 0.0,
+              "rf": 0.0
+            }
+          }
+        },
+        {
+          "replicate": 2,
+          "seed": 20260927,
+          "network_seed": 20260927,
+          "reticulations_in_truth": 1,
+          "truth_newick": "(T2,((T1,(((T6,T4)I5,(T5,T8)I6)I4)#H0)I3,((T3,T7)I2,#H0)I_r0)I1)Root;",
+          "ils": {
+            "gene_trees": 200,
+            "concordant_with_truth": 0,
+            "distinct_topologies": 72
+          },
+          "phynetpy": {
+            "default": {
+              "wall_s": 0.7513218000531197,
+              "score": -1833998.9532334644,
+              "newick": "((T3,T7)UID_7,(T2,((T6,(T4)#UID_5)UID_22,T1)UID_23,#UID_5,(T8,T5)UID_24)Internal_1)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 10.0,
+                "rf": 6.0
+              }
+            },
+            "phylonet": {
+              "wall_s": 3.80615099996794,
+              "score": -6482.980953346504,
+              "newick": "((((T7)#UID_16,(T3,#UID_16)UID_21)UID_18,((T6,T4)Internal_5,(T1,(T8,T5)UID_9)UID_19)UID_10)UID_17,T2)Internal_0;",
+              "reticulations_inferred": 1,
+              "distances": {
+                "mu": 10.0,
+                "rf": 3.0
+              }
+            }
+          },
+          "phylonet": {
+            "wall_s": 3.9177601999836043,
+            "self_reported_s": 3.444,
+            "log_pseudolikelihood": -6486.040529948018,
+            "newick": "(T2:0.07416665425211807,((((T5:1.245424894564282,T8:3.809069126264548)I0:2.56607968156273,T1:2.527912262194396)I5:0.13997764555370223,((T6:0.9562350287399176)I7#H1:0.8065602720283217::0.5,(T4:0.2390239298979946,I7#H1:1.0::0.5)I6:1.394948735223672)I4:0.9379657217041824)I3:0.6351078948908304,(T3:1.2704207749172989,T7:3.757786114176546)I8:3.6541651897486167)I1:1.1670337691952049)I2;",
+            "returncode": 0,
+            "stderr_tail": "",
+            "reticulations_inferred": 0,
+            "distances": {
+              "mu": 12.0,
+              "rf": 3.0
+            }
+          }
+        }
+      ],
+      "aggregate": {
+        "phynetpy": {
+          "default": {
+            "runtime_s": {
+              "mean": 1.2327241333356749,
+              "min": 0.19815419998485595,
+              "max": 2.748696399969049,
+              "n": 3
+            },
+            "mu": {
+              "mean": 10.666666666666666,
+              "min": 8.0,
+              "max": 14.0,
+              "n": 3
+            },
+            "exact_recoveries": 0
+          },
+          "phylonet": {
+            "runtime_s": {
+              "mean": 3.3605262666242197,
+              "min": 0.6158365999581292,
+              "max": 5.65959119994659,
+              "n": 3
+            },
+            "mu": {
+              "mean": 10.666666666666666,
+              "min": 10.0,
+              "max": 12.0,
+              "n": 3
+            },
+            "exact_recoveries": 0
+          }
+        },
+        "phylonet": {
+          "runtime_s": {
+            "mean": 4.322333333333334,
+            "min": 3.444,
+            "max": 5.722,
+            "n": 3
+          },
+          "wall_s": {
+            "mean": 5.046835733305973,
+            "min": 3.9177601999836043,
+            "max": 6.62483590003103,
+            "n": 3
+          },
+          "mu": {
+            "mean": 4.666666666666667,
+            "min": 0.0,
+            "max": 12.0,
+            "n": 3
+          },
+          "exact_recoveries": 1
+        },
+        "concordance_mean": 0.0
+      }
+    }
+  }
+}

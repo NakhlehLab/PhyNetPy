@@ -36,9 +36,9 @@ and autopolyploid species. Taking gene tree topologies and a taxon mapping as in
   
 This new method employs a single network move (rather than 6 independent moves) that combines aspects of SPR with the ability to only propose networks that
 satisfy the ploidyness of the taxa, which has the effect of reducing time spent proposing networks that would simply be rejected on the basis of incorrect topology.
-We will show a drastic decrease in runtime, as well as a empirical data that shows that this one move is sufficient to explore the entire network space.
+We will show that runtime scales markedly better with the size of the problem, as well as empirical data that shows that this one move is sufficient to explore the entire network space.
 
-Also, this method is more flexible and robust than prior iterations. For example, AlloppNET \cite{AlloppNET} can only infer networks with exactly 2 diploid species and 1 tetraploid clade; it is also a Bayesian method that is far slower than parsimony approaches. InferNetwork-MP-Allop \cite{YanAllop} is one such parsimony method, reported to be orders of magnitude faster than AlloppNET. However, it uses six independent network moves, only supports fixed polyploid clade membership, and does not support autopolyploid "bubbles". Our improved method, MP-Allop-2, replaces the six moves with a single ploidy-preserving move and additionally supports autopolyploidy and variable clade membership. On the DEFJ benchmark (Section~\ref{sec:results}) MP-Allop-2 matches or exceeds the accuracy of InferNetwork-MP-Allop while running faster on every model condition we tested; the measured speedup is reported in Section~\ref{sec:runtime} rather than asserted as a fixed multiple, since it grows with data-set size.
+Also, this method is more flexible and robust than prior iterations. For example, AlloppNET \cite{AlloppNET} can only infer networks with exactly 2 diploid species and 1 tetraploid clade; it is also a Bayesian method that is far slower than parsimony approaches. InferNetwork-MP-Allop \cite{YanAllop} is one such parsimony method, reported to be orders of magnitude faster than AlloppNET. However, it uses six independent network moves, only supports fixed polyploid clade membership, and does not support autopolyploid "bubbles". Our improved method, MP-Allop-2, replaces the six moves with a single ploidy-preserving move and additionally supports autopolyploidy and variable clade membership. On the DEFJ benchmark (Section~\ref{sec:results}) MP-Allop-2 is substantially more accurate than InferNetwork-MP-Allop on every scenario where both were run, and its runtime scales far better with the size of the problem: PhyloNet is faster on the smallest scenario (D, one reticulation), MP-Allop-2 is several times faster on E, and more than an order of magnitude faster on F. We report the measured runtimes in Section~\ref{sec:runtime} rather than asserting a fixed speedup, since the comparison changes sign with data-set size.
 
 \section{Polyploidy and Allopolyploidy}
 In phylogenetics, allopolyploid and polyploid species play significant roles in understanding evolutionary relationships and genetic diversity. Allopolyploids arise from the hybridization of two distinct species, resulting in a genome containing sets of chromosomes from each parental species. These hybrids often exhibit increased genetic variation, potentially leading to enhanced adaptability and speciation. On the other hand, polyploid species possess multiple sets of chromosomes within their genomes, which can arise through various mechanisms such as genome duplication events.
@@ -817,13 +817,33 @@ expected decrease in error as more genes are supplied and the increase in error
 as ILS deepens. Table~\ref{tab:defj-accuracy} gives the per-scenario means
 ($\pm$ standard deviation across conditions).
 
+Because ILS level and gene count act on accuracy independently, any figure
+that collapses one of them reports a mixture rather than a single
+distribution, and the resulting spread is easy to misread as instability.
+Figure~\ref{fig:defj-acc-grid} therefore crosses the two factors. Read that
+way the behaviour is sharply stratified: at $t=4$, MP-Allop-2 recovers the
+true network exactly in $79\%$ of replicates at one gene tree and $94\%$ at
+ten or more, with the interquartile range collapsing onto zero, whereas at
+$t=100$ no replicate recovers it at any gene count. The residual error at high
+ILS is a bias rather than a variance. Scoring the inferred network and the
+true network under the same criterion shows why: at $t=4$ the search returns a
+network whose extra-lineage cost equals the true network's, while at $t=100$ it
+reliably returns networks that cost strictly \emph{fewer} extra lineages than
+the truth. The search is therefore solving its stated problem, and the
+limitation is that minimizing deep coalescence does not identify the true
+network once ILS is deep -- additional genes sharpen that optimum rather than
+correct it. PhyloNet, which optimizes the same criterion, shows the same floor
+at a substantially worse $\mu$-distance.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.8\linewidth]{paper_figures/defj_accuracy_by_scenario_mu_d.png}
     \caption{Mean species-network error ($\mu$-distance to the true network,
     lower is better) by scenario for MP-Allop-2 (hill climbing and simulated
     annealing $\times 3$) versus PhyloNet's InferNetwork-MP-Allop, single
-    individual per species ($n=1$). Error bars are standard deviations across
+    individual per species ($n=1$), pooled over ILS levels and gene counts
+    (see Figure~\ref{fig:defj-acc-grid} for the same data disaggregated).
+    Error bars are standard deviations across
     model conditions and replicates.}
     \label{fig:defj-acc-scenario}
 \end{figure}
@@ -840,9 +860,30 @@ as ILS deepens. Table~\ref{tab:defj-accuracy} gives the per-scenario means
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.7\linewidth]{paper_figures/defj_accuracy_vs_genes_mu_d.png}
-    \caption{Species-network error versus the number of gene trees $g$,
-    averaged over scenarios ($n=1$). Additional genes reduce error.}
+    \caption{Species-network error versus the number of gene trees $g$
+    ($n=1$), pooled over ILS levels. Additional genes reduce error. Because
+    this view collapses the ILS axis, the within-box spread is dominated by
+    the mixture of ILS regimes rather than by run-to-run variability;
+    Figure~\ref{fig:defj-acc-grid} separates the two factors. In every box
+    plot the median is the line inside the box and the mean is the white
+    diamond.}
     \label{fig:defj-acc-genes}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{paper_figures/defj_accuracy_grid_mu_d.png}
+    \caption{Species-network error with the two factors that drive it
+    separated: ILS level by row, scenario by column, number of gene trees on
+    the horizontal axis ($n=1$). The two regimes are close to disjoint. At low
+    ILS, MP-Allop-2 recovers the true network exactly in the large majority of
+    replicates ($94\%$ at $g \ge 10$) and its boxes collapse onto zero, while
+    PhyloNet sits at a $\mu$-distance of $10$--$19$. At high ILS neither method
+    recovers the network and additional genes tighten the distribution without
+    moving its centre. Pooling these rows, as in
+    Figures~\ref{fig:defj-acc-scenario} and~\ref{fig:defj-acc-genes}, is what
+    makes MP-Allop-2's error look broadly distributed.}
+    \label{fig:defj-acc-grid}
 \end{figure}
 
 \begin{table}[H]
@@ -855,20 +896,63 @@ as ILS deepens. Table~\ref{tab:defj-accuracy} gives the per-scenario means
 
 \subsection{\color{bluem}Runtime and Performance Comparisons}\label{sec:runtime}
 
-Figures~\ref{fig:defj-rt-genes} and \ref{fig:defj-rt-scenario} report
-wall-clock runtime (log scale). Because MP-Allop-2 proposes only valid,
-ploidy-preserving networks, it avoids the wasted proposals incurred by
-InferNetwork-MP-Allop's six-move kernel, and the runtime gap widens with
-data-set size (more genes, more taxa). Table~\ref{tab:defj-runtime} lists the
-per-scenario mean runtimes; the measured speedup of MP-Allop-2 over PhyloNet on
-this benchmark is therefore reported directly rather than as a single fixed
-multiple.
+Figures~\ref{fig:defj-rt-genes}, \ref{fig:defj-rt-grid}
+and~\ref{fig:defj-rt-scenario} report wall-clock runtime (log scale) and
+Table~\ref{tab:defj-runtime} lists the per-scenario means;
+Figure~\ref{fig:defj-rt-grid} separates ILS level from gene count in the same
+way as Figure~\ref{fig:defj-acc-grid}. Because MP-Allop-2 proposes only valid, ploidy-preserving
+networks, it avoids the wasted proposals incurred by InferNetwork-MP-Allop's
+six-move kernel, and the gap widens with data-set size (more genes, more
+taxa). The comparison therefore changes sign across the benchmark rather than
+reducing to a single speedup factor, and we report it directly.
+
+On the smallest scenario, D (six taxa, one reticulation), PhyloNet is the
+faster of the two: median $2.4$~s against $6.5$~s for MP-Allop-2. The ordering
+reverses on E, where MP-Allop-2 is about five times faster (median $7.5$~s
+against $40.1$~s), and on F -- the largest D/E/F scenario, with three reticulations
+-- MP-Allop-2 is faster by more than an order of magnitude (median $8.5$~s
+against $132.0$~s). The tail matters more than the median for PhyloNet: its F
+runtimes have a standard deviation roughly twice their mean, the slowest
+completed F condition took $6885$~s, and a further $13$ of the $142$ F
+conditions we were able to run hit the two-hour cap without returning a
+network at all. MP-Allop-2's slowest F condition finished in $90$~s.
+
+Two caveats on coverage. PhyloNet completed all $270$ D and all $270$ E
+conditions, but only $129$ of the $142$ F conditions attempted; the sweep was
+abandoned in F once conditions began timing out in series. Scenario~J is beyond
+it altogether: the smallest J condition -- a single gene tree over $14$ species
+with \texttt{maxRetic 3} -- returned no network after $50$ minutes, against
+roughly $6$ seconds for MP-Allop-2 on the same input, so a $90$-condition J
+sweep is not attainable. The J column of Table~\ref{tab:defj-runtime} is
+accordingly MP-Allop-2 only.
+Second, MP-Allop-2's runtimes reflect a stall-based stopping rule: each
+annealing chain halts after a quarter of its iteration budget passes with no
+improvement to that chain's best score. Without it, a mean $80\%$ of every
+chain executed after its final improvement. The rule has to scale with the
+budget -- a limit tuned on D/E/F truncates J badly enough to cost several
+units of $\mu$-distance -- and with it the search uses a mean $44\%$ of the
+nominal budget at accuracy indistinguishable from running every iteration.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.7\linewidth]{paper_figures/defj_runtime_vs_genes.png}
-    \caption{Mean wall-clock runtime (log scale) versus number of gene trees.}
+    \caption{Wall-clock runtime (log scale) versus number of gene trees,
+    pooled over scenarios and ILS levels. Median is the line inside each box,
+    mean is the white diamond.}
     \label{fig:defj-rt-genes}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{paper_figures/defj_runtime_grid.png}
+    \caption{Wall-clock runtime (log scale) with ILS level by row, scenario by
+    column, and number of gene trees on the horizontal axis ($n=1$). The
+    crossover is visible directly: PhyloNet is the faster method throughout
+    Scenario~D, the two swap order in~E as genes are added, and in~F PhyloNet
+    runs one to three orders of magnitude slower. MP-Allop-2's runtime
+    distributions are also markedly tighter, which matters in practice because
+    PhyloNet's upper tail is what produces the two-hour timeouts in~F.}
+    \label{fig:defj-rt-grid}
 \end{figure}
 
 \begin{figure}[H]

@@ -1,0 +1,37 @@
+\begin{abstract}
+\noindent
+\textbf{Motivation.} Phylogenetic network methods have accumulated faster than
+the software infrastructure to support them. PhyloNet established a body of
+network-analysis methods and the computational ecosystem around them, and much
+of the field's methodological work now assumes that body of methods exists. New
+methods, however, are typically built as standalone programs, each supplying its
+own network representation, search machinery and input handling, and most are not
+reachable from the Python environment where comparative and statistical analysis
+is now usually done.
+
+\noindent
+\textbf{Results.} We present \phynetpy, a Python library for phylogenetic network
+inference and analysis. Inference is expressed as two verbs, \code{infer} and
+\code{score}, parameterised on three independent axes: the data observed, the
+generative model, and the statistical criterion. A method is a cell in that
+product rather than a command name, and dispatch runs through a registry that
+doubles as a machine-readable statement of which combinations are defined,
+which are unimplemented, and which are meaningless. Version 1.0.0 provides seven
+inference methods, six of them reimplementations of published PhyloNet analyses;
+a reusable rooted-DAG network type with ploidy and typed branch-length units;
+nine network dissimilarity measures and a separate reticulation-specific
+comparison module; coalescent, sequence and biallelic-marker simulation; and
+MCMC convergence diagnostics with Tracer-compatible output. The library holds
+1{,}130 tests, and a harness cross-validates its multispecies-network-coalescent
+density and Felsenstein likelihood against PhyloNet's own implementations across
+14 adversarial cases, agreeing to $10^{-5}$. On matched pseudo-likelihood
+inference from identical gene trees, \phynetpy\ runs faster than PhyloNet by a
+margin that grows with dataset size, but recovers the generating topology about
+half as often across 30 trials; we report that discrepancy and the diagnostic
+work it still needs rather than a net verdict.
+
+\noindent
+\textbf{Availability.} \code{pip install phynetpy}. Source, documentation and the
+scripts reproducing every figure and table here are at
+\url{https://github.com/NakhlehLab/PhyNetPy}, under the MIT license.
+\end{abstract}

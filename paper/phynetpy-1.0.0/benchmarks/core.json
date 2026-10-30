@@ -1,0 +1,526 @@
+{
+  "meta": {
+    "phynetpy_version": "0.6.0",
+    "python": "3.14.2",
+    "python_implementation": "CPython",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "numpy": "2.3.5",
+    "scipy": "1.16.3",
+    "networkx": "3.6.1",
+    "timestamp": "2026-09-25 12:06:24-0500",
+    "timing": {
+      "clock": "time.perf_counter",
+      "statistic": "median of repeats",
+      "warmup_calls": 1,
+      "startup_included": false,
+      "parallelism": "single process, single thread unless noted"
+    },
+    "baselines": {
+      "substitution_models": "scipy.linalg.expm on the same Q matrix",
+      "graph_core": "networkx.DiGraph on an identical topology",
+      "distances": "none; absolute scaling measurement",
+      "pseudolikelihood": "none; absolute throughput measurement"
+    }
+  },
+  "substitution_models": {
+    "JC": {
+      "kind": "closed form",
+      "phynetpy_us": 1.6790999798104167,
+      "scipy_expm_us": 24.746200011577457,
+      "speedup": 14.7377763737282,
+      "max_abs_diff": 1.1102230246251565e-16,
+      "protocol": {
+        "phynetpy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.0033581999596208334,
+          "per_call_us": 1.6790999798104167,
+          "best_per_call_us": 1.588699989952147,
+          "worst_per_call_us": 1.8613000283949077
+        },
+        "scipy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.049492400023154914,
+          "per_call_us": 24.746200011577457,
+          "best_per_call_us": 24.488500028382987,
+          "worst_per_call_us": 25.33485001185909
+        }
+      }
+    },
+    "F81": {
+      "kind": "closed form",
+      "phynetpy_us": 1.3186499709263444,
+      "scipy_expm_us": 24.959900008980185,
+      "speedup": 18.928374139686206,
+      "max_abs_diff": 1.3877787807814457e-17,
+      "protocol": {
+        "phynetpy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.002637299941852689,
+          "per_call_us": 1.3186499709263444,
+          "best_per_call_us": 1.2950500240549445,
+          "worst_per_call_us": 1.4464000123552978
+        },
+        "scipy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.04991980001796037,
+          "per_call_us": 24.959900008980185,
+          "best_per_call_us": 24.40554997883737,
+          "worst_per_call_us": 25.271199992857873
+        }
+      }
+    },
+    "K81": {
+      "kind": "closed form",
+      "phynetpy_us": 1.4453500043600798,
+      "scipy_expm_us": 25.945650006178766,
+      "speedup": 17.95111905622199,
+      "max_abs_diff": 1.1102230246251565e-16,
+      "protocol": {
+        "phynetpy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.0028907000087201595,
+          "per_call_us": 1.4453500043600798,
+          "best_per_call_us": 1.427349983714521,
+          "worst_per_call_us": 1.471749972552061
+        },
+        "scipy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.05189130001235753,
+          "per_call_us": 25.945650006178766,
+          "best_per_call_us": 25.4636500030756,
+          "worst_per_call_us": 36.951999994926155
+        }
+      }
+    },
+    "K80": {
+      "kind": "Tamura-Nei",
+      "phynetpy_us": 2.034250006545335,
+      "scipy_expm_us": 24.696950044017285,
+      "speedup": 12.140567759396928,
+      "max_abs_diff": 1.1102230246251565e-16,
+      "protocol": {
+        "phynetpy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.00406850001309067,
+          "per_call_us": 2.034250006545335,
+          "best_per_call_us": 2.0321999909356236,
+          "worst_per_call_us": 2.0440499647520483
+        },
+        "scipy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.04939390008803457,
+          "per_call_us": 24.696950044017285,
+          "best_per_call_us": 24.301799945533276,
+          "worst_per_call_us": 26.804799970705062
+        }
+      }
+    },
+    "HKY": {
+      "kind": "Tamura-Nei",
+      "phynetpy_us": 2.057700010482222,
+      "scipy_expm_us": 23.74289999715984,
+      "speedup": 11.538562412504286,
+      "max_abs_diff": 2.7755575615628914e-17,
+      "protocol": {
+        "phynetpy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.004115400020964444,
+          "per_call_us": 2.057700010482222,
+          "best_per_call_us": 2.015949983615428,
+          "worst_per_call_us": 2.155149995815009
+        },
+        "scipy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.04748579999431968,
+          "per_call_us": 23.74289999715984,
+          "best_per_call_us": 22.988650016486645,
+          "worst_per_call_us": 25.053750025108457
+        }
+      }
+    },
+    "TN93": {
+      "kind": "Tamura-Nei",
+      "phynetpy_us": 2.043450018391013,
+      "scipy_expm_us": 24.778750026598573,
+      "speedup": 12.125938879635063,
+      "max_abs_diff": 1.1102230246251565e-16,
+      "protocol": {
+        "phynetpy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.004086900036782026,
+          "per_call_us": 2.043450018391013,
+          "best_per_call_us": 2.025199995841831,
+          "worst_per_call_us": 2.049550006631762
+        },
+        "scipy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.049557500053197145,
+          "per_call_us": 24.778750026598573,
+          "best_per_call_us": 23.309200012590736,
+          "worst_per_call_us": 27.213850000407547
+        }
+      }
+    },
+    "SYM": {
+      "kind": "cached eigendecomposition",
+      "phynetpy_us": 2.673399983905256,
+      "scipy_expm_us": 23.908200033474714,
+      "speedup": 8.942994006661896,
+      "max_abs_diff": 2.0816681711721685e-16,
+      "protocol": {
+        "phynetpy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.005346799967810512,
+          "per_call_us": 2.673399983905256,
+          "best_per_call_us": 2.571100019849837,
+          "worst_per_call_us": 2.972999995108694
+        },
+        "scipy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.04781640006694943,
+          "per_call_us": 23.908200033474714,
+          "best_per_call_us": 23.730300017632544,
+          "worst_per_call_us": 25.05034999921918
+        }
+      }
+    },
+    "GTR": {
+      "kind": "cached eigendecomposition",
+      "phynetpy_us": 2.598249993752688,
+      "scipy_expm_us": 25.45069996267557,
+      "speedup": 9.795323784805163,
+      "max_abs_diff": 4.440892098500626e-16,
+      "protocol": {
+        "phynetpy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.005196499987505376,
+          "per_call_us": 2.598249993752688,
+          "best_per_call_us": 2.5583499809727073,
+          "worst_per_call_us": 2.6203999877907336
+        },
+        "scipy": {
+          "loops": 2000,
+          "repeats": 5,
+          "median_total_s": 0.05090139992535114,
+          "per_call_us": 25.45069996267557,
+          "best_per_call_us": 23.180700023658574,
+          "worst_per_call_us": 31.77389997290447
+        }
+      }
+    }
+  },
+  "graph_core": {
+    "100_leaves": {
+      "nodes": 199,
+      "edges": 198,
+      "phynetpy_peak_kib": 204.41796875,
+      "networkx_peak_kib": 119.966796875,
+      "memory_ratio_nx_over_phy": 0.5868701152280675,
+      "ops": {
+        "in_edges lookup": {
+          "phynetpy_us": 0.15965999918989837,
+          "networkx_us": 1.8120299966540188,
+          "ratio_nx_over_phy": 11.34930480927038
+        },
+        "out_degree": {
+          "phynetpy_us": 0.16263999859802425,
+          "networkx_us": 0.20227499771863222,
+          "ratio_nx_over_phy": 1.2436977340277071
+        },
+        "get_leaves": {
+          "phynetpy_us": 9.673999738879502,
+          "networkx_us": 40.143500082194805,
+          "ratio_nx_over_phy": 4.149627989016718
+        },
+        "topological_order": {
+          "phynetpy_us": 121.13600037992,
+          "networkx_us": 87.40799967199564,
+          "ratio_nx_over_phy": 0.7215691404525252
+        },
+        "leaf_descendants_all": {
+          "phynetpy_us": 93.10999885201454
+        }
+      }
+    },
+    "500_leaves": {
+      "nodes": 999,
+      "edges": 998,
+      "phynetpy_peak_kib": 1015.7529296875,
+      "networkx_peak_kib": 554.8896484375,
+      "memory_ratio_nx_over_phy": 0.5462840738330076,
+      "ops": {
+        "in_edges lookup": {
+          "phynetpy_us": 0.15906000044196844,
+          "networkx_us": 1.8874550005421042,
+          "ratio_nx_over_phy": 11.866308281765185
+        },
+        "out_degree": {
+          "phynetpy_us": 0.2992899972014129,
+          "networkx_us": 0.24235500022768974,
+          "ratio_nx_over_phy": 0.8097664555912049
+        },
+        "get_leaves": {
+          "phynetpy_us": 68.16400040406734,
+          "networkx_us": 351.9399999640882,
+          "ratio_nx_over_phy": 5.163135935065924
+        },
+        "topological_order": {
+          "phynetpy_us": 626.9100005738437,
+          "networkx_us": 427.86800069734454,
+          "ratio_nx_over_phy": 0.6825030711038178
+        },
+        "leaf_descendants_all": {
+          "phynetpy_us": 530.3699988871813
+        }
+      }
+    },
+    "1000_leaves": {
+      "nodes": 1999,
+      "edges": 1998,
+      "phynetpy_peak_kib": 2103.4716796875,
+      "networkx_peak_kib": 1111.4521484375,
+      "memory_ratio_nx_over_phy": 0.5283894046068743,
+      "ops": {
+        "in_edges lookup": {
+          "phynetpy_us": 0.15801999834366143,
+          "networkx_us": 1.808655000058934,
+          "ratio_nx_over_phy": 11.4457348374696
+        },
+        "out_degree": {
+          "phynetpy_us": 0.16272499924525619,
+          "networkx_us": 0.19719499978236854,
+          "ratio_nx_over_phy": 1.2118297784420928
+        },
+        "get_leaves": {
+          "phynetpy_us": 173.40650025289506,
+          "networkx_us": 453.98599992040545,
+          "ratio_nx_over_phy": 2.6180448787001342
+        },
+        "topological_order": {
+          "phynetpy_us": 2384.31999925524,
+          "networkx_us": 1295.2560000121593,
+          "ratio_nx_over_phy": 0.5432391627033042
+        },
+        "leaf_descendants_all": {
+          "phynetpy_us": 1452.3749996442348
+        }
+      }
+    }
+  },
+  "pseudolikelihood": {
+    "6taxa_50genes": {
+      "taxa": 6,
+      "gene_trees": 50,
+      "theta": 0.5,
+      "ms_per_score": 2.0578800002112985,
+      "log_pseudolikelihood": -243.71177121916878,
+      "seed": 7,
+      "protocol": {
+        "loops": 5,
+        "repeats": 3,
+        "median_total_s": 0.010289400001056492,
+        "per_call_us": 2057.8800002112985,
+        "best_per_call_us": 1812.4200170859694,
+        "worst_per_call_us": 2078.100014477968
+      }
+    },
+    "8taxa_100genes": {
+      "taxa": 8,
+      "gene_trees": 100,
+      "theta": 0.5,
+      "ms_per_score": 5.265999981202185,
+      "log_pseudolikelihood": -1402.4633604595033,
+      "seed": 7,
+      "protocol": {
+        "loops": 5,
+        "repeats": 3,
+        "median_total_s": 0.026329999906010926,
+        "per_call_us": 5265.999981202185,
+        "best_per_call_us": 4293.840005993843,
+        "worst_per_call_us": 5917.820008471608
+      }
+    },
+    "10taxa_200genes": {
+      "taxa": 10,
+      "gene_trees": 200,
+      "theta": 0.5,
+      "ms_per_score": 21.129279979504645,
+      "log_pseudolikelihood": -5403.964468803669,
+      "seed": 7,
+      "protocol": {
+        "loops": 5,
+        "repeats": 3,
+        "median_total_s": 0.10564639989752322,
+        "per_call_us": 21129.279979504645,
+        "best_per_call_us": 18146.979995071888,
+        "worst_per_call_us": 21215.260005556047
+      }
+    }
+  },
+  "distances": {
+    "10_taxa": {
+      "taxa": 10,
+      "metrics": {
+        "mu_distance": {
+          "ms": 0.15640999772585928,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.0031281999545171857,
+            "per_call_us": 156.40999772585928,
+            "best_per_call_us": 119.9949998408556,
+            "worst_per_call_us": 160.61500064097345
+          }
+        },
+        "hardwired_cluster_distance": {
+          "ms": 0.03998499596491456,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.0007996999192982912,
+            "per_call_us": 39.98499596491456,
+            "best_per_call_us": 39.50000391341746,
+            "worst_per_call_us": 57.899998500943184
+          }
+        },
+        "tripartition_distance": {
+          "ms": 0.15424000448547304,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.0030848000897094607,
+            "per_call_us": 154.24000448547304,
+            "best_per_call_us": 149.3350020609796,
+            "worst_per_call_us": 167.7249965723604
+          }
+        },
+        "robinson_foulds_distance": {
+          "ms": 0.04411499830894172,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.0008822999661788344,
+            "per_call_us": 44.11499830894172,
+            "best_per_call_us": 43.700000969693065,
+            "worst_per_call_us": 44.98999915085733
+          }
+        }
+      }
+    },
+    "25_taxa": {
+      "taxa": 25,
+      "metrics": {
+        "mu_distance": {
+          "ms": 0.4642350017093122,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.009284700034186244,
+            "per_call_us": 464.2350017093122,
+            "best_per_call_us": 390.93500236049294,
+            "worst_per_call_us": 631.8749976344407
+          }
+        },
+        "hardwired_cluster_distance": {
+          "ms": 0.18177999882027507,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.0036355999764055014,
+            "per_call_us": 181.77999882027507,
+            "best_per_call_us": 181.76500452682376,
+            "worst_per_call_us": 185.37499709054828
+          }
+        },
+        "tripartition_distance": {
+          "ms": 0.8147250046022236,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.016294500092044473,
+            "per_call_us": 814.7250046022236,
+            "best_per_call_us": 776.0149950627238,
+            "worst_per_call_us": 887.0149962604046
+          }
+        },
+        "robinson_foulds_distance": {
+          "ms": 0.20641500013880432,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.004128300002776086,
+            "per_call_us": 206.41500013880432,
+            "best_per_call_us": 158.6899976246059,
+            "worst_per_call_us": 215.8600022085011
+          }
+        }
+      }
+    },
+    "50_taxa": {
+      "taxa": 50,
+      "metrics": {
+        "mu_distance": {
+          "ms": 1.6384650021791458,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.032769300043582916,
+            "per_call_us": 1638.4650021791458,
+            "best_per_call_us": 1175.499998498708,
+            "worst_per_call_us": 1688.9849968720227
+          }
+        },
+        "hardwired_cluster_distance": {
+          "ms": 0.3606750047765672,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.007213500095531344,
+            "per_call_us": 360.6750047765672,
+            "best_per_call_us": 195.40500361472368,
+            "worst_per_call_us": 380.17999613657594
+          }
+        },
+        "tripartition_distance": {
+          "ms": 1.2063400004990399,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.024126800009980798,
+            "per_call_us": 1206.34000049904,
+            "best_per_call_us": 1195.05999609828,
+            "worst_per_call_us": 1260.2150032762438
+          }
+        },
+        "robinson_foulds_distance": {
+          "ms": 0.22638000082224607,
+          "protocol": {
+            "loops": 20,
+            "repeats": 3,
+            "median_total_s": 0.0045276000164449215,
+            "per_call_us": 226.38000082224607,
+            "best_per_call_us": 226.00499796681106,
+            "worst_per_call_us": 229.0049975272268
+          }
+        }
+      }
+    }
+  }
+}

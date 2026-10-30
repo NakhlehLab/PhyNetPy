@@ -490,6 +490,10 @@ class SimulatedAnnealing:
                  reheat_on_no_uphill: bool = True,
                  reheat_cap_mult: float = 1.0,
                  reheat_max_consecutive: int = 5,
+                 stall_limit: Optional[int] = None,
+                 neutral_accept_prob: float = 1.0,
+                 restart_factory: Optional[Callable[[int], Model]] = None,
+                 trace: bool = False,
                  validate: Callable[[Model], bool] = network_invariants_routine) -> None:
         """
         Args:
@@ -536,6 +540,35 @@ class SimulatedAnnealing:
                 them. Once hit, further reheats are suspended until the chain
                 finds a new best score (at which point the counter resets).
                 Set to a very large int to disable the guard.
+            stall_limit: Stop a chain once it has gone this many iterations
+                without strictly improving its run-best score, mirroring
+                :class:`HillClimbing`'s ``no_progress`` guard.  ``None``
+                (default) runs the full ``num_iter`` budget.  On the DEFJ
+                benchmark a mean 80% of every chain executes *after* its
+                final improvement, so this is where the wasted work is.
+                Ignored by ``schedule="geometric_reheat"``, which handles
+                stagnation by reheating instead of stopping.
+            neutral_accept_prob: Probability of accepting a proposal that
+                scores exactly the same as the current network.  The
+                Metropolis rule gives such ties ``exp(0) == 1``, i.e.
+                unconditional acceptance at any temperature, which makes the
+                chain random-walk across score-equal plateaus at the most
+                expensive per-iteration cost (each acceptance pays a network
+                clone).  ``1.0`` (default) keeps that behaviour.  Ignored by
+                ``schedule="geometric_reheat"``.
+            restart_factory: Called as ``factory(restart_index)`` to build a
+                fresh model for each restart.  Without it every restart is a
+                deep copy of ``model``, so the "restarts" all begin from the
+                same starting network -- parallel chains rather than
+                independent restarts.  Pass a factory that draws a new start
+                network to make them independent.
+            trace: If True, record a per-iteration tuple
+                ``(iter, score, run_best, temperature, delta, outcome)`` for
+                each run, where ``outcome`` is one of ``improve`` /
+                ``neutral`` / ``uphill`` / ``reject`` / ``invalid`` /
+                ``error``.  Traces land in ``run_stats[i]["trace"]``.  Off by
+                default: the list costs memory proportional to ``num_iter``.
+                Not produced by ``schedule="geometric_reheat"``.
         """
         self.kernel = pkernel
         self.init_model = model
@@ -559,6 +592,14 @@ class SimulatedAnnealing:
         self.reheat_on_no_uphill = bool(reheat_on_no_uphill)
         self.reheat_cap_mult = max(1.0, float(reheat_cap_mult))
         self.reheat_max_consecutive = max(1, int(reheat_max_consecutive))
+        self.stall_limit = None if stall_limit is None else max(1, int(stall_limit))
+        self.neutral_accept_prob = min(1.0, max(0.0, float(neutral_accept_prob)))
+        self.restart_factory = restart_factory
+        self.trace = bool(trace)
+        # Per-restart child seeds. The MPL engine passes a SeedSequence it
+        # spawned for this driver; a plain int (or None) is wrapped.
+        self._seed_seq = (seed if isinstance(seed, np.random.SeedSequence)
+                          else np.random.SeedSequence(seed))
 
         cool_iters = max(1, int(num_iter * (1.0 - self.plateau_frac)))
         if schedule == "cool" and not (t_start > t_end):
@@ -610,8 +651,12 @@ class SimulatedAnnealing:
         plateau_end = int(self.num_iter * self.plateau_frac)
         accepted = 0
         uphill_accepted = 0
+        neutral_accepted = 0
         best_run_score = state.likelihood()
         best_run_network = state.current_model.network.copy()[0]
+        best_iter = 0
+        iters_run = self.num_iter
+        trace: list[tuple] = [] if self.trace else None
 
         for i in range(self.num_iter):
             try:
@@ -620,6 +665,9 @@ class SimulatedAnnealing:
 
                 if not is_valid:
                     self.kernel.report_outcome(False, delta=0.0)
+                    if trace is not None:
+                        trace.append((i, best_run_score, best_run_score,
+                                      temp, 0.0, "invalid"))
                     if i >= plateau_end:
                         temp *= self.alpha
                     continue
@@ -630,6 +678,9 @@ class SimulatedAnnealing:
                 except Exception:
                     state.revert(next_move)
                     self.kernel.report_outcome(False, delta=0.0)
+                    if trace is not None:
+                        trace.append((i, best_run_score, best_run_score,
+                                      temp, 0.0, "error"))
                     if i >= plateau_end:
                         temp *= self.alpha
                     continue
@@ -638,26 +689,63 @@ class SimulatedAnnealing:
 
                 was_accepted = False
                 if delta < 0:
-                    state.commit(next_move, proposed)
+                    state.commit(next_move, score=proposed)
                     accepted += 1
                     was_accepted = True
-                elif temp > 0 and self.rng.random() < math.exp(-delta / temp):
-                    state.commit(next_move, proposed)
-                    accepted += 1
-                    uphill_accepted += 1
-                    was_accepted = True
+                    outcome = "improve"
                 else:
-                    state.revert(next_move)
+                    # Only reached for delta >= 0, so -delta/temp <= 0 and the
+                    # exponential underflows to 0 rather than overflowing.
+                    # Computing it for delta < 0 would raise OverflowError once
+                    # the chain cools (large parsimony deltas / small temp).
+                    #
+                    # A tie scores exp(0) == 1, i.e. unconditional acceptance,
+                    # so ties are gated separately to keep the chain from
+                    # free-wheeling across a score-equal plateau.
+                    if delta == 0:
+                        accept_prob = self.neutral_accept_prob
+                    elif temp > 0:
+                        accept_prob = math.exp(-delta / temp)
+                    else:
+                        accept_prob = 0.0
+
+                    if self.rng.random() < accept_prob:
+                        state.commit(next_move, score=proposed)
+                        accepted += 1
+                        uphill_accepted += 1
+                        was_accepted = True
+                        if delta == 0:
+                            neutral_accepted += 1
+                            outcome = "neutral"
+                        else:
+                            outcome = "uphill"
+                    else:
+                        state.revert(next_move)
+                        outcome = "reject"
 
                 self.kernel.report_outcome(was_accepted, delta=proposed - cur)
 
-                score_now = state.likelihood()
+                # The current model's score is already known: committing makes
+                # it ``proposed``, reverting leaves it at ``cur``.  Passing it
+                # to commit() above primes the cache, so neither this line nor
+                # the next iteration's ``cur`` triggers a redundant re-score.
+                score_now = proposed if was_accepted else cur
                 if score_now > best_run_score:
                     best_run_score = score_now
                     best_run_network = state.current_model.network.copy()[0]
+                    best_iter = i
+
+                if trace is not None:
+                    trace.append((i, score_now, best_run_score, temp,
+                                  delta, outcome))
 
                 if i >= plateau_end:
                     temp *= self.alpha
+
+                if (self.stall_limit is not None
+                        and i - best_iter >= self.stall_limit):
+                    iters_run = i + 1
+                    break
             finally:
                 if self.progress_every and (i + 1) % self.progress_every == 0:
                     try:
@@ -673,9 +761,13 @@ class SimulatedAnnealing:
         return {
             "accepted": accepted,
             "uphill": uphill_accepted,
+            "neutral": neutral_accepted,
+            "iters_run": iters_run,
+            "best_iter": best_iter,
             "final_score": state.likelihood(),
             "best_score": best_run_score,
             "best_network": best_run_network,
+            "trace": trace,
         }
 
     def _single_run_geometric_reheat(self, state: State) -> dict:
@@ -781,11 +873,11 @@ class SimulatedAnnealing:
 
                 was_accepted = False
                 if delta < 0:
-                    state.commit(next_move, proposed)
+                    state.commit(next_move, score=proposed)
                     accepted += 1
                     was_accepted = True
                 elif temp > 0 and self.rng.random() < math.exp(-delta / temp):
-                    state.commit(next_move, proposed)
+                    state.commit(next_move, score=proposed)
                     accepted += 1
                     uphill_accepted += 1
                     uphill_in_window += 1
@@ -795,7 +887,9 @@ class SimulatedAnnealing:
 
                 self.kernel.report_outcome(was_accepted, delta=proposed - cur)
 
-                score_now = state.likelihood()
+                # Already known: commit() makes the current score ``proposed``,
+                # revert() leaves it at ``cur``.  See _single_run.
+                score_now = proposed if was_accepted else cur
                 if score_now > best_run_score:
                     best_run_score = score_now
                     best_run_network = state.current_model.network.copy()[0]
@@ -891,9 +985,13 @@ class SimulatedAnnealing:
         return {
             "accepted": accepted,
             "uphill": uphill_accepted,
+            "neutral": 0,
+            "iters_run": self.num_iter,
+            "best_iter": 0,
             "final_score": state.likelihood(),
             "best_score": best_run_score,
             "best_network": best_run_network,
+            "trace": None,
             "reheat_count": reheat_count,
         }
 
@@ -924,8 +1022,20 @@ class SimulatedAnnealing:
         Returns:
             State holding the best network found across all restarts.
         """
+        child_seeds = self._seed_seq.spawn(self.n_restarts)
+
         for restart in range(self.n_restarts):
-            model = copy.deepcopy(self.init_model)
+            if self.restart_factory is not None:
+                model = self.restart_factory(restart)
+            else:
+                model = copy.deepcopy(self.init_model)
+
+            # Without this, every restart inherits a deep copy of the same
+            # model.rng and therefore the same move stream, so the chains
+            # only diverge where the acceptance coin happens to differ.
+            if getattr(model, "rng", None) is not None:
+                model.rng = np.random.default_rng(child_seeds[restart])
+
             state = State(model, validate=self.validate)
 
             stats = self._single_run(state)

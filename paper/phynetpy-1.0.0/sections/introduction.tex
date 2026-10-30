@@ -1,0 +1,80 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Species histories are not always trees. Hybridization, introgression and
+allopolyploidy move genetic material between diverging lineages, and the result
+is a reticulate history that a tree cannot express
+\cite{TODO_networks_review}. Inferring such histories is harder than inferring
+trees for two reasons that compound: the space of networks is larger and less
+well behaved than the space of trees, and the same gene-tree discordance that
+hybridization produces is also produced by incomplete lineage sorting
+\cite{TODO_ILS_review}. Distinguishing the two requires a model in which both
+occur, which is what the multispecies network coalescent provides
+\cite{TODO_MSNC}.
+
+Over roughly fifteen years PhyloNet \cite{Than2008PhyloNet,
+Wen2018InferringPhyloNet} assembled the methods this implies: parsimony,
+maximum likelihood, pseudo-likelihood, and Bayesian inference, from gene trees,
+from sequence alignments, and from biallelic markers, with extensions to
+polyploid complexes. Its importance to the field is not in dispute and this
+paper does not argue otherwise. A researcher today who wants to infer a
+phylogenetic network from gene trees reaches for PhyloNet, and should.
+
+What has changed is the surrounding computational environment. Three specific
+frictions motivated this work.
+
+First, a PhyloNet analysis is specified in a NEXUS file containing a command
+block and run through the JVM. That design is well suited to running an analysis
+and poorly suited to embedding one: a sweep over conditions means generating
+files, and consuming the result means parsing text. Comparative and statistical
+analysis in phylogenetics now largely happens in Python, alongside NumPy
+\cite{Harris2020NumPy} and SciPy \cite{Virtanen2020SciPy}, and the tree-oriented
+libraries that serve that environment -- DendroPy \cite{Sukumaran2010DendroPy},
+ETE \cite{HuertaCepas2016ETE3}, Biopython \cite{Cock2009Biopython} -- have no
+network counterpart.
+
+Second, a method developer starting a new network method starts from very little.
+A network representation, traversal and cluster machinery, topology moves, a
+search driver, parameter optimisation, input parsing and convergence diagnostics
+are all prerequisites to testing a new scoring criterion, and none of them are
+what the new method is about. The predictable outcome is that each new method
+ships as a separate program with its own representation, and that comparing two
+methods means reconciling two file formats.
+
+Third, the organisation of a method set as a list of command names hides its
+structure. Most of those commands vary along the same three dimensions -- the
+data, the assumed generative process, the optimality criterion -- and a list
+does not say which combinations exist, which are unimplemented, and which are
+not meaningful at all. A user cannot tell the difference between a feature that
+is missing and a request that does not make sense.
+
+\phynetpy\ addresses these. It is a Python library in which the network is a
+reusable data structure, inference is two verbs over three typed axes, and the
+set of available methods is queryable at runtime. Its inference methods are, for
+the most part, reimplementations of PhyloNet's, which is deliberate: the point is
+not new statistics but a foundation on which new statistics can be built and
+against which existing results can be checked.
+
+\paragraph{Contributions.}
+\begin{itemize}
+  \item A network representation and analysis layer usable independently of any
+    inference method: a rooted DAG with ploidy, typed branch-length units, nine
+    dissimilarity measures, blob and cluster decomposition, and MUL-tree
+    conversion (Sections~\ref{sec:architecture} and~\ref{sec:functionality}).
+  \item An inference interface of two verbs over the product of data, model and
+    criterion, with dispatch through a registry that distinguishes undefined,
+    unimplemented and ill-typed requests, and that serves as the extension point
+    for contributed methods (Section~\ref{sec:architecture}).
+  \item Seven implemented inference methods, six corresponding to published
+    PhyloNet analyses, with the gaps relative to PhyloNet stated explicitly
+    (Section~\ref{sec:functionality}).
+  \item Numerical cross-validation against PhyloNet's own implementations of the
+    multispecies-network-coalescent density and the Felsenstein likelihood,
+    across 14 adversarial cases (Section~\ref{sec:validation}).
+  \item A replicated head-to-head runtime and accuracy comparison on identical
+    input, reporting a runtime advantage and an accuracy deficit, with the
+    accuracy result left open rather than explained away
+    (Section~\ref{sec:validation}).
+  \item A migration account for existing PhyloNet users, including what does not
+    carry over (Section~\ref{sec:comparison}).
+\end{itemize}

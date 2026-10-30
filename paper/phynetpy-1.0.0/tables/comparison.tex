@@ -1,0 +1,137 @@
+% Comparison of PhyloNet and PhyNetPy.
+%
+% Hand-written, unlike the numeric tables, because the rows are qualitative.
+% Every PhyNetPy entry is verified against the 0.6.0 source; see INVENTORY.md.
+% PhyloNet entries describe version 3.8.2 as distributed and are drawn from its
+% published description and its command set.
+%
+% Rows marked [TODO] could not be verified from the material available and must
+% be checked against PhyloNet's documentation before submission.
+
+\begin{tabular}{@{}p{38mm}p{52mm}p{52mm}@{}}
+\toprule
+& \textbf{PhyloNet 3.8.2} & \textbf{\textsc{PhyNetPy} 1.0.0} \\
+\midrule
+
+Implementation language
+& Java
+& Python, with four Cython extension modules \\
+
+Invocation
+& A NEXUS file containing a \texttt{PHYLONET} block, run through
+  \texttt{java -jar}
+& Python function calls; no driver file \\
+
+Programmatic API
+& Java classes are reachable by writing Java against the jar
+& The documented surface is the package itself: 121 exported names, two
+  inference verbs plus \texttt{simulate} \\
+
+Analysis organisation
+& One named command per analysis
+& A method is a (data, model, criterion) cell; dispatch goes through a
+  registry that also reports validity \\
+
+Adding a method
+& Implement a new command
+& Register one cell with \texttt{@register}; search drivers, moves,
+  parameter optimiser and I/O are inherited \\
+
+Network representation
+& Internal to the tool
+& \texttt{Network}: a reusable rooted DAG, independent of any analysis, with
+  no cap on reticulation in-degree \\
+
+Distinguishing invalid from unbuilt requests
+& An unsupported combination surfaces as a command-level error
+& \texttt{TypeError}, \texttt{ValueError} and \texttt{NotImplementedError} are
+  raised for three distinct causes \\
+
+\midrule
+\multicolumn{3}{@{}l}{\emph{Analyses}} \\
+
+Maximum likelihood from gene trees
+& \texttt{InferNetwork\_ML}
+& Available \\
+
+Maximum pseudo-likelihood from gene trees
+& \texttt{InferNetwork\_MPL}
+& Available \\
+
+Bayesian from gene trees
+& \texttt{MCMC\_GT}
+& Available \\
+
+Bayesian from sequences
+& \texttt{MCMC\_SEQ}
+& Available \\
+
+Marker likelihood
+& \texttt{MLE\_BiMarkers}
+& Scoring available; the search path raises \\
+
+Bayesian from markers
+& \texttt{MCMC\_BiMarkers}
+& Available \\
+
+Maximum parsimony, diploid hybridization
+& \texttt{InferNetwork\_MP}
+& Not in 0.6.0; scheduled for 1.0.0 \\
+
+Maximum parsimony under polyploidy
+& \texttt{InferNetwork\_MP\_Allopp}
+& Available, with bootstrapping \\
+
+\midrule
+\multicolumn{3}{@{}l}{\emph{Supporting capability}} \\
+
+Simulation
+& Available as separate commands
+& \texttt{simulate} inverts the same axes and returns a data object that feeds
+  \texttt{infer} directly; gene trees, sequences and markers under
+  \texttt{MSC} only \\
+
+Network comparison
+& Distance commands are provided
+& Nine dissimilarity measures plus a reticulation-specific comparison module
+  (tripartitions, precision and recall) \\
+
+Chain diagnostics
+& Output is written for external tools
+& ESS, autocorrelation time, HPD intervals, Geweke and Gelman--Rubin
+  in-process; Tracer and NEXUS output for external tools \\
+
+Visualisation
+& \textbf{[TODO: verify what PhyloNet 3.8.2 provides]}
+& ASCII rendering only \\
+
+Across-site rate heterogeneity
+& \textbf{[TODO: verify]}
+& Not implemented \\
+
+\midrule
+\multicolumn{3}{@{}l}{\emph{Distribution and testing}} \\
+
+Installation
+& Download a jar; requires a JVM
+& \texttt{pip install phynetpy}; requires a C compiler when building from
+  source \\
+
+Automated testing
+& \textbf{[TODO: verify what PhyloNet publishes]}
+& 1{,}130 tests, 1{,}125 passing in the default run \\
+
+Continuous integration
+& \textbf{[TODO: verify]}
+& GitHub Actions across Python 3.9--3.14, plus Windows and packaging jobs \\
+
+Numerical cross-validation
+& ---
+& 14 cases checked against PhyloNet itself to a tolerance of $10^{-5}$ \\
+
+License
+& \textbf{[TODO: verify PhyloNet's license]}
+& MIT \\
+
+\bottomrule
+\end{tabular}

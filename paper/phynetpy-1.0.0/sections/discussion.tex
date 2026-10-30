@@ -1,0 +1,103 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Infrastructure as the contribution}
+
+The methods in Table~\ref{tab:analyses} are mostly not new. What is new is that
+they sit on shared components: one network type, one set of topology moves, one
+parameter optimiser, one I/O layer, one set of chain diagnostics. A developer
+adding a criterion writes the criterion.
+
+Whether this lowers the barrier enough to change how network methods get built is
+not something this paper can settle. The registry is exercised by seven methods,
+all of them ours, and an interface that suffices for its author is weaker
+evidence than one an outside contributor found sufficient. The design argument is
+stated in Section~\ref{sec:architecture}; the measurement that would test it does
+not exist yet.
+
+Two design decisions seem worth keeping regardless. Making the validity of a
+(data, model, criterion) triple a runtime query, rather than prose in
+documentation, means the method set cannot drift from its description --
+Table~\ref{tab:analyses} is generated from the registry. And separating the three
+failure modes gives a user an actionable answer: change the data, wait for a
+release, or reconsider the question.
+
+\subsection{What the Python implementation does and does not buy}
+
+Being a Python library makes some things straightforward that were awkward
+before. An inferred network is an object that goes directly into a distance
+function, a plotting call, or a pandas frame. A sweep over reticulation counts is
+a loop. Simulation and inference compose without an intermediate file, which is
+what makes the recovery check in Section~\ref{sec:examples} two lines.
+
+It does not, by itself, make anything faster. \phynetpy's runtime advantage in
+Section~\ref{sec:headtohead} comes from compiled kernels and from algorithmic
+choices such as incremental rescoring, not from the choice of language -- and the
+component measurements show the trade is not uniform: the graph core is faster on
+incidence queries and slower on whole-graph traversal, using about twice the
+memory. Claims that one language is faster than another are not what this section
+is for.
+
+Integration with the numerical and machine-learning ecosystem is often cited as a
+reason to work in Python, and the architecture does make it practical: the
+network is an ordinary object, likelihoods are ordinary callables, and a scorer
+backed by PyTorch or JAX could be registered as a cell without changing anything
+else. \phynetpy\ 1.0.0 contains no machine-learning functionality, no
+differentiable likelihood and no GPU support beyond an optional CuPy path in the
+marker likelihood. The integration is available rather than done.
+
+\subsection{Reproducibility}
+
+Two properties of the release matter for reproducing results. The version is
+single-sourced and CI verifies that a clean install of both the wheel and the
+source distribution reports it, so a paper citing a version is citing something
+checkable. And the parts of an analysis that affect results -- the model
+parameters, the criterion, the search preset, the seed -- are arguments at the
+call site rather than defaults buried in a driver file.
+
+The benchmark scripts for this paper follow the same discipline: each writes a
+JSON file recording package versions, interpreter, platform, replicate counts and
+seeds, and the tables and figures are generated from those files. This is why the
+accuracy result in Section~\ref{sec:headtohead} is reported as it is. It emerged
+from re-running a benchmark rather than from reading code, and a pipeline that
+only regenerated favourable numbers would not have surfaced it.
+
+\subsection{Limitations}
+
+Relative to PhyloNet, \phynetpy\ 1.0.0 lacks maximum parsimony from gene trees
+under diploid hybridization, and its marker maximum likelihood can score a
+network but not search. Both are visible in \code{validity_matrix()}.
+
+The accuracy deficit in Section~\ref{sec:headtohead} is the most consequential
+open item. Across 30 trials of matched pseudo-likelihood inference PhyloNet
+recovered the generating topology 16 times and \phynetpy\ 8, and the
+\code{phylonet} preset intended to make the comparison like-for-like did not
+close the gap. Anyone whose work depends on pseudo-likelihood network inference
+should validate against PhyloNet on data with a known answer before relying on
+\phynetpy\ for it.
+
+Other limits are narrower. Across-site rate heterogeneity is not implemented, so
+sequence analyses cannot fit a discretised gamma over sites. Simulation supports
+only the \code{MSC} model; the allopolyploid model has no simulator. The network
+simulator grafts reticulations onto a separately drawn tree rather than running a
+birth--death--hybridization process, so it should not be used to study the
+distribution of network shapes. Visualisation is ASCII text. There is no network
+classifier for the graph-theoretic classes beyond level, and no summarisation of
+\emph{sets} of networks, which is what a Bayesian run most wants. One compiled
+kernel, \code{seq_engine_cy}, is built but not yet called. Installing from source
+needs a C compiler. And every measurement in this paper comes from one machine.
+
+\subsection{Future work}
+
+The immediate items are the two unbuilt cells and a diagnosis of the accuracy
+result. Beyond those: connecting the compiled sequence kernel; rate
+heterogeneity; a birth--death--hybridization simulator; network classification
+and set-level summarisation; and visualisation, where writing Tracer and NEXUS
+output has so far been a substitute for having any of our own.
+
+The architecture suggests directions we have not taken. A differentiable
+pseudo-likelihood would make gradient-based optimisation over continuous
+parameters available; a learned proposal distribution would fit the
+\code{ProposalKernel} interface; approximate Bayesian computation would compose
+with \code{simulate} directly. These are plausible because the pieces are
+separable, not because any of them is underway.

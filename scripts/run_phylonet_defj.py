@@ -24,9 +24,19 @@ Gene trees are collapsed to one individual per subgenome (same as the MP-Allop
 harness) so both methods receive identical inputs.
 
 The number of reticulations PhyloNet may add is capped at the ground-truth
-count per scenario (D=1, E=2, F=3, J=2), matching how MP-Allop fixes ploidy.
+count per scenario (D=1, E=2, F=3, J=3; see ``defj_common.TRUE_RETICULATIONS``),
+matching how MP-Allop fixes ploidy.
 
 Results are appended to a resumable CSV.
+
+**Scenario J is not feasible for PhyloNet on this hardware.** The invocation is
+correct -- PhyloNet echoes back a well-formed ``InferNetwork_MP_Allopp`` command
+with all 14 species and their homeologs -- but the *smallest* J condition
+(1 gene tree, ``maxRetic 3``) produced no output in ~50 minutes, versus ~6
+seconds for MP-Allop-2 on the same input. For scale, Scenario F has only 6
+species and already yields 2-hour timeouts. A full 90-condition J sweep is
+therefore out of reach, and the published comparison reports J for MP-Allop-2
+only. Use ``--timeout`` to bound a probe before committing to a sweep.
 
 Examples::
 
@@ -44,6 +54,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import re
 import subprocess
 import sys
@@ -112,8 +123,25 @@ def parse_phylonet_output(stdout: str) -> tuple[str | None, float | None]:
     return net, xl
 
 
+def _kill_tree(pid: int) -> None:
+    """Kill a process and everything it spawned."""
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+                       capture_output=True)
+        return
+    import signal
+    try:
+        os.killpg(os.getpgid(pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 def run_one(jar: Path, scenario: str, tier: int, g: int, n: int, t: int, r: int,
-            procs: int, true_net, keep_nexus: Path | None = None) -> dict:
+            procs: int, true_net, keep_nexus: Path | None = None,
+            timeout: int = 7200) -> dict:
     labels = dc.read_leaf_labels(dc.gene_tree_files(scenario, tier, g, n, t, r))
     gene_map, _ = dc.build_gene_map(labels)
     gts = dc.load_gene_trees(scenario, tier, g, n, t, r,
@@ -130,16 +158,25 @@ def run_one(jar: Path, scenario: str, tier: int, g: int, n: int, t: int, r: int,
         keep_nexus.write_text(nexus, encoding="utf-8")
 
     t0 = time.perf_counter()
+    proc = subprocess.Popen(
+        ["java", "-jar", str(jar), str(nexus_path)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
     try:
-        proc = subprocess.run(
-            ["java", "-jar", str(jar), str(nexus_path)],
-            capture_output=True, text=True, timeout=7200,
-        )
-        stdout = proc.stdout
-        stderr = proc.stderr
-    except subprocess.TimeoutExpired:
-        return {"error": "timeout", "seconds": time.perf_counter() - t0,
-                "n_genes": len(gts)}
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # ``-pl`` makes PhyloNet fan out into several JVMs. Killing only
+            # the direct child leaves those grandchildren holding the stdout
+            # pipe, so a plain subprocess.run(timeout=...) blocks forever in
+            # pipe drain *after* the timeout fires. Kill the whole tree.
+            _kill_tree(proc.pid)
+            try:
+                stdout, stderr = proc.communicate(timeout=60)
+            except Exception:  # noqa: BLE001
+                stdout = stderr = ""
+            return {"error": "timeout", "seconds": time.perf_counter() - t0,
+                    "n_genes": len(gts), "stdout": stdout, "stderr": stderr}
     finally:
         try:
             nexus_path.unlink()
@@ -210,6 +247,11 @@ def main() -> int:
     parser.add_argument("--scenarios", default="D,E,F,J")
     parser.add_argument("--reps", default="1-10")
     parser.add_argument("--pl", type=int, default=4, help="PhyloNet processors")
+    parser.add_argument("--timeout", type=int, default=7200,
+                        help="per-condition wall-clock cap in seconds "
+                             "(default 7200 = 2 h). Use a short cap to probe "
+                             "feasibility on a large scenario before "
+                             "committing to a full sweep")
     parser.add_argument("--limit", type=int, default=0)
     # probe mode
     parser.add_argument("--probe", action="store_true",
@@ -235,7 +277,7 @@ def main() -> int:
               f"t{args.t}-r{args.r}", flush=True)
         res = run_one(args.jar, args.scenario, args.tier, args.g, args.n,
                       args.t, args.r, args.pl, true_nets[args.scenario],
-                      keep_nexus=nexus_out)
+                      keep_nexus=nexus_out, timeout=args.timeout)
         print(f"--- nexus written to {nexus_out} ---", flush=True)
         print("--- STDOUT (tail) ---", flush=True)
         print((res.get("stdout") or "")[-2000:], flush=True)
@@ -273,7 +315,7 @@ def main() -> int:
         label = f"{tier}G {scenario}-g{g}-n{n}-t{t}-r{r}"
         try:
             res = run_one(args.jar, scenario, tier, g, n, t, r, args.pl,
-                          true_nets[scenario])
+                          true_nets[scenario], timeout=args.timeout)
         except Exception as exc:  # noqa: BLE001
             res = {"error": f"run:{exc}", "seconds": 0, "n_genes": ""}
         row = {"tier": tier, "scenario": scenario, "g": g, "n": n, "t": t,

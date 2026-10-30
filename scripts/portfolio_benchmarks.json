@@ -1,0 +1,208 @@
+{
+  "meta": {
+    "phynetpy_version": "0.6.0",
+    "python": "3.14.2",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "numpy": "2.3.5",
+    "timestamp": "2026-08-24 15:10:13"
+  },
+  "substitution_models": {
+    "JC (closed form)": {
+      "phynetpy_us": 1.5865499153733253,
+      "scipy_expm_us": 21.024200017564,
+      "speedup": 13.251521312909256,
+      "max_abs_diff": 1.1102230246251565e-16
+    },
+    "F81 (closed form)": {
+      "phynetpy_us": 1.2845499441027641,
+      "scipy_expm_us": 24.98109999578446,
+      "speedup": 19.447355947871163,
+      "max_abs_diff": 1.3877787807814457e-17
+    },
+    "K81 (closed form)": {
+      "phynetpy_us": 1.3939500786364079,
+      "scipy_expm_us": 23.170299944467843,
+      "speedup": 16.622044289515397,
+      "max_abs_diff": 1.1102230246251565e-16
+    },
+    "K80 (Tamura-Nei)": {
+      "phynetpy_us": 1.9696999806910755,
+      "scipy_expm_us": 22.58515008725226,
+      "speedup": 11.466289439332881,
+      "max_abs_diff": 1.1102230246251565e-16
+    },
+    "HKY (Tamura-Nei)": {
+      "phynetpy_us": 2.043150016106665,
+      "scipy_expm_us": 20.914699998684227,
+      "speedup": 10.236497483693508,
+      "max_abs_diff": 2.7755575615628914e-17
+    },
+    "TN93 (Tamura-Nei)": {
+      "phynetpy_us": 1.968700089491904,
+      "scipy_expm_us": 23.671400034800172,
+      "speedup": 12.023873093290433,
+      "max_abs_diff": 1.1102230246251565e-16
+    },
+    "SYM (cached eigen)": {
+      "phynetpy_us": 2.5341500295326114,
+      "scipy_expm_us": 26.50395000819117,
+      "speedup": 10.458713848555941,
+      "max_abs_diff": 2.0816681711721685e-16
+    },
+    "GTR (cached eigen)": {
+      "phynetpy_us": 2.584249945357442,
+      "scipy_expm_us": 22.09724998101592,
+      "speedup": 8.550740233433391,
+      "max_abs_diff": 4.440892098500626e-16
+    }
+  },
+  "graph_core": {
+    "100_leaves": {
+      "nodes": 199,
+      "edges": 198,
+      "phynetpy_peak_kib": 207.24609375,
+      "networkx_peak_kib": 119.693359375,
+      "memory_ratio_nx_over_phy": 0.5775421732164735,
+      "ops": {
+        "in_edges lookup": {
+          "phynetpy_us": 0.15579499304294586,
+          "networkx_us": 1.6740049934014678,
+          "ratio_nx_over_phy": 10.744921648027661
+        },
+        "out_degree": {
+          "phynetpy_us": 0.15254000900313258,
+          "networkx_us": 0.19450000254437327,
+          "ratio_nx_over_phy": 1.275075331484863
+        },
+        "get_leaves()": {
+          "phynetpy_us": 9.468499338254333,
+          "networkx_us": 34.997499315068126,
+          "ratio_nx_over_phy": 3.696203386071152
+        },
+        "topological_order": {
+          "phynetpy_us": 118.3500001206994,
+          "networkx_us": 84.77999828755856,
+          "ratio_nx_over_phy": 0.7163497946860631
+        },
+        "leaf_descendants_all": {
+          "phynetpy_us": 89.51500058174133
+        }
+      }
+    },
+    "500_leaves": {
+      "nodes": 999,
+      "edges": 998,
+      "phynetpy_peak_kib": 1015.6904296875,
+      "networkx_peak_kib": 554.8896484375,
+      "memory_ratio_nx_over_phy": 0.5463176891488721,
+      "ops": {
+        "in_edges lookup": {
+          "phynetpy_us": 0.1528550055809319,
+          "networkx_us": 1.686285005416721,
+          "ratio_nx_over_phy": 11.0319253138484
+        },
+        "out_degree": {
+          "phynetpy_us": 0.1511649927124381,
+          "networkx_us": 0.19137499621137977,
+          "ratio_nx_over_phy": 1.2660007636518948
+        },
+        "get_leaves()": {
+          "phynetpy_us": 45.381999807432294,
+          "networkx_us": 174.72250037826598,
+          "ratio_nx_over_phy": 3.850039687974512
+        },
+        "topological_order": {
+          "phynetpy_us": 607.7560037374496,
+          "networkx_us": 427.1339997649193,
+          "ratio_nx_over_phy": 0.7028050683797786
+        },
+        "leaf_descendants_all": {
+          "phynetpy_us": 519.1750009544194
+        }
+      }
+    },
+    "1000_leaves": {
+      "nodes": 1999,
+      "edges": 1998,
+      "phynetpy_peak_kib": 2103.3505859375,
+      "networkx_peak_kib": 1111.4521484375,
+      "memory_ratio_nx_over_phy": 0.5284198249537684,
+      "ops": {
+        "in_edges lookup": {
+          "phynetpy_us": 0.1511600101366639,
+          "networkx_us": 1.6530050081200898,
+          "ratio_nx_over_phy": 10.935465052070361
+        },
+        "out_degree": {
+          "phynetpy_us": 0.14611500082537532,
+          "networkx_us": 0.19277000101283193,
+          "ratio_nx_over_phy": 1.3193032879848856
+        },
+        "get_leaves()": {
+          "phynetpy_us": 91.19100053794682,
+          "networkx_us": 348.9909996278584,
+          "ratio_nx_over_phy": 3.8270333428640764
+        },
+        "topological_order": {
+          "phynetpy_us": 1253.7000002339482,
+          "networkx_us": 857.6719975098968,
+          "ratio_nx_over_phy": 0.6841126245113264
+        },
+        "leaf_descendants_all": {
+          "phynetpy_us": 1132.1350000798702
+        }
+      }
+    }
+  },
+  "mpl_incremental": {
+    "score_ms": 2.5785599835217,
+    "log_pseudolikelihood": -855.390232930178,
+    "taxa": 8,
+    "gene_trees": 60
+  },
+  "distances": {
+    "10_taxa": {
+      "mu_distance": {
+        "ms": 0.11032000184059143
+      },
+      "hardwired_cluster_distance": {
+        "ms": 0.038204994052648544
+      },
+      "tripartition_distance": {
+        "ms": 0.1506650005467236
+      },
+      "robinson_foulds_distance": {
+        "ms": 0.041734997648745775
+      }
+    },
+    "25_taxa": {
+      "mu_distance": {
+        "ms": 0.3653750056400895
+      },
+      "hardwired_cluster_distance": {
+        "ms": 0.09280999656766653
+      },
+      "tripartition_distance": {
+        "ms": 0.45203500194475055
+      },
+      "robinson_foulds_distance": {
+        "ms": 0.10185498977079988
+      }
+    },
+    "50_taxa": {
+      "mu_distance": {
+        "ms": 1.1012750095687807
+      },
+      "hardwired_cluster_distance": {
+        "ms": 0.19207000732421875
+      },
+      "tripartition_distance": {
+        "ms": 1.161160005722195
+      },
+      "robinson_foulds_distance": {
+        "ms": 0.20656499546021223
+      }
+    }
+  }
+}

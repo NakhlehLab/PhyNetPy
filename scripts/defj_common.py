@@ -23,6 +23,7 @@ Copyright 2025 Mark Kessler, Luay Nakhleh. All rights reserved.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -31,9 +32,22 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def defj_base() -> Path:
+    """Directory holding the ``<N>Genes`` tiers of the DEFJ dataset.
+
+    The dataset is large and is not vendored into the repository, so it may
+    live outside the checkout. ``PHYNETPY_DEFJ_ROOT`` overrides the default
+    in-repo location.
+    """
+    override = os.environ.get("PHYNETPY_DEFJ_ROOT")
+    if override:
+        return Path(override).expanduser()
+    return project_root() / "DEFJ"
+
+
 def defj_root(genes: int) -> Path:
     """Root of the DEFJ tree for a given gene-count tier (10 or 100)."""
-    return project_root() / "DEFJ" / f"{genes}Genes" / "withOG"
+    return defj_base() / f"{genes}Genes" / "withOG"
 
 
 # Ground-truth species networks (extended Newick), species-level labels.

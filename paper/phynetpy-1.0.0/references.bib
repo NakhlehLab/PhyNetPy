@@ -1,0 +1,491 @@
+% ---------------------------------------------------------------------------
+% PhyNetPy 1.0.0 software paper -- bibliography
+%
+% Entries whose key begins with TODO_ are placeholders: the work is real and
+% is cited in the text, but the full bibliographic record has not been
+% verified against the published article. Each carries a note saying what
+% still needs checking. Resolve every TODO_ entry before submission.
+%
+% Placeholder text must not use square brackets in the author or year fields.
+% BibTeX copies the author's surname into natbib's optional \bibitem[...]
+% argument, where a ']' closes the argument early and the document then fails
+% with "Missing $ inserted". Use the word TODO and keep the explanation in the
+% note or title field instead.
+% ---------------------------------------------------------------------------
+
+% ===========================================================================
+% PhyloNet
+% ===========================================================================
+
+@article{Than2008PhyloNet,
+  author  = {Than, Cuong and Ruths, Derek and Nakhleh, Luay},
+  title   = {{PhyloNet}: a software package for analyzing and reconstructing
+             reticulate evolutionary relationships},
+  journal = {BMC Bioinformatics},
+  volume  = {9},
+  pages   = {322},
+  year    = {2008},
+  doi     = {10.1186/1471-2105-9-322}
+}
+
+@article{Wen2018InferringPhyloNet,
+  author  = {Wen, Dingqiao and Yu, Yun and Zhu, Jiafan and Nakhleh, Luay},
+  title   = {Inferring phylogenetic networks using {PhyloNet}},
+  journal = {Systematic Biology},
+  volume  = {67},
+  number  = {4},
+  pages   = {735--740},
+  year    = {2018},
+  doi     = {10.1093/sysbio/syy015}
+}
+
+% ===========================================================================
+% Inference methods reimplemented in PhyNetPy
+% ===========================================================================
+
+@article{Yu2014ML,
+  author  = {Yu, Yun and Dong, Jianrong and Liu, Kevin J. and Nakhleh, Luay},
+  title   = {Maximum likelihood inference of reticulate evolutionary histories},
+  journal = {Proceedings of the National Academy of Sciences},
+  volume  = {111},
+  number  = {46},
+  pages   = {16448--16453},
+  year    = {2014},
+  doi     = {10.1073/pnas.1407950111},
+  note    = {{TODO} --- verify author list, volume and page range against the
+             published article. This is the reference behind the
+             InferNetwork\_ML cell.}
+}
+
+@article{Yu2015MPL,
+  author  = {Yu, Yun and Nakhleh, Luay},
+  title   = {A maximum pseudo-likelihood approach for phylogenetic networks},
+  journal = {BMC Genomics},
+  volume  = {16},
+  number  = {Suppl 10},
+  pages   = {S10},
+  year    = {2015},
+  doi     = {10.1186/1471-2164-16-S10-S10},
+  note    = {{TODO} --- verify supplement number, article number and DOI. This is
+             the reference behind the InferNetwork\_MPL cell.}
+}
+
+@article{Wen2018MCMCSEQ,
+  author  = {Wen, Dingqiao and Nakhleh, Luay},
+  title   = {Coestimating reticulate phylogenies and gene trees from multilocus
+             sequence data},
+  journal = {Systematic Biology},
+  volume  = {67},
+  number  = {3},
+  pages   = {439--457},
+  year    = {2018},
+  doi     = {10.1093/sysbio/syx085},
+  note    = {{TODO} --- verify volume, issue and page range. This is the reference
+             behind the MCMC\_SEQ cell.}
+}
+
+@article{Wen2016MCMCGT,
+  author  = {Wen, Dingqiao and Yu, Yun and Nakhleh, Luay},
+  title   = {Bayesian inference of reticulate phylogenies under the
+             multispecies network coalescent},
+  journal = {PLoS Genetics},
+  volume  = {12},
+  number  = {5},
+  pages   = {e1006006},
+  year    = {2016},
+  doi     = {10.1371/journal.pgen.1006006},
+  note    = {{TODO} --- verify. This is the reference behind the MCMC\_GT cell;
+             confirm whether MCMC\_GT should cite this or Wen \& Nakhleh 2018.}
+}
+
+@article{Bryant2012SNAPP,
+  author  = {Bryant, David and Bouckaert, Remco and Felsenstein, Joseph and
+             Rosenberg, Noah A. and RoyChoudhury, Arindam},
+  title   = {Inferring species trees directly from biallelic genetic markers:
+             bypassing gene trees in a full coalescent analysis},
+  journal = {Molecular Biology and Evolution},
+  volume  = {29},
+  number  = {8},
+  pages   = {1917--1932},
+  year    = {2012},
+  doi     = {10.1093/molbev/mss086}
+}
+
+@article{Zhu2018BiMarkers,
+  author  = {Zhu, Jiafan and Wen, Dingqiao and Yu, Yun and Meudt, Heidi M. and
+             Nakhleh, Luay},
+  title   = {Bayesian inference of phylogenetic networks from bi-allelic
+             genetic markers},
+  journal = {PLoS Computational Biology},
+  volume  = {14},
+  number  = {1},
+  pages   = {e1005932},
+  year    = {2018},
+  doi     = {10.1371/journal.pcbi.1005932},
+  note    = {{TODO} --- verify volume, issue and article number. Reference behind
+             the MLE\_BiMarkers and MCMC\_BiMarkers cells.}
+}
+
+@article{Than2009MDC,
+  author  = {Than, Cuong and Nakhleh, Luay},
+  title   = {Species tree inference by minimizing deep coalescences},
+  journal = {PLoS Computational Biology},
+  volume  = {5},
+  number  = {9},
+  pages   = {e1000501},
+  year    = {2009},
+  doi     = {10.1371/journal.pcbi.1000501}
+}
+
+@article{Yan2022Allop,
+  author  = {Yan, Zhi and Du, Peng and Hahn, Matthew W. and Nakhleh, Luay},
+  title   = {Maximum parsimony inference of phylogenetic networks in the
+             presence of polyploid complexes},
+  journal = {Systematic Biology},
+  year    = {2022},
+  doi     = {10.1093/sysbio/syab081},
+  note    = {InferNetwork\_MP\_Allopp, implemented in PhyloNet.
+             {TODO} --- add volume, issue and page range.}
+}
+
+@misc{TODO_Hejase_Allop,
+  author = {Hejase, Hussein A. and others},
+  title  = {{TODO} --- establish the correct attribution for the
+            maximum-parsimony allopolyploid method. The PhyNetPy README and
+            the project's NSF report credit Hejase et al.; paper/refs.bib in
+            this repository credits Yan et al. 2022. Determine which work
+            introduced the method PhyNetPy reimplements, and either cite it
+            here or delete this entry in favour of Yan2022Allop.},
+  year   = {0000}
+}
+
+% ===========================================================================
+% Phylogenetic networks: concepts and models
+% ===========================================================================
+
+@article{TODO_MSNC,
+  author  = {{TODO}},
+  title   = {{TODO} --- the primary reference for the multispecies network
+             coalescent. PhyNetPy's MSC model axis implements this; cite the
+             work that introduced the coalescent-with-hybridization density,
+             not PhyloNet},
+  journal = {{TODO}},
+  year    = {0000}
+}
+
+@article{TODO_ILS_review,
+  author  = {{TODO}},
+  title   = {{TODO} --- a review of incomplete lineage sorting and gene-tree
+             discordance, for the Background section},
+  journal = {{TODO}},
+  year    = {0000}
+}
+
+@article{TODO_networks_review,
+  author  = {{TODO}},
+  title   = {{TODO} --- a review of phylogenetic networks and reticulate
+             evolution, for the Introduction. Huson \& Scornavacca or a
+             Degnan-style review},
+  journal = {{TODO}},
+  year    = {0000}
+}
+
+@article{Cardona2009MuDistance,
+  author  = {Cardona, Gabriel and Llabr{\'e}s, Merc{\`e} and Rossell{\'o},
+             Francesc and Valiente, Gabriel},
+  title   = {Metrics for phylogenetic networks {I}: generalizations of the
+             {R}obinson--{F}oulds metric},
+  journal = {IEEE/ACM Transactions on Computational Biology and
+             Bioinformatics},
+  volume  = {6},
+  number  = {1},
+  pages   = {46--61},
+  year    = {2009},
+  doi     = {10.1109/TCBB.2008.70},
+  note    = {{TODO} --- verify. This is the reference for the mu-distance
+             implemented as GraphUtils.mu\_distance.}
+}
+
+@inproceedings{TODO_APD,
+  author = {Yakici, Berk and Ogilvie, Huw A. and Nakhleh, Luay},
+  title  = {{TODO} --- the RECOMB-CG 2022 paper introducing average path distance
+            (APD) and weighted APD, implemented as
+            GraphUtils.average\_path\_distance and
+            weighted\_average\_path\_distance. Establish the exact title,
+            proceedings volume and pages},
+  year   = {2022}
+}
+
+% ===========================================================================
+% Substitution models
+% ===========================================================================
+
+@incollection{JukesCantor1969,
+  author    = {Jukes, Thomas H. and Cantor, Charles R.},
+  title     = {Evolution of protein molecules},
+  booktitle = {Mammalian Protein Metabolism},
+  editor    = {Munro, Hamish N.},
+  pages     = {21--132},
+  publisher = {Academic Press},
+  year      = {1969}
+}
+
+@article{Kimura1980K80,
+  author  = {Kimura, Motoo},
+  title   = {A simple method for estimating evolutionary rates of base
+             substitutions through comparative studies of nucleotide
+             sequences},
+  journal = {Journal of Molecular Evolution},
+  volume  = {16},
+  number  = {2},
+  pages   = {111--120},
+  year    = {1980},
+  doi     = {10.1007/BF01731581}
+}
+
+@article{Kimura1981K81,
+  author  = {Kimura, Motoo},
+  title   = {Estimation of evolutionary distances between homologous
+             nucleotide sequences},
+  journal = {Proceedings of the National Academy of Sciences},
+  volume  = {78},
+  number  = {1},
+  pages   = {454--458},
+  year    = {1981},
+  doi     = {10.1073/pnas.78.1.454}
+}
+
+@article{Felsenstein1981F81,
+  author  = {Felsenstein, Joseph},
+  title   = {Evolutionary trees from {DNA} sequences: a maximum likelihood
+             approach},
+  journal = {Journal of Molecular Evolution},
+  volume  = {17},
+  number  = {6},
+  pages   = {368--376},
+  year    = {1981},
+  doi     = {10.1007/BF01734359}
+}
+
+@article{Hasegawa1985HKY,
+  author  = {Hasegawa, Masami and Kishino, Hirohisa and Yano, Taka-aki},
+  title   = {Dating of the human--ape splitting by a molecular clock of
+             mitochondrial {DNA}},
+  journal = {Journal of Molecular Evolution},
+  volume  = {22},
+  number  = {2},
+  pages   = {160--174},
+  year    = {1985},
+  doi     = {10.1007/BF02101694}
+}
+
+@article{Tamura1993TN93,
+  author  = {Tamura, Koichiro and Nei, Masatoshi},
+  title   = {Estimation of the number of nucleotide substitutions in the
+             control region of mitochondrial {DNA} in humans and chimpanzees},
+  journal = {Molecular Biology and Evolution},
+  volume  = {10},
+  number  = {3},
+  pages   = {512--526},
+  year    = {1993},
+  doi     = {10.1093/oxfordjournals.molbev.a040023}
+}
+
+@article{Felsenstein1981Pruning,
+  author  = {Felsenstein, Joseph},
+  title   = {Evolutionary trees from gene frequencies and quantitative
+             characters: finding maximum likelihood estimates},
+  journal = {Evolution},
+  volume  = {35},
+  number  = {6},
+  pages   = {1229--1242},
+  year    = {1981},
+  note    = {{TODO} --- the pruning algorithm is usually cited to Felsenstein
+             1981 J Mol Evol (see Felsenstein1981F81). Decide which entry the
+             Felsenstein-likelihood cross-check should cite and remove the
+             other.}
+}
+
+% ===========================================================================
+% Sampling and search
+% ===========================================================================
+
+@article{Green1995RJMCMC,
+  author  = {Green, Peter J.},
+  title   = {Reversible jump {M}arkov chain {M}onte {C}arlo computation and
+             {B}ayesian model determination},
+  journal = {Biometrika},
+  volume  = {82},
+  number  = {4},
+  pages   = {711--732},
+  year    = {1995},
+  doi     = {10.1093/biomet/82.4.711}
+}
+
+@article{Hastings1970,
+  author  = {Hastings, W. Keith},
+  title   = {Monte {C}arlo sampling methods using {M}arkov chains and their
+             applications},
+  journal = {Biometrika},
+  volume  = {57},
+  number  = {1},
+  pages   = {97--109},
+  year    = {1970},
+  doi     = {10.1093/biomet/57.1.97}
+}
+
+@article{GelmanRubin1992,
+  author  = {Gelman, Andrew and Rubin, Donald B.},
+  title   = {Inference from iterative simulation using multiple sequences},
+  journal = {Statistical Science},
+  volume  = {7},
+  number  = {4},
+  pages   = {457--472},
+  year    = {1992},
+  doi     = {10.1214/ss/1177011136}
+}
+
+@article{Geweke1992,
+  author  = {Geweke, John},
+  title   = {Evaluating the accuracy of sampling-based approaches to the
+             calculation of posterior moments},
+  journal = {Bayesian Statistics},
+  volume  = {4},
+  pages   = {169--193},
+  year    = {1992},
+  note    = {{TODO} --- this is a book chapter in Bernardo et al., Bayesian
+             Statistics 4 (Oxford University Press). Convert to an
+             @incollection with editors and publisher.}
+}
+
+% ===========================================================================
+% Software ecosystem
+% ===========================================================================
+
+@article{Harris2020NumPy,
+  author  = {Harris, Charles R. and Millman, K. Jarrod and
+             van der Walt, St{\'e}fan J. and others},
+  title   = {Array programming with {NumPy}},
+  journal = {Nature},
+  volume  = {585},
+  pages   = {357--362},
+  year    = {2020},
+  doi     = {10.1038/s41586-020-2649-2}
+}
+
+@article{Virtanen2020SciPy,
+  author  = {Virtanen, Pauli and Gommers, Ralf and Oliphant, Travis E. and
+             others},
+  title   = {{SciPy} 1.0: fundamental algorithms for scientific computing in
+             {P}ython},
+  journal = {Nature Methods},
+  volume  = {17},
+  pages   = {261--272},
+  year    = {2020},
+  doi     = {10.1038/s41592-019-0686-2}
+}
+
+@inproceedings{Hagberg2008NetworkX,
+  author    = {Hagberg, Aric A. and Schult, Daniel A. and Swart, Pieter J.},
+  title     = {Exploring network structure, dynamics, and function using
+               {N}etwork{X}},
+  booktitle = {Proceedings of the 7th Python in Science Conference
+               (SciPy 2008)},
+  pages     = {11--15},
+  year      = {2008}
+}
+
+@article{Behnel2011Cython,
+  author  = {Behnel, Stefan and Bradshaw, Robert and Citro, Craig and
+             Dalcin, Lisandro and Seljebotn, Dag Sverre and Smith, Kurt},
+  title   = {{C}ython: the best of both worlds},
+  journal = {Computing in Science \& Engineering},
+  volume  = {13},
+  number  = {2},
+  pages   = {31--39},
+  year    = {2011},
+  doi     = {10.1109/MCSE.2010.118}
+}
+
+@article{Sukumaran2010DendroPy,
+  author  = {Sukumaran, Jeet and Holder, Mark T.},
+  title   = {{D}endro{P}y: a {P}ython library for phylogenetic computing},
+  journal = {Bioinformatics},
+  volume  = {26},
+  number  = {12},
+  pages   = {1569--1571},
+  year    = {2010},
+  doi     = {10.1093/bioinformatics/btq228}
+}
+
+@article{HuertaCepas2016ETE3,
+  author  = {Huerta-Cepas, Jaime and Serra, Fran{\c c}ois and Bork, Peer},
+  title   = {{ETE} 3: reconstruction, analysis, and visualization of
+             phylogenomic data},
+  journal = {Molecular Biology and Evolution},
+  volume  = {33},
+  number  = {6},
+  pages   = {1635--1638},
+  year    = {2016},
+  doi     = {10.1093/molbev/msw046}
+}
+
+@article{Cock2009Biopython,
+  author  = {Cock, Peter J. A. and Antao, Tiago and Chang, Jeffrey T. and
+             others},
+  title   = {{B}iopython: freely available {P}ython tools for computational
+             molecular biology and bioinformatics},
+  journal = {Bioinformatics},
+  volume  = {25},
+  number  = {11},
+  pages   = {1422--1423},
+  year    = {2009},
+  doi     = {10.1093/bioinformatics/btp163}
+}
+
+@article{Bouckaert2019BEAST2,
+  author  = {Bouckaert, Remco and Vaughan, Timothy G. and
+             Barido-Sottani, Joëlle and others},
+  title   = {{BEAST} 2.5: an advanced software platform for {B}ayesian
+             evolutionary analysis},
+  journal = {PLoS Computational Biology},
+  volume  = {15},
+  number  = {4},
+  pages   = {e1006650},
+  year    = {2019},
+  doi     = {10.1371/journal.pcbi.1006650}
+}
+
+@article{Ayres2012BEAGLE,
+  author  = {Ayres, Daniel L. and Darling, Aaron and Zwickl, Derrick J. and
+             others},
+  title   = {{BEAGLE}: an application programming interface and high-performance
+             computing library for statistical phylogenetics},
+  journal = {Systematic Biology},
+  volume  = {61},
+  number  = {1},
+  pages   = {170--173},
+  year    = {2012},
+  doi     = {10.1093/sysbio/syr100}
+}
+
+@article{Rambaut2018Tracer,
+  author  = {Rambaut, Andrew and Drummond, Alexei J. and Xie, Dong and
+             Baele, Guy and Suchard, Marc A.},
+  title   = {Posterior summarization in {B}ayesian phylogenetics using
+             {T}racer 1.7},
+  journal = {Systematic Biology},
+  volume  = {67},
+  number  = {5},
+  pages   = {901--904},
+  year    = {2018},
+  doi     = {10.1093/sysbio/syy032}
+}
+
+@misc{TODO_PhyNetPy_archive,
+  author = {Kessler, Mark and Nakhleh, Luay},
+  title  = {{TODO} --- the archival record for PhyNetPy 1.0.0. Deposit the tagged
+            release with Zenodo (or another archive), then replace this entry
+            with the resulting DOI. Do not invent a DOI},
+  year   = {2026}
+}

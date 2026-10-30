@@ -1,0 +1,66 @@
+\section{Background}
+\label{sec:background}
+
+This section fixes terminology and names the four criterion families the library
+implements. Readers familiar with network inference can skip to
+Section~\ref{sec:architecture}.
+
+\subsection{Networks}
+
+A rooted phylogenetic network is a rooted directed acyclic graph whose leaves are
+labelled by sampled taxa. Nodes of in-degree one are tree nodes and represent
+ordinary divergence; nodes of in-degree two or more are reticulation nodes and
+represent an event in which a lineage derives material from more than one parent.
+Edges entering a reticulation carry inheritance probabilities $\gamma$ summing to
+one, giving the proportion of loci descending through each parent.
+
+A network with no reticulation nodes is a tree, which is why \phynetpy\ does not
+give trees a separate type. Two derived notions recur. A \emph{displayed tree} is
+obtained by retaining one incoming edge at each reticulation and suppressing the
+rest; a network on $r$ reticulations displays up to $2^r$ trees, each with a
+probability given by the product of the retained $\gamma$ values. A \emph{blob}
+is a biconnected component, and contracting each blob to a node yields the
+\emph{tree of blobs}, which captures the part of the history that is unambiguously
+tree-like. Network \emph{level} is the largest number of reticulations in any
+single blob, and bounds how entangled the reticulate structure is.
+
+Branch lengths are measured on more than one scale. Sequence-based methods work
+in expected substitutions per site; coalescent methods work in coalescent units,
+related through the population-size parameter $\theta = 4N\mu$. The two are not
+interchangeable, and a network carrying lengths on one scale will produce
+plausible but wrong answers if read on the other.
+
+\subsection{Criteria}
+
+\paragraph{Parsimony.} Minimising deep coalescences (MDC) counts the extra
+lineages implied by embedding observed gene trees in a candidate species history
+and prefers the history requiring fewest \cite{Than2009MDC}. It needs only
+gene-tree topologies, is cheap, and assumes no probabilistic model. Under
+polyploidy the criterion is applied to a multiply-labelled tree, in which a
+polyploid taxon appears once per subgenome \cite{Yan2022Allop}.
+
+\paragraph{Likelihood.} Under the multispecies network coalescent, the
+probability of a gene tree given a network is obtained by summing over the ways
+lineages can be routed through reticulations and coalesce within branches
+\cite{Yu2014ML}. This uses all the information in the data and is the most
+expensive of the criteria, since the sum grows quickly with taxa and
+reticulations.
+
+\paragraph{Pseudo-likelihood.} Replacing the full likelihood with a product over
+subsets of taxa -- in practice rooted triplets -- yields a composite objective
+that is far cheaper and retains enough signal to rank topologies
+\cite{Yu2015MPL}. The cost is that the product is not a normalised probability of
+the data, which is why it cannot serve as a posterior target.
+
+\paragraph{Bayesian inference.} Sampling networks from a posterior requires
+proposals that change dimension, since adding or removing a reticulation changes
+the parameter count; reversible-jump MCMC supplies the machinery
+\cite{Green1995RJMCMC, Hastings1970}. Samplers exist for gene trees as data, for
+sequence alignments with gene trees treated as latent variables
+\cite{Wen2018MCMCSEQ}, and for biallelic markers, where the marker likelihood is
+computed exactly without gene trees \cite{Bryant2012SNAPP, Zhu2018BiMarkers}.
+
+The grouping above is the reason \phynetpy's interface has the shape it does.
+Across these four families the data type, the assumed generative process and the
+objective vary independently, so the natural parameterisation of the method set
+is a product of three axes rather than a list of names.

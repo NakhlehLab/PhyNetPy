@@ -1,0 +1,98 @@
+{
+  "meta": {
+    "phynetpy_version": "0.6.0",
+    "python": "3.14.2",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "numpy": "2.3.5",
+    "timestamp": "2026-08-24 15:11:39"
+  },
+  "cython_ab": {
+    "6taxa_40gts": {
+      "taxa": 6,
+      "gene_trees": 40,
+      "cython_ms": 0.9870599955320359,
+      "python_ms": 1.3806667023648818,
+      "speedup": 1.3987667503642345,
+      "log_pl_cython": -461.660602774991,
+      "log_pl_python": -461.660602774991,
+      "abs_diff": 0.0
+    },
+    "8taxa_60gts": {
+      "taxa": 8,
+      "gene_trees": 60,
+      "cython_ms": 2.616519993171096,
+      "python_ms": 4.1353666844467325,
+      "speedup": 1.5804835029885889,
+      "log_pl_cython": -1760.444836272842,
+      "log_pl_python": -1760.4448362728415,
+      "abs_diff": 4.547473508864641e-13
+    },
+    "10taxa_80gts": {
+      "taxa": 10,
+      "gene_trees": 80,
+      "cython_ms": 5.773960007354617,
+      "python_ms": 9.650999990602335,
+      "speedup": 1.6714698366994774,
+      "log_pl_cython": -4631.238837338296,
+      "log_pl_python": -4631.2388373382955,
+      "abs_diff": 9.094947017729282e-13
+    },
+    "12taxa_100gts": {
+      "taxa": 12,
+      "gene_trees": 100,
+      "cython_ms": 11.384679982438684,
+      "python_ms": 19.08956669891874,
+      "speedup": 1.6767767498397097,
+      "log_pl_cython": -10266.676253834024,
+      "log_pl_python": -10266.676253834028,
+      "abs_diff": 3.637978807091713e-12
+    }
+  },
+  "retained_memory": {
+    "100_leaves": {
+      "leaves": 100,
+      "nodes": 199,
+      "edges": 198,
+      "phynetpy_retained_kib": 205.40625,
+      "networkx_retained_kib": 115.8955078125,
+      "phynetpy_peak_kib": 216.9140625,
+      "networkx_peak_kib": 122.248046875,
+      "ratio_phy_over_nx": 1.7723400490406733,
+      "phynetpy_bytes_per_node": 1056.964824120603
+    },
+    "500_leaves": {
+      "leaves": 500,
+      "nodes": 999,
+      "edges": 998,
+      "phynetpy_retained_kib": 979.8701171875,
+      "networkx_retained_kib": 551.4208984375,
+      "phynetpy_peak_kib": 1032.5185546875,
+      "networkx_peak_kib": 556.3037109375,
+      "ratio_phy_over_nx": 1.776991260150003,
+      "phynetpy_bytes_per_node": 1004.3913913913914
+    },
+    "1000_leaves": {
+      "leaves": 1000,
+      "nodes": 1999,
+      "edges": 1998,
+      "phynetpy_retained_kib": 2055.6591796875,
+      "networkx_retained_kib": 1102.9833984375,
+      "phynetpy_peak_kib": 2160.5576171875,
+      "networkx_peak_kib": 1112.4599609375,
+      "ratio_phy_over_nx": 1.863726310477177,
+      "phynetpy_bytes_per_node": 1053.024012006003
+    },
+    "2000_leaves": {
+      "leaves": 2000,
+      "nodes": 3999,
+      "edges": 3998,
+      "phynetpy_retained_kib": 3921.177734375,
+      "networkx_retained_kib": 2208.115234375,
+      "phynetpy_peak_kib": 4126.544921875,
+      "networkx_peak_kib": 2224.748046875,
+      "ratio_phy_over_nx": 1.7758030347926461,
+      "phynetpy_bytes_per_node": 1004.0725181295323
+    }
+  }
+}

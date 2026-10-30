@@ -1,0 +1,138 @@
+\section{What version 1.0.0 does}
+\label{sec:functionality}
+
+\subsection{Inference}
+
+Table~\ref{tab:analyses} lists the analyses available, generated from
+\code{registered_cells()} so that it matches the release it describes. Seven
+cells are implemented. Six correspond to PhyloNet commands and are
+reimplementations of published methods; the seventh, maximum-parsimony
+inference under polyploidy, is a new implementation of the method PhyloNet
+exposes as \code{InferNetwork_MP_Allopp} and differs from it in its proposal
+kernel.
+
+\begin{table}[t]
+  \centering
+  \scriptsize
+  \input{tables/analyses}
+  \caption{Analyses in \phynetpy\ 1.0.0. Rows are generated from the dispatch
+  registry. ``Reimplementation'' means the method was published elsewhere and
+  implemented here from its description; the \code{MP_Allop} row is marked as
+  a new implementation because its search uses a single ploidy-preserving move
+  rather than the six moves of the original. The lower block lists
+  combinations that are well defined but carry no engine, and therefore raise
+  \code{NotImplementedError} rather than failing obscurely.%
+  }
+  \label{tab:analyses}
+\end{table}
+
+Three points about that table matter more than its length.
+
+The first is what is \emph{not} in it. Maximum parsimony from gene trees under
+diploid hybridization -- PhyloNet's \code{InferNetwork_MP} -- is a legal cell
+with no engine behind it. The only parsimony code in \phynetpy\ is defined on
+multiply-labelled trees for the allopolyploid model, so the diploid case is
+genuinely absent rather than partially present. The biallelic
+pseudo-likelihood is absent for the same kind of reason: the marker code
+computes the full likelihood only. Both are scheduled for
+1.0.0.\footnote{[TODO: verify at 1.0.0. At the time of writing these two cells
+raise \code{NotImplementedError}; the manuscript must be updated with measured
+behaviour once they are built, or this claim removed.]}
+
+The second is a limitation inside a row that is otherwise marked available.
+\code{MLE_BiMarkers} can score a given network but cannot search: its
+\code{infer} path raises unconditionally. A reader comparing feature lists
+would otherwise reasonably assume that maximum-likelihood network inference
+from markers is available.
+
+The third concerns \code{Bayesian(objective=PseudoLikelihood())}, which is
+refused. A triplet pseudo-likelihood is not a normalised probability of the
+data, so using it as a Metropolis--Hastings target does not yield a calibrated
+posterior. The combination is mechanically easy to allow and would produce
+numbers; it is rejected because those numbers would not mean what a reader of
+the output would take them to mean.
+
+Search behaviour is controlled by presets rather than by combinations of
+booleans. Four are provided: \code{default}, \code{fast}, \code{accurate}, and
+\code{phylonet}. The last exists to reproduce PhyloNet's
+optimise-everything-per-topology behaviour, which is what makes cross-checking
+against it meaningful; individual flags override the preset.
+
+\subsection{Network analysis}
+
+The analysis layer is usable without running any inference, and is where a
+researcher comparing methods or summarising results spends time.
+
+Nine dissimilarity measures are implemented: the $\mu$ (path-multiplicity)
+distance \cite{Cardona2009MuDistance}, hardwired and softwired cluster
+distances, Robinson--Foulds over hardwired clusters, tripartition distance,
+displayed-tree distance, average and weighted average path distance
+\cite{TODO_APD}, and a pairwise leaf distance; \code{Network} additionally
+provides a rooted triplet distance. The cluster, tripartition and
+displayed-tree measures accept a \code{normalize} argument returning a value in
+$[0,1]$.
+
+A separate module compares networks by the reticulations they assert rather
+than by overall topology, through reticulation tripartitions, a dissimilarity
+built on them, and precision and recall against a reference network. Whether an
+inferred network recovers the \emph{right hybridizations} is the question a
+biologist usually has, and a whole-network distance answers it only indirectly.
+
+Decomposition covers displayed trees with their probabilities, the dominant
+tree, hardwired and softwired clusters, biconnected components (blobs) and the
+tree of blobs, network level, bridges and articulation points, and induced
+subnetworks by taxon set.
+
+\subsection{Simulation}
+
+\code{simulate} is the generative inverse of \code{infer} and returns a
+data-axis object, so a recovery check is two calls with nothing in between:
+
+\begin{lstlisting}
+sim = simulate(MSC(theta=0.02), taxa=6, n=200)
+recovered = infer(sim, criterion=PseudoLikelihood())
+\end{lstlisting}
+
+Gene genealogies are simulated backwards in time within network branches under
+the multispecies network coalescent, with lineages routed at reticulations
+according to inheritance probabilities. Sequence evolution runs a continuous-time
+Markov chain down each gene tree under JC69, HKY85 or GTR, single- or
+multi-locus. Biallelic markers are simulated site by site, sampling an
+independent genealogy per site. Species trees come from Yule or constant-rate
+birth--death processes; networks are produced by drawing a tree and grafting
+reticulations onto it.
+
+Two limits are worth stating. Simulation under \code{Allopolyploid} raises
+\code{NotImplementedError} -- only \code{MSC} has simulators. And because
+reticulations are grafted onto a separately drawn tree, the network simulator
+is not a birth--death--hybridization process in which hybridization and
+speciation occur jointly, so it should not be used to study the distribution of
+network shapes such a process induces.
+
+One asymmetry catches users. The simulators write branch lengths in expected
+substitutions per site while the gene-tree criteria read coalescent units, so a
+round trip recovers the topology but not the lengths. The branch-length unit
+tags described in Section~\ref{sec:architecture} make this visible rather than
+silent.
+
+\subsection{Data, I/O, and diagnostics}
+
+Extended Newick, NEXUS, FASTA and VCF are supported for both reading and
+writing. The extended Newick reader detects dialects and converts between them,
+which matters because no single interchange convention is universal across
+network software. PHYLIP is not supported.
+
+Four alphabets are built in (DNA, RNA, protein, codon). Eight nucleotide
+substitution models are provided -- JC, K80, F81, HKY, TN93, K81, SYM, GTR --
+each parameterised by the free parameters its literature defines rather than by
+a full exchangeability vector.
+
+For posterior analysis, \phynetpy\ computes effective sample size,
+autocorrelation time, standard error of the mean, highest-posterior-density
+intervals, the Geweke statistic \cite{Geweke1992}, and the Gelman--Rubin
+$\hat{R}$ across chains \cite{GelmanRubin1992}. Traces are written in Tracer
+log format \cite{Rambaut2018Tracer} and tree samples in NEXUS, and Tracer logs
+can be read back, so existing tooling applies to \phynetpy\ output without
+conversion scripts. \code{reticulation_sweep} fits a range of reticulation
+counts and reports information criteria, which addresses the standing problem
+that a more reticulate network almost always fits the data better.

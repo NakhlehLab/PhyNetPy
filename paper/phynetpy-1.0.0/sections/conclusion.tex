@@ -1,0 +1,21 @@
+\section{Conclusions}
+\label{sec:conclusion}
+
+\phynetpy\ 1.0.0 provides a Python foundation for phylogenetic network work:
+a reusable network type, an analysis layer that does not depend on any inference
+method, and seven inference methods reached through two verbs over three typed
+axes. Six of those methods correspond to PhyloNet analyses, and the
+likelihood functions underlying two of them agree with PhyloNet's own to
+$10^{-5}$ across fourteen adversarial cases.
+
+It is a successor to PhyloNet in the sense that it continues the same line of
+software and reimplements much of the same body of methods. It is not a
+replacement. Two PhyloNet analyses have no counterpart here, PhyloNet command
+files do not carry over, and on the one search we compared directly PhyloNet
+recovered the true topology about twice as often as we did. Where those matter,
+PhyloNet remains the right tool.
+
+The case for building on \phynetpy\ is about what the next method costs. A new
+criterion is a class and a registry entry, and it inherits the network
+representation, the topology moves, the parameter optimiser and the diagnostics
+rather than restating them.
