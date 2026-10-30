@@ -25,7 +25,6 @@ reports/
 scripts/
 runs/
 paper/
-tests/
 var/
 # Anchored to the repo root only -- unanchored patterns here previously
 # shadowed same-named nested dirs (e.g. "Data/" was silently matching

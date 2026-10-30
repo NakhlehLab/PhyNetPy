@@ -1822,6 +1822,7 @@ def convert_newick(newick_str: str, standard: str = "PhyNetPy") -> str:
     )
 
     def _phylonet_to_intermediate(m: re.Match) -> str:
+        """Rewrite one ``#H:len::gamma`` match as ``#H[&gamma=g]:len``."""
         name = m.group(1)
         branch = m.group(2) or ''
         gamma = m.group(3)
@@ -1847,6 +1848,7 @@ def convert_newick(newick_str: str, standard: str = "PhyNetPy") -> str:
         )
 
         def _to_phylonet(m: re.Match) -> str:
+            """Move a ``gamma=`` entry out of a metadata block into ``::gamma``."""
             name = m.group(1)
             metadata = m.group(2)
             branch = m.group(3) or ''

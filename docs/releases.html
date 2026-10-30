@@ -30,21 +30,22 @@
 
   <main class="content-page">
     <article class="release">
-      <p class="eyebrow">Released August 10, 2026</p>
-      <h2>PhyNetPy 0.6.0</h2>
+      <p class="eyebrow">Released October 30, 2026</p>
+      <h2>PhyNetPy 0.7.0</h2>
       <p>
-        PhyNetPy 0.6.0 consolidates inference around three typed axes and makes
-        biological units explicit. This is a breaking alpha release; review the
-        migration notes before upgrading from 0.5.x.
+        PhyNetPy 0.7.0 adds DIMPLE, a divide-and-conquer pipeline for inferring
+        large networks from a tree of blobs, and a joint reticulation-and-tree
+        dissimilarity for comparing networks. Network edits are now
+        transactional, and seeded searches reproduce across processes.
       </p>
 
       <h3>Highlights</h3>
       <ul class="highlight-list">
-        <li><strong>One inference API:</strong> <code>infer</code>, <code>score</code>, and <code>simulate</code> dispatch over data, model, and criterion.</li>
-        <li><strong>Explicit units:</strong> branch lengths are tagged and converted instead of being interpreted implicitly.</li>
-        <li><strong>Exact marker simulation:</strong> every biallelic site receives an independently sampled MSNC genealogy.</li>
-        <li><strong>Population parameters:</strong> fixed per-branch theta values are available for simulation and scoring.</li>
-        <li><strong>Population genetics:</strong> validated allele-count and pulse-admixture containers are now public.</li>
+        <li><strong>DIMPLE:</strong> <code>infer_dimple</code> partitions a tree of blobs, infers each subset under MSC pseudo-likelihood, merges, and grafts.</li>
+        <li><strong>Joint dissimilarity:</strong> <code>joint_dissimilarity</code> scores matched reticulations and the reticulation-free remainders separately.</li>
+        <li><strong>Hybrid-ancestry error:</strong> the balanced HAE of an estimate against the truth, plus distinct displayed-tree enumeration.</li>
+        <li><strong>Transactions:</strong> journaled, nestable, in-place undo for network edits; no topology move copies the network.</li>
+        <li><strong>Reproducibility:</strong> process-independent node and edge hashes, and annotated Newick that round-trips.</li>
       </ul>
 
       <h3>Install</h3>
@@ -52,7 +53,7 @@
 
       <p>
         The repository also includes the full Markdown release notes at
-        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/RELEASE_NOTES_0.6.0.md">RELEASE_NOTES_0.6.0.md</a>
+        <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/RELEASE_NOTES_0.7.0.md">RELEASE_NOTES_0.7.0.md</a>
         and the running changelog at
         <a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/CHANGELOG.md">CHANGELOG.md</a>.
       </p>
@@ -61,6 +62,13 @@
     <section class="section">
       <article class="callout">
         <h2>Release Archive</h2>
+        <p>
+          <strong>PhyNetPy 0.6.0 — August 10, 2026.</strong> Consolidated
+          inference around typed data, model, and criterion axes, made
+          branch-length units explicit, and added exact marker simulation and
+          population-genetics helpers.
+        </p>
+        <p><a href="https://github.com/NakhlehLab/PhyNetPy/blob/main/RELEASE_NOTES_0.6.0.md">Read the 0.6.0 notes</a></p>
         <p>
           <strong>PhyNetPy 0.5.0 — May 12, 2026.</strong> Added the curated
           inference facade, Cython scoring engines, adaptive proposal kernels,

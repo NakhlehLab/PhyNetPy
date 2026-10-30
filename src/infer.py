@@ -300,6 +300,7 @@ class Start:
     mode: StartMode = StartMode.FREE
 
     def __post_init__(self) -> None:
+        """Accept a mode name as shorthand for the :class:`StartMode` member."""
         if isinstance(self.mode, str):
             self.mode = StartMode(self.mode.lower())
         if not isinstance(self.mode, StartMode):
@@ -392,6 +393,7 @@ class InferenceResult:
         )
 
     def __repr__(self) -> str:
+        """One line naming the method, the score and its sense, and the posterior size."""
         direction = "min" if self.lower_is_better else "max"
         n_post = len(self.posterior) if self.posterior is not None else 0
         return (

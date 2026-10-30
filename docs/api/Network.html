@@ -1786,6 +1786,38 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
+                                <span class="name">joint_dissimilarity</span>(<span class="params">other: Network, kind: str = 'nakhleh'</span>) <span class="keyword">-&gt;</span> 'JointDissimilarityResult'
+                            </div>
+                            <div class="function-body">
+                                <p>The joint reticulation-and-tree dissimilarity between this network and another on the same taxon set: a minimum-cost matching of the reticulation tripartitions (``D_ret``) plus three times the dissimilarity of the two remainders left once every reticulation is removed (``D_tree``). See :mod:`~phynetpy.JointDissimilarity` for the definition; this method calls ``JointDissimilarity.joint_dissimilarity``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">other</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The other network to compare against.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">kind</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Structure dissimilarity used on blocks and</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">remainders</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``&quot;leaf&quot;``, ``&quot;cluster&quot;`` or ``&quot;nakhleh&quot;`` (default).</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> JointDissimilarityResult: ``r1``, ``r2``, ``D_ret``, ``D_tree`` and the derived ``m``, ``D_joint``, ``D_ret_normalized``, ``D_joint_normalized``.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If either network is not a valid rooted binary- reticulation network, or the taxon sets differ., <code>ValueError</code>: If ``kind`` is unknown.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
                                 <span class="name">get_subtree_at</span>(<span class="params">node: Node</span>) <span class="keyword">-&gt;</span> set[Node]
                             </div>
                             <div class="function-body">
@@ -1988,6 +2020,7 @@
                 <li><a href="GeneTrees.html">GeneTrees</a></li>
                 <li><a href="GraphUtils.html">GraphUtils</a></li>
                 <li><a href="IO.html">IO</a></li>
+                <li><a href="JointDissimilarity.html">JointDissimilarity</a></li>
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>

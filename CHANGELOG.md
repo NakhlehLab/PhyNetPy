@@ -6,18 +6,42 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [0.7.0] -- 2026-10-30
 
-### Added
+### Added -- DIMPLE: divide-and-conquer inference on a tree of blobs
 
-- `GraphUtils.get_displayed_trees(net)` enumerates the trees a network
-  displays, returning one `Network` per *distinct* topology. A network with
-  k reticulations admits at most 2^k displayed trees but often fewer: when the
-  hybrid-edge choices at two reticulations discard each other's subtrees,
-  different choices display the same tree. Pass `unique=False` for the old
-  one-tree-per-choice behaviour.
-- `GraphUtils.count_displayed_trees(net, exact=True)` counts distinct displayed
-  trees by enumerating them, rather than multiplying reticulation in-degrees.
+- `phynetpy.infer.infer_dimple(gene_trees, tree_of_blobs, start_tree, ...)`
+  is a port of DIMPLE (divide, infer, merge). The scaffold's polytomies are
+  the blobs. Each blob is cut into subsets of at most `max_subset_size` taxa
+  over `n_divisions` alternative partitions; each subset is inferred with the
+  MSC triplet pseudo-likelihood engine (simulated annealing, three runs by
+  default; any `infer` keyword overrides the defaults, and
+  `chains=[{...}, ...]` runs a portfolio per subset); the subset networks are
+  merged by constrained neighbor-joining of the overlapping subset trees
+  (NJMerge, Molloy & Warnow 2018) with the subsets' reticulations placed back
+  onto the merged tree; and the pieces are grafted onto the scaffold. It is
+  not a cell of the `(data, model, criterion)` registry, since the partition
+  and the stitch are specific to the pipeline. Options: `outgroup` (dropped
+  from the scaffold before partitioning), `model_selection` (`gain`, `aic`,
+  `bic`, `elbow` over caps 0 to `max_reticulations`), `true_network` (the
+  DIMPLE paper's per-subset true-reticulation caps; benchmarks only), and
+  `score_final`. Returns an `InferenceResult` with `method="DIMPLE"` and a
+  `DimpleTrace` in `raw` that records every blob, subset, chain, and
+  reticulation trial. Illegal inputs raise `DimpleError`.
+- The reticulation-identity and triple helpers the merger uses are public in
+  `GraphUtils`: `reticulation_signature`, `same_reticulation`, and
+  `group_reticulations` decide when two inferred subnetworks found the same
+  hybridization; `rooted_triples(net)` is the set of rooted triples a tree or
+  network displays; `reticulation_cycle_size` (moved from the sequence-MCMC
+  module) and `count_reticulations(net, min_cycle_size=4)` count only the
+  reticulations a rooted-triple criterion can detect.
+- `Network.graft_subtree(subtree, sibling_of=...)` or `(..., under=...)`
+  copies a subtree in and attaches it by splitting an edge or as a new
+  child. Colliding internal labels are renamed; a duplicate taxon is an
+  error; grafting beside the root creates a new root.
+
+### Added -- comparing networks
+
 - `joint_dissimilarity(net1, net2, kind)` and `Network.joint_dissimilarity`:
   the joint reticulation-and-tree dissimilarity of two rooted networks on the
   same taxa (`JointDissimilarity` module, re-exported from `GraphUtils` next
@@ -29,15 +53,87 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   replaced by marker leaves; `D_joint = D_ret + 3 D_tree`, with normalised
   forms in [0, 1]. The structure dissimilarity is one of `leaf` (Jaccard),
   `cluster` (multiset hardwired clusters) or `nakhleh` (vertex-equivalence
-  classes). `tests/crosscheck/jointdist_standalone.py` is the reference
-  implementation the port is tested against.
+  classes).
 - `GraphUtils.hybrid_ancestry_error(estimated, true_net)` -- the balanced
   hybrid-ancestry error (HAE) used in the NetCSEval evaluation: the mean of the
   false-positive and false-negative rates of the set of taxa descending from a
   reticulation, with each rate 0 when its denominator is empty. Asymmetric,
   like a precision/recall summary. `GraphUtils.hybrid_ancestry(net)` returns
-  the set itself. The DIMPLE benchmark records `mu_dist` and `hae` per
-  replicate alongside the existing metrics.
+  the set itself.
+- `GraphUtils.get_displayed_trees(net)` enumerates the trees a network
+  displays, returning one `Network` per *distinct* topology. A network with
+  k reticulations admits at most 2^k displayed trees but often fewer: when the
+  hybrid-edge choices at two reticulations discard each other's subtrees,
+  different choices display the same tree. Pass `unique=False` for the old
+  one-tree-per-choice behaviour. The major tree (highest-gamma edge at every
+  reticulation) is enumerated first, so callers that break ties by taking the
+  first tree resolve them the same way for every network.
+- `GraphUtils.count_displayed_trees(net, exact=True)` counts distinct displayed
+  trees by enumerating them, rather than multiplying reticulation in-degrees.
+
+### Added -- network transactions
+
+- `Network.begin_transaction`, `commit_transaction`, `rollback_transaction`,
+  and `in_transaction`. While a transaction is open every node and edge added
+  or removed, every rename through `update_node_name`, and every change to a
+  node's time or reticulation flag or an edge's length, gamma, weight or tag
+  is journaled with its inverse; rollback restores the network exactly, same
+  objects included, and transactions nest. This is the general form of
+  "mutate, evaluate, maybe revert" for search moves and candidate edits.
+- Every topology move (`AddReticulation`, `RemoveReticulation`,
+  `FlipReticulation`, `RelocateReticulation`, `SwitchParentage`, `SPR`,
+  `ChangeReticSource`, `ChangeReticDest`) now undoes itself by rolling back a
+  transaction instead of restoring a deep copy of the network, so no move
+  copies the network any more.
+
+### Changed -- search state
+
+- `State` keeps a single live model. `current_model` and `proposed_model`
+  are properties that both return it; `commit(move, score)` records the
+  accepted score and closes the move's transaction; `likelihood()` returns
+  the cached accepted score and never re-scores a network that may be
+  mid-proposal. A custom driver that wants a best-so-far network must snapshot
+  it with `Network.copy()`; the live one moves on. The built-in drivers,
+  engines, and leaderboards already do.
+- `HillClimbing` lets a phased kernel whose phase switch is due make one more
+  proposal before the 150-non-improvement stop (`MPLKernel.phase_switch_due`),
+  so the reticulation phase is sampled instead of being cut off at the same
+  count. The pseudo-likelihood engine takes `phase_patience=n` to shorten that
+  switch for short runs. With `optimize_params=True`, an `AddReticulation`
+  proposal is always parameter-optimised before it is judged: a new hybrid is
+  born at gamma 0.5, and its raw score is not evidence against the insertion.
+- `SwitchParentage(debug_id=...)` is accepted and ignored.
+- The compiled MPL kernel's node limit rose from 128 to 1024, with the DP
+  workspace sized by the network actually scored.
+- Engines and drivers snapshot networks with `Network.copy()` rather than
+  `copy.deepcopy`.
+
+### Changed -- reproducibility
+
+- Node and edge hashes are process-independent. `Network.stable_hash` (64-bit
+  FNV-1a) replaces the per-process salted `hash(str)` behind `Node.__hash__`,
+  and `Edge.__hash__` is fixed at construction from the endpoint labels
+  (equality is still identity). Every collection keyed by nodes or edges, and
+  therefore every candidate list a move draws from, now iterates in the same
+  order in every process, so fixed-seed searches reproduce across runs
+  regardless of `PYTHONHASHSEED`. Birth-death species selection and
+  `random_network`'s edge draws are sorted by label for the same reason.
+- `random_network` relabels the Yule tree in place (`T1..Tn`, `I1..`, `Root`)
+  with a deterministic internal numbering and returns *at most* `level`
+  reticulations, warning when the topology runs out of legal insertion
+  sites. Its branch lengths are tagged `SUBSTITUTIONS_PER_SITE`.
+
+### Changed -- Newick annotations
+
+- `Network.newick(annotate=True)` and `IO.write_newick(net, annotate=True)`
+  write `:length` on every branch and `[&gamma=g]` on the first occurrence of
+  each reticulation, the dialect the readers parse back.
+  `SimulatedSNPData.write_nexus` uses it; the simulator's private rich-Newick
+  writer is gone.
+- `Network.from_newick` and `IO.read_newick` complete the inheritance
+  probabilities a string leaves implicit: a hybrid edge without a gamma gets
+  `1 - g` when its sibling edge carries one, and `1/k` each when none does,
+  instead of being left at 0.
 
 ### Fixed -- networks written by `Network.newick` could not be read back
 
@@ -66,6 +162,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `average_path_distance`, and `weighted_average_path_distance` share that
   enumeration and so counted clusters over the spurious leaves. Their values
   change for networks where a reticulation's parents can both be discarded.
+- `pairwise_leaf_distance` no longer fails on a network whose edges carry no
+  length; a missing length counts as one unit, as the Newick readers default
+  it.
+
+### Removed -- **BREAKING**: `phynetpy.Logger`
+
+- The `Logger` module and the `phynetpy.Logger` export are gone. Its only
+  consumer was `SwitchParentage`'s debug output, which no longer exists.
+
+### Development
+
+- CI pins the test matrix to `ubuntu-24.04`: the `ubuntu-latest` image moved
+  to 26.04, whose `setup-python` manifest has no Python 3.9 build, so the 3.9
+  job could not start. The clean-install check now reads the release version
+  from `src/_version.py` instead of a hardcoded string.
+- `tests/` was listed in `.gitignore`, which silently hid new test files from
+  git and CI. The entry is removed. New test modules cover DIMPLE
+  (`tests/test_dimple.py`), the joint dissimilarity
+  (`tests/test_joint_dissimilarity.py`), and network transactions and
+  grafting (in `tests/test_network.py`).
+- `generate_docs.py` documents the new `JointDissimilarity` module; the
+  generated reference in `docs/api/` is rebuilt.
 
 ---
 

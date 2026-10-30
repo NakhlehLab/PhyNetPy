@@ -13,7 +13,8 @@ Covers the core data structures and algorithms:
         copy, to_networkx, is_isomorphic, get_subtree_at, dist_from_root,
         topological_order, distance_from_root, set_node_times_from_root,
         set_node_times_by_edge_count, edges_downstream_of_node,
-        edges_upstream_of_node, subgenome_count.
+        edges_upstream_of_node, subgenome_count, transactions
+        (begin / commit / rollback), graft_subtree.
 
 Each test builder constructs a small network topology from scratch so
 that tests are self-contained and deterministic.
@@ -1749,3 +1750,107 @@ class TestReticulationLabelLeniency:
         with pytest.raises(PhyIOError):
             read_newick("((A,(B)#LGX1),(#LGX1,C));")
 
+
+
+class TestTransactions:
+    """``begin_transaction`` / ``rollback_transaction`` / ``commit_transaction``
+    journal structural and attribute edits so a move can be undone in place."""
+
+    @staticmethod
+    def _snapshot(net: Network) -> tuple:
+        nodes = sorted((n.label, n.is_reticulation()) for n in net.V())
+        edges = sorted((e.src.label, e.dest.label, e.get_gamma(), e.get_length()) for e in net.E())
+        return nodes, edges
+
+    def test_rollback_restores_edits_and_commit_keeps_them(self):
+        net = build_simple_tree()
+        before = self._snapshot(net)
+        root = net.root()
+        leaf = next(iter(net.get_leaves()))
+        edge = net.get_edge(*[(p, leaf) for p in net.get_parents(leaf)][0])
+
+        net.begin_transaction()
+        assert net.in_transaction()
+        edge.set_length(9.5)
+        net.update_node_name(leaf, "renamed")
+        extra = Node("extra")
+        net.add_nodes(extra)
+        net.add_edges(Edge(root, extra))
+        net.remove_edge(edge)
+        assert self._snapshot(net) != before
+        net.rollback_transaction()
+
+        assert not net.in_transaction()
+        assert self._snapshot(net) == before
+        assert leaf in net.V() and extra not in net.V()
+
+        net.begin_transaction()
+        net.add_nodes(extra)
+        net.add_edges(Edge(root, extra))
+        net.commit_transaction()
+        assert extra in net.get_leaves()
+        assert not net.in_transaction()
+
+    def test_nested_rollback_undoes_only_the_inner_frame(self):
+        net = build_simple_tree()
+        root = net.root()
+        outer, inner = Node("outer"), Node("inner")
+        net.begin_transaction()
+        net.add_nodes(outer)
+        net.add_edges(Edge(root, outer))
+        net.begin_transaction()
+        net.add_nodes(inner)
+        net.add_edges(Edge(root, inner))
+        net.rollback_transaction()
+        assert outer in net.V() and inner not in net.V()
+        assert net.in_transaction()
+        net.rollback_transaction()
+        assert outer not in net.V()
+
+    def test_rollback_outside_a_transaction_is_a_no_op(self):
+        net = build_simple_tree()
+        before = self._snapshot(net)
+        net.rollback_transaction()
+        net.commit_transaction()
+        assert self._snapshot(net) == before
+
+
+class TestGraftSubtree:
+    """``graft_subtree`` copies a subtree in and attaches it by one edge."""
+
+    def test_graft_as_sibling_splits_the_edge(self):
+        host = Network.from_newick("((A,B),C);")
+        sub = Network.from_newick("(X,Y);")
+        anchor = host.has_node_named("C")
+        parent = host.get_parents(anchor)[0]
+        image = host.graft_subtree(sub, sibling_of=anchor)
+        assert sorted(l.label for l in host.get_leaves()) == ["A", "B", "C", "X", "Y"]
+        # C and the grafted root now share a fresh parent under the old one.
+        mid = host.get_parents(anchor)[0]
+        assert mid is not parent and host.get_parents(image)[0] is mid
+        assert host.get_parents(mid)[0] is parent
+        assert is_tree(host) and host.is_acyclic()
+
+    def test_graft_under_adds_a_child_and_sibling_of_root_makes_a_new_root(self):
+        host = Network.from_newick("((A,B),C);")
+        image = host.graft_subtree(Network.from_newick("(X,Y);"), under=host.root())
+        assert image in host.get_children(host.root())
+
+        host2 = Network.from_newick("((A,B),C);")
+        old_root = host2.root()
+        host2.graft_subtree(Network.from_newick("(X,Y);"), sibling_of=old_root)
+        assert host2.root() is not old_root
+        assert old_root in host2.get_children(host2.root())
+        assert sorted(l.label for l in host2.get_leaves()) == ["A", "B", "C", "X", "Y"]
+
+    def test_graft_rejects_bad_anchors_and_duplicate_leaves(self):
+        host = Network.from_newick("((A,B),C);")
+        sub = Network.from_newick("(X,Y);")
+        with pytest.raises(NetworkError):
+            host.graft_subtree(sub)
+        with pytest.raises(NetworkError):
+            host.graft_subtree(sub, sibling_of=host.root(), under=host.root())
+        with pytest.raises(NetworkError):
+            host.graft_subtree(sub, sibling_of=Node("not_here"))
+        with pytest.raises(NetworkError):
+            host.graft_subtree(Network.from_newick("(A,Z);"), under=host.root())

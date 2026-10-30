@@ -19,7 +19,7 @@ Once the virtual environment is active:
     pip install --upgrade pip
     pip install phynetpy
 
-PhyNetPy 0.6.0 supports Python 3.9 through 3.14 and requires compiled Cython
+PhyNetPy 0.7.0 supports Python 3.9 through 3.14 and requires compiled Cython
 extensions. `pip` uses a platform wheel when one is published. Installing from
 an sdist or source checkout requires a working C compiler (MSVC Build Tools on
 Windows, Xcode Command Line Tools on macOS, or GCC/Clang on Linux).

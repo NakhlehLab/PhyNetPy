@@ -1,7 +1,31 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
+##############################################################################
+##  -- PhyNetPy --
+##  Library for the Development and use of Phylogenetic Network Methods
+##
+##  Copyright 2025 Mark Kessler, Luay Nakhleh.
+##  All rights reserved.
+##
+##  See "LICENSE.txt" for terms and conditions of usage.
+##
+##  If you use this work or any portion thereof in published work,
+##  please cite it as:
+##
+##     Mark Kessler, Luay Nakhleh. 2025.
+##
+##############################################################################
+
 """
+Author : Mark Kessler
+Last Stable Edit : 10/30/26
+First Included in Version : 0.7.0
+
+Docs   - [x]
+Tests  - [x]
+Design - [x]
+
 DIMPLE: divide a tree of blobs, infer each piece, stitch.
 
 The scaffold's polytomies (out-degree greater than 2) are the blobs. This is
@@ -522,12 +546,14 @@ def _mega_groups(net: Network, blobs: Sequence[Node]) -> list[list[Node]]:
     by_label = {blob.label: blob for blob in blobs}
 
     def find(label: str) -> str:
+        """Root of ``label``'s set, with path halving."""
         while parent[label] != label:
             parent[label] = parent[parent[label]]
             label = parent[label]
         return label
 
     def union(a: str, b: str) -> None:
+        """Merge the sets of ``a`` and ``b``."""
         ra, rb = find(a), find(b)
         if ra != rb:
             parent[ra] = rb
@@ -684,6 +710,7 @@ def _enumerate_partitions(weights: list[int], max_size: int, min_size: int, cap:
     bins: list[list] = []
 
     def backtrack(index: int) -> bool:
+        """Place item ``index`` in each open bin, then a new one; True once ``cap`` is hit."""
         if len(results) >= cap:
             return True
         if index == count:
@@ -845,6 +872,7 @@ def _allocations(
     seen: set[frozenset[frozenset[str]]] = set()
 
     def accept(bins: list[list[int]], floor: int) -> None:
+        """Keep a packing whose subsets all fall in ``[floor, max_subset_size]`` and is new."""
         division = _bins_to_division(bins, items)
         if any(len(subset) < floor or len(subset) > max_subset_size for subset in division):
             return
@@ -911,6 +939,7 @@ def _items_of(
     items: list[tuple[str, frozenset[str]]] = []
 
     def walk(node: Node) -> None:
+        """Descend through this job's polytomies; every other clade is an item."""
         if node.label in member_labels:
             for child in net.get_children(node):
                 walk(child)
@@ -1331,6 +1360,21 @@ def finish_subset(
     The score is a fresh :func:`phynetpy.infer.score` of ``network`` on
     ``subset_trees``, so the trace does not depend on a search statistic.
     ``blob_name`` is left empty for the caller to fill.
+
+    Args:
+        subset_trees (GeneTrees): Gene trees restricted to the subset.
+        taxa (frozenset[str]): The subset's taxa.
+        network (Network): The network chosen for the subset.
+        max_reticulations (int): The cap the search ran under.
+        k_selected (int | None): Reticulation count model selection chose;
+            defaults to the cap.
+        selection (str | None): The selection rule used, if any.
+        sweep (list[dict] | None): Per-cap rows of the selection sweep.
+        chains (list[dict] | None): Per-chain summaries from
+            :func:`_chain_summary`.
+
+    Returns:
+        SubsetRecord: The subset's network, score, and search trace.
     """
     from .infer import score
 
@@ -1345,6 +1389,7 @@ def finish_subset(
 
 
 def _chain_summary(chain: dict, result, seconds: float, chosen: bool) -> dict:
+    """One trace row for a subset chain: its settings, score, time, and whether it won."""
     return {
         "chain": chain["chain"], "method": chain["method"],
         "num_iter": int(chain["num_iter"]), "seed": int(chain["seed"]),
@@ -1413,10 +1458,12 @@ def _infer_subset(
     timings: dict[tuple[int, int], float] = {}
 
     def best_key(cap: int) -> tuple[int, int]:
+        """``(cap, chain)`` of the highest-scoring finished chain at ``cap``."""
         keys = [(cap, chain["chain"]) for chain in chains if (cap, chain["chain"]) in found]
         return max(keys, key=lambda key: found[key].score)
 
     def run_one(cap: int, chain: dict, warm: bool):
+        """Run ``chain`` at ``cap``, warm-started from the cap below when asked, and file it."""
         start_net = subset_start
         if warm and cap > 0 and any((cap - 1, c["chain"]) in found for c in chains):
             # Sweep step: continue from the best network one cap below. The
@@ -1441,6 +1488,7 @@ def _infer_subset(
         by_index = {chain["chain"]: chain for chain in chains}
 
         def search_fn(cap: int, index: int) -> float:
+            """Score of chain ``index`` at ``cap``, in the form ``reticulation_sweep`` calls."""
             return float(run_one(cap, by_index[index], warm=True).score)
 
         swept = reticulation_sweep(
@@ -1538,6 +1586,20 @@ def select_displayed_trees_with_choices(
     :func:`reticulation_records` reads a network's leaf sets on that tree,
     so the sides it records are clades of the tree the backbone was built
     from.
+
+    Args:
+        networks (Sequence[Network]): Inferred subnetworks, some of them trees.
+        observed (dict | None): Counts of rooted triples ``(a, b, c)`` with
+            ``a < b``. Required only when some network has two or more
+            displayed trees.
+
+    Returns:
+        tuple[list[Network], list[dict[Node, Edge] | None]]: The chosen tree
+        per input, and the hybrid in-edge it kept per reticulation.
+
+    Raises:
+        DimpleError: If a network has several displayed trees and
+            ``observed`` is None.
     """
     leaf_sets = [{leaf.label for leaf in net.get_leaves()} for net in networks]
     chosen: list[Network] = []
@@ -1742,12 +1804,18 @@ class _Constraint:
     """
 
     def __init__(self, net: Network) -> None:
+        """Build the constraint from a subset tree.
+
+        Args:
+            net (Network): A tree whose leaves are the cluster labels.
+        """
         self.leaves: set[str] = set()
         self.adj: dict[str, set[str]] = {}
         self.broken: int = 0
         self._build(net)
 
     def _build(self, net: Network) -> None:
+        """Copy ``net`` as an undirected graph and suppress every non-leaf of degree <= 2."""
         names: dict[Node, str] = {}
         for node in net.V():
             if net.out_degree(node) == 0:
@@ -1774,7 +1842,11 @@ class _Constraint:
                 break
 
     def cherries(self) -> set[frozenset[str]]:
-        """Pairs of labels that currently share a neighbour."""
+        """Pairs of labels that currently share a neighbour.
+
+        Returns:
+            set[frozenset[str]]: Every unordered pair of leaves that is a cherry.
+        """
         pairs: set[frozenset[str]] = set()
         if len(self.leaves) == 2:
             pairs.add(frozenset(self.leaves))
@@ -1790,6 +1862,7 @@ class _Constraint:
         return pairs
 
     def _suppress(self, node: str) -> None:
+        """Splice out a non-leaf of degree 2, or delete one of degree <= 1."""
         neighbours = self.adj.get(node)
         if neighbours is None or node in self.leaves:
             return
@@ -1806,7 +1879,12 @@ class _Constraint:
             del self.adj[node]
 
     def rename(self, old: str, new: str) -> None:
-        """Replace a leaf label. Used when only one side of a join is in this tree."""
+        """Replace a leaf label. Used when only one side of a join is in this tree.
+
+        Args:
+            old (str): The leaf to relabel; ignored when absent.
+            new (str): Its new label.
+        """
         if old not in self.leaves:
             return
         neighbours = self.adj.pop(old)
@@ -2139,6 +2217,7 @@ def overlap_nj(
         pairs.sort(key=lambda item: (item[0], item[1], item[2]))
 
         def violates(left: str, right: str) -> bool:
+            """True when some subset tree holds both labels but not as a cherry."""
             for constraint in constraints:
                 if left in constraint.leaves and right in constraint.leaves:
                     if frozenset((left, right)) not in constraint.cherries():
@@ -2707,6 +2786,7 @@ def _destination_edge(
         return incoming[0]
 
     def match(edge: Edge) -> tuple[int, str]:
+        """Rank an in-edge by how many held leaves sit on its side, then by label."""
         covered = _side_leaves(net, child, edge.src, taxa)
         return (len(covered & held), edge.src.label)
 
@@ -3239,6 +3319,7 @@ def reattach_prunes(
     remaining = list(ordered)
 
     def attach(prune: PrunedSubtree, host: Network, anchor: Node) -> Network:
+        """Graft ``prune`` as the sibling of ``anchor`` (moved below any reticulation chain)."""
         anchor = _below_retics(host, anchor)
         # graft_subtree returns the image and, when anchor is the root,
         # builds a new root so the clade is not dropped.
@@ -3368,6 +3449,7 @@ def graft_blobs(scaffold: Network, pieces: Sequence[GraftPiece]) -> Network:
     result = _copy(scaffold)
 
     def depth_of(leaves: frozenset[str]) -> int:
+        """Root distance of the scaffold node holding exactly ``leaves``; 0 when absent."""
         node = _clade_node(scaffold, leaves)
         if node is None:
             return 0
@@ -3459,6 +3541,7 @@ def _msc_scorer(gene_trees: GeneTrees, taxa: frozenset[str]) -> Callable[[Networ
     )
 
     def score(net: Network) -> float:
+        """Log pseudo-likelihood of ``net`` on the subset's triplet table."""
         _populate_default_branch_lengths(net)
         value = None
         if _HAS_CYTHON_MPL:

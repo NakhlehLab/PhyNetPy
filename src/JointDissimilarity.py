@@ -112,6 +112,7 @@ class _Graph:
     __slots__ = ("root", "children", "label", "_leaves", "_order", "_clusters")
 
     def __init__(self, root, children: dict, label: dict) -> None:
+        """Store the adjacency and leaf labels; derived views are cached lazily."""
         self.root, self.children, self.label = root, children, label
         self._leaves = self._order = self._clusters = None
 

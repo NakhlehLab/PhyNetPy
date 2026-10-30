@@ -7,7 +7,6 @@ include setup.py
 
 exclude deploy.py
 exclude generate_docs.py
-exclude reticulation_distance_report.pdf
 
 recursive-include src *.py *.pyx
 
@@ -30,7 +29,6 @@ prune paper
 prune paper_figures
 prune reports
 prune runs
-prune src/Theory
 
 global-exclude *.pyc
 global-exclude __pycache__

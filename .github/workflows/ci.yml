@@ -18,7 +18,9 @@ permissions:
 jobs:
   tests:
     name: Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, whose setup-python manifest has
+    # no 3.9 build. 24.04 still provisions every version in the matrix.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -66,16 +68,20 @@ jobs:
         run: python -m build
       - name: Validate metadata
         run: python -m twine check dist/*
+      - name: Read release version
+        id: version
+        run: |
+          echo "value=$(python -c "import re; print(re.search(r'__version__ = \"([^\"]+)\"', open('src/_version.py').read()).group(1))")" >> "$GITHUB_OUTPUT"
       - name: Clean-install wheel
         run: |
           python -m venv wheel-test
           wheel-test/bin/python -m pip install dist/*.whl
-          wheel-test/bin/python -c "import phynetpy; assert phynetpy.__version__ == '0.6.0'"
+          wheel-test/bin/python -c "import phynetpy; assert phynetpy.__version__ == '${{ steps.version.outputs.value }}', phynetpy.__version__"
       - name: Clean-install source distribution
         run: |
           python -m venv sdist-test
           sdist-test/bin/python -m pip install dist/*.tar.gz
-          sdist-test/bin/python -c "import phynetpy; assert phynetpy.__version__ == '0.6.0'"
+          sdist-test/bin/python -c "import phynetpy; assert phynetpy.__version__ == '${{ steps.version.outputs.value }}', phynetpy.__version__"
 
   slow:
     name: Slow recovery and stress tests

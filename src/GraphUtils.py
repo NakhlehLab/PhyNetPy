@@ -78,6 +78,7 @@ __all__ = [
     "level",
     "is_tree",
     "count_reticulations",
+    "reticulation_cycle_size",
     "is_isomorphic",
     # Distances / dissimilarities
     "hardwired_cluster_distance",
@@ -2095,6 +2096,7 @@ def ascii(net: Network, show_edge_lengths: bool = False) -> str:
     nodes_by_depth = _ascii_group_by_depth(node_depth, node_x)
 
     def _center(node: Node) -> int:
+        """Column of the node's label centre in the rendered rows."""
         return int(node_x[node] * char_width) + char_width // 2
 
     lines: list[str] = []
