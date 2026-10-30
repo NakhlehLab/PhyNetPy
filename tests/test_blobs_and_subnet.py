@@ -569,3 +569,21 @@ class TestIntegration:
         assert "C" not in sub_leaves
         assert "D" not in sub_leaves
         assert "E" not in sub_leaves
+
+
+def test_displayed_trees_have_exactly_the_networks_leaves_and_the_major_tree_comes_first():
+    from phynetpy.GraphUtils import get_all_subtrees, induced_subnetwork_by_taxa
+    net = Network.from_newick("((((A:1,(B:1)#H1[&gamma=0.7]:1):1,(#H1:1[&gamma=0.3],C:1):1):1,E:1):1,D:1);")
+    trees = get_all_subtrees(net)
+    assert len(trees) == 2
+    assert all({l.label for l in t.get_leaves()} == set("ABCDE") for t in trees)
+    # Major tree first: B stays with A under the gamma-0.7 edge.
+    first = trees[0]
+    assert first.get_parents(first.has_node_named("B"))[0] is first.get_parents(first.has_node_named("A"))[0]
+    # Restricted to taxa that leave the minor parent without another child,
+    # the displayed tree that drops the major edge used to keep that parent
+    # as a dangling leaf.
+    sub = induced_subnetwork_by_taxa(net, ["B", "C", "D"])
+    for t in get_all_subtrees(sub):
+        assert {l.label for l in t.get_leaves()} == set("BCD")
+        assert all(t.out_degree(n) > 0 or n.label in "BCD" for n in t.V())

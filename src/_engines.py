@@ -153,7 +153,7 @@ class _GeneTreeEngine(Engine):
                 BranchLengthUnit.COALESCENT_2N,
                 context="gene-tree inference",
             )
-            return copy.deepcopy(self.start.network)
+            return self.start.network.copy()[0]
 
         seed = data.build_majority_rule_consensus_tree(threshold=0.5)
         seed.set_branch_length_unit(BranchLengthUnit.COALESCENT_2N)
@@ -502,7 +502,7 @@ class SeqBayesEngine(Engine):
             )
 
         start_net = (
-            copy.deepcopy(self.start.network) if self.start is not None else None
+            self.start.network.copy()[0] if self.start is not None else None
         )
         if self.start is not None and self.start.augment_only:
             raise NotImplementedError(
@@ -547,7 +547,7 @@ class SeqBayesEngine(Engine):
                 "continuous parameters (gene trees, theta, gammas) are "
                 "sampled rather than maximised. Use optimize=False."
             )
-        return float(self._driver(data, copy.deepcopy(network)).score())
+        return float(self._driver(data, network.copy()[0]).score())
 
 
 # ======================================================================
@@ -671,7 +671,7 @@ class MarkerBayesEngine(_MarkerEngine):
         kwargs.setdefault("priors", criterion.prior)
 
         if self.start is not None:
-            kwargs["start_net"] = copy.deepcopy(self.start.network)
+            kwargs["start_net"] = self.start.network.copy()[0]
             if self.start.augment_only:
                 kwargs["backbone"] = self.start.network
 
@@ -739,7 +739,7 @@ class AllopolyParsimonyEngine(_GeneTreeEngine):
         rng = np.random.default_rng(self.search.get("seed"))
 
         if self.start is not None:
-            start_net = copy.deepcopy(self.start.network)
+            start_net = self.start.network.copy()[0]
         else:
             start_net = partition_gene_trees(subgenome_map, rng=rng)
 

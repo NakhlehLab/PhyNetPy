@@ -2454,7 +2454,7 @@ class MCMC_GT:
                 posterior=posterior, n_workers=n_workers,
             )
         model = Model(rng=np.random.default_rng(model_ss))
-        model.network = copy.deepcopy(self.net)
+        model.network = self.net.copy()[0]
         model.set_likelihood_calculator(scorer)
 
         # Kernel.  ``move_types`` (opt_bl / fix_st) and ``max_level``
@@ -2553,7 +2553,7 @@ class MCMC_GT:
         # Adopt the final network into self.net.  For MH we use the
         # final-state network (equivalent to "last sample"); callers
         # wanting the MAP should read ``result.best_network`` instead.
-        self.net = copy.deepcopy(result.best_network)
+        self.net = result.best_network.copy()[0]
         return result
 
     # ── Internal ──────────────────────────────────────────────────
@@ -2610,7 +2610,7 @@ class MCMC_GT:
         rng = np.random.default_rng(driver_seed)
         cur_score = float(scorer(model))
         best_score = cur_score
-        best_network = copy.deepcopy(model.network)
+        best_network = model.network.copy()[0]
         samples: list[MCMCSample] = []
         num_accepted = 0
 
@@ -2686,7 +2686,7 @@ class MCMC_GT:
                 cur_score = prop_score
                 if prop_score > best_score:
                     best_score = prop_score
-                    best_network = copy.deepcopy(model.network)
+                    best_network = model.network.copy()[0]
             else:
                 try:
                     move.undo(model)
@@ -2702,7 +2702,7 @@ class MCMC_GT:
                 samples.append(
                     MCMCSample(
                         iteration=iter_no,
-                        network=copy.deepcopy(model.network),
+                        network=model.network.copy()[0],
                         log_posterior=cur_score,
                         log_likelihood=(
                             scorer.last_log_likelihood

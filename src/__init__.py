@@ -189,7 +189,6 @@ from .ModelMove import (
     ChangeReticDest,
 )
 from .ModelSelection import reticulation_sweep, SweepResult, SweepRow
-from .Logger import Logger
 
 # =============================================================================
 # Inference
@@ -295,7 +294,6 @@ __all__ = [
     "reticulation_sweep",
     "SweepResult",
     "SweepRow",
-    "Logger",
     # Inference: the two verbs live in ``phynetpy.infer``; the three axes
     # live in ``phynetpy.data`` / ``.models`` / ``.criteria``.
     "infer",

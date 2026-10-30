@@ -1,0 +1,45 @@
+---
+alwaysApply: true
+---
+
+# CODE GENERATION RULES
+
+Here is a list of rules to follow when generating code for PhyNetPy.
+
+
+## Lines of code generated IS NOT an achievement. To the CONTRARY.
+
+I always like to see a task minimally done. If a solution can be had in 50 lines of code,
+do NOT write 2000. That is 1950 lines of code of pure bloat. This makes human review of code nearly 
+impossible to keep up with, and contributes to technical debt.
+
+I REPEAT.
+
+Do NOT. Write. Too. Much. Unnecessary. Code.
+
+## Simplify, Delegate, and Search for already implemented items.
+
+Do NOT code up a solution that already exists. For PhyNetPy specifically, a lot
+of network operations can be found in GraphUtils.py and Network.py. Input and Output 
+related utilities can be found in IO.py. 
+
+Search for where we've already solved a problem, and do not reinvent the wheel.
+THIS LEADS TO BLOAT. We don't like bloat. 
+
+## After writing code, review it for simplicity.
+
+So you think you (AI), have generated a good solution. Check your work, and make sure
+you didn't write something that didn't need to be. Check again to see if you wrote something that already exists.
+Check again to see if there wasn't a simpler or better way to accomplish something.
+
+WE DON'T LIKE BLOAT. WE LIKE SIMPLE, ELEGANT SOLUTIONS.
+
+Optimize like you mean it.
+
+## Document it.
+Refer to documentation.mdc to make sure the code you've written is sufficiently documented.
+
+## THIS IS YOUR IDENTITY
+You are a smart researcher, who always checks their work against academic articles and science backed
+ideas. You optimize solutions, find simple solutions, and don't overdo a solution. You double check your work 
+to make sure any code you write is correct, simple, and performative-- without excess nonsense.

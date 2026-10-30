@@ -69,7 +69,7 @@
                         <span class="keyword">class</span> <span class="name">Move</span>(<span class="params">ABC</span>)
                     </div>
                     <div class="class-body">
-                        <p>Abstract base class for every network proposal move. A :class:`Move` is a stateful object whose ``execute`` method mutates the ``Network`` held by a :class:`Model` and whose ``undo`` method restores the pre-execute state. The contract is: * ``execute(model)`` performs the proposal and records just enough information (either compact deltas in ``same_move_info`` or a full ``copy.deepcopy`` snapshot in ``undo_info``) to later roll back or replay the move. * ``undo(model)`` returns the network to its pre-execute state. Must be cheap and side-effect-free on anything else. * ``same_move(model)`` re-plays the proposal on a clone of the model, used by the parallel MCMC driver. * ``log_hastings_ratio()`` returns ``log[ q(x | x') / q(x' | x) ]`` (in log space, ``0.0`` for symmetric moves) plus any r...</p>
+                        <p>Abstract base class for every network proposal move. A :class:`Move` is a stateful object whose ``execute`` method mutates the ``Network`` held by a :class:`Model` and whose ``undo`` method restores the pre-execute state. The contract is: * ``execute(model)`` performs the proposal and records just enough information to roll it back: either compact deltas in ``undo_info`` (continuous moves), or, for topology moves, an open ``Network`` transaction (``net.begin_transaction()``) whose journal undoes every change on ``rollback_transaction()``. No move copies the network. * ``undo(model)`` returns the network to its pre-execute state. Must be cheap and side-effect-free on anything else. * ``same_move(model)`` re-plays the proposal on a clone of the model, used by the parallel MCMC driver. * ``lo...</p>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
@@ -396,13 +396,8 @@
                                     </tr>
                                     <tr>
                                         <td><span class="param-name">debug_id</span></td>
-                                        <td><span class="param-type">int, optional</span></td>
-                                        <td>Identifier forwarded to the</td>
-                                    </tr>
-                                    <tr>
-                                        <td><span class="param-name">internal</span></td>
                                         <td><span class="param-type"></span></td>
-                                        <td>class:`~.Logger.Logger` for debug output. Defaults to 0.</td>
+                                        <td>Deprecated and ignored; retained for constructor compatibility with existing callers.</td>
                                     </tr>
                                 </table>
                             </div>
@@ -942,7 +937,7 @@
                 <li><a href="GeneTrees.html">GeneTrees</a></li>
                 <li><a href="GraphUtils.html">GraphUtils</a></li>
                 <li><a href="IO.html">IO</a></li>
-                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="JointDissimilarity.html">JointDissimilarity</a></li>
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>

@@ -21,7 +21,7 @@
 
                 <h1>GraphUtils Module <span class="version-badge">v1.0.0</span></h1>
 
-                <p>Network decomposition, distances, and structural edits: blobs, tree-of-blobs, cluster/mu/tripartition distances, reticulation-aware comparison, and ASCII rendering.</p>
+                <p>Network decomposition, distances, and structural edits: blobs, tree-of-blobs, displayed trees, cluster/mu/tripartition distances, hybrid-ancestry error, reticulation-aware comparison, and ASCII rendering.</p>
 
                 <div class="module-info">
                     <dl>
@@ -96,10 +96,36 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
+                                <span class="name">get_displayed_trees</span>(<span class="params">net: Network, unique: bool = True</span>) <span class="keyword">-&gt;</span> list[Network]
+                            </div>
+                            <div class="function-body">
+                                <p>Enumerate the trees displayed by a phylogenetic network. A tree is displayed by a network when it can be obtained by keeping exactly one in-edge at every reticulation, deleting the rest, and then reducing what is left to a tree over the network's full leaf set: * nodes left without children are suppressed, repeatedly, since suppressing one can leave its parent childless; * chains of degree-2 nodes are contracted into single branches; * the reticulation flag is cleared, so :func:`is_tree` holds of every result. Every displayed tree has exactly the leaf set of 'net'. Removing in-edges of reticulations never disconnects a leaf, because each reticulation keeps one parent and no other node loses its only one. A network with k reticulations admits at most 2^k displayed trees, but often fewer distinct ones: when the choices at two reticulations discard each other's subtrees, different choices display the same tree. In ``(t2,((t4,t6),(((t3)#H1,(t1)#H2),((t5,#H1),#H2))));`` two of the four choices display ``(t2,((t4,t6),(t1,(t5,t3))));``, so the network displays three trees, not four.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A phylogenetic network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">unique</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>If True (the default), return one Network per distinct topology. If False, return one per hybrid-edge choice, so that the length of the result is the product of the reticulations' in-degrees.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[Network]: The displayed trees, as new Network objects. Order is deterministic: reticulations and their in-edges are enumerated by label, and duplicates are dropped in favour of the first occurrence.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
                                 <span class="name">get_all_subtrees</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> list[Network]
                             </div>
                             <div class="function-body">
-                                <p>Generate all possible trees that can be derived from the given network by removing hybrid edges and creating copies with subtrees that start at each non-reticulation node.</p>
+                                <p>Generate one tree per choice of hybrid edges to keep at the reticulations. Prefer :func:`get_displayed_trees`, which returns the *distinct* displayed trees. This function returns one tree per element of the product of the reticulations' in-edge sets, so the same topology can appear twice; see :func:`get_displayed_trees` for when that happens.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -138,7 +164,33 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">count_reticulations</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> int
+                                <span class="name">reticulation_cycle_size</span>(<span class="params">net: Network, retic: Node</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Number of nodes on a reticulation's cycle, in the undirected graph. The cycle is ``retic`` plus the two ancestral paths from its parents up to their lowest common ancestor. A cycle of 3 means the two parents are parent and grandparent of each other, which no rooted triple can distinguish from a tree; such a reticulation is invisible to triplet pseudo-likelihood. ``2`` means parallel edges (both parents identical) and ``0`` means the node is not a proper two-parent reticulation.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Network containing ``retic``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">retic</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>The reticulation node.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: Cycle size, or 0 when ``retic`` has fewer than two parents or its parents share no ancestor.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">count_reticulations</span>(<span class="params">net: Network, min_cycle_size: Optional[int] = None</span>) <span class="keyword">-&gt;</span> int
                             </div>
                             <div class="function-body">
                                 <p>Count the number of reticulation nodes in a network.</p>
@@ -153,8 +205,13 @@
                                         <td><span class="param-type">Network</span></td>
                                         <td>A network object.</td>
                                     </tr>
+                                    <tr>
+                                        <td><span class="param-name">min_cycle_size</span></td>
+                                        <td><span class="param-type">int | None</span></td>
+                                        <td>When given, count only reticulations whose cycle (see :func:`reticulation_cycle_size`) has at least this many nodes. ``4`` counts the reticulations a rooted-triple criterion can detect; a cycle of 3 or less is invisible to it.</td>
+                                    </tr>
                                 </table>
-                                <div class="returns"><span class="returns-label">Returns:</span> int: Number of nodes with indegree &gt;= 2 (reticulations by flag).</div>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: Number of nodes flagged as reticulations, filtered by cycle size when ``min_cycle_size`` is given.</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -309,10 +366,10 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">count_displayed_trees</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> int
+                                <span class="name">count_displayed_trees</span>(<span class="params">net: Network, exact: bool = False</span>) <span class="keyword">-&gt;</span> int
                             </div>
                             <div class="function-body">
-                                <p>Estimate the number of displayed trees of a network. Computed as the product, over reticulation nodes, of their inbound edge counts (typically 2). For general networks, this is an upper bound when some choices may be incompatible; for level-1 networks this often matches the exact count.</p>
+                                <p>Count the trees displayed by a network. By default this is the product, over reticulation nodes, of their inbound edge counts (typically 2), which counts hybrid-edge *choices* rather than trees. It is an upper bound: two choices display the same tree whenever each discards the other's subtree, so the number of distinct displayed trees can be strictly smaller. Pass ``exact=True`` to enumerate the displayed trees with :func:`get_displayed_trees` and count the distinct ones instead. That is exponentially more expensive, since it builds every tree.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -324,8 +381,13 @@
                                         <td><span class="param-type">Network</span></td>
                                         <td>A network object.</td>
                                     </tr>
+                                    <tr>
+                                        <td><span class="param-name">exact</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Count distinct displayed trees rather than hybrid-edge choices. Defaults to False.</td>
+                                    </tr>
                                 </table>
-                                <div class="returns"><span class="returns-label">Returns:</span> int: Estimated number of displayed trees.</div>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: The number of displayed trees, or of hybrid-edge choices.</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -514,6 +576,54 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
+                                <span class="name">hybrid_ancestry</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> frozenset[str]
+                            </div>
+                            <div class="function-body">
+                                <p>The leaf labels that descend from at least one reticulation node. A taxon is of *hybrid ancestry* if some reticulation lies on a directed path from the root to it, i.e. it belongs to the hardwired cluster of some reticulation node. Since every leaf below a reticulation is reached along every edge, the set is independent of inheritance probabilities and of the root placement.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A phylogenetic network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> frozenset[str]: Labels of the leaves below any reticulation; empty for a tree.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">hybrid_ancestry_error</span>(<span class="params">estimated: Network, true_net: Network</span>) <span class="keyword">-&gt;</span> float
+                            </div>
+                            <div class="function-body">
+                                <p>Hybrid-ancestry balanced error (HAE) of an estimated network against the true network. Let B be the hybrid-ancestry set (see :func:`hybrid_ancestry`) of the estimate and A that of the truth. The false-positive rate is |B - A| / |B| and the false-negative rate |A - B| / |A|; HAE is their mean, in [0, 1]. Each rate is defined as 0 when its denominator is empty, so a tree estimated for a reticulate truth scores 0.5 and a tree estimated for a tree scores 0. Unlike :func:`mu_distance`, this measure is *asymmetric*: the argument order matters. The convention follows the HAE column of the NetCSEval evaluation scripts (``hae_datafinal.jl``), so values are comparable to that work.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">estimated</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The inferred network.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">true_net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The reference (true) network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> float: Balanced hybrid-ancestry error in [0, 1].</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If the two networks have different leaf label sets.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
                                 <span class="name">tripartition_distance</span>(<span class="params">net1: Network, net2: Network, normalize: bool = False</span>) <span class="keyword">-&gt;</span> Union[int, float]
                             </div>
                             <div class="function-body">
@@ -696,6 +806,101 @@
                                 <div class="returns"><span class="returns-label">Returns:</span> str: The ASCII art representation of the network Example: For newick string &quot;((C,D)A, E)Root;&quot;, outputs:: Root /    \ A      E / \ C   D</div>
                             </div>
                         </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">reticulation_signature</span>(<span class="params">net: Network, node: Node</span>) <span class="keyword">-&gt;</span> tuple
+                            </div>
+                            <div class="function-body">
+                                <p>Leaf-set signature of one reticulation. The signature is ``(child_branches, parent_branches)``. ``child_branches`` is the list of leaf sets directly below the reticulation's child. ``parent_branches`` has one entry per parent: the leaf sets of that parent's other children (the sibling clades on that side). Parent order is the network's parent order and is not significant for equality; see :func:`same_reticulation`. This is the identity used to decide that two inferred subnetworks found the same hybridization. It is not a phylogenetic distance.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Network containing ``node``.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">node</span></td>
+                                        <td><span class="param-type">Node</span></td>
+                                        <td>A reticulation node (in-degree 2).</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> tuple: ``(child_branches, parent_branches)``, each a tuple of frozensets (parent side: a tuple of tuples of frozensets).</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If ``node`` is not in ``net``.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">same_reticulation</span>(<span class="params">sig_a, sig_b</span>) <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Whether two reticulation signatures are the same event. Parents match up to order. A side matches when one of its sibling branches shares at least one leaf with a sibling branch on the other signature's corresponding side (overlap, not set equality). The child clade is ignored here; callers that need it read it off the signature.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sig_a</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>A signature from :func:`reticulation_signature`, or a record with a ``signature`` attribute or key.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sig_b</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>The signature to compare against.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True when the two parent pairs overlap in either order.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">group_reticulations</span>(<span class="params">records: list</span>) <span class="keyword">-&gt;</span> list[list]
+                            </div>
+                            <div class="function-body">
+                                <p>Group reticulation records that are the same event. The first record of a group is its representative. Later records join the group when :func:`same_reticulation` says they match that representative. Records are not reordered inside a group.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">records</span></td>
+                                        <td><span class="param-type">list</span></td>
+                                        <td>Records that carry a ``signature`` (dict key or attribute), as returned alongside :func:`reticulation_signature`.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> list[list]: One list per distinct event.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">rooted_triples</span>(<span class="params">net: Network</span>) <span class="keyword">-&gt;</span> set[tuple[str, str, str]]
+                            </div>
+                            <div class="function-body">
+                                <p>Rooted triples displayed by a tree or network. Each triple is ``(a, b, c)`` with ``a &lt; b``, meaning the rooted triple ``(a, b | c)``: ``a`` and ``b`` are together in a clade that excludes ``c``. Every such triple is emitted once, at the node that is the MRCA of ``a`` and ``b``. A root polytomy displays no triple, because no pair is resolved. This is the set the displayed-tree picker counts. It is not :meth:`Network.rooted_triplet_distance`, which is a distance between two networks, and it is not an MSC pseudo-likelihood.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">net</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>A rooted tree or network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> set[tuple[str, str, str]]: The displayed triples.</div>
+                            </div>
+                        </div>
 
 
                 <div class="footer">
@@ -719,7 +924,7 @@
                 <li><a href="GeneTrees.html">GeneTrees</a></li>
                 <li><a href="GraphUtils.html" class="current">GraphUtils</a></li>
                 <li><a href="IO.html">IO</a></li>
-                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="JointDissimilarity.html">JointDissimilarity</a></li>
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>

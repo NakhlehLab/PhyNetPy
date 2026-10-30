@@ -4,7 +4,7 @@ PhyNetPy is a Python library for phylogenetic network inference and analysis. It
 provides improved implementations of methods from PhyloNet, plus a framework for
 building new Bayesian and simulation-based methods.
 
-Current version: **v0.6.0** (see [CHANGELOG.md](CHANGELOG.md) for history).
+Current version: **v0.7.0** (see [CHANGELOG.md](CHANGELOG.md) for history).
 
 ## Install
 
@@ -74,12 +74,18 @@ A method name means implemented, `-` means legal but not yet implemented, and
 `x` means the combination is not meaningful. The table above is for `MSC`; pass
 a model class to tabulate another, such as `validity_matrix(Allopolyploid)`.
 
-Data structures, I/O, and analysis helpers live at the top level:
+Data structures, I/O, and analysis helpers live at the top level. The
+comparison metrics take two networks on the same taxa:
 
 ```python
-from phynetpy import read_newick, Network, Node, Edge, compare_networks
+from phynetpy import read_newick, joint_dissimilarity, hybrid_ancestry_error, mu_distance
 
-net = read_newick("(((A,B),C),D);")[0]
+estimate = read_newick("((A,(B)#H1),(#H1,C));")
+truth = read_newick("(((A)#H1,B),(#H1,C));")
+
+joint_dissimilarity(estimate, truth).D_joint_normalized   # in [0, 1]
+hybrid_ancestry_error(estimate, truth)                    # estimate first
+mu_distance(estimate, truth)
 ```
 
 For the data structures and I/O, start with
@@ -129,6 +135,13 @@ The references behind those cells: `InferNetwork_ML` (Yu et al., 2014),
 Nakhleh, 2018), `MLE_BiMarkers` and `MCMC_BiMarkers` (Bryant et al., 2012; Zhu
 et al., 2018).
 
+Divide-and-conquer on a tree of blobs is a pipeline rather than a cell.
+`infer_dimple(gts, tree_of_blobs, start_tree)` (a port of DIMPLE) partitions
+the scaffold at its polytomies, infers each subset under `MSC()` with
+`PseudoLikelihood()`, merges the subset networks, and grafts the pieces back
+onto the scaffold. See
+[`RELEASE_NOTES_0.7.0.md`](RELEASE_NOTES_0.7.0.md) for a worked call.
+
 A third verb, `simulate`, runs the same axes backwards: it takes a model and a
 network and returns a data-axis object, so a recovery check composes directly.
 
@@ -144,7 +157,7 @@ recovered = infer(sim, criterion=PseudoLikelihood())
 ```bash
 python -m pytest -m "not slow"   # test suite
 python generate_docs.py          # regenerate docs/api/
-python deploy.py --dry-run --no-bump # test + build 0.6.0, no upload
+python deploy.py --dry-run --no-bump # test + build 0.7.0, no upload
 ```
 
 The version lives in `src/_version.py` and is the single source of truth;

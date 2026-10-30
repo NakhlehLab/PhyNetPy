@@ -1015,7 +1015,7 @@ def _snp_mcmc(aln: MSA,
     # ── Metropolis-Hastings loop (mirrors MCMC_GT._run_mh semantics) ─────
     cur_score = float(scorer(model))
     best_score = cur_score
-    best_network = copy.deepcopy(model.network)
+    best_network = model.network.copy()[0]
 
     freeze_fn = getattr(kernel, "freeze_adaptation", None)
     adaptation_frozen = False
@@ -1064,7 +1064,7 @@ def _snp_mcmc(aln: MSA,
             cur_score = prop_score
             if prop_score > best_score:
                 best_score = prop_score
-                best_network = copy.deepcopy(model.network)
+                best_network = model.network.copy()[0]
         else:
             try:
                 move.undo(model)

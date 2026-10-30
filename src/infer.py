@@ -13,7 +13,11 @@
 Author : Mark Kessler
 First Included in Version : 0.6.0
 
-Public inference API for PhyNetPy: two verbs.
+Public inference API for PhyNetPy: two verbs, plus DIMPLE.
+
+``infer`` and ``score`` are the registry. :func:`infer_dimple` is a separate
+entry point for divide-and-conquer on a tree of blobs. It calls ``infer``
+on each subset; it is not itself a cell of the registry.
 
 There are two things a user wants to do with a phylogenetic network method
 -- find a network, or evaluate one -- so there are two verbs, ``infer`` and
@@ -168,10 +172,11 @@ from ._chain_analysis import (
 )
 
 __all__ = [
-    # The three verbs.
+    # The three verbs, plus DIMPLE (not a registry cell).
     "infer",
     "score",
     "simulate",
+    "infer_dimple",
     # Results and the starting-phylogeny option.
     "InferenceResult",
     "Start",
@@ -295,6 +300,7 @@ class Start:
     mode: StartMode = StartMode.FREE
 
     def __post_init__(self) -> None:
+        """Accept a mode name as shorthand for the :class:`StartMode` member."""
         if isinstance(self.mode, str):
             self.mode = StartMode(self.mode.lower())
         if not isinstance(self.mode, StartMode):
@@ -387,6 +393,7 @@ class InferenceResult:
         )
 
     def __repr__(self) -> str:
+        """One line naming the method, the score and its sense, and the posterior size."""
         direction = "min" if self.lower_is_better else "max"
         n_post = len(self.posterior) if self.posterior is not None else 0
         return (
@@ -529,3 +536,8 @@ def score(
     engine_cls = resolve(data, model_obj, criterion_obj)
     engine = engine_cls(model_obj, criterion_obj, **search)
     return engine.score(network, data, optimize=optimize)
+
+
+# Imported last: _dimple calls back into infer() and score(), so it must not
+# be loaded until those names exist. infer_dimple is not routed through resolve().
+from ._dimple import infer_dimple  # noqa: E402

@@ -21,6 +21,10 @@ lib/
 lib64/
 parts/
 sdist/
+reports/
+scripts/
+runs/
+paper/
 var/
 # Anchored to the repo root only -- unanchored patterns here previously
 # shadowed same-named nested dirs (e.g. "Data/" was silently matching

@@ -43,6 +43,7 @@
                         <li><a href="#edge">Edge</a></li>
                         <li><a href="#network">Network</a></li>
                         <li><a href="#mul">MUL</a></li>
+                        <li><a href="#functions">Module Functions</a></li>
                     </ul>
                 </div>
 
@@ -637,6 +638,15 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
+                                <span class="name">__hash__</span> <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>Hash function for Edge objects: a process-independent hash of the endpoint labels fixed at construction. Equality is identity.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: The cached hash.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
                                 <span class="name">set_gamma</span>(<span class="params">gamma: float</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
@@ -821,6 +831,39 @@
                             </div>
                         </div>
                         <h4>Methods</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">begin_transaction</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Start recording every change to this network so it can be undone. While a transaction is open, each node and edge added or removed, each rename, and each change to a node's time or reticulation flag or an edge's length, gamma, weight or tag is journaled with its inverse. :meth:`rollback_transaction` replays the inverses and restores the network exactly, same objects included; :meth:`commit_transaction` discards the journal. Transactions nest: an inner commit folds its journal into the outer one, an inner rollback undoes only the inner changes. This is the general form of &quot;mutate, evaluate, maybe revert&quot;. A search move can be undone without cloning the network first, and code that tries a candidate edit in place can roll it back instead of working on a copy. Changes made through ``Node.set_name`` directly, through the attribute dictionaries, or by touching the underlying node and edge sets are not journaled; use :meth:`update_node_name` and the network methods.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">in_transaction</span> <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Whether a transaction is open on this network.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True between :meth:`begin_transaction` and the matching commit or rollback.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">commit_transaction</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Keep the changes of the innermost open transaction. A no-op when no transaction is open, so a driver can call it on acceptance without knowing whether the move used a transaction.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">rollback_transaction</span> <span class="keyword">-&gt;</span> None
+                            </div>
+                            <div class="function-body">
+                                <p>Undo every change of the innermost open transaction. The inverses are replayed newest first with journaling suspended, so the network returns to the state at :meth:`begin_transaction` with the same node and edge objects. A no-op when no transaction is open.</p>
+                            </div>
+                        </div>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">__contains__</span>(<span class="params">obj: Union[Node, Edge]</span>) <span class="keyword">-&gt;</span> bool
@@ -1559,10 +1602,22 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">newick</span> <span class="keyword">-&gt;</span> str
+                                <span class="name">newick</span>(<span class="params">annotate: bool = False</span>) <span class="keyword">-&gt;</span> str
                             </div>
                             <div class="function-body">
                                 <p>Generate the newick string of the network.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">annotate</span></td>
+                                        <td><span class="param-type">bool, optional</span></td>
+                                        <td>If True, branch lengths (``:len``) and inheritance probabilities (``[&amp;gamma=g]``) are written alongside the topology. Defaults to False.</td>
+                                    </tr>
+                                </table>
                                 <div class="returns"><span class="returns-label">Returns:</span> str: The newick representation of the network.</div>
                             </div>
                         </div>
@@ -1648,6 +1703,38 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
+                                <span class="name">graft_subtree</span>(<span class="params">subtree: Network, sibling_of: Node | None = None, under: Node | None = None</span>) <span class="keyword">-&gt;</span> Node
+                            </div>
+                            <div class="function-body">
+                                <p>Copy ``subtree`` into this network and attach it. Internal labels that already occur here are replaced with fresh ones. Leaf labels are kept, and a leaf label that is already present is an error: grafting must not duplicate a taxon. The copy is attached either by splitting the edge above ``sibling_of`` or as a new child of ``under``. If ``sibling_of`` is the root, there is no edge to split. A new root is created with the old root and the grafted subtree as its two children, so the grafted leaves are not dropped.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">subtree</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The subtree to copy in. Its own root is the node that becomes the attachment point.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">sibling_of</span></td>
+                                        <td><span class="param-type">Node | None</span></td>
+                                        <td>A node of this network. The subtree becomes its sibling.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">under</span></td>
+                                        <td><span class="param-type">Node | None</span></td>
+                                        <td>A node of this network. The subtree becomes a new child of it.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> Node: The image, in this network, of ``subtree``'s root.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If neither or both of ``sibling_of`` and ``under`` are given, if the anchor is not in this network, or if a leaf label of ``subtree`` is already present.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
                                 <span class="name">to_networkx</span> <span class="keyword">-&gt;</span> nx.Graph
                             </div>
                             <div class="function-body">
@@ -1695,6 +1782,38 @@
                                     </tr>
                                 </table>
                                 <div class="returns"><span class="returns-label">Returns:</span> float: The rooted triplet distance (0 = identical, 1 = completely different).</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">joint_dissimilarity</span>(<span class="params">other: Network, kind: str = 'nakhleh'</span>) <span class="keyword">-&gt;</span> 'JointDissimilarityResult'
+                            </div>
+                            <div class="function-body">
+                                <p>The joint reticulation-and-tree dissimilarity between this network and another on the same taxon set: a minimum-cost matching of the reticulation tripartitions (``D_ret``) plus three times the dissimilarity of the two remainders left once every reticulation is removed (``D_tree``). See :mod:`~phynetpy.JointDissimilarity` for the definition; this method calls ``JointDissimilarity.joint_dissimilarity``.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">other</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>The other network to compare against.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">kind</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>Structure dissimilarity used on blocks and</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">remainders</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>``&quot;leaf&quot;``, ``&quot;cluster&quot;`` or ``&quot;nakhleh&quot;`` (default).</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> JointDissimilarityResult: ``r1``, ``r2``, ``D_ret``, ``D_tree`` and the derived ``m``, ``D_joint``, ``D_ret_normalized``, ``D_joint_normalized``.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>NetworkError</code>: If either network is not a valid rooted binary- reticulation network, or the taxon sets differ., <code>ValueError</code>: If ``kind`` is unknown.</div>
                             </div>
                         </div>
                         <div class="function-def">
@@ -1856,6 +1975,29 @@
                     </div>
                 </div>
 
+                <h2 id="functions">Module Functions</h2>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">stable_hash</span>(<span class="params">text: str</span>) <span class="keyword">-&gt;</span> int
+                            </div>
+                            <div class="function-body">
+                                <p>A hash of ``text`` that is the same in every Python process. Python salts ``hash(str)`` per process, so collections keyed by node names (and anything that iterates them: candidate lists in search moves, the merger's edge scans) came out in a different order on every run, and fixed-seed searches were not reproducible. This is 64-bit FNV-1a: cheap, well spread, and process independent. Node and Edge hashes are computed from it once and cached.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">text</span></td>
+                                        <td><span class="param-type">str</span></td>
+                                        <td>The string to hash.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> int: A 64-bit hash.</div>
+                            </div>
+                        </div>
+
 
                 <div class="footer">
                     <p>PhyNetPy Documentation - Copyright 2025 Mark Kessler, Luay Nakhleh</p>
@@ -1878,7 +2020,7 @@
                 <li><a href="GeneTrees.html">GeneTrees</a></li>
                 <li><a href="GraphUtils.html">GraphUtils</a></li>
                 <li><a href="IO.html">IO</a></li>
-                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="JointDissimilarity.html">JointDissimilarity</a></li>
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
@@ -1906,6 +2048,7 @@
                 <li><a href="#edge">Edge</a></li>
                 <li><a href="#network">Network</a></li>
                 <li><a href="#mul">MUL</a></li>
+                <li><a href="#functions">Module Functions</a></li>
             </ul>
         </div>
     </div>

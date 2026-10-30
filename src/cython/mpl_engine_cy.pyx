@@ -18,7 +18,7 @@ DEF MAX_CONFIGS = 64
 DEF NUM_STATES = 11
 DEF MAX_CHILDREN = 4
 DEF MAX_PARENTS = 2
-DEF MAX_NODES = 128
+DEF MAX_NODES = 1024
 DEF MAX_SPLITS = 4
 DEF MAX_COAL = 3
 
@@ -586,10 +586,13 @@ def score_all_triplets(
             f"Network has {net_node_num} reticulations, exceeds compiled limit {MAX_RETICS}"
         )
 
+    # Sized by the network actually scored, not by MAX_NODES: the workspace
+    # is indexed node_idx * MAX_PARENTS + slot, so n_nodes rows suffice, and
+    # a StateMap is about 28 KB.
     cdef StateMap* store = <StateMap*>malloc(
-        MAX_NODES * MAX_PARENTS * sizeof(StateMap)
+        n_nodes * MAX_PARENTS * sizeof(StateMap)
     )
-    cdef int* act = <int*>malloc(MAX_NODES * MAX_PARENTS * sizeof(int))
+    cdef int* act = <int*>malloc(n_nodes * MAX_PARENTS * sizeof(int))
 
     if store == NULL or act == NULL:
         if store != NULL:

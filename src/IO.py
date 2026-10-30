@@ -53,7 +53,7 @@ from Bio import Phylo, SeqIO
 from nexus import NexusReader
 
 from .MSA import DataSequence, MSA
-from .Network import Edge, Network, Node
+from .Network import Edge, Network, Node, _complete_hybrid_gammas
 from .Newick import get_labels as _get_newick_labels
 from .GeneTrees import GeneTrees
 
@@ -801,6 +801,7 @@ def _parse_reticulation_attributes(attr_str: str) -> Tuple[str, int]:
         - "H1"    -> ("Hybridization", 1)
         - "LGT21" -> ("Lateral Gene Transfer", 21)
         - "R3"    -> ("Recombination", 3)
+        - "UID_7" -> ("Hybridization", 7)   (any other prefix)
 
     Args:
         attr_str (str): A node name suffix carrying reticulation event 
@@ -812,7 +813,7 @@ def _parse_reticulation_attributes(attr_str: str) -> Tuple[str, int]:
     Returns:
         tuple[str, int]: (event_type, index)
     """
-    if len(attr_str) < 2:
+    if not attr_str:
         raise IOError("Reticulation event label formatting incorrect")
 
     index_lookup = 0
@@ -830,7 +831,12 @@ def _parse_reticulation_attributes(attr_str: str) -> Tuple[str, int]:
         else:
             raise IOError("Invalid reticulation label format (event error)")
     else:
-        raise IOError("Invalid reticulation label format (event error)")
+        # Not an extended-Newick event code. Networks built in memory carry
+        # labels such as "#UID_6057" (see Network.add_uid_node), and other
+        # tools write "#1" or "#h1"; treat them all as hybridizations and
+        # keep any trailing digits as the index.
+        digits = re.search(r"(\d+)$", attr_str)
+        return "Hybridization", int(digits.group(1)) if digits else -1
 
     try:
         num = int(attr_str[index_lookup:])
@@ -850,6 +856,9 @@ class _NewickTreeBuilder:
         """Create a new ``_NewickTreeBuilder`` with fresh per-build state."""
         self._internal_count: int = 0
         self._inheritance: Dict[str, Dict] = {}
+        # Hybrid edges whose gamma the string gave (directly or as the
+        # complement of an earlier occurrence); the rest are completed in build.
+        self._explicit_edges: set = set()
 
     def build(self, tree: Any) -> Network:
         """
@@ -875,6 +884,9 @@ class _NewickTreeBuilder:
             parent_node = self._parse_parent(par, net)
             self._parse_child(node, net, parent_node)
 
+        # A reticulation whose first occurrence carried no gamma had that
+        # edge created before the second occurrence supplied one.
+        _complete_hybrid_gammas(net, self._explicit_edges)
         return net
 
     def _parse_comment(self, node: Any, parent: Node) -> dict:
@@ -1069,11 +1081,14 @@ class _NewickTreeBuilder:
         else:
             new_edge.set_length(1)
 
-        # Set gamma if applicable
+        # Set gamma if applicable. -1 marks a parent whose gamma is still
+        # unknown; it is completed once every occurrence has been read.
         inheritance_prob = parsed_node.attribute_value("gamma")
         if inheritance_prob is not None:
-            gamma_value = inheritance_prob[parent.label][0]
-            new_edge.set_gamma(gamma_value)
+            gamma_value = inheritance_prob.get(parent.label, [None])[0]
+            if gamma_value is not None and gamma_value >= 0:
+                new_edge.set_gamma(gamma_value)
+                self._explicit_edges.add(new_edge)
 
         network.add_edges(new_edge)
         return parsed_node
@@ -1393,7 +1408,7 @@ def read_newick_file(
 #### Newick Writing Functions ####
 ##################################
 
-def write_newick(network: Network) -> str:
+def write_newick(network: Network, annotate: bool = False) -> str:
     """
     Convert a PhyNetPy Network into a newick string.
 
@@ -1403,11 +1418,15 @@ def write_newick(network: Network) -> str:
 
     Args:
         network (Network): A PhyNetPy Network object.
+        annotate (bool, optional): If True, emit branch lengths (``:len``) 
+                                    and inheritance probabilities 
+                                    (``[&gamma=g]``) as well as the 
+                                    topology. Defaults to False.
 
     Returns:
         str: The newick representation of the network, ending with ';'.
     """
-    return network.newick()
+    return network.newick(annotate)
 
 def write_newick_file(
     networks: List[Network],
@@ -1803,6 +1822,7 @@ def convert_newick(newick_str: str, standard: str = "PhyNetPy") -> str:
     )
 
     def _phylonet_to_intermediate(m: re.Match) -> str:
+        """Rewrite one ``#H:len::gamma`` match as ``#H[&gamma=g]:len``."""
         name = m.group(1)
         branch = m.group(2) or ''
         gamma = m.group(3)
@@ -1828,6 +1848,7 @@ def convert_newick(newick_str: str, standard: str = "PhyNetPy") -> str:
         )
 
         def _to_phylonet(m: re.Match) -> str:
+            """Move a ``gamma=`` entry out of a metadata block into ``::gamma``."""
             name = m.group(1)
             metadata = m.group(2)
             branch = m.group(3) or ''

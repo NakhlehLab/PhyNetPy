@@ -15,11 +15,12 @@ This module is the catch-all for graph-theoretic operations on
 * topology summaries (network level, blob/biconnected-component
   decomposition, tree-child / tree-based predicates);
 * enumeration of displayed trees and subnetworks
-  (``get_all_subtrees``, ``subnet_given_leaves``,
+  (``get_displayed_trees``, ``get_all_subtrees``, ``subnet_given_leaves``,
   ``induced_subnetwork_by_taxa``);
 * distance metrics on networks
   (mu-distance, hardwired / softwired / Robinson--Foulds /
-  tripartition / displayed-tree / average-path / weighted-APD);
+  tripartition / displayed-tree / average-path / weighted-APD, and the
+  joint reticulation-and-tree dissimilarity of ``JointDissimilarity``);
 * convenience helpers for branch lengths, clades, and ASCII rendering.
 
 Docs   - [x]
@@ -46,9 +47,10 @@ from __future__ import annotations
 ##############################################################################
 
 from .Network import Network, Node, Edge, NetworkError
+from .JointDissimilarity import JOINT_KINDS, JointDissimilarityResult, joint_dissimilarity
 from collections import Counter, deque
 from itertools import product as _product
-from typing import Dict, Set, Union
+from typing import Dict, Optional, Set, Union
 import heapq
 import warnings
 
@@ -62,6 +64,7 @@ __all__ = [
     # Topology extraction / sub-structures
     "subnet_given_leaves",
     "induced_subnetwork_by_taxa",
+    "get_displayed_trees",
     "get_all_subtrees",
     "get_all_clusters",
     "network_clusters",
@@ -75,6 +78,7 @@ __all__ = [
     "level",
     "is_tree",
     "count_reticulations",
+    "reticulation_cycle_size",
     "is_isomorphic",
     # Distances / dissimilarities
     "hardwired_cluster_distance",
@@ -83,6 +87,11 @@ __all__ = [
     "robinson_foulds_distance",
     "tripartition_distance",
     "mu_distance",
+    "joint_dissimilarity",
+    "JointDissimilarityResult",
+    "JOINT_KINDS",
+    "hybrid_ancestry",
+    "hybrid_ancestry_error",
     "pairwise_leaf_distance",
     "average_path_distance",
     "weighted_average_path_distance",
@@ -101,6 +110,11 @@ __all__ = [
     "compare_networks",
     # Rendering
     "ascii",
+    # DIMPLE-style reticulation identity and rooted triples
+    "reticulation_signature",
+    "same_reticulation",
+    "group_reticulations",
+    "rooted_triples",
 ]
 
 def get_all_clusters(net : Network,
@@ -206,22 +220,121 @@ def subnet_given_leaves(net : Network, leaf_set : list[Node]) -> Network:
 
     return subnet
     
+def _suppress_childless_nodes(tree : Network, taxa : set[str]) -> None:
+    """
+    Delete out-degree-0 nodes that are not leaves of the original network.
+
+    Dropping the unused in-edges of a reticulation can leave a tree node with
+    no children at all. In
+    ``(t2,((t4,t6),(((t3)#H1,(t1)#H2),((t5,#H1),#H2))));`` the node whose only
+    children are ``#H1`` and ``#H2`` keeps neither of them when both
+    reticulations inherit from their *other* parent. Such a node has
+    out-degree 0 but stands for no taxon, so a displayed tree has to suppress
+    it -- and suppressing it can orphan its own parent in turn, hence the
+    worklist rather than a single pass.
+
+    Args:
+        tree (Network): A network being reduced to a displayed tree. Mutated
+                        in place.
+        taxa (set[str]): Labels of the leaves of the network the tree is
+                         displayed by. Nodes carrying these labels are kept
+                         however few children they have.
+    Returns:
+        N/A
+    """
+    childless = [node for node in tree.V()
+                 if tree.out_degree(node) == 0 and node.label not in taxa]
+    pending : set[Node] = set(childless)
+
+    while childless:
+        node = childless.pop()
+        pending.discard(node)
+
+        # Read the parents before the node (and so its in-edges) is gone.
+        # A bubble puts the same parent in this list twice.
+        parents = tree.get_parents(node)
+        tree.remove_nodes(node)
+
+        for parent in parents:
+            if (parent not in pending
+                    and tree.out_degree(parent) == 0
+                    and parent.label not in taxa):
+                pending.add(parent)
+                childless.append(parent)
+
+def _displayed_tree(net : Network,
+                    dropped : set[Edge],
+                    taxa : set[str]) -> Network:
+    """
+    Build the tree that remains once 'dropped' hybrid edges are discarded.
+
+    Copies the whole node set and every edge outside 'dropped', then reduces
+    the result to a tree on 'taxa': childless internal nodes are suppressed,
+    degree-2 chains are contracted, and the reticulation flag is cleared on
+    every node, since nothing in a tree has in-degree 2 any more.
+
+    The copy is built edge by edge instead of by pruning
+    :meth:`Network.copy`, because looking an edge up by its (src, dest) pair
+    cannot tell the two edges of a bubble apart.
+
+    Args:
+        net (Network): The network the tree is displayed by.
+        dropped (set[Edge]): Edges of 'net' to leave out, identified by
+                             object identity.
+        taxa (set[str]): Labels of the leaves of 'net'.
+    Returns:
+        Network: The displayed tree, with fresh Node and Edge objects.
+    """
+    tree = Network(branch_length_unit=net.get_branch_length_unit())
+    old_new : dict[Node, Node] = {}
+
+    for node in net.V():
+        new_node = node.copy()
+        new_node.set_is_reticulation(False)
+        old_new[node] = new_node
+        tree.add_nodes(new_node)
+
+    for edge in net.E():
+        if edge not in dropped:
+            tree.add_edges(edge.copy(old_new[edge.src], old_new[edge.dest]))
+
+    tree.set_uid_count(net.uid_count())
+
+    _suppress_childless_nodes(tree, taxa)
+    tree.clean()
+
+    return tree
+
 def _displayed_trees_with_probs(net : Network) -> list[tuple[Network, float]]:
     """
-    Enumerate every displayed tree together with its probability.
+    Enumerate one displayed tree per hybrid-edge choice, with its probability.
 
     A displayed tree is obtained by keeping exactly one in-edge at each
     reticulation; its probability is the product of the gammas of the kept
     edges. When gamma is unset for an edge, a uniform 1/k weight is assumed
     (k = in-degree of the reticulation node).
 
-    Reticulations and their in-edges are both sorted by label so that the
-    enumeration order is deterministic across runs.
+    There is one entry per element of the product of the reticulations'
+    in-edge sets, so the same topology can appear more than once: two choices
+    that differ only at a reticulation whose subtree is discarded anyway
+    display the same tree. :func:`get_displayed_trees` collapses those;
+    callers that weight trees by probability need them kept apart.
+
+    Reticulations are sorted by label and each one's in-edges by gamma,
+    highest first (then by source label), so the first tree enumerated is
+    the major tree and the order is deterministic across runs. A caller
+    that breaks ties by taking the first candidate therefore resolves them
+    toward the major tree, the same way for every network of a family.
+
+    A displayed tree has exactly the network's leaves: an internal node left
+    without children by a dropped edge (as happens in a network restricted
+    to a subset of its taxa) is removed, and degree-2 chains are contracted
+    (:func:`_displayed_tree`).
 
     Args:
         net (Network): A phylogenetic network.
     Returns:
-        list[tuple[Network, float]]: (tree copy, probability) pairs.
+        list[tuple[Network, float]]: (tree, probability) pairs.
     """
     retics = sorted(
         (node for node in net.V() if node.is_reticulation()),
@@ -232,14 +345,16 @@ def _displayed_trees_with_probs(net : Network) -> list[tuple[Network, float]]:
         return [(copy, 1.0)]
 
     retic_in_edges = [
-        sorted(list(net.in_edges(node)), key=lambda e: e.src.label)
+        sorted(list(net.in_edges(node)),
+               key=lambda e: (-(e.get_gamma() or 0.0), e.src.label))
         for node in retics
     ]
+    taxa = {leaf.label for leaf in net.get_leaves()}
 
     results : list[tuple[Network, float]] = []
     for combo in _product(*retic_in_edges):
-        tree, old_new = net.copy()
         prob = 1.0
+        dropped : set[Edge] = set()
         for retic_node, kept_edge in zip(retics, combo):
             gamma = kept_edge.get_gamma()
             if gamma is not None and gamma > 0:
@@ -247,19 +362,90 @@ def _displayed_trees_with_probs(net : Network) -> list[tuple[Network, float]]:
             else:
                 k = len(net.in_edges(retic_node))
                 prob *= 1.0 / k if k > 0 else 1.0
-            for e in net.in_edges(retic_node):
-                if e is not kept_edge:
-                    tree.remove_edge([old_new[e.src], old_new[e.dest]])
-        tree.clean()
-        results.append((tree, prob))
+            dropped.update(e for e in net.in_edges(retic_node)
+                           if e is not kept_edge)
+        results.append((_displayed_tree(net, dropped, taxa), prob))
 
     return results
 
+def _tree_topology_key(tree : Network) -> frozenset[frozenset[str]]:
+    """
+    Canonical key identifying the topology of a rooted tree.
+
+    A rooted tree with no degree-2 nodes is determined by the leaf sets below
+    its nodes, so two trees share a key exactly when they have the same
+    topology. Internal node labels and branch lengths are deliberately
+    ignored: displayed trees inherit internal names from whichever hybrid
+    edges survived, so the same topology reached two ways is named two ways.
+
+    Args:
+        tree (Network): A tree.
+    Returns:
+        frozenset[frozenset[str]]: The tree's clusters, as leaf label sets.
+    """
+    return frozenset(_hardwired_clusters_by_label(tree, include_trivial=True))
+
+def get_displayed_trees(net : Network,
+                        unique : bool = True) -> list[Network]:
+    """
+    Enumerate the trees displayed by a phylogenetic network.
+
+    A tree is displayed by a network when it can be obtained by keeping
+    exactly one in-edge at every reticulation, deleting the rest, and then
+    reducing what is left to a tree over the network's full leaf set:
+
+    * nodes left without children are suppressed, repeatedly, since
+      suppressing one can leave its parent childless;
+    * chains of degree-2 nodes are contracted into single branches;
+    * the reticulation flag is cleared, so :func:`is_tree` holds of every
+      result.
+
+    Every displayed tree has exactly the leaf set of 'net'. Removing in-edges
+    of reticulations never disconnects a leaf, because each reticulation keeps
+    one parent and no other node loses its only one.
+
+    A network with k reticulations admits at most 2^k displayed trees, but
+    often fewer distinct ones: when the choices at two reticulations discard
+    each other's subtrees, different choices display the same tree. In
+    ``(t2,((t4,t6),(((t3)#H1,(t1)#H2),((t5,#H1),#H2))));`` two of the four
+    choices display ``(t2,((t4,t6),(t1,(t5,t3))));``, so the network displays
+    three trees, not four.
+
+    Args:
+        net (Network): A phylogenetic network.
+        unique (bool): If True (the default), return one Network per distinct
+                       topology. If False, return one per hybrid-edge choice,
+                       so that the length of the result is the product of the
+                       reticulations' in-degrees.
+    Returns:
+        list[Network]: The displayed trees, as new Network objects. Order is
+                       deterministic: reticulations and their in-edges are
+                       enumerated by label, and duplicates are dropped in
+                       favour of the first occurrence.
+    """
+    trees = [tree for tree, _ in _displayed_trees_with_probs(net)]
+
+    if not unique:
+        return trees
+
+    seen : set[frozenset[frozenset[str]]] = set()
+    distinct : list[Network] = []
+    for tree in trees:
+        key = _tree_topology_key(tree)
+        if key not in seen:
+            seen.add(key)
+            distinct.append(tree)
+
+    return distinct
+
 def get_all_subtrees(net : Network) -> list[Network]:
     """
-    Generate all possible trees that can be derived from the given network by
-    removing hybrid edges and creating copies with subtrees that start at each 
-    non-reticulation node.
+    Generate one tree per choice of hybrid edges to keep at the reticulations.
+
+    Prefer :func:`get_displayed_trees`, which returns the *distinct* displayed
+    trees. This function returns one tree per element of the product of the
+    reticulations' in-edge sets, so the same topology can appear twice; see
+    :func:`get_displayed_trees` for when that happens.
 
     Args:
         net (Network): A network object
@@ -267,7 +453,7 @@ def get_all_subtrees(net : Network) -> list[Network]:
         list[Network]: A list of network objects, each representing a tree that
                        is derived from the original network.
     """
-    return [tree for tree, _ in _displayed_trees_with_probs(net)]
+    return get_displayed_trees(net, unique=False)
 
 def dominant_tree(net : Network) -> Network:
     """
@@ -311,17 +497,76 @@ def dominant_tree(net : Network) -> Network:
     
     return dom
 
-def count_reticulations(net: Network) -> int:
+def _ancestor_depths(net: Network, start: Node) -> dict[Node, int]:
+    """Map every ancestor of ``start`` (inclusive) to its min edge-distance."""
+    dist: dict[Node, int] = {start: 0}
+    frontier = [start]
+    while frontier:
+        nxt: list[Node] = []
+        for u in frontier:
+            for p in net.get_parents(u):
+                if p not in dist:
+                    dist[p] = dist[u] + 1
+                    nxt.append(p)
+        frontier = nxt
+    return dist
+
+
+def reticulation_cycle_size(net: Network, retic: Node) -> int:
+    """Number of nodes on a reticulation's cycle, in the undirected graph.
+
+    The cycle is ``retic`` plus the two ancestral paths from its parents up
+    to their lowest common ancestor. A cycle of 3 means the two parents are
+    parent and grandparent of each other, which no rooted triple can
+    distinguish from a tree; such a reticulation is invisible to triplet
+    pseudo-likelihood. ``2`` means parallel edges (both parents identical)
+    and ``0`` means the node is not a proper two-parent reticulation.
+
+    Args:
+        net (Network): Network containing ``retic``.
+        retic (Node): The reticulation node.
+
+    Returns:
+        int: Cycle size, or 0 when ``retic`` has fewer than two parents or
+        its parents share no ancestor.
+    """
+    parents = net.get_parents(retic)
+    if len(parents) < 2:
+        return 0
+    p1, p2 = parents[0], parents[1]
+    if p1 is p2:
+        return 2
+    d1 = _ancestor_depths(net, p1)
+    d2 = _ancestor_depths(net, p2)
+    common = [n for n in d1 if n in d2]
+    if not common:
+        return 0
+    lca = min(common, key=lambda n: d1[n] + d2[n])
+    # r + (path p1..lca) + (path p2..lca), lca shared once.
+    return d1[lca] + d2[lca] + 2
+
+
+def count_reticulations(net: Network, min_cycle_size: Optional[int] = None) -> int:
     """
     Count the number of reticulation nodes in a network.
 
     Args:
         net (Network): A network object.
+        min_cycle_size (int | None): When given, count only reticulations
+            whose cycle (see :func:`reticulation_cycle_size`) has at least
+            this many nodes. ``4`` counts the reticulations a rooted-triple
+            criterion can detect; a cycle of 3 or less is invisible to it.
 
     Returns:
-        int: Number of nodes with indegree >= 2 (reticulations by flag).
+        int: Number of nodes flagged as reticulations, filtered by cycle size
+        when ``min_cycle_size`` is given.
     """
-    return sum(1 for n in net.V() if n.is_reticulation())
+    if min_cycle_size is None:
+        return sum(1 for n in net.V() if n.is_reticulation())
+    return sum(
+        1 for n in net.V()
+        if n.is_reticulation() and reticulation_cycle_size(net, n) >= min_cycle_size
+    )
 
 def add_hybrid(net : Network,
                source : Edge,
@@ -476,6 +721,10 @@ def pairwise_leaf_distance(net: Network,
     adj: Dict[Node, list[tuple[Node, float]]] = {n: [] for n in net.V()}
     for e in net.E():
         w = e.get_length() if use_branch_lengths else 1.0
+        if w is None:
+            # An edge with no length counts as one unit, as the newick
+            # readers default it.
+            w = 1.0
         adj[e.src].append((e.dest, w))
         adj[e.dest].append((e.src, w))
 
@@ -731,21 +980,31 @@ def level(net: Network) -> int:
         return 0
     return max((sum(1 for node in comp if node.is_reticulation()) for comp in components), default=0)
 
-def count_displayed_trees(net: Network) -> int:
+def count_displayed_trees(net: Network, exact: bool = False) -> int:
     """
-    Estimate the number of displayed trees of a network.
+    Count the trees displayed by a network.
 
-    Computed as the product, over reticulation nodes, of their inbound edge
-    counts (typically 2). For general networks, this is an upper bound when
-    some choices may be incompatible; for level-1 networks this often matches
-    the exact count.
+    By default this is the product, over reticulation nodes, of their inbound
+    edge counts (typically 2), which counts hybrid-edge *choices* rather than
+    trees. It is an upper bound: two choices display the same tree whenever
+    each discards the other's subtree, so the number of distinct displayed
+    trees can be strictly smaller.
+
+    Pass ``exact=True`` to enumerate the displayed trees with
+    :func:`get_displayed_trees` and count the distinct ones instead. That is
+    exponentially more expensive, since it builds every tree.
 
     Args:
         net (Network): A network object.
+        exact (bool): Count distinct displayed trees rather than hybrid-edge
+                      choices. Defaults to False.
 
     Returns:
-        int: Estimated number of displayed trees.
+        int: The number of displayed trees, or of hybrid-edge choices.
     """
+    if exact:
+        return len(get_displayed_trees(net))
+
     prod = 1
     for n in net.V():
         if n.is_reticulation():
@@ -957,6 +1216,30 @@ def _leaf_label_set(net: Network) -> frozenset[str]:
     return frozenset(n.label for n in net.get_leaves())
 
 
+def _require_same_leaves(net1: Network, net2: Network, caller: str) -> frozenset[str]:
+    """
+    Check that two networks have identical leaf label sets.
+
+    Args:
+        net1 (Network): First network.
+        net2 (Network): Second network.
+        caller (str): Name of the metric, for the error message.
+
+    Returns:
+        frozenset[str]: The shared leaf label set.
+
+    Raises:
+        NetworkError: If the leaf label sets differ.
+    """
+    leaves1, leaves2 = _leaf_label_set(net1), _leaf_label_set(net2)
+    if leaves1 != leaves2:
+        raise NetworkError(
+            f"{caller} requires identical leaf label sets. "
+            f"Got {sorted(leaves1)} vs {sorted(leaves2)}"
+        )
+    return leaves1
+
+
 def _hardwired_clusters_by_label(
     net: Network,
     include_trivial: bool = False
@@ -1042,7 +1325,7 @@ def _softwired_clusters_by_label(
         return _hardwired_clusters_by_label(net, include_trivial)
 
     clusters: set[frozenset[str]] = set()
-    for tree in get_all_subtrees(net):
+    for tree in get_displayed_trees(net):
         clusters.update(_hardwired_clusters_by_label(tree, include_trivial))
 
     return clusters
@@ -1163,15 +1446,9 @@ def _displayed_tree_topology_set(
         A set of tree topologies, each encoded as a frozenset of clusters.
     """
     if is_tree(net):
-        clusters = _hardwired_clusters_by_label(net, include_trivial=True)
-        return {frozenset(clusters)}
+        return {_tree_topology_key(net)}
 
-    topos: set[frozenset[frozenset[str]]] = set()
-    for tree in get_all_subtrees(net):
-        clusters = _hardwired_clusters_by_label(tree, include_trivial=True)
-        topos.add(frozenset(clusters))
-
-    return topos
+    return {_tree_topology_key(tree) for tree in get_displayed_trees(net)}
 
 
 # ── Network Distance Metrics ──────────────────────────────────────────
@@ -1322,16 +1599,7 @@ def mu_distance(net1: Network, net2: Network) -> int:
     Returns:
         The mu-distance (non-negative integer).
     """
-    leaves1 = _leaf_label_set(net1)
-    leaves2 = _leaf_label_set(net2)
-
-    if leaves1 != leaves2:
-        raise NetworkError(
-            "mu_distance requires identical leaf label sets. "
-            f"Got {sorted(leaves1)} vs {sorted(leaves2)}"
-        )
-
-    leaf_order = sorted(leaves1)
+    leaf_order = sorted(_require_same_leaves(net1, net2, "mu_distance"))
     mu1 = _mu_vectors(net1, leaf_order)
     mu2 = _mu_vectors(net2, leaf_order)
 
@@ -1340,6 +1608,60 @@ def mu_distance(net1: Network, net2: Network) -> int:
 
     all_keys = set(counter1) | set(counter2)
     return sum(abs(counter1.get(k, 0) - counter2.get(k, 0)) for k in all_keys)
+
+
+def hybrid_ancestry(net: Network) -> frozenset[str]:
+    """
+    The leaf labels that descend from at least one reticulation node.
+
+    A taxon is of *hybrid ancestry* if some reticulation lies on a directed
+    path from the root to it, i.e. it belongs to the hardwired cluster of
+    some reticulation node. Since every leaf below a reticulation is reached
+    along every edge, the set is independent of inheritance probabilities and
+    of the root placement.
+
+    Args:
+        net (Network): A phylogenetic network.
+
+    Returns:
+        frozenset[str]: Labels of the leaves below any reticulation; empty
+                        for a tree.
+    """
+    below = _leaf_labels_below(net)
+    return frozenset().union(*(below[v] for v in net.V() if v.is_reticulation()))
+
+
+def hybrid_ancestry_error(estimated: Network, true_net: Network) -> float:
+    """
+    Hybrid-ancestry balanced error (HAE) of an estimated network against the
+    true network.
+
+    Let B be the hybrid-ancestry set (see :func:`hybrid_ancestry`) of the
+    estimate and A that of the truth. The false-positive rate is
+    |B - A| / |B| and the false-negative rate |A - B| / |A|; HAE is their
+    mean, in [0, 1]. Each rate is defined as 0 when its denominator is empty,
+    so a tree estimated for a reticulate truth scores 0.5 and a tree estimated
+    for a tree scores 0. Unlike :func:`mu_distance`, this measure is
+    *asymmetric*: the argument order matters.
+
+    The convention follows the HAE column of the NetCSEval evaluation
+    scripts (``hae_datafinal.jl``), so values are comparable to that work.
+
+    Args:
+        estimated (Network): The inferred network.
+        true_net (Network): The reference (true) network.
+
+    Returns:
+        float: Balanced hybrid-ancestry error in [0, 1].
+
+    Raises:
+        NetworkError: If the two networks have different leaf label sets.
+    """
+    _require_same_leaves(estimated, true_net, "hybrid_ancestry_error")
+    B, A = hybrid_ancestry(estimated), hybrid_ancestry(true_net)
+    fpr = len(B - A) / len(B) if B else 0.0
+    fnr = len(A - B) / len(A) if A else 0.0
+    return (fpr + fnr) / 2
 
 
 def tripartition_distance(
@@ -1774,6 +2096,7 @@ def ascii(net: Network, show_edge_lengths: bool = False) -> str:
     nodes_by_depth = _ascii_group_by_depth(node_depth, node_x)
 
     def _center(node: Node) -> int:
+        """Column of the node's label centre in the rendered rows."""
         return int(node_x[node] * char_width) + char_width // 2
 
     lines: list[str] = []
@@ -1837,6 +2160,196 @@ def ascii(net: Network, show_edge_lengths: bool = False) -> str:
 
 # ── Reticulation-Aware Comparison (re-export) ──────────────────────────
 #
+def _direct_branch_leaf_sets(net: Network, node: Node) -> list[frozenset[str]]:
+    """Leaf sets of the clades directly below ``node``.
+
+    A leaf is its own one-element branch. Used to describe a reticulation
+    by the clades sitting beside it, rather than by node labels, which are
+    not stable across inferred subnetworks.
+
+    Args:
+        net (Network): Network containing ``node``.
+        node (Node): The node whose child clades are read.
+
+    Returns:
+        list[frozenset[str]]: One frozenset of leaf labels per child.
+    """
+    children = net.get_children(node)
+    if not children:
+        return [frozenset({node.label})]
+    branches: list[frozenset[str]] = []
+    for child in children:
+        leaves = frozenset(leaf.label for leaf in net.leaf_descendants(child))
+        if leaves:
+            branches.append(leaves)
+    return branches
+
+
+def reticulation_signature(net: Network, node: Node) -> tuple:
+    """Leaf-set signature of one reticulation.
+
+    The signature is ``(child_branches, parent_branches)``. ``child_branches``
+    is the list of leaf sets directly below the reticulation's child.
+    ``parent_branches`` has one entry per parent: the leaf sets of that
+    parent's other children (the sibling clades on that side). Parent order
+    is the network's parent order and is not significant for equality; see
+    :func:`same_reticulation`.
+
+    This is the identity used to decide that two inferred subnetworks found
+    the same hybridization. It is not a phylogenetic distance.
+
+    Args:
+        net (Network): Network containing ``node``.
+        node (Node): A reticulation node (in-degree 2).
+
+    Returns:
+        tuple: ``(child_branches, parent_branches)``, each a tuple of
+        frozensets (parent side: a tuple of tuples of frozensets).
+
+    Raises:
+        NetworkError: If ``node`` is not in ``net``.
+    """
+    if node not in net.V():
+        raise NetworkError("reticulation node is not in the network")
+
+    # Child clade is recorded for placement. Equality does not use it.
+    children = net.get_children(node)
+    if children:
+        child_branches = tuple(_direct_branch_leaf_sets(net, children[0]))
+    else:
+        child_branches = (frozenset({node.label}),)
+
+    parent_branches = []
+    for parent in net.get_parents(node):
+        siblings = [c for c in net.get_children(parent) if c is not node]
+        side: list[frozenset[str]] = []
+        for sibling in siblings:
+            side.extend(_direct_branch_leaf_sets(net, sibling))
+        parent_branches.append(tuple(side))
+    return (child_branches, tuple(parent_branches))
+
+
+def _signature_parents(sig) -> tuple:
+    """Parent-side branch lists of a signature or of a record carrying one."""
+    if isinstance(sig, dict):
+        sig = sig.get("signature", sig)
+    if hasattr(sig, "signature"):
+        sig = sig.signature
+    return sig[1]
+
+
+def _branches_overlap(side_a, side_b) -> bool:
+    """True when some branch on ``side_a`` shares a leaf with some branch on ``side_b``."""
+    for branch_a in side_a:
+        for branch_b in side_b:
+            if frozenset(branch_a) & frozenset(branch_b):
+                return True
+    return False
+
+
+def same_reticulation(sig_a, sig_b) -> bool:
+    """Whether two reticulation signatures are the same event.
+
+    Parents match up to order. A side matches when one of its sibling
+    branches shares at least one leaf with a sibling branch on the other
+    signature's corresponding side (overlap, not set equality). The child
+    clade is ignored here; callers that need it read it off the signature.
+
+    Args:
+        sig_a: A signature from :func:`reticulation_signature`, or a record
+            with a ``signature`` attribute or key.
+        sig_b: The signature to compare against.
+
+    Returns:
+        bool: True when the two parent pairs overlap in either order.
+    """
+    parents_a = _signature_parents(sig_a)
+    parents_b = _signature_parents(sig_b)
+    if len(parents_a) != 2 or len(parents_b) != 2:
+        return False
+    straight = (_branches_overlap(parents_a[0], parents_b[0])
+                and _branches_overlap(parents_a[1], parents_b[1]))
+    crossed = (_branches_overlap(parents_a[0], parents_b[1])
+               and _branches_overlap(parents_a[1], parents_b[0]))
+    return straight or crossed
+
+
+def group_reticulations(records: list) -> list[list]:
+    """Group reticulation records that are the same event.
+
+    The first record of a group is its representative. Later records join
+    the group when :func:`same_reticulation` says they match that
+    representative. Records are not reordered inside a group.
+
+    Args:
+        records (list): Records that carry a ``signature`` (dict key or
+            attribute), as returned alongside :func:`reticulation_signature`.
+
+    Returns:
+        list[list]: One list per distinct event.
+    """
+    groups: list[list] = []
+    for record in records:
+        matched = None
+        for index, group in enumerate(groups):
+            if same_reticulation(record, group[0]):
+                matched = index
+                break
+        if matched is None:
+            groups.append([record])
+        else:
+            groups[matched].append(record)
+    return groups
+
+
+def rooted_triples(net: Network) -> set[tuple[str, str, str]]:
+    """Rooted triples displayed by a tree or network.
+
+    Each triple is ``(a, b, c)`` with ``a < b``, meaning the rooted triple
+    ``(a, b | c)``: ``a`` and ``b`` are together in a clade that excludes
+    ``c``. Every such triple is emitted once, at the node that is the MRCA
+    of ``a`` and ``b``. A root polytomy displays no triple, because no pair
+    is resolved.
+
+    This is the set the displayed-tree picker counts. It is not
+    :meth:`Network.rooted_triplet_distance`, which is a distance between
+    two networks, and it is not an MSC pseudo-likelihood.
+
+    Args:
+        net (Network): A rooted tree or network.
+
+    Returns:
+        set[tuple[str, str, str]]: The displayed triples.
+    """
+    # One descendant-leaf map, then emit each triple at the MRCA of its pair.
+    desc: dict[Node, set[str]] = {
+        node: {leaf.label for leaf in leaves}
+        for node, leaves in net.leaf_descendants_all().items()
+    }
+    all_leaves = {leaf.label for leaf in net.get_leaves()}
+    triples: set[tuple[str, str, str]] = set()
+    for node in net.V():
+        kids = [child for child in net.get_children(node) if desc.get(child)]
+        if len(kids) < 2:
+            continue
+        below = desc[node]
+        # The root's descendant set is every leaf, so a resolved clade is
+        # always a proper subset. Skipping the full set keeps a polytomy
+        # at the root from inventing triples.
+        if len(below) < 2 or len(below) == len(all_leaves):
+            continue
+        outside = all_leaves - below
+        for i in range(len(kids)):
+            left = desc[kids[i]]
+            for j in range(i + 1, len(kids)):
+                for a in left:
+                    for b in desc[kids[j]]:
+                        x, y = (a, b) if a < b else (b, a)
+                        for c in outside:
+                            triples.add((x, y, c))
+    return triples
+
+
 # The tripartition-matching reticulation dissimilarity lives in its own
 # module (:mod:`~.ReticulationComparison`) but is surfaced here alongside the
 # other network distance metrics for discoverability.  The import is placed at

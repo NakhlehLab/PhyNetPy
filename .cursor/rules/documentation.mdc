@@ -1,0 +1,83 @@
+---
+alwaysApply: true
+---
+
+# PhyNetPy Code Documentation Rules
+
+When I create an agent to review code or create code, these rules for commenting,
+documenting, and writing code apply!
+
+## Inline/Functional comments
+
+For writing comments that explain what a piece of code does, it MUST follow these guildlines.
+
+#### Every function/control flow block that has over 5 lines of code must contain an inline comment
+
+Comments should be concise, but sufficiently written such that a human can read
+the comments that apply for a given block of code and understand what it does at 
+a high level.
+
+#### Comments should be of high quality
+A BAD comment example: 
+    "#Compute the result"
+
+This is vague, and offers no real insight as to what is going on.
+
+A GOOD comment example:
+    "#The value of gamma is set to .7 here due to formula 3.2 from web source 3 (cited at top of file)"
+
+This is specific, explains WHY a line of code is the way it is, and offers reproducible knowledge that a human can track down. 
+
+#### Comments should explain high complexity logic
+
+Do not write a comment for a line of code that is fairly easy to understand. 
+Use a comment when the operation or task for that line of code is complex, complicated, and needs explaining.
+
+## Doc Strings
+
+Each docstring should be descriptive of the method/helper function/class. Docstrings
+must be written for every class and function, regardless of whether it is or is not
+user facing.
+
+#### Doc String Structure.
+
+Each docstring should contain a description, sources (if academic sources are used to
+formulate what the class/function does), and finally, a list of all inputs, outputs, and 
+exceptions that are raised on any fatal error (and what that error would be).
+
+#### Example
+
+For a function that computes a matrix from a few parameters:
+
+def compute_P_matrix(alpha : float, beta : float, dim : tuple[int, int]) -> np.ndarray:
+    """
+    This function computes and returns the "P matrix". A P matrix is a matrix defined by 
+    two parameters, alpha and beta. Alpha and Beta are ... blah blah blah. Also, a matrix size is
+    defined by dim, a tuple containing row and column counts, respectively.
+
+    This P matrix is defined in a paper by .... blah blah blah. It is used specifically for ...blah blah.
+
+    Args:
+        alpha (float) : blah blah blah
+        beta (float) : blah blah blah
+        dim (tuple[int, int]): blah blah blah
+    Returns:
+        np.ndarray : blah blah blah
+    Raises:
+        ValueError: when blah blah blah happens.
+    """
+
+    <insert function code here>
+
+Each docstring should follow this exact structure. For Classes, Returns/Raises may be 
+excluded, but the Args section should list any class constructors and what parameters they take, instead.
+
+
+
+
+
+
+
+
+
+    

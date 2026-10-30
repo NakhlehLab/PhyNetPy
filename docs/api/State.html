@@ -48,14 +48,31 @@
                         <span class="keyword">class</span> <span class="name">State</span>
                     </div>
                     <div class="class-body">
-                        <p>Class that implements accept/reject functionality for the Metropolis-Hastings algorithm. There are 2 model objects, one of which is the current state, and the other is the model used to test changes and moves to the current accepted version. Rejection is implemented by reverting the change on the proposed model (like git revert). Acceptance is implemented by duplicating the move on the current model (like git merge).</p>
+                        <p>Accept/reject bookkeeping for the Metropolis-Hastings and annealing drivers, around one live model. A proposal is a :class:`Move` executed in place on ``model.network``. Rejection undoes the move in place. Acceptance records the proposal's score as the accepted score and nothing else: the live network simply stays as it is. There is no second copy of the network, so accepting a move costs nothing, and scorers that cache topology by network identity (see ``MPLScorer``) keep their caches across acceptances. The one invariant this rests on: :meth:`likelihood` returns the cached accepted score and never re-scores the live network, because the live network may be mid-proposal when it is read. Callers that want a network to keep (a best-so-far) must snapshot it with ``Network.copy()``; the live ...</p>
+                        <h4>Properties</h4>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">current_model</span> <span class="keyword">-&gt;</span> Model | None <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>The live model. Between proposals it is the accepted state.</p>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
+                                <span class="name">proposed_model</span> <span class="keyword">-&gt;</span> Model | None <span class="keyword">property</span>
+                            </div>
+                            <div class="function-body">
+                                <p>The live model, which a proposal mutates in place.</p>
+                            </div>
+                        </div>
                         <h4>Constructor</h4>
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">__init__</span>(<span class="params">model: Model | None = None, validate: Callable[[Model], bool] = network_invariants_routine</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Initialize a State. A State contains two models-- one current model, and one proposed model that contains one singular edit to the current model. At the very beginning of the State and before the execution of a method, the two models will be carbon copies of each other.</p>
+                                <p>Initialize a State around ``model``.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -91,7 +108,7 @@
                                 <span class="name">likelihood</span> <span class="keyword">-&gt;</span> float
                             </div>
                             <div class="function-body">
-                                <p>Calculates the likelihood of the current model</p>
+                                <p>The accepted score: the likelihood of the last accepted state. Computed from the model once, before any proposal, and afterwards updated only by :meth:`commit`. Never re-scores the live network.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -111,7 +128,7 @@
                                 <span class="name">generate_next</span>(<span class="params">move: Move</span>) <span class="keyword">-&gt;</span> bool
                             </div>
                             <div class="function-body">
-                                <p>Set the proposed model to a new model that is the result of applying one move to the former proposed model. Relies on the move's own undo() for rollback instead of deep-copying the entire model as a snapshot.</p>
+                                <p>Apply one move to the live model, as a proposal. Relies on the move's own undo() for rollback instead of deep-copying the entire model as a snapshot.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -132,7 +149,7 @@
                                 <span class="name">revert</span>(<span class="params">move: Move</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>Set the proposed model to the former proposed model, the move that was made was not a beneficial one.</p>
+                                <p>Undo the proposal: the live model returns to the accepted state.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -149,10 +166,10 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
-                                <span class="name">commit</span>(<span class="params">move: Move</span>) <span class="keyword">-&gt;</span> None
+                                <span class="name">commit</span>(<span class="params">move: Move, score: float | None = None</span>) <span class="keyword">-&gt;</span> None
                             </div>
                             <div class="function-body">
-                                <p>The proposed change was beneficial. Synchronise the current model by copying the proposed network (cheaper than replaying the move).</p>
+                                <p>Accept the proposal. The live network already is the new state; only the accepted score changes.</p>
                                                                 <table class="param-table">
                                     <tr>
                                         <th>Parameter</th>
@@ -162,7 +179,12 @@
                                     <tr>
                                         <td><span class="param-name">move</span></td>
                                         <td><span class="param-type">Move</span></td>
-                                        <td>Any instantiated subclass of Move.</td>
+                                        <td>The accepted move (kept for the driver API).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">score</span></td>
+                                        <td><span class="param-type">float | None</span></td>
+                                        <td>The proposal's score, as the driver computed it. When omitted, the model's cached likelihood is read, which is the same value when nothing changed the parameters after it was scored.</td>
                                     </tr>
                                 </table>
                             </div>
@@ -172,7 +194,7 @@
                                 <span class="name">proposed</span> <span class="keyword">-&gt;</span> Model
                             </div>
                             <div class="function-body">
-                                <p>Grab the proposed model.</p>
+                                <p>Grab the live model, which carries the current proposal.</p>
                                 <div class="returns"><span class="returns-label">Returns:</span> Model: The proposed / edited Model.</div>
                             </div>
                         </div>
@@ -270,7 +292,7 @@
                 <li><a href="GeneTrees.html">GeneTrees</a></li>
                 <li><a href="GraphUtils.html">GraphUtils</a></li>
                 <li><a href="IO.html">IO</a></li>
-                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="JointDissimilarity.html">JointDissimilarity</a></li>
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>

@@ -48,9 +48,9 @@ Design - [x]
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 import operator
+import warnings
 
 import numpy as np
 
@@ -92,7 +92,14 @@ class SimulatedSNPData:
     seed: int | None
 
     def taxa_names(self) -> list[str]:
-        """Return sorted list of taxon names."""
+        """
+        List the taxa present in the simulated data, in sorted order.
+
+        Args:
+            N/A
+        Returns:
+            list[str]: Taxon names, sorted lexicographically.
+        """
         return sorted(self.data.keys())
 
     def write_nexus(self, filepath: str) -> None:
@@ -110,9 +117,10 @@ class SimulatedSNPData:
             filepath (str): Path where the nexus file will be written.
         Returns:
             None
+        Raises:
+            ValueError: If any taxon's count vector is not exactly n_sites
+                        long, or if any red count falls outside 0..15.
         """
-        taxa = self.taxa_names()
-        nwk = _network_to_rich_newick(self.network)
         if any(len(counts) != self.n_sites for counts in self.data.values()):
             raise ValueError("every taxon must have exactly n_sites counts.")
         if any(
@@ -124,6 +132,12 @@ class SimulatedSNPData:
                 "NEXUS SNP rows encode counts as one hexadecimal character, "
                 "so every red count must be in 0..15."
             )
+
+        taxa = self.taxa_names()
+
+        # annotate=True keeps branch lengths and gammas in the TREES block,
+        # which SNP_LIKELIHOOD needs to rebuild the generating network.
+        nwk = self.network.newick(annotate = True)
 
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write("#NEXUS\n\n")
@@ -176,7 +190,9 @@ def random_network(
     true level may be less than this value.
 
     Args:
-        n (int): Number of leaf taxa (must be >= 3 for level >= 1).
+        n (int): Number of leaf taxa. A tree on n leaves has only n - 2 edges
+                 joining two internal nodes, and a reticulation consumes two
+                 non-nested ones, so n >= 5 in practice for level >= 1.
         level (int): Number of reticulation nodes to add. Defaults to 1.
         birth_rate (float): Birth rate for the Yule process. Larger values 
                             produce shorter branch lengths. Defaults to 1.0.
@@ -187,11 +203,15 @@ def random_network(
         seed (int | None): Random seed for reproducibility. Defaults to None.
 
     Raises:
-        ValueError: If n < 2 or level < 0, or not enough edges to place 
-                    all reticulations.
+        ValueError: If n < 2 or level < 0.
+
+    Warns:
+        UserWarning: If the topology runs out of legal insertion sites before
+                     `level` reticulations are placed. The network is returned
+                     with however many were added.
 
     Returns:
-        Network: A phylogenetic network with n leaves and `level` 
+        Network: A phylogenetic network with n leaves and at most `level` 
                  reticulation nodes.
     """
     if n < 2:
@@ -203,19 +223,17 @@ def random_network(
 
     # Step 1: Generate a base tree via Yule process
     yule = Yule(gamma=birth_rate, n=n, rng=rng)
-    yule_net = yule.generate_network()
+    net = yule.generate_network()
 
-    # Step 2: Rebuild the network from scratch with clean names.
-    # This avoids hash-breaking issues from renaming nodes in-place
-    # (Node.__hash__ is name-based).
-    net = _rebuild_with_names(yule_net)
+    # Yule emits "spec*"/"internal*"/"root" labels, and reports branch lengths
+    # in expected substitutions per site -- a unit Network cannot infer itself.
+    _clean_node_names(net)
+    net.set_branch_length_unit(BranchLengthUnit.SUBSTITUTIONS_PER_SITE)
 
-    # Step 3: Add reticulations
+    # Step 2: Add reticulations
     for retic_id in range(level):
         gamma = rng.uniform(gamma_range[0], gamma_range[1])
-        success = _add_reticulation(net, rng, gamma, retic_id)
-        if not success:
-            import warnings
+        if not _add_reticulation(net, rng, gamma, retic_id):
             warnings.warn(
                 f"Could not place reticulation #{retic_id}. "
                 f"Network has {retic_id} reticulations instead of {level}."
@@ -225,117 +243,46 @@ def random_network(
     return net
 
 
-def _rebuild_with_names(yule_net: Network) -> Network:
+def _clean_node_names(net: Network) -> None:
     """
-    Rebuild a Yule-generated tree as a fresh Network with clean node names.
-    
-    Leaves are named T1, T2, ... (sorted by original name).
-    Internal nodes are named I1, I2, ...
-    The root is named Root.
-    
-    This avoids the hash-invalidation issue from renaming nodes in-place
-    (since Node.__hash__ and Node.__eq__ are name-based).
+    Relabel a simulator-generated tree in place to PhyNetPy naming conventions:
+    leaves become T1..Tn (ordered by their original label), the root becomes
+    Root, and the remaining internal nodes become I1..Ik ordered by depth.
+
+    Renaming goes through :meth:`Network.update_node_name`, which rehashes the
+    node in every name-keyed collection (``Node.__hash__`` is name-based, so a
+    bare ``set_name`` would strand the node in the node/edge sets).
 
     Args:
-        yule_net (Network): A tree-like network from a Yule/CBDP simulator.
-
+        net (Network): A tree-like network from a Yule/CBDP simulator. Modified
+                       in place.
     Returns:
-        Network: A new Network with the same topology and branch lengths 
-                 but with clean node names.
+        None
     """
-    net = Network(
-        branch_length_unit=BranchLengthUnit.SUBSTITUTIONS_PER_SITE
+    root = net.root()
+    ordered_leaves = sorted(net.get_leaves(), key = lambda nd : nd.label)
+    leaf_rank = {leaf : i for i, leaf in enumerate(ordered_leaves)}
+
+    renames = [(leaf, f"T{i + 1}") for leaf, i in leaf_rank.items()]
+    renames.append((root, "Root"))
+
+    # Internal numbering keys off depth, then the lowest-ranked leaf beneath the
+    # node. A plain BFS discovery order would be simpler but not reproducible:
+    # V(), get_children(), and hence traversal order are all backed by sets, and
+    # Node.__hash__ is hash(name), which Python randomizes per process.
+    depth = net.bfs_dfs()[0]
+    below = net.leaf_descendants_all()
+    named = set(leaf_rank) | {root}
+    internal = sorted(
+        (node for node in depth if node not in named),
+        key = lambda nd : (depth[nd], min(leaf_rank[l] for l in below[nd]))
     )
-    old_root = yule_net.root()
-    
-    # Build a name mapping
-    old_to_new_name: dict[str, str] = {}
-    
-    # Rename leaves
-    leaves = sorted(yule_net.get_leaves(), key=lambda nd: nd.label)
-    for i, leaf in enumerate(leaves):
-        old_to_new_name[leaf.label] = f"T{i + 1}"
-    
-    # Root
-    old_to_new_name[old_root.label] = "Root"
-    
-    # Internal nodes (BFS order for consistency)
-    internal_count = 1
-    queue = deque([old_root])
-    visited = {old_root.label}
-    while queue:
-        node = queue.popleft()
-        if node.label not in old_to_new_name:
-            old_to_new_name[node.label] = f"I{internal_count}"
-            internal_count += 1
-        for child in yule_net.get_children(node):
-            if child.label not in visited:
-                visited.add(child.label)
-                queue.append(child)
-    
-    # Create new nodes
-    new_nodes: dict[str, Node] = {}
-    for old_node in yule_net.V():
-        new_name = old_to_new_name[old_node.label]
-        new_node = Node(name=new_name, t=old_node.get_time())
-        new_node.set_time(old_node.get_time())
-        new_nodes[old_node.label] = new_node
-    
-    # Add all new nodes to the network
-    for new_node in new_nodes.values():
-        net.add_nodes(new_node)
-    
-    # Add edges
-    for edge in yule_net.E():
-        src_new = new_nodes[edge.src.label]
-        dest_new = new_nodes[edge.dest.label]
-        new_edge = Edge(src_new, dest_new, length=edge.get_length())
-        net.add_edges(new_edge)
-    
-    return net
+    renames.extend((nd, f"I{i}") for i, nd in enumerate(internal, start = 1))
 
-
-def _get_internal_edges(net: Network) -> list[Edge]:
-    """
-    Get all edges that connect two non-leaf nodes (internal edges).
-    These are the candidate edges for reticulation insertion.
-
-    Returns the actual Edge objects (not node pairs) to avoid edge lookup 
-    issues after node renaming.
-
-    Excludes edges to/from leaves, and edges involving reticulation nodes 
-    (to avoid creating nested reticulations, which complicates the topology).
-
-    Args:
-        net (Network): A phylogenetic network.
-
-    Returns:
-        list[Edge]: List of internal Edge objects suitable for reticulation 
-                    insertion.
-    """
-    leaves = set(net.get_leaves())
-    candidates = []
-    for edge in net.E():
-        src, dest = edge.src, edge.dest
-        if src not in leaves and dest not in leaves:
-            if not src.is_reticulation() and not dest.is_reticulation():
-                candidates.append(edge)
-    return candidates
-
-
-def _get_descendants(net: Network, node: Node) -> set[Node]:
-    """
-    Get all strict descendants of a node.
-
-    Args:
-        net (Network): The network.
-        node (Node): Starting node.
-
-    Returns:
-        set[Node]: All nodes reachable from node going down the network,
-                   excluding node itself.
-    """
-    return net.get_subtree_at(node) - {node}
+    # Names are resolved up front: renaming mutates each node's hash, so the
+    # pairs cannot be looked up from a Node-keyed container mid-loop.
+    for node, name in renames:
+        net.update_node_name(node, name)
 
 
 def _add_reticulation(
@@ -355,6 +302,11 @@ def _add_reticulation(
         4. The first new node becomes a tree node; the second becomes the 
            hybrid (#H) node with two parents.
 
+    This deliberately does not delegate to ``GraphUtils.add_hybrid``, which
+    performs the same bisection but leaves the four new edges without lengths
+    and takes no gamma. Both are required here: the simulator evolves a
+    coalescent down these branches, and ``write_nexus`` has to serialize them.
+
     Args:
         net (Network): The network to modify (in-place).
         rng (np.random.Generator): Random number generator.
@@ -365,42 +317,48 @@ def _add_reticulation(
         bool: True if a reticulation was successfully added, False if 
               not enough candidate edges were found.
     """
-    candidates = _get_internal_edges(net)
+    # Candidates join two non-leaf, non-reticulation nodes: bisecting a pendant
+    # edge would hang a leaf below the hybrid, and reusing a reticulation
+    # endpoint would nest hybridizations. They are sorted because Network.E()
+    # is backed by a set whose order varies with PYTHONHASHSEED, which would
+    # otherwise leave the draw below irreproducible across processes.
+    leaves = set(net.get_leaves())
+    candidates = sorted(
+        (
+            edge for edge in net.E()
+            if {edge.src, edge.dest}.isdisjoint(leaves)
+            and not edge.src.is_reticulation()
+            and not edge.dest.is_reticulation()
+        ),
+        key = lambda edge : (edge.src.label, edge.dest.label)
+    )
 
     if len(candidates) < 2:
         return False
 
-    # Try a few times to find a valid (non-ancestor-descendant) pair
-    max_attempts = 50
-    for _ in range(max_attempts):
+    # Resample until the two edges are node-disjoint and neither lies in the
+    # other's subtree; the hybrid edge would otherwise close a directed cycle.
+    for _ in range(50):
         idxs = rng.choice(len(candidates), size=2, replace=False)
-        edge1 = candidates[idxs[0]]
-        edge2 = candidates[idxs[1]]
+        edge1, edge2 = candidates[idxs[0]], candidates[idxs[1]]
 
-        e1_src, e1_dest = edge1.src, edge1.dest
-        e2_src, e2_dest = edge2.src, edge2.dest
-
-        # Check they don't share nodes
-        nodes_1 = {e1_src, e1_dest}
-        nodes_2 = {e2_src, e2_dest}
-        if nodes_1 & nodes_2:
+        ends_1 = {edge1.src, edge1.dest}
+        ends_2 = {edge2.src, edge2.dest}
+        if ends_1 & ends_2:
             continue
-
-        # Check ancestor-descendant: e2_dest should not be an ancestor 
-        # of e1_src (and vice versa)
-        desc_e1 = _get_descendants(net, e1_dest)
-        if e2_src in desc_e1 or e2_dest in desc_e1:
+        if ends_2 & net.get_subtree_at(edge1.dest):
             continue
-        desc_e2 = _get_descendants(net, e2_dest)
-        if e1_src in desc_e2 or e1_dest in desc_e2:
+        if ends_1 & net.get_subtree_at(edge2.dest):
             continue
 
         break
     else:
         return False
 
+    e1_src, e1_dest = edge1.src, edge1.dest
+    e2_src, e2_dest = edge2.src, edge2.dest
+
     # Bisect edge 1: e1_src -> new_tree_node -> e1_dest
-    # Use the Edge object directly (no lookup needed)
     e1_len = edge1.get_length()
     half1 = e1_len / 2.0
 
@@ -536,96 +494,3 @@ def simulate(
         theta=theta,
         seed=seed,
     )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# NEWICK SERIALIZATION (with branch lengths and gamma)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _network_to_rich_newick(net: Network) -> str:
-    """
-    Convert a Network to an extended newick string with branch lengths 
-    and inheritance probability (gamma) annotations.
-
-    Format follows the PhyNetPy convention:
-        - First occurrence of a reticulation: (subtree)#H0[&gamma=0.7]:0.05
-        - Subsequent occurrences: #H0:0.05
-
-    Args:
-        net (Network): A phylogenetic network.
-
-    Returns:
-        str: Extended newick string ending with ';'.
-    """
-    processed_retics: set[str] = set()
-    result = _newick_helper(net, net.root(), processed_retics) + ";"
-    return result
-
-
-def _newick_helper(
-    net: Network,
-    node: Node,
-    processed_retics: set[str]
-) -> str:
-    """
-    Recursive helper for newick serialization.
-
-    Args:
-        net (Network): The network.
-        node (Node): Current node being serialized.
-        processed_retics (set[str]): Set of reticulation node names that 
-                                      have already been fully serialized.
-
-    Returns:
-        str: Newick substring for the subtree rooted at node.
-    """
-    leaves = set(net.get_leaves())
-
-    if node in leaves:
-        return node.label
-    
-    # If this is a reticulation node we've already processed, 
-    # just emit the label (second occurrence)
-    is_retic = node.is_reticulation()
-    if is_retic and node.label in processed_retics:
-        # Name should already start with '#'
-        name = node.label if node.label.startswith('#') else '#' + node.label
-        return name
-    
-    # Mark retic as processed (first occurrence)
-    if is_retic:
-        processed_retics.add(node.label)
-
-    # Build children substring
-    children = net.get_children(node)
-    child_strs = []
-    for child in children:
-        child_str = _newick_helper(net, child, processed_retics)
-        
-        # Append branch length
-        edge = net.get_edge(node, child)
-        branch_len = edge.get_length()
-        
-        # Add gamma annotation ONLY on the first occurrence of a retic node
-        # (the one that includes the full subtree with parentheses).
-        # The second occurrence is just the bare "#H0" label — no gamma.
-        if child.is_reticulation() and "(" in child_str:
-            gamma_val = edge.get_gamma()
-            if gamma_val is not None and gamma_val > 0:
-                child_str += f"[&gamma={gamma_val}]"
-        
-        child_str += f":{branch_len}"
-        child_strs.append(child_str)
-
-    substr = "(" + ",".join(child_strs) + ")"
-
-    # Add node name
-    if is_retic:
-        name = node.label if node.label.startswith('#') else '#' + node.label
-    else:
-        name = node.label
-
-    substr += name
-
-    return substr
-

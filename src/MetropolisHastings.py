@@ -90,7 +90,6 @@ from .Matrix import Matrix
 from .ModelGraph import Model
 from .ModelMove import Move, SwitchParentage
 from .GTR import GTR, JC
-from .GraphUtils import _clone_net
 from .Network import Network
 from ._optimize import (
     snapshot_continuous_params,
@@ -278,7 +277,14 @@ class HillClimbing:
         cached_cur: float | None = None
         
         while iter_no < self.num_iter:
-            if no_progress == 150:
+            # generate() is where a phased kernel changes phase. Stopping
+            # first drops the proposal that switch was about to make:
+            # both counters land on 150, and the new phase is never
+            # sampled. Allow that one proposal; a later rejection still
+            # stops, because the count is then past 150 and the switch
+            # has already been consumed.
+            switch_due = getattr(self.kernel, "phase_switch_due", None)
+            if no_progress >= 150 and not (callable(switch_due) and switch_due()):
                 break
             
             next_move = self.kernel.generate(self.current_state.current_model)
@@ -336,7 +342,7 @@ class HillClimbing:
                 accepted: bool = True 
                 
                 if delta < 0:
-                    self.current_state.commit(next_move)  
+                    self.current_state.commit(next_move, proposed)
                     cached_cur = proposed
                     no_progress = 0
                 else:
@@ -349,23 +355,22 @@ class HillClimbing:
 
                 self.kernel.report_outcome(accepted, delta=proposed - cur)
                 
-                cur_net = self.current_state.current_model.network
-        
-                if cur_net not in leaderboard.keys():
-                    if accepted:
-                        if leaderboard:
-                            cur_max_val = max(leaderboard.values())
-                        else:
-                            cur_max_val = float('-inf')
-                        
-                        if len(list(leaderboard.keys())) < top_network_ct:
-                            leaderboard[cur_net] = proposed
-                        elif proposed > cur_max_val:
-                            leaderboard[cur_net] = proposed
-                            old_nets = [net for net in leaderboard.keys()
-                                       if leaderboard[net] == cur_max_val]
-                            if old_nets:
-                                del leaderboard[old_nets[0]]
+                # The state holds one live network that keeps changing, so a
+                # leaderboard entry has to be a snapshot taken at insertion.
+                if accepted:
+                    if leaderboard:
+                        cur_max_val = max(leaderboard.values())
+                    else:
+                        cur_max_val = float('-inf')
+
+                    if len(list(leaderboard.keys())) < top_network_ct:
+                        leaderboard[self.current_state.current_model.network.copy()[0]] = proposed
+                    elif proposed > cur_max_val:
+                        leaderboard[self.current_state.current_model.network.copy()[0]] = proposed
+                        old_nets = [net for net in leaderboard.keys()
+                                    if leaderboard[net] == cur_max_val]
+                        if old_nets:
+                            del leaderboard[old_nets[0]]
             else:
                 self.kernel.report_outcome(False, delta=0.0)
                 if self.enhanced_stop:
@@ -591,7 +596,10 @@ class SimulatedAnnealing:
         self.neutral_accept_prob = min(1.0, max(0.0, float(neutral_accept_prob)))
         self.restart_factory = restart_factory
         self.trace = bool(trace)
-        self._seed_seq = np.random.SeedSequence(seed)
+        # Per-restart child seeds. The MPL engine passes a SeedSequence it
+        # spawned for this driver; a plain int (or None) is wrapped.
+        self._seed_seq = (seed if isinstance(seed, np.random.SeedSequence)
+                          else np.random.SeedSequence(seed))
 
         cool_iters = max(1, int(num_iter * (1.0 - self.plateau_frac)))
         if schedule == "cool" and not (t_start > t_end):
@@ -645,7 +653,7 @@ class SimulatedAnnealing:
         uphill_accepted = 0
         neutral_accepted = 0
         best_run_score = state.likelihood()
-        best_run_network = _clone_net(state.current_model.network)
+        best_run_network = state.current_model.network.copy()[0]
         best_iter = 0
         iters_run = self.num_iter
         trace: list[tuple] = [] if self.trace else None
@@ -724,7 +732,7 @@ class SimulatedAnnealing:
                 score_now = proposed if was_accepted else cur
                 if score_now > best_run_score:
                     best_run_score = score_now
-                    best_run_network = _clone_net(state.current_model.network)
+                    best_run_network = state.current_model.network.copy()[0]
                     best_iter = i
 
                 if trace is not None:
@@ -784,7 +792,7 @@ class SimulatedAnnealing:
         accepted = 0
         uphill_accepted = 0
         best_run_score = state.likelihood()
-        best_run_network = _clone_net(state.current_model.network)
+        best_run_network = state.current_model.network.copy()[0]
 
         steps_at_level = 0
         since_best_improve = 0
@@ -884,7 +892,7 @@ class SimulatedAnnealing:
                 score_now = proposed if was_accepted else cur
                 if score_now > best_run_score:
                     best_run_score = score_now
-                    best_run_network = _clone_net(state.current_model.network)
+                    best_run_network = state.current_model.network.copy()[0]
                     since_best_improve = 0
                     # Re-arm the reheat mechanism: we just escaped the basin
                     # that was provoking cascade-guard suspension (if any).

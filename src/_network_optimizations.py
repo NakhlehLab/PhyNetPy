@@ -268,12 +268,15 @@ def _newick_help(
     node: "Node",
     processed_retics: set["Node"],
     leaf_set: set["Node"],
+    annotate: bool = False,
 ) -> str:
     """Recursive Newick builder for the subnetwork rooted at ``node``.
 
     ``leaf_set`` is precomputed and threaded down so leaf membership is an
     O(1) test per node instead of rebuilding the leaf list (O(V)) at every
     frame -- the naive version was O(V^2) over the whole tree.
+
+    ``annotate`` adds branch lengths and gamma comments; see :func:`newick`.
     """
     if node in leaf_set:
         return node.label
@@ -294,7 +297,24 @@ def _newick_help(
 
     substr = "("
     for child in net.get_children(node):
-        substr += _newick_help(net, child, processed_retics, leaf_set)
+        # Whether this is a reticulation's first occurrence must be read before
+        # recursing, since the recursive call is what marks it as seen. Only
+        # that occurrence carries the subtree, so only it takes a gamma comment;
+        # read_newick derives the sibling hybrid edge's gamma as 1 - g.
+        first_visit = child not in processed_retics
+        child_str = _newick_help(net, child, processed_retics, leaf_set,
+                                 annotate)
+
+        if annotate:
+            edge = net.get_edge(node, child)
+            gamma = edge.get_gamma()
+            if first_visit and net.in_degree(child) >= 2 and gamma is not None:
+                child_str += f"[&gamma={gamma}]"
+            length = edge.get_length()
+            if length is not None:
+                child_str += f":{length}"
+
+        substr += child_str
         substr += ","
     substr = substr[0:-1]
     substr += ")"
@@ -302,9 +322,20 @@ def _newick_help(
     return substr
 
 
-def newick(net: "Network") -> str:
-    """Extended-Newick string for ``net`` (with trailing semicolon)."""
-    return _newick_help(net, net.root(), set(), set(net.get_leaves())) + ";"
+def newick(net: "Network", annotate: bool = False) -> str:
+    """Extended-Newick string for ``net`` (with trailing semicolon).
+
+    Args:
+        net (Network): The network to serialize.
+        annotate (bool): When True, append ``:length`` to every branch and
+                         ``[&gamma=g]`` to the first occurrence of each
+                         reticulation -- the dialect ``IO.read_newick`` parses
+                         back. Defaults to False (topology only).
+    Returns:
+        str: The Newick representation of ``net``.
+    """
+    return _newick_help(net, net.root(), set(), set(net.get_leaves()),
+                        annotate) + ";"
 
 
 # =============================================================================
@@ -765,7 +796,8 @@ def clean(net: "Network", options: list[bool]) -> None:
         floaters = [node for node in net.V()
                     if net.in_degree(node) == 0 and net.out_degree(node) == 0]
         for floater in floaters:
-            net._nodes.remove(floater)
+            # Through the network method so an open transaction journals it.
+            net.remove_nodes(floater)
 
     if options[1]:
         root = net.root()

@@ -13,7 +13,8 @@ Covers the core data structures and algorithms:
         copy, to_networkx, is_isomorphic, get_subtree_at, dist_from_root,
         topological_order, distance_from_root, set_node_times_from_root,
         set_node_times_by_edge_count, edges_downstream_of_node,
-        edges_upstream_of_node, subgenome_count.
+        edges_upstream_of_node, subgenome_count, transactions
+        (begin / commit / rollback), graft_subtree.
 
 Each test builder constructs a small network topology from scratch so
 that tests are self-contained and deterministic.
@@ -1661,3 +1662,195 @@ class TestNodeSet:
             assert ns.out_edges(ghost) == set()
 
         assert entries_held(ns) == before, "absent nodes leaked into the maps"
+
+
+class TestHybridGammaCompletion:
+    """A Newick string may give a reticulation's gamma on one occurrence only.
+
+    ``newick(annotate=True)`` writes ``[&gamma=g]`` on the first occurrence;
+    both parsers must give the other hybrid edge ``1 - g`` (and ``1/k`` each
+    when no occurrence carries a gamma).
+    """
+
+    FIRST = "(((B:0.05)#H0[&gamma=0.3]:0.05,A:0.1)I2:0.1,(C:0.1,#H0:0.05)I1:0.1)I3;"
+    SECOND = "(((B:0.05)#H0:0.05,A:0.1)I2:0.1,(C:0.1,#H0[&gamma=0.7]:0.05)I1:0.1)I3;"
+    BOTH = "(((B:0.05)#H0[&gamma=0.3]:0.05,A:0.1)I2:0.1,(C:0.1,#H0[&gamma=0.7]:0.05)I1:0.1)I3;"
+    NONE = "(((B:0.05)#H0:0.05,A:0.1)I2:0.1,(C:0.1,#H0:0.05)I1:0.1)I3;"
+
+    @staticmethod
+    def _gammas(net: Network) -> dict[str, float]:
+        hybrid = next(node for node in net.V() if net.in_degree(node) == 2)
+        return {edge.src.label: edge.get_gamma() for edge in net.in_edges(hybrid)}
+
+    def test_from_newick_completes_the_unannotated_edge(self):
+        from phynetpy.IO import read_newick
+        for text in (self.FIRST, self.SECOND, self.BOTH):
+            for parse in (Network.from_newick, read_newick):
+                gammas = self._gammas(parse(text))
+                assert abs(gammas["I2"] - 0.3) < 1e-12, (parse.__name__, text)
+                assert abs(gammas["I1"] - 0.7) < 1e-12, (parse.__name__, text)
+        for parse in (Network.from_newick, read_newick):
+            gammas = self._gammas(parse(self.NONE))
+            assert gammas == {"I1": 0.5, "I2": 0.5}
+
+    def test_annotated_newick_round_trip_keeps_every_gamma(self):
+        from phynetpy.IO import read_newick
+        for build in (build_level1_network, build_level2_network, build_level2_10_leaves):
+            net = build()
+            for node in net.V():
+                # A fixture may leave a hybrid pair unset or not summing to one;
+                # the writer only round-trips a proper pair.
+                if net.in_degree(node) == 2 and abs(sum(e.get_gamma() for e in net.in_edges(node)) - 1.0) > 1e-9:
+                    first, second = net.in_edges(node)
+                    first.set_gamma(0.25)
+                    second.set_gamma(0.75)
+            expected = {
+                node.label: sorted(e.get_gamma() for e in net.in_edges(node))
+                for node in net.V() if net.in_degree(node) == 2
+            }
+            text = net.newick(annotate=True)
+            # IO.read_newick only accepts #H / #R / #LGT reticulation labels.
+            standard = all(label.lstrip("#")[0] in "HRL" for label in expected)
+            for parse in (Network.from_newick, read_newick) if standard else (Network.from_newick,):
+                back = parse(text)
+                got = {
+                    node.label.lstrip("#"): sorted(e.get_gamma() for e in back.in_edges(node))
+                    for node in back.V() if back.in_degree(node) == 2
+                }
+                assert set(got) == {label.lstrip("#") for label in expected}
+                for label, gammas in expected.items():
+                    assert all(abs(a - b) < 1e-12 for a, b in zip(gammas, got[label.lstrip("#")])), (build.__name__, parse.__name__)
+
+
+class TestReticulationLabelLeniency:
+    """``read_newick`` accepts reticulation labels that are not extended-Newick
+    event codes. Networks built in memory are written with ``#UID_<n>`` names
+    (``Network.add_uid_node``), and other tools emit ``#1`` or ``#h1``; before
+    this the written file could not be read back."""
+
+    @pytest.mark.parametrize("label", ["#UID_6057", "#1", "#h1", "#X"])
+    def test_round_trip_label(self, label):
+        from phynetpy.IO import read_newick
+        net = read_newick(f"((A,(B){label}),({label},C));")
+        assert sorted(l.label for l in net.get_leaves()) == ["A", "B", "C"]
+        retics = [v for v in net.V() if v.is_reticulation()]
+        assert len(retics) == 1 and retics[0].label == label
+        assert len(net.get_parents(retics[0])) == 2
+
+    def test_written_network_reads_back(self):
+        from phynetpy.IO import read_newick
+        from phynetpy.GraphUtils import mu_distance
+        net = read_newick("((A,(B)#H1),(#H1,C));")
+        net.update_node_name(net.has_node_named("#H1"), "#UID_42")
+        again = read_newick(net.newick())
+        assert mu_distance(net, again) == 0
+
+    def test_malformed_lgt_still_rejected(self):
+        from phynetpy.IO import read_newick, IOError as PhyIOError
+        with pytest.raises(PhyIOError):
+            read_newick("((A,(B)#LGX1),(#LGX1,C));")
+
+
+
+class TestTransactions:
+    """``begin_transaction`` / ``rollback_transaction`` / ``commit_transaction``
+    journal structural and attribute edits so a move can be undone in place."""
+
+    @staticmethod
+    def _snapshot(net: Network) -> tuple:
+        nodes = sorted((n.label, n.is_reticulation()) for n in net.V())
+        edges = sorted((e.src.label, e.dest.label, e.get_gamma(), e.get_length()) for e in net.E())
+        return nodes, edges
+
+    def test_rollback_restores_edits_and_commit_keeps_them(self):
+        net = build_simple_tree()
+        before = self._snapshot(net)
+        root = net.root()
+        leaf = next(iter(net.get_leaves()))
+        edge = net.get_edge(*[(p, leaf) for p in net.get_parents(leaf)][0])
+
+        net.begin_transaction()
+        assert net.in_transaction()
+        edge.set_length(9.5)
+        net.update_node_name(leaf, "renamed")
+        extra = Node("extra")
+        net.add_nodes(extra)
+        net.add_edges(Edge(root, extra))
+        net.remove_edge(edge)
+        assert self._snapshot(net) != before
+        net.rollback_transaction()
+
+        assert not net.in_transaction()
+        assert self._snapshot(net) == before
+        assert leaf in net.V() and extra not in net.V()
+
+        net.begin_transaction()
+        net.add_nodes(extra)
+        net.add_edges(Edge(root, extra))
+        net.commit_transaction()
+        assert extra in net.get_leaves()
+        assert not net.in_transaction()
+
+    def test_nested_rollback_undoes_only_the_inner_frame(self):
+        net = build_simple_tree()
+        root = net.root()
+        outer, inner = Node("outer"), Node("inner")
+        net.begin_transaction()
+        net.add_nodes(outer)
+        net.add_edges(Edge(root, outer))
+        net.begin_transaction()
+        net.add_nodes(inner)
+        net.add_edges(Edge(root, inner))
+        net.rollback_transaction()
+        assert outer in net.V() and inner not in net.V()
+        assert net.in_transaction()
+        net.rollback_transaction()
+        assert outer not in net.V()
+
+    def test_rollback_outside_a_transaction_is_a_no_op(self):
+        net = build_simple_tree()
+        before = self._snapshot(net)
+        net.rollback_transaction()
+        net.commit_transaction()
+        assert self._snapshot(net) == before
+
+
+class TestGraftSubtree:
+    """``graft_subtree`` copies a subtree in and attaches it by one edge."""
+
+    def test_graft_as_sibling_splits_the_edge(self):
+        host = Network.from_newick("((A,B),C);")
+        sub = Network.from_newick("(X,Y);")
+        anchor = host.has_node_named("C")
+        parent = host.get_parents(anchor)[0]
+        image = host.graft_subtree(sub, sibling_of=anchor)
+        assert sorted(l.label for l in host.get_leaves()) == ["A", "B", "C", "X", "Y"]
+        # C and the grafted root now share a fresh parent under the old one.
+        mid = host.get_parents(anchor)[0]
+        assert mid is not parent and host.get_parents(image)[0] is mid
+        assert host.get_parents(mid)[0] is parent
+        assert is_tree(host) and host.is_acyclic()
+
+    def test_graft_under_adds_a_child_and_sibling_of_root_makes_a_new_root(self):
+        host = Network.from_newick("((A,B),C);")
+        image = host.graft_subtree(Network.from_newick("(X,Y);"), under=host.root())
+        assert image in host.get_children(host.root())
+
+        host2 = Network.from_newick("((A,B),C);")
+        old_root = host2.root()
+        host2.graft_subtree(Network.from_newick("(X,Y);"), sibling_of=old_root)
+        assert host2.root() is not old_root
+        assert old_root in host2.get_children(host2.root())
+        assert sorted(l.label for l in host2.get_leaves()) == ["A", "B", "C", "X", "Y"]
+
+    def test_graft_rejects_bad_anchors_and_duplicate_leaves(self):
+        host = Network.from_newick("((A,B),C);")
+        sub = Network.from_newick("(X,Y);")
+        with pytest.raises(NetworkError):
+            host.graft_subtree(sub)
+        with pytest.raises(NetworkError):
+            host.graft_subtree(sub, sibling_of=host.root(), under=host.root())
+        with pytest.raises(NetworkError):
+            host.graft_subtree(sub, sibling_of=Node("not_here"))
+        with pytest.raises(NetworkError):
+            host.graft_subtree(Network.from_newick("(A,Z);"), under=host.root())

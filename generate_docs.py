@@ -51,7 +51,11 @@ MODULE_META = {
         "category": "Analysis",
     },
     "GraphUtils": {
-        "desc": "Network decomposition, distances, and structural edits: blobs, tree-of-blobs, cluster/mu/tripartition distances, reticulation-aware comparison, and ASCII rendering.",
+        "desc": "Network decomposition, distances, and structural edits: blobs, tree-of-blobs, displayed trees, cluster/mu/tripartition distances, hybrid-ancestry error, reticulation-aware comparison, and ASCII rendering.",
+        "category": "Analysis",
+    },
+    "JointDissimilarity": {
+        "desc": "The joint reticulation-and-tree dissimilarity of two rooted networks: a minimum-cost matching of reticulation tripartitions plus a dissimilarity of the reticulation-free remainders, under leaf, cluster, or Nakhleh structure comparison.",
         "category": "Analysis",
     },
     "GTR": {
@@ -61,10 +65,6 @@ MODULE_META = {
     "IO": {
         "desc": "Central I/O hub for reading and writing phylogenetic file formats (FASTA, VCF, Newick, Nexus).",
         "category": "I/O",
-    },
-    "Logger": {
-        "desc": "Simple debug logger for internal model move compatibility.",
-        "category": "Infrastructure",
     },
     "Matrix": {
         "desc": "Data matrix storage and reduction for sequence alignments with unique site pattern compression.",
@@ -119,7 +119,7 @@ MODULE_META = {
         "category": "I/O",
     },
     "infer": {
-        "desc": "The public inference API: the verbs infer, score, and simulate, the InferenceResult they return, plus the registry, scorers, kernels, result types, and MCMC diagnostics around them.",
+        "desc": "The public inference API: the verbs infer, score, and simulate, the InferenceResult they return, infer_dimple for divide-and-conquer on a tree of blobs, plus the registry, scorers, kernels, result types, and MCMC diagnostics around them.",
         "category": "Inference",
     },
     "data": {

@@ -81,7 +81,6 @@ from typing import TYPE_CHECKING, Any, Sequence
 from .Network import Network, Edge, Node
 from . import _network_moves as _nm
 from .GraphUtils import count_reticulations, level as _network_level, _clone_net
-from .Logger import Logger
 
 if TYPE_CHECKING:
     from .ModelGraph import Model
@@ -250,9 +249,11 @@ class Move(ABC):
     is:
 
       * ``execute(model)`` performs the proposal and records just
-        enough information (either compact deltas in
-        ``same_move_info`` or a full ``copy.deepcopy`` snapshot in
-        ``undo_info``) to later roll back or replay the move.
+        enough information to roll it back: either compact deltas in
+        ``undo_info`` (continuous moves), or, for topology moves, an
+        open ``Network`` transaction (``net.begin_transaction()``) whose
+        journal undoes every change on ``rollback_transaction()``. No
+        move copies the network.
       * ``undo(model)`` returns the network to its pre-execute
         state.  Must be cheap and side-effect-free on anything
         else.
@@ -366,9 +367,9 @@ class Move(ABC):
         Efficiency layer for the ``max_lvl`` search flag.  A move that can
         *raise* network level (add / relocate / endpoint reticulation moves)
         calls this right before finalising ``execute``.  If the resulting
-        network's level exceeds the move's ``_max_level`` cap, the network is
-        restored from the ``undo_info`` snapshot and the proposal becomes a
-        no-op (zero Hastings).
+        network's level exceeds the move's ``_max_level`` cap, the move's
+        open transaction is rolled back and the proposal becomes a no-op
+        (zero Hastings).
 
         This is purely an optimisation: it avoids wasting a likelihood
         evaluation on a proposal the accept-path level guard
@@ -388,8 +389,8 @@ class Move(ABC):
         net = model.network
         if net is None or _network_level(net) <= max_level:
             return False
-        if self.undo_info is not None:
-            model.network = self.undo_info
+        if net.in_transaction():
+            net.rollback_transaction()
         self.undo_info = None
         self._log_hr = 0.0
         model.update_network()
@@ -516,7 +517,8 @@ class AddReticulation(Move):
             if count_reticulations(net) >= self._max_retics:
                 return model
 
-        self.undo_info = _clone_net(net)
+        net.begin_transaction()
+        self.undo_info = None
 
         rng = model.rng
         all_edges = net.E()
@@ -605,8 +607,8 @@ class AddReticulation(Move):
 
     def undo(self, model: Model) -> None:
         """Restore the network from the deep-copy snapshot taken in ``execute``."""
-        if self.undo_info is not None:
-            model.network = self.undo_info
+        model.network.rollback_transaction()
+        self.undo_info = None
         model.update_network()
 
     def same_move(self, model: Model) -> None:
@@ -643,7 +645,8 @@ class RemoveReticulation(Move):
             left unchanged if there are no reticulations to remove).
         """
         net: Network = model.network
-        self.undo_info = _clone_net(net)
+        net.begin_transaction()
+        self.undo_info = None
 
         retic_nodes = [n for n in net.V()
                        if n.is_reticulation() and net.in_degree(n) == 2]
@@ -703,8 +706,8 @@ class RemoveReticulation(Move):
 
     def undo(self, model: Model) -> None:
         """Restore the network from the deep-copy snapshot taken in ``execute``."""
-        if self.undo_info is not None:
-            model.network = self.undo_info
+        model.network.rollback_transaction()
+        self.undo_info = None
         model.update_network()
 
     def same_move(self, model: Model) -> None:
@@ -757,7 +760,8 @@ class FlipReticulation(Move):
             The same ``model`` (mutated) for chaining convenience.
         """
         net: Network = model.network
-        self.undo_info = _clone_net(net)
+        net.begin_transaction()
+        self.undo_info = None
 
         root = net.root()
         # Enumerate edges that are safe to flip (see class docstring
@@ -808,7 +812,7 @@ class FlipReticulation(Move):
         # cases, but a cycle can still arise in rare topologies;
         # fall back cleanly when it does.
         if not net.is_acyclic():
-            model.network = self.undo_info
+            model.network.rollback_transaction()
             self.undo_info = None
             model.update_network()
             return model
@@ -821,8 +825,8 @@ class FlipReticulation(Move):
 
     def undo(self, model: Model) -> None:
         """Restore the network from the deep-copy snapshot taken in ``execute``."""
-        if self.undo_info is not None:
-            model.network = self.undo_info
+        model.network.rollback_transaction()
+        self.undo_info = None
         model.update_network()
 
     def same_move(self, model: Model) -> None:
@@ -842,13 +846,11 @@ class SwitchParentage(Move):
         """Create a new ``SwitchParentage`` (PSPP) proposal.
 
         Args:
-            debug_id (int, optional): Identifier forwarded to the
-                internal :class:`~.Logger.Logger` for debug output.
-                Defaults to 0.
+            debug_id: Deprecated and ignored; retained for constructor
+                compatibility with existing callers.
         """
         super().__init__()
         self.valid_attachment_edges: list[Edge] = []
-        self.logger = Logger(str(debug_id))
         
     def _random_choice(self, mylist: list, rng: np.random.Generator) -> Any:
         """Select a random element from a list, or None if empty."""
@@ -866,7 +868,8 @@ class SwitchParentage(Move):
             Model: The modified model with a newly proposed network topology.
         """
         net: Network = model.network
-        self.undo_info = _clone_net(net)
+        net.begin_transaction()
+        self.undo_info = None
         self.valid_attachment_edges = []
 
         # Record the pre-move per-leaf ploidy. SwitchParentage MUST preserve
@@ -994,13 +997,13 @@ class SwitchParentage(Move):
         # rare case we revert to the pre-move network -- the proposal becomes
         # a no-op rather than an invalid network.
         if not self._ploidy_preserved(net, pre_ploidy):
-            model.network = self.undo_info
-            self.same_move_info = _clone_net(self.undo_info)
+            model.network.rollback_transaction()
+            self.same_move_info = None
             model.update_network()
             return model
 
         model.update_network()
-        self.same_move_info = _clone_net(net)
+        self.same_move_info = None
         return model
 
     def _ploidy_preserved(self, net: Network, pre_ploidy: dict) -> bool:
@@ -1018,8 +1021,8 @@ class SwitchParentage(Move):
 
     def undo(self, model: Model) -> None:
         """Restores the network to its pre-move state."""
-        if self.undo_info is not None:
-            model.network = self.undo_info
+        model.network.rollback_transaction()
+        self.undo_info = None
         model.update_network()
 
     def same_move(self, model: Model) -> None:
@@ -1245,7 +1248,8 @@ class SPR(Move):
             is eligible).
         """
         net: Network = model.network
-        self.undo_info = _clone_net(net)
+        net.begin_transaction()
+        self.undo_info = None
         self._log_hr = 0.0
 
         prunable = self._prunable_edges(net)
@@ -1279,7 +1283,7 @@ class SPR(Move):
         eligible = [e for e in net.E()
                     if e.src not in forbidden and e.dest not in forbidden]
         if not eligible:
-            model.network = self.undo_info
+            model.network.rollback_transaction()
             self.undo_info = None
             model.update_network()
             return model
@@ -1313,8 +1317,8 @@ class SPR(Move):
 
     def undo(self, model: Model) -> None:
         """Restore the network from the deep-copy snapshot taken in ``execute``."""
-        if self.undo_info is not None:
-            model.network = self.undo_info
+        model.network.rollback_transaction()
+        self.undo_info = None
         model.update_network()
 
     def same_move(self, model: Model) -> None:
@@ -1837,7 +1841,8 @@ class ChangeReticSource(Move):
             The same ``model`` (mutated) for chaining convenience.
         """
         net: Network = model.network
-        self.undo_info = _clone_net(net)
+        net.begin_transaction()
+        self.undo_info = None
 
         retic_edges = [e for e in net.E() if e.dest.is_reticulation()]
         if not retic_edges:
@@ -1869,7 +1874,7 @@ class ChangeReticSource(Move):
         eligible = [e for e in net.E() if e not in forbidden]
 
         if not eligible:
-            model.network = self.undo_info
+            model.network.rollback_transaction()
             model.update_network()
             self.undo_info = None
             return model
@@ -1896,8 +1901,8 @@ class ChangeReticSource(Move):
 
     def undo(self, model: Model) -> None:
         """Restore the network from the deep-copy snapshot taken in ``execute``."""
-        if self.undo_info is not None:
-            model.network = self.undo_info
+        model.network.rollback_transaction()
+        self.undo_info = None
         model.update_network()
 
     def same_move(self, model: Model) -> None:
@@ -1955,7 +1960,8 @@ class RelocateReticulation(Move):
             The same ``model`` (mutated) for chaining convenience.
         """
         net: Network = model.network
-        self.undo_info = _clone_net(net)
+        net.begin_transaction()
+        self.undo_info = None
 
         retic_nodes = [n for n in net.V() if n.is_reticulation()]
         if not retic_nodes:
@@ -2020,7 +2026,7 @@ class RelocateReticulation(Move):
         forbidden = set(net.edges_downstream_of_node(child))
         eligible = [e for e in net.E() if e not in forbidden]
         if len(eligible) < 2:
-            model.network = self.undo_info
+            model.network.rollback_transaction()
             model.update_network()
             self.undo_info = None
             return model
@@ -2030,7 +2036,7 @@ class RelocateReticulation(Move):
 
         eligible2 = [e for e in eligible if e is not host1]
         if not eligible2:
-            model.network = self.undo_info
+            model.network.rollback_transaction()
             model.update_network()
             self.undo_info = None
             return model
@@ -2059,7 +2065,7 @@ class RelocateReticulation(Move):
             # edit.  With the ``descendants_of_child`` filter above this
             # path is not expected to fire, but we keep the fallback
             # for robustness.
-            model.network = self.undo_info
+            model.network.rollback_transaction()
             model.update_network()
             self.undo_info = None
             return model
@@ -2081,8 +2087,8 @@ class RelocateReticulation(Move):
 
     def undo(self, model: Model) -> None:
         """Restore the network from the deep-copy snapshot taken in ``execute``."""
-        if self.undo_info is not None:
-            model.network = self.undo_info
+        model.network.rollback_transaction()
+        self.undo_info = None
         model.update_network()
 
     def same_move(self, model: Model) -> None:
@@ -2125,7 +2131,8 @@ class ChangeReticDest(Move):
             The same ``model`` (mutated) for chaining convenience.
         """
         net: Network = model.network
-        self.undo_info = _clone_net(net)
+        net.begin_transaction()
+        self.undo_info = None
 
         retic_edges = [e for e in net.E() if e.dest.is_reticulation()]
         if not retic_edges:
@@ -2152,7 +2159,7 @@ class ChangeReticDest(Move):
         eligible = [e for e in net.E() if e not in forbidden]
 
         if not eligible:
-            model.network = self.undo_info
+            model.network.rollback_transaction()
             model.update_network()
             self.undo_info = None
             return model
@@ -2190,8 +2197,8 @@ class ChangeReticDest(Move):
 
     def undo(self, model: Model) -> None:
         """Restore the network from the deep-copy snapshot taken in ``execute``."""
-        if self.undo_info is not None:
-            model.network = self.undo_info
+        model.network.rollback_transaction()
+        self.undo_info = None
         model.update_network()
 
     def same_move(self, model: Model) -> None:

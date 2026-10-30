@@ -21,7 +21,7 @@
 
                 <h1>infer Module <span class="version-badge">v0.6.0</span></h1>
 
-                <p>The public inference API: the verbs infer, score, and simulate, the InferenceResult they return, plus the registry, scorers, kernels, result types, and MCMC diagnostics around them.</p>
+                <p>The public inference API: the verbs infer, score, and simulate, the InferenceResult they return, infer_dimple for divide-and-conquer on a tree of blobs, plus the registry, scorers, kernels, result types, and MCMC diagnostics around them.</p>
 
                 <div class="module-info">
                     <dl>
@@ -95,6 +95,9 @@
                         <div class="function-def">
                             <div class="function-header">
                                 <span class="name">__repr__</span> <span class="keyword">-&gt;</span> str
+                            </div>
+                            <div class="function-body">
+                                <p>One line naming the method, the score and its sense, and the posterior size.</p>
                             </div>
                         </div>
                     </div>
@@ -1636,6 +1639,15 @@
                         <h4>Methods</h4>
                         <div class="function-def">
                             <div class="function-header">
+                                <span class="name">phase_switch_due</span> <span class="keyword">-&gt;</span> bool
+                            </div>
+                            <div class="function-body">
+                                <p>Whether the next :meth:`generate` will change phase. Hill climbing decides to stop before it asks for the next move, and the phase change happens inside that request. When both counters reach the same threshold, the stop wins and the reticulation phase is never sampled. The driver calls this so a switch that is already due still gets one proposal.</p>
+                                <div class="returns"><span class="returns-label">Returns:</span> bool: True when this kernel cycles phases and stagnation has reached ``phase_patience``.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
                                 <span class="name">generate</span>(<span class="params">model: 'Model | None' = None</span>) <span class="keyword">-&gt;</span> Move
                             </div>
                             <div class="function-body">
@@ -2754,6 +2766,88 @@
                         </div>
                         <div class="function-def">
                             <div class="function-header">
+                                <span class="name">infer_dimple</span>(<span class="params">gene_trees: GeneTrees, tree_of_blobs: Network, start_tree: Network, max_subset_size: int = 12, n_divisions: int = 15, max_reticulations: int = 1, seed: int = 0, outgroup: Optional[str] = None, model_selection: Optional[str] = None, true_network: Optional[Network] = None, score_final: bool = True, **search</span>)
+                            </div>
+                            <div class="function-body">
+                                <p>Infer a network by dividing a tree of blobs and stitching the pieces. The scaffold is partitioned at its polytomies. Each subset is inferred with MSC triplet pseudo-likelihood (:func:`phynetpy.infer.infer`), and the subset networks are merged back onto the scaffold. This is not a criterion and it is not dispatched through the inference registry. Each subset is inferred by simulated annealing: :data:`SUBSET_RUNS` runs of :data:`SUBSET_ITERS` iterations, and the highest log pseudo-likelihood is kept. Extra keyword arguments are forwarded to each subset ``infer`` call and override those defaults (``num_iter``, ``n_runs``, ``method``, ``t_start``). ``seed`` seeds only the partition shuffle. The search seeds are ``0, 1, 2`` unless a ``seed`` keyword is passed in the forwarded arguments.</p>
+                                                                <table class="param-table">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">gene_trees</span></td>
+                                        <td><span class="param-type">GeneTrees</span></td>
+                                        <td>Rooted gene trees on the full taxon set. Individual trees may omit taxa. They are not rerooted, and no outgroup leaf is added to them.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">tree_of_blobs</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Rooted scaffold. A node with more than two children is a blob.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">start_tree</span></td>
+                                        <td><span class="param-type">Network</span></td>
+                                        <td>Binary tree on the same taxa, used as the pseudo-likelihood start on each subset.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_subset_size</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Largest subset. Default 12, minimum 4.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">n_divisions</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Alternative partitions of each blob. Default 15.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">max_reticulations</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Cap on each subset search. The merge can still keep every reticulation the subsets returned, so the stitched network can contain more than this many.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">seed</span></td>
+                                        <td><span class="param-type">int</span></td>
+                                        <td>Seed for the partition packings and the enumeration shuffle. The first division of every blob is deterministic.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">outgroup</span></td>
+                                        <td><span class="param-type">str | None</span></td>
+                                        <td>Leaf to drop from the scaffold before partitioning. Not inserted into the gene trees. ``None`` leaves the scaffold unchanged.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">model_selection</span></td>
+                                        <td><span class="param-type">str | None</span></td>
+                                        <td>Choose each subset's reticulation count by ``gain`` (recommended; a step must add more than :data:`SELECTION_GAIN_THRESHOLD`), ``aic``, ``bic``, or ``elbow`` over caps 0 to ``max_reticulations``, each cap warm-started from the one below, and, for ``gain``, ``aic`` and ``bic``, make the merger require the same gain of each reticulation. None keeps the fixed cap and DIMPLE's any-improvement rule.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">true_network</span></td>
+                                        <td><span class="param-type">Network | None</span></td>
+                                        <td>Ground-truth network. When given, each subset's cap is the number of detectable reticulations in the true network restricted to the subset (:func:`true_reticulation_bound`), the protocol of the DIMPLE</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">paper</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>and ``max_reticulations`` and the subset part of ``model_selection`` are not used. For benchmarks only.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">score_final</span></td>
+                                        <td><span class="param-type">bool</span></td>
+                                        <td>Score the stitched network (a triplet table on every taxon; seconds to minutes on large data). False leaves ``score`` None. **search: Subset search settings, see :func:`subset_chains`. Defaults are simulated annealing, :data:`SUBSET_ITERS` iterations,</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="param-name">and</span></td>
+                                        <td><span class="param-type"></span></td>
+                                        <td>data:`SUBSET_RUNS` runs. A passed value replaces the default. ``chains=[{&quot;method&quot;: &quot;sa&quot;, &quot;num_iter&quot;: 20000, &quot;n_runs&quot;: 5}, {&quot;method&quot;: &quot;hc&quot;, &quot;num_iter&quot;: 20000, &quot;n_runs&quot;: 3}]`` runs a portfolio per subset and keeps the best-scoring network.</td>
+                                    </tr>
+                                </table>
+                                <div class="returns"><span class="returns-label">Returns:</span> InferenceResult: ``best`` is the full-taxon network, ``score`` is its log pseudo-likelihood, ``method`` is ``&quot;DIMPLE&quot;``, and ``raw`` is a :class:`DimpleTrace`.</div>
+                                <div class="raises"><span class="raises-label">Raises:</span> <code>DimpleError</code>: If the inputs are illegal or a stitch step cannot place a clade., <code>RuntimeError</code>: If a blob's base tree has a non-finite pseudo-likelihood while reticulations are being placed.</div>
+                            </div>
+                        </div>
+                        <div class="function-def">
+                            <div class="function-header">
                                 <span class="name">convert_network_branch_lengths</span>(<span class="params">network: 'Network', target: BranchLengthUnit | str, theta: float, branch_thetas: Optional[Mapping[BranchThetaKey, float]] = None</span>) <span class="keyword">-&gt;</span> 'Network'
                             </div>
                             <div class="function-body">
@@ -3605,7 +3699,7 @@
                 <li><a href="GeneTrees.html">GeneTrees</a></li>
                 <li><a href="GraphUtils.html">GraphUtils</a></li>
                 <li><a href="IO.html">IO</a></li>
-                <li><a href="Logger.html">Logger</a></li>
+                <li><a href="JointDissimilarity.html">JointDissimilarity</a></li>
                 <li><a href="MSA.html">MSA</a></li>
                 <li><a href="Matrix.html">Matrix</a></li>
                 <li><a href="MetropolisHastings.html">MetropolisHastings</a></li>
