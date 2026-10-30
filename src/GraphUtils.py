@@ -19,7 +19,8 @@ This module is the catch-all for graph-theoretic operations on
   ``induced_subnetwork_by_taxa``);
 * distance metrics on networks
   (mu-distance, hardwired / softwired / Robinson--Foulds /
-  tripartition / displayed-tree / average-path / weighted-APD);
+  tripartition / displayed-tree / average-path / weighted-APD, and the
+  joint reticulation-and-tree dissimilarity of ``JointDissimilarity``);
 * convenience helpers for branch lengths, clades, and ASCII rendering.
 
 Docs   - [x]
@@ -46,6 +47,7 @@ from __future__ import annotations
 ##############################################################################
 
 from .Network import Network, Node, Edge, NetworkError
+from .JointDissimilarity import JOINT_KINDS, JointDissimilarityResult, joint_dissimilarity
 from collections import Counter, deque
 from itertools import product as _product
 from typing import Dict, Optional, Set, Union
@@ -84,6 +86,9 @@ __all__ = [
     "robinson_foulds_distance",
     "tripartition_distance",
     "mu_distance",
+    "joint_dissimilarity",
+    "JointDissimilarityResult",
+    "JOINT_KINDS",
     "pairwise_leaf_distance",
     "average_path_distance",
     "weighted_average_path_distance",

@@ -2560,6 +2560,36 @@ class Network:
         
         return _nopt.rooted_triplet_distance(self, other)
 
+    def joint_dissimilarity(self,
+                            other: Network,
+                            kind: str = "nakhleh") -> "JointDissimilarityResult":
+        """
+        The joint reticulation-and-tree dissimilarity between this network
+        and another on the same taxon set: a minimum-cost matching of the
+        reticulation tripartitions (``D_ret``) plus three times the
+        dissimilarity of the two remainders left once every reticulation is
+        removed (``D_tree``).  See :mod:`~phynetpy.JointDissimilarity` for the
+        definition; this method calls ``JointDissimilarity.joint_dissimilarity``.
+
+        Args:
+            other (Network): The other network to compare against.
+            kind (str): Structure dissimilarity used on blocks and
+                        remainders: ``"leaf"``, ``"cluster"`` or
+                        ``"nakhleh"`` (default).
+
+        Raises:
+            NetworkError: If either network is not a valid rooted binary-
+                          reticulation network, or the taxon sets differ.
+            ValueError: If ``kind`` is unknown.
+
+        Returns:
+            JointDissimilarityResult: ``r1``, ``r2``, ``D_ret``, ``D_tree`` and the
+                                derived ``m``, ``D_joint``,
+                                ``D_ret_normalized``, ``D_joint_normalized``.
+        """
+        from .JointDissimilarity import joint_dissimilarity
+        return joint_dissimilarity(self, other, kind)
+
     def get_subtree_at(self, node: Node) -> set[Node]:
         """
         Collect all nodes in the subtree rooted at the given node.

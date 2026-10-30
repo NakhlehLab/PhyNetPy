@@ -18,6 +18,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   one-tree-per-choice behaviour.
 - `GraphUtils.count_displayed_trees(net, exact=True)` counts distinct displayed
   trees by enumerating them, rather than multiplying reticulation in-degrees.
+- `joint_dissimilarity(net1, net2, kind)` and `Network.joint_dissimilarity`:
+  the joint reticulation-and-tree dissimilarity of two rooted networks on the
+  same taxa (`JointDissimilarity` module, re-exported from `GraphUtils` next
+  to `hardwired_cluster_distance` and `mu_distance`). Every reticulation gives
+  a tripartition of structures (the block below it and the two parent blocks
+  with it deleted); `D_ret` is the minimum-cost matching of the two
+  tripartition multisets with unmatched reticulations charged 3; `D_tree`
+  compares the remainders left once every reticulation block is deleted and
+  replaced by marker leaves; `D_joint = D_ret + 3 D_tree`, with normalised
+  forms in [0, 1]. The structure dissimilarity is one of `leaf` (Jaccard),
+  `cluster` (multiset hardwired clusters) or `nakhleh` (vertex-equivalence
+  classes). `tests/crosscheck/jointdist_standalone.py` is the reference
+  implementation the port is tested against.
 
 ### Fixed -- displayed trees kept nodes that stand for no taxon
 
